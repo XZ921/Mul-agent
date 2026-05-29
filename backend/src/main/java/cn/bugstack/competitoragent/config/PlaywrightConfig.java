@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -19,6 +20,7 @@ import org.springframework.context.annotation.Configuration;
  */
 @Slf4j
 @Configuration
+@EnableConfigurationProperties(PlaywrightConfig.PlaywrightProperties.class)
 @ConditionalOnProperty(name = "collector.mock", havingValue = "false")
 public class PlaywrightConfig {
 
@@ -29,11 +31,6 @@ public class PlaywrightConfig {
         private boolean headless = true;
         private int timeoutMillis = 30000;
         private boolean screenshotOnCollect = false;
-    }
-
-    @Bean
-    public PlaywrightProperties playwrightProperties() {
-        return new PlaywrightProperties();
     }
 
     @Bean(destroyMethod = "close")

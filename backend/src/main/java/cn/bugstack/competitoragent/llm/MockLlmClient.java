@@ -5,10 +5,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * Mock LLM 客户端 — 默认启用的模拟 LLM，用于开发和演示
- * <p>
- * 当 llm.mock=true（默认）时启用，返回模拟数据，保证主流程无需 API Key 即可跑通。
- * 设置 llm.mock=false 并配置真实 API Key 将使用 LangChain4jClientImpl。
+ * Mock LLM 客户端。
+ * 默认启用，用于本地开发和演示，避免没有 API Key 时主流程无法跑通。
  */
 @Slf4j
 @Component
@@ -17,58 +15,91 @@ public class MockLlmClient implements LlmClient {
 
     @Override
     public String chat(String systemPrompt, String userPrompt) {
-        log.info("[Mock LLM] chat 被调用, prompt 长度={}", userPrompt.length());
+        log.info("[Mock LLM] chat 被调用，prompt 长度={}", userPrompt.length());
         sleep(200);
-        return "【Mock 模式】这是一段模拟的 LLM 回复。实际部署时请配置 ANTHROPIC_API_KEY 环境变量并设置 llm.mock=false。";
+        return """
+                # 竞品分析报告（Mock）
+
+                ## 一、总体结论
+                本次报告为模拟输出，用于验证中文界面、报告生成链路和导出功能是否正常。
+
+                ## 二、竞品概览
+                当前竞品在产品能力、市场定位和目标用户上均有差异，但整体仍围绕同类需求展开竞争。
+
+                ## 三、核心对比
+                1. 产品功能：各竞品在功能覆盖面上存在侧重点差异。
+                2. 目标用户：部分竞品偏向个人用户，部分更强调团队协作。
+                3. 定价策略：不同方案在免费额度、付费门槛和企业能力上区分明显。
+
+                ## 四、建议
+                建议结合证据继续完善关键功能对比、定价拆解与差异化表达。
+                """;
     }
 
     @Override
     public String chatForJson(String systemPrompt, String userPrompt, String responseSchema) {
-        log.info("[Mock LLM] chatForJson 被调用, prompt 长度={}, schema={}",
-                userPrompt.length(), responseSchema);
+        log.info("[Mock LLM] chatForJson 被调用，prompt 长度={}, schema={}", userPrompt.length(), responseSchema);
         sleep(300);
 
-        // 根据 schema 描述返回不同的模拟 JSON
         if (responseSchema.contains("ExtractedSchema")) {
             return """
                 {
                   "competitorName": "示例竞品",
                   "officialUrl": "https://example.com",
-                  "summary": "这是一个示例竞品的产品简介（Mock 数据）",
-                  "positioning": "面向XX用户的XX解决方案",
+                  "summary": "这是一个用于本地演示的示例竞品摘要。",
+                  "positioning": "面向知识管理与团队协作场景的产品方案",
                   "targetUsers": ["个人用户", "中小团队"],
                   "coreFeatures": [
-                    {"name": "示例功能1", "description": "功能描述（Mock）", "evidenceIds": ["E001"]}
+                    {
+                      "name": "示例功能一",
+                      "description": "支持基础协作与知识沉淀。",
+                      "evidenceIds": ["E001"],
+                      "sourceUrls": ["https://example.com"]
+                    }
                   ],
                   "pricing": {
-                    "model": "Freemium + 订阅制",
-                    "plans": ["免费版", "专业版 $12/月"],
-                    "evidenceIds": ["E002"]
+                    "model": "免费版加订阅制",
+                    "plans": ["免费版", "专业版"],
+                    "evidenceIds": ["E002"],
+                    "sourceUrls": ["https://example.com/pricing"]
                   },
                   "strengths": [
-                    {"point": "示例优势（Mock 数据）", "evidenceIds": ["E001"]}
+                    {
+                      "point": "上手简单，协作体验较顺畅。",
+                      "evidenceIds": ["E001"],
+                      "sourceUrls": ["https://example.com"]
+                    }
                   ],
                   "weaknesses": [
-                    {"point": "示例劣势（Mock 数据）", "evidenceIds": ["E002"]}
+                    {
+                      "point": "高级能力需要进一步验证。",
+                      "evidenceIds": ["E002"],
+                      "sourceUrls": ["https://example.com/pricing"]
+                    }
                   ],
                   "sources": [
-                    {"id": "E001", "title": "来源页面标题", "url": "https://example.com", "contentSnippet": "引用片段...", "collectedAt": "2026-05-26 10:30:00"}
-                  ]
+                    {
+                      "evidenceId": "E001",
+                      "title": "来源页面标题",
+                      "url": "https://example.com"
+                    }
+                  ],
+                  "sourceUrls": ["https://example.com"]
                 }
                 """;
         } else if (responseSchema.contains("Analysis")) {
             return """
                 {
-                  "overview": "本次竞品分析覆盖了 N 个主要竞品（Mock 数据）",
-                  "featureComparison": "功能对比如下：...",
-                  "positioningComparison": "各竞品市场定位存在差异：...",
-                  "pricingComparison": "定价策略对比：...",
-                  "targetUserComparison": "各竞品目标用户存在差异",
-                  "strengthsSummary": "各竞品优势汇总（Mock）",
-                  "weaknessesSummary": "各竞品劣势汇总（Mock）",
-                  "opportunities": ["机会点1（Mock）", "机会点2（Mock）"],
-                  "risks": ["风险点1（Mock）", "风险点2（Mock）"],
-                  "recommendations": ["建议1（Mock）", "建议2（Mock）"]
+                  "overview": "本次竞品分析覆盖多个核心竞品，用于验证分析链路。",
+                  "featureComparison": "各竞品在功能覆盖、协作体验与知识沉淀能力上存在明显差异。",
+                  "positioningComparison": "部分竞品强调易用性，部分竞品强调企业级能力。",
+                  "pricingComparison": "定价策略从免费切入到企业订阅不等。",
+                  "targetUserComparison": "目标用户从个人创作者延伸到中大型团队。",
+                  "strengthsSummary": "竞品普遍重视易用性与协作能力。",
+                  "weaknessesSummary": "在高阶分析、闭环评审和深度集成方面仍有提升空间。",
+                  "opportunities": ["强化证据链展示", "提升报告可追溯能力"],
+                  "risks": ["同质化竞争明显", "价格战风险提升"],
+                  "recommendations": ["突出差异化能力", "加强企业场景落地"]
                 }
                 """;
         } else if (responseSchema.contains("QualityReview")) {
@@ -77,7 +108,7 @@ public class MockLlmClient implements LlmClient {
                   "score": 85,
                   "passed": true,
                   "issues": [],
-                  "summary": "报告整体质量良好，章节完整，证据引用充分（Mock 数据）"
+                  "summary": "报告整体结构完整，结论清晰，可作为演示版本直接使用。"
                 }
                 """;
         }

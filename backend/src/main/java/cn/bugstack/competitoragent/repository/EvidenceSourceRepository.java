@@ -18,5 +18,7 @@ public interface EvidenceSourceRepository extends JpaRepository<EvidenceSource, 
 
     long countByTaskId(Long taskId);
 
+    void deleteByTaskIdAndEvidenceIdStartingWith(Long taskId, String evidenceIdPrefix);
+
     void deleteByTaskId(Long taskId);
 }

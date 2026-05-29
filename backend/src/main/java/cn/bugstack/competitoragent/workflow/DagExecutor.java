@@ -46,7 +46,10 @@ public class DagExecutor {
 
     public void execute(Long taskId, AgentContext context) {
         log.info("start dag execution, taskId={}", taskId);
-        markTaskRunning(taskId);
+        if (!markTaskRunning(taskId)) {
+            log.info("skip dag execution because task is not in runnable state, taskId={}", taskId);
+            return;
+        }
 
         List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
         if (nodes.isEmpty()) {
@@ -60,6 +63,11 @@ public class DagExecutor {
 
         boolean hasFailedRequiredNode = false;
         for (TaskNode node : nodes) {
+            if (isTaskStopped(taskId)) {
+                stopRemainingNodes(taskId, nodes, node);
+                return;
+            }
+
             // 续跑场景下，已成功节点直接跳过，避免覆盖已产出的稳定结果。
             if (node.getStatus() == TaskNodeStatus.SUCCESS) {
                 continue;
@@ -113,6 +121,11 @@ public class DagExecutor {
             }
 
             nodeRepository.save(node);
+
+            if (isTaskStopped(taskId)) {
+                stopRemainingNodes(taskId, nodes, node);
+                return;
+            }
         }
 
         updateTaskFinalStatus(taskId);
@@ -173,8 +186,11 @@ public class DagExecutor {
         return registry;
     }
 
-    private void markTaskRunning(Long taskId) {
-        taskRepository.findById(taskId).ifPresent(task -> {
+    private boolean markTaskRunning(Long taskId) {
+        return taskRepository.findById(taskId).map(task -> {
+            if (task.getStatus() == AnalysisTaskStatus.STOPPED) {
+                return false;
+            }
             task.setStatus(AnalysisTaskStatus.RUNNING);
             if (task.getStartedAt() == null) {
                 task.setStartedAt(LocalDateTime.now());
@@ -182,7 +198,8 @@ public class DagExecutor {
             task.setCompletedAt(null);
             task.setErrorMessage(null);
             taskRepository.save(task);
-        });
+            return true;
+        }).orElse(false);
     }
 
     private void markNodeRunning(TaskNode node, AgentContext context) {
@@ -299,13 +316,13 @@ public class DagExecutor {
 
             if (hasFailedOrSkippedRequiredNode) {
                 task.setStatus(AnalysisTaskStatus.FAILED);
-                task.setErrorMessage("Task execution failed. Please check node logs.");
+                task.setErrorMessage("任务执行失败，请检查节点日志。");
             } else if (finalReviewPassed || (!initialReviewPresent && allRequiredSuccess) || initialReviewPassed) {
                 task.setStatus(AnalysisTaskStatus.SUCCESS);
                 task.setErrorMessage(null);
             } else if (initialReviewPresent || revisionFlowUsed) {
                 task.setStatus(AnalysisTaskStatus.FAILED);
-                task.setErrorMessage("Quality loop did not reach a passing review. Please inspect reviewer feedback.");
+                task.setErrorMessage("质量闭环未达到通过状态，请检查评审反馈。");
             }
 
             task.setCompletedAt(LocalDateTime.now());
@@ -320,6 +337,41 @@ public class DagExecutor {
             task.setCompletedAt(LocalDateTime.now());
             taskRepository.save(task);
         });
+    }
+
+    private boolean isTaskStopped(Long taskId) {
+        return taskRepository.findById(taskId)
+                .map(task -> task.getStatus() == AnalysisTaskStatus.STOPPED)
+                .orElse(false);
+    }
+
+    private void stopRemainingNodes(Long taskId, List<TaskNode> nodes, TaskNode currentNode) {
+        boolean afterCurrent = false;
+        for (TaskNode candidate : nodes) {
+            if (!afterCurrent) {
+                if (candidate.getId().equals(currentNode.getId())) {
+                    afterCurrent = true;
+                }
+                continue;
+            }
+            if (candidate.getStatus() == TaskNodeStatus.SUCCESS
+                    || candidate.getStatus() == TaskNodeStatus.FAILED
+                    || candidate.getStatus() == TaskNodeStatus.SKIPPED) {
+                continue;
+            }
+            candidate.setStatus(TaskNodeStatus.SKIPPED);
+            candidate.setErrorMessage("任务已被用户主动停止");
+            candidate.setCompletedAt(LocalDateTime.now());
+            nodeRepository.save(candidate);
+        }
+
+        taskRepository.findById(taskId).ifPresent(task -> {
+            task.setStatus(AnalysisTaskStatus.STOPPED);
+            task.setErrorMessage("任务已由用户主动停止");
+            task.setCompletedAt(LocalDateTime.now());
+            taskRepository.save(task);
+        });
+        log.info("task stopped during dag execution, taskId={}, currentNode={}", taskId, currentNode.getNodeName());
     }
 
     /**
@@ -459,23 +511,33 @@ public class DagExecutor {
         if ("review_failed".equals(trigger)) {
             JsonNode reviewOutput = readJson(context.getSharedOutput("quality_check"));
             if (reviewOutput == null) {
-                return "Revision skipped because no valid review result is available";
+                return "跳过修订：缺少有效的评审结果";
+            }
+            if (!reviewOutput.has("passed")) {
+                return "跳过修订：评审输出不完整";
             }
             return reviewOutput.path("passed").asBoolean(false)
-                    ? "Revision skipped because review output is incomplete"
-                    : "Initial quality review passed, revision not required";
+                    ? "初审已通过，无需修订"
+                    : "初审未通过，应触发修订";
         }
 
         if ("rewrite_executed".equals(trigger)) {
-            boolean rewriteSucceeded = allNodes.stream()
-                    .anyMatch(current -> "rewrite_report".equals(current.getNodeName())
-                            && current.getStatus() == TaskNodeStatus.SUCCESS);
-            return rewriteSucceeded
-                    ? "Final review skipped because rewrite output is not available"
-                    : "Final review skipped because rewrite was not triggered";
+            TaskNode rewriteNode = allNodes.stream()
+                    .filter(current -> "rewrite_report".equals(current.getNodeName()))
+                    .findFirst()
+                    .orElse(null);
+            if (rewriteNode == null) {
+                return "跳过终审：未找到改写节点";
+            }
+            return switch (rewriteNode.getStatus()) {
+                case SKIPPED -> "跳过终审：本轮未触发改写";
+                case FAILED -> "跳过终审：改写执行失败";
+                case PENDING, RUNNING -> "跳过终审：改写尚未完成";
+                default -> "跳过终审：改写结果不可用";
+            };
         }
 
-        return "Node execution condition not met";
+        return "未满足节点执行条件";
     }
 
     private String resolveTrigger(String nodeConfig) {

@@ -162,7 +162,7 @@ V1 通过 OpenAI-compatible API 协议支持以下提供商：
 ```
 Mul-agnet/
 ├── plan.md                          # V1 架构计划 (823 行)
-├── V2.md                            # V2 升级计划
+├── planV2.md                        # V2 升级计划
 ├── project_rules.md                 # 编码规范（中文注释、OOP、容错、溯源）
 ├── projectV1.md                     # 本文档
 ├── pom.xml                          # 根 Maven POM（多模块）

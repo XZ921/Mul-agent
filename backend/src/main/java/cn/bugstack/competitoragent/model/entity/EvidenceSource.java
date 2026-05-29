@@ -44,7 +44,7 @@ public class EvidenceSource {
     /**
      * 任务内唯一的证据编号，如 E001, E002
      */
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 100)
     @Schema(description = "证据编号（任务内唯一）", example = "E001", requiredMode = Schema.RequiredMode.REQUIRED)
     private String evidenceId;
 

@@ -103,7 +103,7 @@ springdoc:
 
 # ==================== Mock 开关（开发演示用） ====================
 llm:
-  mock: false       # true=使用模拟 LLM，false=使用真实 AI 提供商 API
+  mock: true       # true=使用模拟 LLM，false=使用真实 AI 提供商 API
 
 # ==================== Playwright 配置 ====================
 playwright:

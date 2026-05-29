@@ -50,25 +50,23 @@ public class CompetitorAnalysisAgent extends BaseAgent {
 
     @Override
     public String getName() {
-        return "CompetitorAnalysisAgent";
+        return "竞品分析智能体";
     }
 
     @Override
     protected AgentResult doExecute(AgentContext context) {
-        // Analyzer 消费的是 Extractor 已落库的竞品知识，而不是原始页面内容。
         List<CompetitorKnowledge> knowledges = knowledgeRepository.findByTaskIdOrderByIdAsc(context.getTaskId());
         if (knowledges.isEmpty()) {
-            return AgentResult.failed("No competitor knowledge available");
+            return AgentResult.failed("暂无可分析的竞品知识");
         }
 
         String competitorData;
         try {
-            // 这里先把实体清洗成提示词载荷，避免把数据库字段细节直接暴露给模型。
             competitorData = objectMapper.writeValueAsString(knowledges.stream()
                     .map(this::toPromptPayload)
                     .toList());
         } catch (JsonProcessingException e) {
-            return AgentResult.failed("serialize competitor knowledge failed: " + e.getMessage());
+            return AgentResult.failed("竞品知识序列化失败：" + e.getMessage());
         }
 
         String prompt = promptService.render("analyzer", Map.of(
@@ -79,25 +77,23 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         ));
 
         try {
-            // 分析节点要求模型严格返回 JSON，方便后续 Writer 直接消费。
             String llmResponse = llmClient.chatForJson(
-                    "You are a senior competitor analysis expert. Return JSON only.",
+                    "你是一名资深竞品分析专家，请只返回 JSON。",
                     prompt,
                     "Analysis"
             );
             objectMapper.readTree(cleanJson(llmResponse));
             return AgentResult.success(llmResponse,
-                    "分析完成: " + knowledges.size() + " competitors",
+                    "竞品分析完成：共处理 " + knowledges.size() + " 个竞品",
                     System.currentTimeMillis(),
                     llmClient.getModelName(),
                     llmClient.getLastTokenUsage().toJson());
         } catch (Exception e) {
             log.error("competitor analysis failed", e);
-            return AgentResult.failed("analysis failed: " + e.getMessage());
+            return AgentResult.failed("竞品分析失败：" + e.getMessage());
         }
     }
 
-    // 只暴露分析真正需要的结构化字段，同时保留 sources 供后续证据溯源。
     private Map<String, Object> toPromptPayload(CompetitorKnowledge knowledge) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("competitorName", knowledge.getCompetitorName());
@@ -112,7 +108,6 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         return payload;
     }
 
-    // 某些字段可能是 JSON 数组，也可能是普通文本，这里统一做兼容解析。
     private Object parseJsonOrFallback(String rawValue) {
         if (rawValue == null || rawValue.isBlank()) {
             return null;
@@ -124,7 +119,6 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         }
     }
 
-    // 模型偶尔会包裹 markdown code fence，这里清洗后再做 JSON 校验。
     private String cleanJson(String llmResponse) {
         String cleaned = llmResponse.trim();
         if (cleaned.startsWith("```json")) {

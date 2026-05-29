@@ -26,7 +26,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * 任务应用服务，负责创建、执行、重试、续跑和删除任务，并维护任务关联产物生命周期。
@@ -152,6 +158,46 @@ public class AnalysisTaskService {
     }
 
     @Transactional
+    public void rerunFromNode(Long taskId, String nodeName) {
+        AnalysisTask task = getTaskOrThrow(taskId);
+        if (task.getStatus() == AnalysisTaskStatus.RUNNING) {
+            throw new BusinessException(ResultCode.TASK_ALREADY_RUNNING, "taskId=" + taskId);
+        }
+
+        List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
+        if (nodes.isEmpty()) {
+            throw new BusinessException(ResultCode.TASK_STATUS_INVALID, "Task has no workflow nodes");
+        }
+
+        TaskNode targetNode = nodes.stream()
+                .filter(node -> node.getNodeName().equals(nodeName))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ResultCode.TASK_STATUS_INVALID,
+                        "Node not found in task: " + nodeName));
+
+        List<TaskNode> affectedNodes = collectAffectedNodes(nodes, targetNode.getNodeName());
+        if (affectedNodes.isEmpty()) {
+            throw new BusinessException(ResultCode.TASK_STATUS_INVALID,
+                    "No downstream nodes affected by rerun: " + nodeName);
+        }
+
+        invalidateDerivedDataForNodeRerun(taskId, targetNode, affectedNodes);
+        for (TaskNode node : affectedNodes) {
+            resetNodeExecutionState(node, true);
+        }
+        nodeRepository.saveAll(affectedNodes);
+
+        task.setStatus(AnalysisTaskStatus.PENDING);
+        task.setErrorMessage(null);
+        task.setCompletedAt(null);
+        taskRepository.save(task);
+
+        log.info("task rerun from node requested, taskId={}, nodeName={}, affectedCount={}",
+                taskId, nodeName, affectedNodes.size());
+        runAfterCommit(taskId);
+    }
+
+    @Transactional
     public void resumeTask(Long taskId) {
         AnalysisTask task = getTaskOrThrow(taskId);
         if (task.getStatus() == AnalysisTaskStatus.RUNNING) {
@@ -171,6 +217,23 @@ public class AnalysisTaskService {
 
         log.info("task resume requested, taskId={}", taskId);
         runAfterCommit(taskId);
+    }
+
+    @Transactional
+    public void stopTask(Long taskId) {
+        AnalysisTask task = getTaskOrThrow(taskId);
+        if (task.getStatus() != AnalysisTaskStatus.RUNNING) {
+            throw new BusinessException(ResultCode.TASK_STOP_FAILED,
+                    "Only running tasks can be stopped. Current status: " + task.getStatus());
+        }
+
+        task.setStatus(AnalysisTaskStatus.STOPPED);
+        task.setErrorMessage("任务已由用户主动停止");
+        task.setCompletedAt(java.time.LocalDateTime.now());
+        taskRepository.save(task);
+        taskRecoveryService.markStoppedNodes(taskId);
+
+        log.info("task stop requested, taskId={}", taskId);
     }
 
     @Transactional
@@ -249,6 +312,81 @@ public class AnalysisTaskService {
     /**
      * 删除整任务重跑所需清空的派生产物，保证任务视角下数据一致。
      */
+    private List<TaskNode> collectAffectedNodes(List<TaskNode> nodes, String startNodeName) {
+        Map<String, List<String>> dependentsMap = new HashMap<>();
+        for (TaskNode node : nodes) {
+            dependentsMap.putIfAbsent(node.getNodeName(), new ArrayList<>());
+        }
+        for (TaskNode node : nodes) {
+            for (String dependencyName : parseDependencyNames(node.getDependsOn())) {
+                dependentsMap.computeIfAbsent(dependencyName, key -> new ArrayList<>()).add(node.getNodeName());
+            }
+        }
+
+        Set<String> affectedNames = new HashSet<>();
+        ArrayDeque<String> queue = new ArrayDeque<>();
+        queue.add(startNodeName);
+        affectedNames.add(startNodeName);
+
+        while (!queue.isEmpty()) {
+            String current = queue.removeFirst();
+            for (String dependentName : dependentsMap.getOrDefault(current, List.of())) {
+                if (affectedNames.add(dependentName)) {
+                    queue.add(dependentName);
+                }
+            }
+        }
+
+        return nodes.stream()
+                .filter(node -> affectedNames.contains(node.getNodeName()))
+                .toList();
+    }
+
+    private void invalidateDerivedDataForNodeRerun(Long taskId, TaskNode targetNode, List<TaskNode> affectedNodes) {
+        Set<String> affectedNodeNames = new HashSet<>();
+        for (TaskNode affectedNode : affectedNodes) {
+            affectedNodeNames.add(affectedNode.getNodeName());
+        }
+
+        if (targetNode.getNodeName().startsWith("collect_sources")) {
+            evidenceRepository.deleteByTaskIdAndEvidenceIdStartingWith(
+                    taskId, buildEvidencePrefix(taskId, targetNode.getNodeName()));
+        }
+
+        if (affectedNodeNames.contains("extract_schema")) {
+            knowledgeRepository.deleteByTaskId(taskId);
+            reportRepository.deleteByTaskId(taskId);
+            return;
+        }
+
+        if (affectedNodeNames.contains("analyze_competitors") || "write_report".equals(targetNode.getNodeName())) {
+            reportRepository.deleteByTaskId(taskId);
+        }
+    }
+
+    private String buildEvidencePrefix(Long taskId, String nodeName) {
+        long safeTaskId = taskId == null ? 0L : taskId;
+        String safeNodeName = nodeName == null || nodeName.isBlank()
+                ? "NODE"
+                : nodeName.toUpperCase().replaceAll("[^A-Z0-9]+", "_");
+        return String.format("T%04d-%s-", safeTaskId % 10000, safeNodeName);
+    }
+
+    private List<String> parseDependencyNames(String dependsOn) {
+        if (dependsOn == null || dependsOn.isBlank() || "[]".equals(dependsOn)) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(
+                    dependsOn,
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, String.class)
+            );
+        } catch (Exception e) {
+            log.warn("parse dependencies failed: {}", dependsOn, e);
+            return List.of();
+        }
+    }
+
     private void deleteGeneratedData(Long taskId) {
         reportRepository.deleteByTaskId(taskId);
         knowledgeRepository.deleteByTaskId(taskId);
@@ -279,7 +417,7 @@ public class AnalysisTaskService {
         List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(task.getId());
         int totalNodes = nodes.size();
         int completedNodes = (int) nodes.stream()
-                .filter(node -> node.getStatus() == TaskNodeStatus.SUCCESS)
+                .filter(node -> isTerminalStatus(node.getStatus()))
                 .count();
 
         return TaskResponse.builder()
@@ -297,6 +435,12 @@ public class AnalysisTaskService {
                 .updatedAt(task.getUpdatedAt())
                 .completedAt(task.getCompletedAt())
                 .build();
+    }
+
+    private boolean isTerminalStatus(TaskNodeStatus status) {
+        return status == TaskNodeStatus.SUCCESS
+                || status == TaskNodeStatus.FAILED
+                || status == TaskNodeStatus.SKIPPED;
     }
 
     private TaskNodeResponse toNodeResponse(TaskNode node) {

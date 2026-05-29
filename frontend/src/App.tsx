@@ -26,15 +26,10 @@ export default function App() {
       <Header className="app-header">
         <Link to="/" className="brand">
           <FileSearchOutlined />
-          <span>竞品分析 Agent</span>
+          <span>竞品分析智能体</span>
         </Link>
-        <span className="subtitle">多 Agent 协作 · 过程透明 · 结论可溯源</span>
-        <Menu
-          mode="horizontal"
-          selectedKeys={[selectedKey]}
-          items={menuItems}
-          className="top-menu"
-        />
+        <span className="subtitle">多智能体协作 · 过程透明 · 结论可溯源</span>
+        <Menu mode="horizontal" selectedKeys={[selectedKey]} items={menuItems} className="top-menu" />
       </Header>
       <Content className="app-content">
         <Routes>

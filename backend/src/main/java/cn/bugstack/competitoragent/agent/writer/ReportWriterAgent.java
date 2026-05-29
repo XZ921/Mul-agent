@@ -54,7 +54,7 @@ public class ReportWriterAgent extends BaseAgent {
 
     @Override
     public String getName() {
-        return "ReportWriterAgent";
+        return "报告撰写智能体";
     }
 
     @Override
@@ -62,7 +62,7 @@ public class ReportWriterAgent extends BaseAgent {
         // Writer 必须消费 Analyzer 的结构化分析结果，否则没有可写入的业务内容。
         String analysisResult = context.getSharedOutput("analyze_competitors");
         if (analysisResult == null || analysisResult.isBlank()) {
-            return AgentResult.failed("No analysis result available, run analyzer first");
+            return AgentResult.failed("缺少分析结果，请先执行竞品分析节点");
         }
 
         // 当节点被配置为 revision 模式时，必须显式带上 Reviewer 产出的修订计划。
@@ -70,7 +70,7 @@ public class ReportWriterAgent extends BaseAgent {
         JsonNode reviewOutput = readJson(context.getSharedOutput("quality_check"));
         JsonNode revisionPlan = extractRevisionPlan(reviewOutput);
         if (revisionMode && (revisionPlan == null || !revisionPlan.path("rewriteRequired").asBoolean(false))) {
-            return AgentResult.failed("Revision mode requires a quality-check revision plan");
+            return AgentResult.failed("修订模式缺少有效的质量评审修订计划");
         }
 
         // 证据列表直接注入提示词，约束 Writer 输出必须围绕已采集证据展开。
@@ -89,6 +89,7 @@ public class ReportWriterAgent extends BaseAgent {
         String prompt = promptService.render("writer", Map.of(
                 "taskName", safe(context.getTaskName()),
                 "subjectProduct", safe(context.getSubjectProduct()),
+                "reportLanguage", safe(context.getReportLanguage(), "中文"),
                 "analysisResult", analysisResult,
                 "currentReport", currentReport,
                 "evidenceList", evidenceList.toString(),
@@ -99,14 +100,14 @@ public class ReportWriterAgent extends BaseAgent {
         try {
             // 统一走 LLM 生成报告正文，便于后续在日志中追踪 token 使用与模型名称。
             String reportContent = llmClient.chat(
-                    "You are a professional business report writer. Generate a high-quality Markdown competitor analysis report.",
+                    "你是一名专业的中文竞品分析报告撰写专家，请输出高质量 Markdown 报告。",
                     prompt
             );
 
             // 报告记录是幂等更新：首次创建，后续重写直接覆盖正文和摘要。
             Report report = reportRepository.findByTaskId(context.getTaskId())
                     .orElse(Report.builder().taskId(context.getTaskId()).build());
-            report.setTitle(context.getTaskName() + " - Competitor Analysis Report");
+            report.setTitle(context.getTaskName() + " - 竞品分析报告");
             report.setContent(reportContent);
             report.setEvidenceCount(evidences.size());
             report.setSummary(buildSummary(reportContent, revisionMode));
@@ -116,13 +117,13 @@ public class ReportWriterAgent extends BaseAgent {
                     context.getTaskId(), revisionMode, reportContent.length());
 
             return AgentResult.success(reportContent,
-                    String.format("report generated, chars=%d, evidences=%d", reportContent.length(), evidences.size()),
+                    String.format("报告已生成，长度=%d，证据数=%d", reportContent.length(), evidences.size()),
                     System.currentTimeMillis(),
                     llmClient.getModelName(),
                     llmClient.getLastTokenUsage().toJson());
         } catch (Exception e) {
             log.error("report writing failed", e);
-            return AgentResult.failed("report writing failed: " + e.getMessage());
+            return AgentResult.failed("报告撰写失败：" + e.getMessage());
         }
     }
 
@@ -142,7 +143,7 @@ public class ReportWriterAgent extends BaseAgent {
 
     // 摘要只保留报告前部内容，便于列表页和概览页快速展示。
     private String buildSummary(String content, boolean revisionMode) {
-        String prefix = revisionMode ? "Revision report: " : "Initial report: ";
+        String prefix = revisionMode ? "修订报告：" : "初版报告：";
         if (content == null) {
             return prefix;
         }
@@ -152,6 +153,10 @@ public class ReportWriterAgent extends BaseAgent {
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private String safe(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     // Reviewer 结果既可能是对象，也可能被序列化成字符串，这里统一兜底解析。

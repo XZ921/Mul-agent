@@ -52,8 +52,16 @@ export async function resumeTask(id: number) {
   return api.post(`/task/${id}/resume`) as Promise<ApiResponse<string>>
 }
 
+export async function stopTask(id: number) {
+  return api.post(`/task/${id}/stop`) as Promise<ApiResponse<string>>
+}
+
 export async function retryTask(id: number) {
   return api.post(`/task/${id}/retry`) as Promise<ApiResponse<string>>
+}
+
+export async function rerunTaskNode(id: number, nodeName: string) {
+  return api.post(`/task/${id}/nodes/${encodeURIComponent(nodeName)}/rerun`) as Promise<ApiResponse<string>>
 }
 
 export async function deleteTask(id: number) {

@@ -108,7 +108,7 @@ public class ReportService {
 
         String content = report.getContent();
         if (content == null || content.isBlank()) {
-            throw new BusinessException(ResultCode.REPORT_EXPORT_FAILED, "Report content is empty");
+            throw new BusinessException(ResultCode.REPORT_EXPORT_FAILED, "报告内容为空，无法导出");
         }
         return content.getBytes(StandardCharsets.UTF_8);
     }
@@ -150,47 +150,47 @@ public class ReportService {
                     <section class="card">
                       <h1>%s</h1>
                       <div class="meta">
-                        <span class="badge %s">Quality %s</span>
-                        <span class="badge">Evidence %d</span>
+                        <span class="badge %s">质量 %s</span>
+                        <span class="badge">证据 %d</span>
                         <span class="badge">%s</span>
                       </div>
                     </section>
 
                     <section class="card">
-                      <h2>Summary</h2>
+                      <h2>报告摘要</h2>
                       <p>%s</p>
                     </section>
 
                     <section class="card">
-                      <h2>Execution Highlights</h2>
+                      <h2>执行摘要</h2>
                       <div class="grid">
                         <div class="metric">
-                          <span class="muted">Initial Review</span>
+                          <span class="muted">初审结果</span>
                           <strong>%s</strong>
                         </div>
                         <div class="metric">
-                          <span class="muted">Final Review</span>
+                          <span class="muted">终审结果</span>
                           <strong>%s</strong>
                         </div>
                         <div class="metric">
-                          <span class="muted">Rewrite Flow</span>
+                          <span class="muted">改写流程</span>
                           <strong>%s</strong>
                         </div>
                       </div>
                     </section>
 
                     <section class="card">
-                      <h2>Report Content</h2>
+                      <h2>报告正文</h2>
                       <div class="report-body">%s</div>
                     </section>
 
                     <section class="card">
-                      <h2>Competitor Traceability</h2>
+                      <h2>竞品溯源</h2>
                       %s
                     </section>
 
                     <section class="card">
-                      <h2>Evidence Sources</h2>
+                      <h2>证据来源</h2>
                       %s
                     </section>
                   </div>
@@ -202,11 +202,11 @@ public class ReportService {
                 report.isQualityPassed() ? "ok" : "warn",
                 report.getQualityScore() == null ? "N/A" : escapeHtml(report.getQualityScore() + "/100"),
                 report.getEvidenceCount() == null ? 0 : report.getEvidenceCount(),
-                report.isRewriteApplied() ? "Rewrite applied" : "No rewrite needed",
-                escapeHtml(report.getSummary() == null || report.getSummary().isBlank() ? "No summary available" : report.getSummary()),
+                report.isRewriteApplied() ? "已执行改写" : "无需改写",
+                escapeHtml(report.getSummary() == null || report.getSummary().isBlank() ? "暂无摘要" : report.getSummary()),
                 formatReviewStatus(report.getInitialReview()),
                 formatReviewStatus(report.getFinalReview()),
-                report.isRewriteApplied() ? "Closed Loop Executed" : "Single Pass",
+                report.isRewriteApplied() ? "已完成改写闭环" : "单轮直出",
                 escapeHtml(report.getContent()),
                 buildKnowledgeHtml(report.getCompetitorKnowledges()),
                 buildEvidenceHtml(report.getEvidences())
@@ -220,15 +220,15 @@ public class ReportService {
      */
     private String buildKnowledgeHtml(List<CompetitorKnowledgeInfo> knowledges) {
         if (knowledges == null || knowledges.isEmpty()) {
-            return "<p class=\"muted\">No structured knowledge extracted.</p>";
+            return "<p class=\"muted\">暂无结构化竞品知识。</p>";
         }
 
         StringBuilder builder = new StringBuilder();
         for (CompetitorKnowledgeInfo knowledge : knowledges) {
             builder.append("<div style=\"margin-bottom:20px;\">")
                     .append("<h3>").append(escapeHtml(knowledge.getCompetitorName())).append("</h3>")
-                    .append("<p>").append(escapeHtml(defaultText(knowledge.getSummary(), "No summary"))).append("</p>")
-                    .append("<p><strong>Source URLs:</strong> ")
+                    .append("<p>").append(escapeHtml(defaultText(knowledge.getSummary(), "暂无摘要"))).append("</p>")
+                    .append("<p><strong>来源链接：</strong> ")
                     .append(escapeHtml(String.join(", ", knowledge.getSourceUrls() == null ? List.of() : knowledge.getSourceUrls())))
                     .append("</p>")
                     .append("<pre class=\"report-body\" style=\"background:#f8fafc;color:#1f2937;\">")
@@ -244,10 +244,10 @@ public class ReportService {
      */
     private String buildEvidenceHtml(List<EvidenceInfo> evidences) {
         if (evidences == null || evidences.isEmpty()) {
-            return "<p class=\"muted\">No evidence captured.</p>";
+            return "<p class=\"muted\">暂无证据记录。</p>";
         }
 
-        StringBuilder rows = new StringBuilder("<table><thead><tr><th>ID</th><th>Competitor</th><th>Title</th><th>URL</th></tr></thead><tbody>");
+        StringBuilder rows = new StringBuilder("<table><thead><tr><th>证据编号</th><th>竞品</th><th>标题</th><th>来源链接</th></tr></thead><tbody>");
         for (EvidenceInfo evidence : evidences) {
             rows.append("<tr>")
                     .append("<td>").append(escapeHtml(evidence.getEvidenceId())).append("</td>")
@@ -262,12 +262,18 @@ public class ReportService {
 
     private String formatReviewStatus(ReviewCheckpoint review) {
         if (review == null) {
-            return "Not Triggered";
+            return "未触发";
         }
         if (review.getPassed() == null) {
-            return review.getNodeStatus().name();
+            return switch (review.getNodeStatus()) {
+                case PENDING -> "待执行";
+                case RUNNING -> "执行中";
+                case SUCCESS -> "已完成";
+                case FAILED -> "失败";
+                case SKIPPED -> "已跳过";
+            };
         }
-        return review.getPassed() ? "Passed" : "Needs Revision";
+        return review.getPassed() ? "已通过" : "需修订";
     }
 
     private List<String> parseJsonList(String json) {

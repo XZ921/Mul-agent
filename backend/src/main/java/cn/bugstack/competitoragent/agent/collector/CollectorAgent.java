@@ -50,7 +50,7 @@ public class CollectorAgent extends BaseAgent {
 
     @Override
     public String getName() {
-        return "CollectorAgent";
+        return "信息采集智能体";
     }
 
     @Override
@@ -58,12 +58,12 @@ public class CollectorAgent extends BaseAgent {
         // 采集节点依赖动态 DAG 注入的 competitorName / competitorUrls / sourceType 配置。
         CollectorNodeConfig config = parseConfig(context.getCurrentNodeConfig());
         if (config == null || config.competitorName == null || config.competitorName.isBlank()) {
-            return AgentResult.failed("Missing collector node config");
+            return AgentResult.failed("缺少采集节点配置");
         }
 
         List<String> urls = config.competitorUrls == null ? List.of() : config.competitorUrls;
         if (urls.isEmpty()) {
-            return AgentResult.failed("No URL provided for competitor: " + config.competitorName);
+            return AgentResult.failed("竞品未提供可采集的链接：" + config.competitorName);
         }
 
         List<Map<String, Object>> results = new ArrayList<>();
@@ -110,9 +110,9 @@ public class CollectorAgent extends BaseAgent {
                     "results", results
             ));
             return AgentResult.success(outputJson,
-                    "Collected " + sourceType + " pages for " + config.competitorName + ": " + results.size());
+                    "已完成 " + config.competitorName + " 的 " + sourceType + " 采集，共 " + results.size() + " 条");
         } catch (JsonProcessingException e) {
-            return AgentResult.failed("serialize collection result failed: " + e.getMessage());
+            return AgentResult.failed("采集结果序列化失败：" + e.getMessage());
         }
     }
 

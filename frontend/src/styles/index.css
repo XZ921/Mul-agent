@@ -127,6 +127,16 @@ body {
   margin-top: 16px;
 }
 
+.workflow-steps .ant-steps-item-description {
+  max-width: none;
+}
+
+.workflow-steps .ant-steps-item-title,
+.workflow-steps .ant-steps-item-description {
+  word-break: break-word;
+  white-space: normal;
+}
+
 .code-block {
   max-height: 260px;
   overflow: auto;

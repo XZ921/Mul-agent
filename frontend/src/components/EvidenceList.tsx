@@ -21,7 +21,9 @@ export default function EvidenceList({ evidences }: Props) {
         <List.Item>
           <div className="evidence-item">
             <Space size={[4, 4]} wrap>
-              <Tag color="blue" className="mono-tag">{item.evidenceId}</Tag>
+              <Tag color="blue" className="mono-tag">
+                {item.evidenceId}
+              </Tag>
               <Tag>{item.competitorName}</Tag>
             </Space>
             <Paragraph ellipsis={{ rows: 1 }} className="evidence-title">
@@ -35,11 +37,11 @@ export default function EvidenceList({ evidences }: Props) {
             </Space>
             {item.contentSnippet && (
               <Paragraph type="secondary" ellipsis={{ rows: 3 }} className="evidence-snippet">
-                "{item.contentSnippet}"
+                “{item.contentSnippet}”
               </Paragraph>
             )}
             <Text type="secondary" className="small-text">
-              采集时间: {dayjs(item.collectedAt).format('YYYY-MM-DD HH:mm:ss')}
+              采集时间：{dayjs(item.collectedAt).format('YYYY-MM-DD HH:mm:ss')}
             </Text>
           </div>
         </List.Item>

@@ -57,7 +57,7 @@ public class QualityReviewAgent extends BaseAgent {
 
     @Override
     public String getName() {
-        return "QualityReviewAgent";
+        return "质量评审智能体";
     }
 
     @Override
@@ -65,7 +65,7 @@ public class QualityReviewAgent extends BaseAgent {
         // Reviewer 只评审当前任务已生成的报告正文，没有报告则无法进入质检。
         Report report = reportRepository.findByTaskId(context.getTaskId()).orElse(null);
         if (report == null || report.getContent() == null || report.getContent().isBlank()) {
-            return AgentResult.failed("No report content available for review");
+            return AgentResult.failed("缺少可评审的报告内容");
         }
 
         List<EvidenceSource> evidences = evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(context.getTaskId());
@@ -81,7 +81,7 @@ public class QualityReviewAgent extends BaseAgent {
         try {
             // Reviewer 同样要求模型输出 JSON，便于系统提取 score / issues / revisionPlan。
             String llmResponse = llmClient.chatForJson(
-                    "You are a strict quality reviewer. Return JSON only.",
+                    "你是一名严格的中文质量评审专家，请只返回 JSON。",
                     prompt,
                     "QualityReview"
             );
@@ -96,9 +96,9 @@ public class QualityReviewAgent extends BaseAgent {
                 for (JsonNode issueNode : reviewJson.get("issues")) {
                     items.add(new RevisionPlan.RevisionItem(
                             issueNode.path("type").asText("UNKNOWN"),
-                            issueNode.path("section").asText("general"),
+                            issueNode.path("section").asText("通用"),
                             issueNode.path("severity").asText("WARNING"),
-                            issueNode.path("suggestion").asText("Please improve this section")
+                            issueNode.path("suggestion").asText("请补充并完善这一部分")
                     ));
                 }
             }
@@ -108,7 +108,7 @@ public class QualityReviewAgent extends BaseAgent {
                     .rewriteRequired(!passed)
                     .summary(summary)
                     .items(items)
-                    .rewriteGuidelines(buildGuidelines(items))
+                    .rewriteGuidelines(passed ? List.of() : buildGuidelines(items))
                     .build();
 
             String revisionPlanJson = objectMapper.writeValueAsString(revisionPlan);
@@ -129,8 +129,8 @@ public class QualityReviewAgent extends BaseAgent {
 
             String outputJson = objectMapper.writeValueAsString(output);
             String outputSummary = passed
-                    ? "quality check passed, report can be closed"
-                    : "quality check failed, revision plan generated";
+                    ? "质量评审通过，报告可直接定稿"
+                    : "质量评审未通过，已生成修订计划";
 
             return AgentResult.success(outputJson, outputSummary,
                     System.currentTimeMillis(),
@@ -138,7 +138,7 @@ public class QualityReviewAgent extends BaseAgent {
                     llmClient.getLastTokenUsage().toJson());
         } catch (Exception e) {
             log.error("quality review failed", e);
-            return AgentResult.failed("quality review failed: " + e.getMessage());
+            return AgentResult.failed("质量评审失败：" + e.getMessage());
         }
     }
 
@@ -149,7 +149,7 @@ public class QualityReviewAgent extends BaseAgent {
             guidelines.add(item.getSection() + ": " + item.getSuggestion());
         }
         if (guidelines.isEmpty()) {
-            guidelines.add("Strengthen evidence citations and tighten section structure.");
+            guidelines.add("请补强证据引用，并进一步收紧章节结构与结论表达。");
         }
         return guidelines;
     }

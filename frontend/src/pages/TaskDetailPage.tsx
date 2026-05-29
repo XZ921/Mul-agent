@@ -27,40 +27,57 @@ import {
   SplitCellsOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { executeTask, getTask, getTaskNodes, resumeTask, retryTask } from '../api/client'
+import { executeTask, getTask, getTaskNodes, resumeTask, rerunTaskNode, retryTask, stopTask } from '../api/client'
 import AgentLogPanel from '../components/AgentLogPanel'
 import type { NodeStatus, TaskInfo, TaskNodeInfo, TaskStatus } from '../types'
+import {
+  getAgentTypeText,
+  getNodeDisplayName,
+  getNodeNameLabel,
+  getNodeStatusText,
+  getReviewPassedText,
+  getReviewSectionText,
+  getReviewSeverityText,
+  getReviewTypeText,
+  getTaskStatusText,
+} from '../utils/display'
 
 const { Paragraph, Text } = Typography
 
-const nodeStatusMap: Record<NodeStatus, { color: string; text: string }> = {
-  PENDING: { color: 'default', text: 'Pending' },
-  RUNNING: { color: 'processing', text: 'Running' },
-  SUCCESS: { color: 'success', text: 'Success' },
-  FAILED: { color: 'error', text: 'Failed' },
-  SKIPPED: { color: 'default', text: 'Skipped' },
+const nodeStatusColorMap: Record<NodeStatus, string> = {
+  PENDING: 'default',
+  RUNNING: 'processing',
+  SUCCESS: 'success',
+  FAILED: 'error',
+  SKIPPED: 'default',
 }
 
-const taskStatusMap: Record<TaskStatus, { color: string; text: string }> = {
-  PENDING: { color: 'gold', text: 'Pending' },
-  RUNNING: { color: 'blue', text: 'Running' },
-  SUCCESS: { color: 'green', text: 'Success' },
-  FAILED: { color: 'red', text: 'Failed' },
+const taskStatusColorMap: Record<TaskStatus, string> = {
+  PENDING: 'gold',
+  RUNNING: 'blue',
+  SUCCESS: 'green',
+  STOPPED: 'orange',
+  FAILED: 'red',
 }
 
-// 统一节点状态标签，避免列表页、抽屉面板出现展示不一致。
+function isTerminalNodeStatus(status: NodeStatus) {
+  return status === 'SUCCESS' || status === 'FAILED' || status === 'SKIPPED'
+}
+
+function getNodeNoticeType(status: NodeStatus) {
+  if (status === 'FAILED') return 'error' as const
+  if (status === 'SKIPPED') return 'warning' as const
+  return 'info' as const
+}
+
 function statusTag(status: NodeStatus) {
-  const item = nodeStatusMap[status]
-  return <Tag color={item.color}>{item.text}</Tag>
+  return <Tag color={nodeStatusColorMap[status]}>{getNodeStatusText(status)}</Tag>
 }
 
-// 统一任务状态标签，便于任务级状态与节点级状态区分。
 function taskStatusTag(status: TaskStatus) {
-  const item = taskStatusMap[status]
-  return <Tag color={item.color}>{item.text}</Tag>
+  return <Tag color={taskStatusColorMap[status]}>{getTaskStatusText(status)}</Tag>
 }
 
-// 后端部分字段以 JSON 字符串存储，前端统一做安全解析，避免页面因脏数据直接崩掉。
 function parseJsonArray(value: string | null) {
   if (!value) return []
   try {
@@ -71,7 +88,6 @@ function parseJsonArray(value: string | null) {
   }
 }
 
-// 通用 JSON 解析器，节点配置、输入输出详情都依赖它做容错展示。
 function parseJson(value?: string | null) {
   if (!value) return null
   try {
@@ -81,7 +97,6 @@ function parseJson(value?: string | null) {
   }
 }
 
-// 把原始 JSON 美化成可读文本，便于节点级溯源面板直接查看配置和产物。
 function pretty(value?: string | null) {
   if (!value) return ''
   try {
@@ -91,17 +106,14 @@ function pretty(value?: string | null) {
   }
 }
 
-// 采集与抽取节点是证据链的核心入口，抽屉里会针对它们展示“已捕获证据”视角。
 function isEvidenceNode(node: TaskNodeInfo) {
   return node.nodeName.startsWith('collect_sources') || node.nodeName === 'extract_schema'
 }
 
-// Reviewer 节点需要额外展示评分、问题列表、修订计划等结构化内容。
 function isReviewNode(node: TaskNodeInfo) {
   return node.agentType === 'REVIEWER'
 }
 
-// 不同节点输出里的证据 ID 结构不完全一致，这里统一抽取成一组可回溯的 evidenceId。
 function extractEvidenceIds(payload: unknown): string[] {
   if (!payload || typeof payload !== 'object') return []
   const record = payload as Record<string, unknown>
@@ -121,7 +133,6 @@ function extractEvidenceIds(payload: unknown): string[] {
   return [...directIds.map(String), ...sourceIds, ...documentIds]
 }
 
-// Reviewer 输出既承载评分结果，也承载重写计划，这里做一次前端归一化。
 function parseReviewPayload(value?: string | null) {
   const parsed = parseJson(value) as
     | {
@@ -157,47 +168,46 @@ export default function TaskDetailPage() {
   const [nodes, setNodes] = useState<TaskNodeInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
-  const [selectedNode, setSelectedNode] = useState<TaskNodeInfo | null>(null)
+  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
 
-  // 任务详情和节点列表总是成对刷新，确保概览区、步骤条、溯源面板看到的是同一份快照。
   const fetchData = useCallback(async () => {
     try {
       const [taskRes, nodesRes] = await Promise.all([getTask(taskId), getTaskNodes(taskId)])
       setTask(taskRes.data)
       setNodes(nodesRes.data || [])
-      if (selectedNode) {
-        const nextSelected = (nodesRes.data || []).find((node) => node.id === selectedNode.id) || null
-        setSelectedNode(nextSelected)
-      }
     } catch {
-      message.error('Failed to load task detail')
+      message.error('加载任务详情失败')
     } finally {
       setLoading(false)
     }
-  }, [taskId, selectedNode])
+  }, [taskId])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
 
-  // 运行中的任务持续轮询，支撑“节点级进度面板”实时刷新。
   useEffect(() => {
     if (task?.status !== 'RUNNING') return
     const timer = window.setInterval(fetchData, 3000)
     return () => window.clearInterval(timer)
   }, [task?.status, fetchData])
 
-  // 任务总体进度依赖后端累计完成节点数，适合做任务级概览展示。
+  const completedNodeCount = useMemo(() => {
+    if (nodes.length) {
+      return nodes.filter((node) => isTerminalNodeStatus(node.status)).length
+    }
+    return task?.completedNodes ?? 0
+  }, [nodes, task])
+
   const progressPercent = useMemo(() => {
     if (!task?.totalNodes) return 0
-    return Math.round((task.completedNodes / task.totalNodes) * 100)
-  }, [task])
+    return Math.round((completedNodeCount / task.totalNodes) * 100)
+  }, [completedNodeCount, task])
 
-  // 步骤条优先定位正在执行的节点；如果没有运行中节点，则退化为已完成节点数量。
   const currentStep = useMemo(() => {
     const runningIndex = nodes.findIndex((node) => node.status === 'RUNNING')
     if (runningIndex >= 0) return runningIndex
-    return nodes.filter((node) => node.status === 'SUCCESS').length
+    return nodes.filter((node) => isTerminalNodeStatus(node.status)).length
   }, [nodes])
 
   const activeRevisionNode = useMemo(
@@ -212,7 +222,11 @@ export default function TaskDetailPage() {
 
   const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.nodeName, node])), [nodes])
 
-  // 抽屉中的“上游节点”面板依赖 dependsOn，把当前节点依赖链直接映射成可点击实体。
+  const selectedNode = useMemo(
+    () => nodes.find((node) => node.id === selectedNodeId) || null,
+    [nodes, selectedNodeId],
+  )
+
   const selectedNodeDependencies = useMemo(() => {
     const dependencyNames = parseJsonArray(selectedNode?.dependsOn || null).map(String)
     return dependencyNames
@@ -220,7 +234,6 @@ export default function TaskDetailPage() {
       .filter((item): item is TaskNodeInfo => Boolean(item))
   }, [nodeMap, selectedNode])
 
-  // 节点级溯源的关键：递归回看当前节点及其上游节点，把所有 evidenceId 聚合出来。
   const selectedNodeEvidenceIds = useMemo(() => {
     if (!selectedNode) return []
 
@@ -241,43 +254,66 @@ export default function TaskDetailPage() {
 
   const selectedReviewPayload = useMemo(() => parseReviewPayload(selectedNode?.outputData), [selectedNode])
 
-  // 失败后重新执行整条 DAG，适合首次运行失败或用户明确要求重新跑全流程。
   const handleExecute = async () => {
     setActionLoading(true)
     try {
       await executeTask(taskId)
-      message.success('Task started')
+      message.success('任务已启动')
       await fetchData()
     } catch {
-      message.error('Execute task failed')
+      message.error('执行任务失败')
     } finally {
       setActionLoading(false)
     }
   }
 
-  // Retry 会把任务重置回初始状态，用于彻底清理失败现场重新开始。
   const handleRetry = async () => {
     setActionLoading(true)
     try {
       await retryTask(taskId)
-      message.success('Task reset')
+      message.success('任务已重置')
       await fetchData()
     } catch {
-      message.error('Retry task failed')
+      message.error('重试任务失败')
     } finally {
       setActionLoading(false)
     }
   }
 
-  // Resume 会尝试基于已有检查点继续跑，适合 V2 的恢复执行场景。
   const handleResume = async () => {
     setActionLoading(true)
     try {
       await resumeTask(taskId)
-      message.success('Task resumed from existing checkpoints')
+      message.success('已基于现有检查点恢复任务')
       await fetchData()
     } catch {
-      message.error('Resume task failed')
+      message.error('恢复任务失败')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleStop = async () => {
+    setActionLoading(true)
+    try {
+      await stopTask(taskId)
+      message.success('任务已停止')
+      await fetchData()
+    } catch {
+      message.error('停止任务失败')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleRerunNode = async (nodeName: string) => {
+    setActionLoading(true)
+    try {
+      await rerunTaskNode(taskId, nodeName)
+      message.success(`已从节点 ${nodeName} 重新发起执行`)
+      await fetchData()
+    } catch {
+      message.error('从当前节点重跑失败')
     } finally {
       setActionLoading(false)
     }
@@ -288,7 +324,7 @@ export default function TaskDetailPage() {
   }
 
   if (!task) {
-    return <Alert type="warning" message="Task not found" />
+    return <Alert type="warning" message="未找到任务" />
   }
 
   const competitors = parseJsonArray(task.competitorNames)
@@ -298,7 +334,7 @@ export default function TaskDetailPage() {
     <div>
       <div className="page-toolbar">
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')}>
-          Back
+          返回
         </Button>
       </div>
 
@@ -306,28 +342,28 @@ export default function TaskDetailPage() {
         <h2>{task.taskName}</h2>
         <Space wrap>
           {taskStatusTag(task.status)}
-          <Text type="secondary">Created {dayjs(task.createdAt).format('YYYY-MM-DD HH:mm:ss')}</Text>
+          <Text type="secondary">创建时间 {dayjs(task.createdAt).format('YYYY-MM-DD HH:mm:ss')}</Text>
         </Space>
       </div>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={8}>
-          <Card title="Overview" className="work-card">
+          <Card title="任务概览" className="work-card">
             <Progress
               percent={progressPercent}
-              status={task.status === 'FAILED' ? 'exception' : undefined}
+              status={task.status === 'FAILED' || task.status === 'STOPPED' ? 'exception' : undefined}
               style={{ marginBottom: 16 }}
             />
             <Descriptions column={1} size="small">
-              <Descriptions.Item label="Product">{task.subjectProduct}</Descriptions.Item>
-              <Descriptions.Item label="Competitors">
+              <Descriptions.Item label="产品">{task.subjectProduct}</Descriptions.Item>
+              <Descriptions.Item label="竞品">
                 <Space size={[4, 4]} wrap>
                   {competitors.map((name) => (
                     <Tag key={String(name)}>{String(name)}</Tag>
                   ))}
                 </Space>
               </Descriptions.Item>
-              <Descriptions.Item label="Dimensions">
+              <Descriptions.Item label="分析维度">
                 <Space size={[4, 4]} wrap>
                   {dimensions.map((item) => (
                     <Tag color="blue" key={String(item)}>
@@ -336,16 +372,16 @@ export default function TaskDetailPage() {
                   ))}
                 </Space>
               </Descriptions.Item>
-              <Descriptions.Item label="Nodes">
-                {task.completedNodes}/{task.totalNodes}
+              <Descriptions.Item label="节点进度">
+                {completedNodeCount}/{task.totalNodes}
               </Descriptions.Item>
             </Descriptions>
 
             {task.errorMessage && (
               <Alert
-                type="error"
+                type={task.status === 'STOPPED' ? 'warning' : 'error'}
                 showIcon
-                message="Task failed"
+                message={task.status === 'STOPPED' ? '任务已停止' : '任务执行失败'}
                 description={task.errorMessage}
                 style={{ marginTop: 16 }}
               />
@@ -359,17 +395,22 @@ export default function TaskDetailPage() {
                   loading={actionLoading}
                   onClick={handleExecute}
                 >
-                  {task.status === 'FAILED' ? 'Run Again' : 'Start'}
+                  {task.status === 'FAILED' ? '重新执行' : '开始执行'}
                 </Button>
               )}
-              {task.status === 'FAILED' && (
+              {task.status === 'RUNNING' && (
+                <Button danger loading={actionLoading} onClick={handleStop}>
+                  停止任务
+                </Button>
+              )}
+              {(task.status === 'FAILED' || task.status === 'STOPPED') && (
                 <Button type="primary" loading={actionLoading} onClick={handleResume}>
-                  Resume
+                  恢复执行
                 </Button>
               )}
-              {task.status === 'FAILED' && (
+              {(task.status === 'FAILED' || task.status === 'STOPPED') && (
                 <Button icon={<ReloadOutlined />} loading={actionLoading} onClick={handleRetry}>
-                  Reset Task
+                  重置任务
                 </Button>
               )}
               <Button
@@ -377,7 +418,7 @@ export default function TaskDetailPage() {
                 disabled={task.status !== 'SUCCESS'}
                 onClick={() => navigate(`/task/${taskId}/report`)}
               >
-                View Report
+                查看报告
               </Button>
             </Space>
 
@@ -385,12 +426,12 @@ export default function TaskDetailPage() {
               <Space wrap>
                 {activeRevisionNode && (
                   <Tag color="orange" icon={<SplitCellsOutlined />}>
-                    Revision flow ready
+                    修订流程已就绪
                   </Tag>
                 )}
                 {finalReviewNode && (
                   <Tag color="green" icon={<CheckCircleOutlined />}>
-                    Final review node present
+                    已包含终审节点
                   </Tag>
                 )}
               </Space>
@@ -399,18 +440,20 @@ export default function TaskDetailPage() {
         </Col>
 
         <Col xs={24} lg={16}>
-          <Card title="Execution Flow" className="work-card">
-            {/* 步骤条承载任务级流程视图，帮助用户快速判断当前卡在哪个节点。 */}
+          <Card title="执行流程" className="work-card">
             <Steps
+              className="workflow-steps"
               current={currentStep}
+              direction="vertical"
+              size="small"
               items={nodes.map((node) => ({
-                title: node.displayName,
+                title: getNodeDisplayName(node),
                 description: (
                   <Space direction="vertical" size={2}>
                     <Space wrap>
                       {statusTag(node.status)}
-                      <Text type="secondary">{node.agentType}</Text>
-                      {node.allowFailedDependency && <Tag color="gold">Allow-fail</Tag>}
+                      <Text type="secondary">{getAgentTypeText(node.agentType)}</Text>
+                      {node.allowFailedDependency && <Tag color="gold">允许失败依赖</Tag>}
                     </Space>
                     {node.nodeNotes && (
                       <Text type="secondary" style={{ fontSize: 12 }}>
@@ -433,7 +476,7 @@ export default function TaskDetailPage() {
                 status:
                   node.status === 'FAILED'
                     ? 'error'
-                    : node.status === 'SUCCESS'
+                    : isTerminalNodeStatus(node.status)
                       ? 'finish'
                       : node.status === 'RUNNING'
                         ? 'process'
@@ -449,7 +492,7 @@ export default function TaskDetailPage() {
         items={[
           {
             key: 'nodes',
-            label: 'Node Trace',
+            label: '节点追踪',
             children: (
               <Row gutter={[16, 16]}>
                 {nodes.map((node) => (
@@ -458,27 +501,39 @@ export default function TaskDetailPage() {
                       size="small"
                       title={
                         <Space>
-                          <span>{node.displayName}</span>
+                          <span>{getNodeDisplayName(node)}</span>
                           {statusTag(node.status)}
                         </Space>
                       }
                       extra={
-                        <Button type="link" onClick={() => setSelectedNode(node)}>
-                          Trace
-                        </Button>
+                        <Space size={4}>
+                          <Button type="link" onClick={() => setSelectedNodeId(node.id)}>
+                            查看追踪
+                          </Button>
+                          {task.status !== 'RUNNING' && (
+                            <Button type="link" loading={actionLoading} onClick={() => void handleRerunNode(node.nodeName)}>
+                              从此节点重跑
+                            </Button>
+                          )}
+                        </Space>
                       }
                       className="work-card"
                     >
                       {node.errorMessage && (
-                        <Alert type="error" showIcon message={node.errorMessage} style={{ marginBottom: 12 }} />
+                        <Alert
+                          type={getNodeNoticeType(node.status)}
+                          showIcon
+                          message={node.errorMessage}
+                          style={{ marginBottom: 12 }}
+                        />
                       )}
                       <Descriptions column={1} size="small" bordered>
-                        <Descriptions.Item label="Node">{node.nodeName}</Descriptions.Item>
-                        <Descriptions.Item label="Agent">{node.agentType}</Descriptions.Item>
-                        <Descriptions.Item label="Depends On">{node.dependsOn || '[]'}</Descriptions.Item>
-                        <Descriptions.Item label="Config">{node.nodeConfig || 'No config recorded'}</Descriptions.Item>
-                        <Descriptions.Item label="Input">{node.inputSummary || 'No input recorded'}</Descriptions.Item>
-                        <Descriptions.Item label="Output">{node.outputSummary || 'No output recorded'}</Descriptions.Item>
+                        <Descriptions.Item label="节点">{getNodeNameLabel(node.nodeName)}</Descriptions.Item>
+                        <Descriptions.Item label="智能体">{getAgentTypeText(node.agentType)}</Descriptions.Item>
+                        <Descriptions.Item label="依赖节点">{node.dependsOn || '[]'}</Descriptions.Item>
+                        <Descriptions.Item label="配置">{node.nodeConfig || '暂无配置记录'}</Descriptions.Item>
+                        <Descriptions.Item label="输入">{node.inputSummary || '暂无输入记录'}</Descriptions.Item>
+                        <Descriptions.Item label="输出">{node.outputSummary || '暂无输出记录'}</Descriptions.Item>
                       </Descriptions>
                     </Card>
                   </Col>
@@ -488,73 +543,72 @@ export default function TaskDetailPage() {
           },
           {
             key: 'logs',
-            label: 'Agent Logs',
+            label: '智能体日志',
             children: <AgentLogPanel taskId={taskId} autoRefresh={task.status === 'RUNNING'} />,
           },
         ]}
       />
 
       <Drawer
-        title={selectedNode ? `${selectedNode.displayName} Trace` : 'Node Trace'}
+        title={selectedNode ? `${getNodeDisplayName(selectedNode)}追踪` : '节点追踪'}
         open={Boolean(selectedNode)}
-        onClose={() => setSelectedNode(null)}
+        onClose={() => setSelectedNodeId(null)}
         width={820}
       >
         {selectedNode && (
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
-            {/* 第一层先把节点配置、输入、输出并排收拢，形成单节点的完整执行快照。 */}
+            {task.status !== 'RUNNING' && (
+              <Button type="primary" loading={actionLoading} onClick={() => void handleRerunNode(selectedNode.nodeName)}>
+                从该节点重跑
+              </Button>
+            )}
+
             <Descriptions column={1} bordered size="small">
-              <Descriptions.Item label="Status">{statusTag(selectedNode.status)}</Descriptions.Item>
-              <Descriptions.Item label="Node">{selectedNode.nodeName}</Descriptions.Item>
-              <Descriptions.Item label="Agent">{selectedNode.agentType}</Descriptions.Item>
-              <Descriptions.Item label="Depends On">{selectedNode.dependsOn || '[]'}</Descriptions.Item>
-              <Descriptions.Item label="Node Notes">{selectedNode.nodeNotes || '-'}</Descriptions.Item>
-              <Descriptions.Item label="Config">
+              <Descriptions.Item label="状态">{statusTag(selectedNode.status)}</Descriptions.Item>
+              <Descriptions.Item label="节点">{getNodeNameLabel(selectedNode.nodeName)}</Descriptions.Item>
+              <Descriptions.Item label="智能体">{getAgentTypeText(selectedNode.agentType)}</Descriptions.Item>
+              <Descriptions.Item label="依赖节点">{selectedNode.dependsOn || '[]'}</Descriptions.Item>
+              <Descriptions.Item label="节点说明">{selectedNode.nodeNotes || '-'}</Descriptions.Item>
+              <Descriptions.Item label="配置">
                 <Paragraph code className="code-block">
-                  {pretty(selectedNode.nodeConfig) || 'No config recorded'}
+                  {pretty(selectedNode.nodeConfig) || '暂无配置记录'}
                 </Paragraph>
               </Descriptions.Item>
-              <Descriptions.Item label="Input Data">
+              <Descriptions.Item label="输入数据">
                 <Paragraph code className="code-block">
-                  {pretty(selectedNode.inputData) || selectedNode.inputSummary || 'No input recorded'}
+                  {pretty(selectedNode.inputData) || selectedNode.inputSummary || '暂无输入记录'}
                 </Paragraph>
               </Descriptions.Item>
-              <Descriptions.Item label="Output Data">
+              <Descriptions.Item label="输出数据">
                 <Paragraph code className="code-block">
-                  {pretty(selectedNode.outputData) || selectedNode.outputSummary || 'No output recorded'}
+                  {pretty(selectedNode.outputData) || selectedNode.outputSummary || '暂无输出记录'}
                 </Paragraph>
               </Descriptions.Item>
             </Descriptions>
 
-            {/* Reviewer 节点单独展开评分结论和修订计划，补齐 Writer / Reviewer 闭环可视化。 */}
             {isReviewNode(selectedNode) && selectedReviewPayload && (
-              <Card size="small" title="Review Decision">
+              <Card size="small" title="评审结论">
                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
                   <Space wrap>
                     {selectedReviewPayload.score != null && (
-                      <Tag color="blue">Score {selectedReviewPayload.score}/100</Tag>
+                      <Tag color="blue">评分 {selectedReviewPayload.score}/100</Tag>
                     )}
                     {selectedReviewPayload.passed != null && (
                       <Tag color={selectedReviewPayload.passed ? 'green' : 'orange'}>
-                        {selectedReviewPayload.passed ? 'Passed' : 'Needs revision'}
+                        {getReviewPassedText(selectedReviewPayload.passed)}
                       </Tag>
                     )}
                   </Space>
 
                   {selectedReviewPayload.summary && (
-                    <Alert
-                      type="info"
-                      showIcon
-                      message="Reviewer Summary"
-                      description={selectedReviewPayload.summary}
-                    />
+                    <Alert type="info" showIcon message="评审摘要" description={selectedReviewPayload.summary} />
                   )}
 
                   {selectedReviewPayload.issues.length > 0 && (
                     <List
                       size="small"
                       bordered
-                      header="Issues"
+                      header="问题清单"
                       dataSource={selectedReviewPayload.issues}
                       renderItem={(item) => (
                         <List.Item>
@@ -562,19 +616,15 @@ export default function TaskDetailPage() {
                             <Space wrap>
                               <Tag
                                 color={
-                                  item.severity === 'ERROR'
-                                    ? 'red'
-                                    : item.severity === 'WARNING'
-                                      ? 'orange'
-                                      : 'blue'
+                                  item.severity === 'ERROR' ? 'red' : item.severity === 'WARNING' ? 'orange' : 'blue'
                                 }
                               >
-                                {item.severity || 'INFO'}
+                                {getReviewSeverityText(item.severity)}
                               </Tag>
-                              <Text>{item.section || 'General'}</Text>
-                              <Text type="secondary">{item.type || 'Issue'}</Text>
+                              <Text>{getReviewSectionText(item.section)}</Text>
+                              <Text type="secondary">{getReviewTypeText(item.type)}</Text>
                             </Space>
-                            <Text>{item.suggestion || 'No suggestion provided'}</Text>
+                            <Text>{item.suggestion || '暂无建议说明'}</Text>
                           </Space>
                         </List.Item>
                       )}
@@ -585,7 +635,7 @@ export default function TaskDetailPage() {
                     <List
                       size="small"
                       bordered
-                      header="Revision Plan"
+                      header="修订计划"
                       dataSource={[
                         ...(selectedReviewPayload.revisionPlan.summary
                           ? [selectedReviewPayload.revisionPlan.summary]
@@ -599,9 +649,8 @@ export default function TaskDetailPage() {
               </Card>
             )}
 
-            {/* 上游节点列表用于把“当前输出来自哪里”串起来，支持逐层回点查看。 */}
             {selectedNodeDependencies.length > 0 && (
-              <Card size="small" title="Upstream Nodes">
+              <Card size="small" title="上游节点">
                 <List
                   size="small"
                   bordered
@@ -609,17 +658,17 @@ export default function TaskDetailPage() {
                   renderItem={(item) => (
                     <List.Item
                       actions={[
-                        <Button key={item.id} type="link" onClick={() => setSelectedNode(item)}>
-                          Trace
+                        <Button key={item.id} type="link" onClick={() => setSelectedNodeId(item.id)}>
+                          查看追踪
                         </Button>,
                       ]}
                     >
                       <Space direction="vertical" size={2} style={{ width: '100%' }}>
                         <Space wrap>
-                          <Text strong>{item.displayName}</Text>
+                          <Text strong>{getNodeDisplayName(item)}</Text>
                           {statusTag(item.status)}
                         </Space>
-                        <Text type="secondary">{item.outputSummary || item.errorMessage || 'No output yet'}</Text>
+                        <Text type="secondary">{item.outputSummary || item.errorMessage || '暂无输出'}</Text>
                       </Space>
                     </List.Item>
                   )}
@@ -627,9 +676,8 @@ export default function TaskDetailPage() {
               </Card>
             )}
 
-            {/* 证据标签是节点级溯源的最后一环，用来回答“这段结果最终基于哪些证据”。 */}
             {selectedNodeEvidenceIds.length > 0 && (
-              <Card size="small" title={isEvidenceNode(selectedNode) ? 'Evidence Captured' : 'Evidence Trace'}>
+              <Card size="small" title={isEvidenceNode(selectedNode) ? '已捕获证据' : '证据追踪'}>
                 <Space wrap>
                   {selectedNodeEvidenceIds.map((evidenceId) => (
                     <Tag color="green" key={evidenceId}>

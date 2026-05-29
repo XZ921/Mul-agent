@@ -75,11 +75,25 @@ public class TaskController {
         return ApiResponse.success("Task resumed", "Task resumed from existing checkpoints");
     }
 
+    @PostMapping("/{id}/stop")
+    @Operation(summary = "Stop running task")
+    public ApiResponse<String> stopTask(@PathVariable Long id) {
+        taskService.stopTask(id);
+        return ApiResponse.success("Task stopped", "Task stop requested");
+    }
+
     @PostMapping("/{id}/retry")
     @Operation(summary = "Retry failed task with full reset")
     public ApiResponse<String> retryTask(@PathVariable Long id) {
         taskService.retryTask(id);
         return ApiResponse.success("Task reset", "Task reset to pending");
+    }
+
+    @PostMapping("/{id}/nodes/{nodeName}/rerun")
+    @Operation(summary = "Rerun task from a specific node")
+    public ApiResponse<String> rerunNode(@PathVariable Long id, @PathVariable String nodeName) {
+        taskService.rerunFromNode(id, nodeName);
+        return ApiResponse.success("Node rerun scheduled", "Task rerun scheduled from node " + nodeName);
     }
 
     @DeleteMapping("/{id}")

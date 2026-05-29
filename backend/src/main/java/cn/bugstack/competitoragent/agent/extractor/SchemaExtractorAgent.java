@@ -72,14 +72,14 @@ public class SchemaExtractorAgent extends BaseAgent {
 
     @Override
     public String getName() {
-        return "SchemaExtractorAgent";
+        return "结构抽取智能体";
     }
 
     @Override
     protected AgentResult doExecute(AgentContext context) {
         List<EvidenceSource> evidences = evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(context.getTaskId());
         if (evidences.isEmpty()) {
-            return AgentResult.failed("No evidence sources available");
+            return AgentResult.failed("暂无可用于抽取的证据来源");
         }
 
         // 抽取阶段按竞品聚合证据，保证每次提示词只处理单个竞品上下文。
@@ -112,7 +112,7 @@ public class SchemaExtractorAgent extends BaseAgent {
         }
 
         if (successCount == 0) {
-            return AgentResult.failed("No competitor knowledge could be extracted");
+            return AgentResult.failed("未能抽取出可用的竞品知识");
         }
 
         try {
@@ -122,9 +122,9 @@ public class SchemaExtractorAgent extends BaseAgent {
                     "results", extractionSummaries
             ));
             return AgentResult.success(outputJson,
-                    "Extracted competitor knowledge: " + successCount + "/" + evidencesByCompetitor.size());
+                    "已抽取竞品知识：" + successCount + "/" + evidencesByCompetitor.size());
         } catch (JsonProcessingException e) {
-            return AgentResult.failed("serialize extract result failed: " + e.getMessage());
+            return AgentResult.failed("抽取结果序列化失败：" + e.getMessage());
         }
     }
 
@@ -148,7 +148,7 @@ public class SchemaExtractorAgent extends BaseAgent {
         ));
 
         String llmResponse = llmClient.chatForJson(
-                "You are a competitor knowledge extraction expert. Return JSON only.",
+                "你是一名竞品知识抽取专家，请只返回 JSON。",
                 prompt,
                 "ExtractedSchema"
         );

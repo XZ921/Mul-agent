@@ -11,12 +11,14 @@ import {
 import dayjs from 'dayjs'
 import { deleteTask, listTasks } from '../api/client'
 import type { TaskInfo, TaskStatus } from '../types'
+import { getTaskStatusText } from '../utils/display'
 
-const statusMap: Record<TaskStatus, { color: string; text: string }> = {
-  PENDING: { color: 'gold', text: '待执行' },
-  RUNNING: { color: 'blue', text: '执行中' },
-  SUCCESS: { color: 'green', text: '已完成' },
-  FAILED: { color: 'red', text: '失败' },
+const statusColorMap: Record<TaskStatus, string> = {
+  PENDING: 'gold',
+  RUNNING: 'blue',
+  SUCCESS: 'green',
+  STOPPED: 'orange',
+  FAILED: 'red',
 }
 
 function parseJsonArray(value: string | null) {
@@ -63,7 +65,8 @@ export default function TaskListPage() {
     const running = tasks.filter((task) => task.status === 'RUNNING').length
     const success = tasks.filter((task) => task.status === 'SUCCESS').length
     const failed = tasks.filter((task) => task.status === 'FAILED').length
-    return { total, running, success, failed }
+    const stopped = tasks.filter((task) => task.status === 'STOPPED').length
+    return { total, running, success, failed, stopped }
   }, [tasks])
 
   const handleDelete = async (id: number) => {
@@ -100,17 +103,16 @@ export default function TaskListPage() {
             ))}
             {names.length > 3 && <Tag>+{names.length - 3}</Tag>}
           </Space>
-        ) : '-'
+        ) : (
+          '-'
+        )
       },
     },
     {
       title: '状态',
       dataIndex: 'status',
       width: 110,
-      render: (status: TaskStatus) => {
-        const item = statusMap[status] || { color: 'default', text: status }
-        return <Tag color={item.color}>{item.text}</Tag>
-      },
+      render: (status: TaskStatus) => <Tag color={statusColorMap[status]}>{getTaskStatusText(status)}</Tag>,
     },
     {
       title: '进度',
@@ -160,14 +162,30 @@ export default function TaskListPage() {
     <div>
       <div className="page-header">
         <h2>竞品分析任务</h2>
-        <p>保留最近 10 条任务，聚焦创建、执行、查看报告这条第一版主流程。</p>
+        <p>保留最近 10 条任务，聚焦创建、执行与查看报告的主流程。</p>
       </div>
 
       <div className="metric-grid">
-        <Card><span className="metric-value">{summary.total}</span><span className="metric-label">最近任务</span></Card>
-        <Card><span className="metric-value">{summary.running}</span><span className="metric-label">执行中</span></Card>
-        <Card><span className="metric-value">{summary.success}</span><span className="metric-label">已完成</span></Card>
-        <Card><span className="metric-value">{summary.failed}</span><span className="metric-label">失败</span></Card>
+        <Card>
+          <span className="metric-value">{summary.total}</span>
+          <span className="metric-label">最近任务</span>
+        </Card>
+        <Card>
+          <span className="metric-value">{summary.running}</span>
+          <span className="metric-label">执行中</span>
+        </Card>
+        <Card>
+          <span className="metric-value">{summary.success}</span>
+          <span className="metric-label">已完成</span>
+        </Card>
+        <Card>
+          <span className="metric-value">{summary.failed}</span>
+          <span className="metric-label">失败</span>
+        </Card>
+        <Card>
+          <span className="metric-value">{summary.stopped}</span>
+          <span className="metric-label">已停止</span>
+        </Card>
       </div>
 
       <Card className="work-card">
@@ -190,6 +208,7 @@ export default function TaskListPage() {
               { label: '待执行', value: 'PENDING' },
               { label: '执行中', value: 'RUNNING' },
               { label: '已完成', value: 'SUCCESS' },
+              { label: '已停止', value: 'STOPPED' },
               { label: '失败', value: 'FAILED' },
             ]}
           />

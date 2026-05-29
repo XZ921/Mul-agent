@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import { Tooltip } from 'antd'
 import type { EvidenceInfo } from '../types'
+import { normalizeReportContent } from '../utils/display'
 
 interface Props {
   content: string
@@ -13,12 +14,14 @@ export default function MarkdownReport({ content, evidences }: Props) {
     evidenceMap.set(evidence.evidenceId, evidence)
   }
 
-  const processedContent = content.replace(
-    /\[证据:\s*([^\]]+)\]/g,
+  const normalizedContent = normalizeReportContent(content)
+
+  const processedContent = normalizedContent.replace(
+    /\[证据[:：]\s*([^\]]+)\]/g,
     (_match: string, id: string) => {
       const evidenceId = id.trim()
       const evidence = evidenceMap.get(evidenceId)
-      return evidence ? `[证据: ${evidenceId}](${evidence.url} "${evidence.title}")` : `[证据: ${evidenceId}]`
+      return evidence ? `[证据：${evidenceId}](${evidence.url} "${evidence.title}")` : `[证据：${evidenceId}]`
     },
   )
 
@@ -34,7 +37,9 @@ export default function MarkdownReport({ content, evidences }: Props) {
                   title={
                     <div className="evidence-tooltip">
                       <strong>{evidence.title}</strong>
-                      <div>[{evidence.evidenceId}] {evidence.competitorName}</div>
+                      <div>
+                        [{evidence.evidenceId}] {evidence.competitorName}
+                      </div>
                       {evidence.contentSnippet && <p>{evidence.contentSnippet.substring(0, 220)}</p>}
                       <span>点击打开原始来源</span>
                     </div>

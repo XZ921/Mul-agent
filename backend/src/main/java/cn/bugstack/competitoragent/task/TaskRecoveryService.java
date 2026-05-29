@@ -71,6 +71,19 @@ public class TaskRecoveryService {
         }
     }
 
+    @Transactional
+    public void markStoppedNodes(Long taskId) {
+        List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
+        for (TaskNode node : nodes) {
+            if (node.getStatus() == TaskNodeStatus.PENDING) {
+                node.setStatus(TaskNodeStatus.SKIPPED);
+                node.setErrorMessage("任务已被用户主动停止");
+                node.setCompletedAt(LocalDateTime.now());
+            }
+        }
+        nodeRepository.saveAll(nodes);
+    }
+
     /**
      * 只回滚中断时仍停留在 RUNNING/PENDING 的节点，保留 SUCCESS 检查点供执行器续跑。
      */

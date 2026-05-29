@@ -4,6 +4,7 @@ import { ReloadOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { getAgentLogDetail, getAgentLogs } from '../api/client'
 import type { AgentLog, AgentType, NodeStatus } from '../types'
+import { getAgentTypeText, getNodeStatusText } from '../utils/display'
 
 const { Paragraph } = Typography
 
@@ -42,7 +43,7 @@ export default function AgentLogPanel({ taskId, autoRefresh = false }: Props) {
       const res = await getAgentLogs(taskId)
       setLogs(res.data || [])
     } catch {
-      message.error('获取 Agent 日志失败')
+      message.error('获取智能体日志失败')
     } finally {
       setLoading(false)
     }
@@ -80,21 +81,21 @@ export default function AgentLogPanel({ taskId, autoRefresh = false }: Props) {
       render: (time: string) => dayjs(time).format('HH:mm:ss'),
     },
     {
-      title: 'Agent',
+      title: '智能体类型',
       dataIndex: 'agentType',
-      width: 120,
-      render: (type: AgentType) => <Tag color={agentColorMap[type]}>{type}</Tag>,
+      width: 140,
+      render: (type: AgentType) => <Tag color={agentColorMap[type]}>{getAgentTypeText(type)}</Tag>,
     },
     {
       title: '名称',
       dataIndex: 'agentName',
-      width: 130,
+      width: 140,
     },
     {
       title: '状态',
       dataIndex: 'status',
-      width: 90,
-      render: (status: NodeStatus) => <Tag color={statusColor[status]}>{status}</Tag>,
+      width: 100,
+      render: (status: NodeStatus) => <Tag color={statusColor[status]}>{getNodeStatusText(status)}</Tag>,
     },
     {
       title: '模型',
@@ -106,10 +107,10 @@ export default function AgentLogPanel({ taskId, autoRefresh = false }: Props) {
       title: '耗时',
       dataIndex: 'durationMs',
       width: 90,
-      render: (duration: number | null) => (duration ? `${(duration / 1000).toFixed(1)}s` : '-'),
+      render: (duration: number | null) => (duration ? `${(duration / 1000).toFixed(1)}秒` : '-'),
     },
     {
-      title: '追踪 ID',
+      title: '追踪编号',
       dataIndex: 'traceId',
       ellipsis: true,
       render: (value: string | null) => value || '-',
@@ -128,12 +129,12 @@ export default function AgentLogPanel({ taskId, autoRefresh = false }: Props) {
         <Space>
           <Select
             allowClear
-            placeholder="按 Agent 筛选"
-            style={{ width: 170 }}
+            placeholder="按智能体类型筛选"
+            style={{ width: 190 }}
             value={agentFilter}
             onChange={setAgentFilter}
-            options={['COLLECTOR', 'EXTRACTOR', 'ANALYZER', 'WRITER', 'REVIEWER'].map((type) => ({
-              label: <Tag color={agentColorMap[type as AgentType]}>{type}</Tag>,
+            options={(['COLLECTOR', 'EXTRACTOR', 'ANALYZER', 'WRITER', 'REVIEWER'] as AgentType[]).map((type) => ({
+              label: <Tag color={agentColorMap[type]}>{getAgentTypeText(type)}</Tag>,
               value: type,
             }))}
           />
@@ -150,11 +151,11 @@ export default function AgentLogPanel({ taskId, autoRefresh = false }: Props) {
         loading={loading}
         size="small"
         pagination={{ pageSize: 10 }}
-        locale={{ emptyText: '暂无 Agent 执行日志' }}
+        locale={{ emptyText: '暂无智能体执行日志' }}
       />
 
       <Modal
-        title={`Agent 执行详情 ${selectedLog?.agentType || ''}`}
+        title={`智能体执行详情 ${selectedLog ? `- ${getAgentTypeText(selectedLog.agentType)}` : ''}`}
         open={detailOpen}
         onCancel={() => setDetailOpen(false)}
         width={920}
@@ -162,19 +163,19 @@ export default function AgentLogPanel({ taskId, autoRefresh = false }: Props) {
       >
         {detail && (
           <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label="Agent 类型">
-              <Tag color={agentColorMap[detail.agentType]}>{detail.agentType}</Tag>
+            <Descriptions.Item label="智能体类型">
+              <Tag color={agentColorMap[detail.agentType]}>{getAgentTypeText(detail.agentType)}</Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="Agent 名称">{detail.agentName}</Descriptions.Item>
+            <Descriptions.Item label="智能体名称">{detail.agentName}</Descriptions.Item>
             <Descriptions.Item label="模型">{detail.modelName || '-'}</Descriptions.Item>
             <Descriptions.Item label="状态">
-              <Tag color={statusColor[detail.status]}>{detail.status}</Tag>
+              <Tag color={statusColor[detail.status]}>{getNodeStatusText(detail.status)}</Tag>
             </Descriptions.Item>
             <Descriptions.Item label="耗时">
-              {detail.durationMs ? `${(detail.durationMs / 1000).toFixed(1)}s` : '-'}
+              {detail.durationMs ? `${(detail.durationMs / 1000).toFixed(1)}秒` : '-'}
             </Descriptions.Item>
-            <Descriptions.Item label="Token 用量">{detail.tokenUsage || '-'}</Descriptions.Item>
-            <Descriptions.Item label="追踪 ID">{detail.traceId || '-'}</Descriptions.Item>
+            <Descriptions.Item label="令牌用量">{detail.tokenUsage || '-'}</Descriptions.Item>
+            <Descriptions.Item label="追踪编号">{detail.traceId || '-'}</Descriptions.Item>
             {detail.errorMessage && (
               <Descriptions.Item label="错误信息">
                 <span className="danger-text">{detail.errorMessage}</span>
@@ -185,7 +186,7 @@ export default function AgentLogPanel({ taskId, autoRefresh = false }: Props) {
                 {detail.inputData || '(未记录)'}
               </Paragraph>
             </Descriptions.Item>
-            <Descriptions.Item label="Prompt">
+            <Descriptions.Item label="提示词">
               <Paragraph code className="code-block">
                 {detail.promptUsed || '(未记录)'}
               </Paragraph>

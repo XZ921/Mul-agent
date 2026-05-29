@@ -41,6 +41,7 @@ public enum ResultCode {
     TASK_EXECUTION_FAILED(10004, "任务执行失败，请查看 Agent 日志定位原因"),
     TASK_DELETE_FAILED(10005, "任务删除失败，运行中的任务不可删除"),
     TASK_STATUS_INVALID(10006, "当前任务状态不允许此操作"),
+    TASK_STOP_FAILED(10007, "任务停止失败，只有执行中的任务才能停止"),
 
     // ==================== Agent 执行 (2xxxx) ====================
     AGENT_EXECUTION_FAILED(20001, "Agent 执行失败"),
