@@ -1,0 +1,157 @@
+server:
+  port: 9093
+
+spring:
+  application:
+    name: competitor-agent
+  profiles:
+    active: dev
+
+  # ==================== 数据源配置 ====================
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+    username: postgres
+    password: postgres
+    url: jdbc:postgresql://127.0.0.1:5432/ecommerce_agent?client_encoding=UTF8
+    hikari:
+      connection-timeout: 5000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      maximum-pool-size: 10
+      minimum-idle: 5
+      pool-name: RagentHikariPool
+
+  # ==================== JPA 配置 ====================
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate # Flyway 管理表结构，JPA 只做校验
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 20
+
+  # ==================== Flyway 配置 ====================
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    clean-disabled: true # 禁止自动清理数据库
+
+  # ==================== Jackson 配置 ====================
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+
+# ==================== AI 提供商配置 ====================
+ai:
+  active-provider: deepseek
+  model-name: deepseek-v4-pro
+  max-tokens: 4096
+  temperature: 0.3
+  timeout-seconds: 120
+  providers:
+#    ollama:
+#      url: http://localhost:11434
+#      endpoints:
+#        chat: /v1/chat/completions
+#        embedding: /v1/embeddings
+    bailian:
+      url: https://dashscope.aliyuncs.com
+      api-key: ${BAILIAN_API_KEY:}
+      endpoints:
+        chat: /compatible-mode/v1/chat/completions
+        rerank: /api/v1/services/rerank/text-rerank/text-rerank
+    deepseek:
+      url: https://api.deepseek.com
+      api-key: ${DEEPSEEK_API_KEY:}
+      endpoints:
+        chat: /v1/chat/completions
+        embedding: /v1/embeddings
+    siliconflow:
+      url: https://api.siliconflow.cn
+      api-key: ${SILICONFLOW_API_KEY:}
+      endpoints:
+        chat: /v1/chat/completions
+        embedding: /v1/embeddings
+
+# ==================== Knife4j API 文档配置 ====================
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+    swagger-model-name: 实体类列表
+    enable-footer: false
+    enable-footer-custom: true
+    footer-custom-content: "AI 竞品分析 Agent 协作系统 | Copyright 2026"
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+    disable-swagger-default-url: true
+  api-docs:
+    path: /v3/api-docs
+
+# ==================== Mock 开关（开发演示用） ====================
+llm:
+  mock: false       # true=使用模拟 LLM，false=使用真实 AI 提供商 API
+
+# ==================== Playwright 配置 ====================
+playwright:
+  browser: chromium
+  headless: true
+  timeout-millis: 30000
+  screenshot-on-collect: false
+
+# ==================== 采集配置 ====================
+collector:
+  mock: true       # true=使用模拟采集器，false=使用 Playwright 真实抓取
+  max-pages-per-competitor: 5
+  page-timeout-seconds: 30
+  user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+# ==================== 日志配置 ====================
+logging:
+  level:
+    root: INFO
+    cn.bugstack.competitoragent: DEBUG
+    dev.langchain4j: DEBUG
+    com.microsoft.playwright: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: ./logs/competitor-agent.log
+    max-size: 10MB
+    max-history: 7
+
+---
+# ==================== 生产环境配置 ====================
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ragent}?client_encoding=UTF8
+    hikari:
+      connection-timeout: 5000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      maximum-pool-size: 20
+      minimum-idle: 5
+      pool-name: RagentHikariPool
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
