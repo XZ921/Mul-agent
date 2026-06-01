@@ -1,0 +1,5 @@
+ALTER TABLE task_node
+    ADD COLUMN IF NOT EXISTS control_state VARCHAR(30) NOT NULL DEFAULT 'NONE';
+
+ALTER TABLE task_node
+    ADD COLUMN IF NOT EXISTS intervention_reason TEXT;
