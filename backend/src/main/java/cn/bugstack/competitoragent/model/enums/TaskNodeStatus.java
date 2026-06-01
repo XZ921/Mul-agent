@@ -10,6 +10,7 @@ import lombok.Getter;
  * <pre>
  * PENDING → RUNNING → SUCCESS
  *                   → FAILED → (可选) RETRY → RUNNING ...
+ * PENDING → PAUSED → PENDING
  * </pre>
  */
 @Getter
@@ -21,6 +22,9 @@ public enum TaskNodeStatus {
 
     @Schema(description = "执行中")
     RUNNING("执行中"),
+
+    @Schema(description = "已暂停")
+    PAUSED("已暂停"),
 
     @Schema(description = "执行成功")
     SUCCESS("执行成功"),

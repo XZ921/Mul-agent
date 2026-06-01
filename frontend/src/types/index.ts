@@ -8,7 +8,7 @@ export interface ApiResponse<T> {
 
 export type TaskStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'STOPPED'
 
-export type NodeStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'SKIPPED'
+export type NodeStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUCCESS' | 'FAILED' | 'SKIPPED'
 
 export type AgentType = 'COLLECTOR' | 'EXTRACTOR' | 'ANALYZER' | 'WRITER' | 'REVIEWER'
 
@@ -19,6 +19,7 @@ export interface TaskInfo {
   competitorNames: string
   competitorUrls: string | null
   analysisDimensions: string | null
+  sourceScope: string | null
   status: TaskStatus
   errorMessage: string | null
   totalNodes: number
@@ -26,6 +27,75 @@ export interface TaskInfo {
   createdAt: string
   updatedAt: string
   completedAt: string | null
+  canExecute?: boolean
+  canResume?: boolean
+  canRetry?: boolean
+  canStop?: boolean
+  canViewReport?: boolean
+  interventionSummary?: string | null
+}
+
+export interface TaskNodeConfigSummary {
+  summaryText?: string | null
+  competitorName?: string | null
+  sourceType?: string | null
+  sourceTypeLabel?: string | null
+  searchMode?: string | null
+  searchModeLabel?: string | null
+  candidateCount?: number | null
+  queryCount?: number | null
+  stepCount?: number | null
+  browserSearchEnabled?: boolean | null
+  verificationEnabled?: boolean | null
+  minVerifiedCandidates?: number | null
+  sourceScope?: string[] | null
+  preferredDomains?: string[] | null
+  competitorUrls?: string[] | null
+  discoveryNotes?: string | null
+  mode?: string | null
+  reportLanguage?: string | null
+  reportTemplate?: string | null
+  qualityPolicy?: string | null
+  sourceNode?: string | null
+  competitorCount?: number | null
+  dimensionCount?: number | null
+  dimensions?: string[] | null
+}
+
+export interface CollectorSelectedTargetSummary {
+  url: string
+  title?: string
+  verified?: boolean
+  browserTraceId?: string
+  selectionStage?: string
+  selectionReason?: string
+  hasPrefetchedPage?: boolean
+}
+
+export interface CollectorNodeInsightData {
+  competitorName: string
+  sourceType: string
+  sourceTypeLabel?: string | null
+  sourceScope: string[]
+  competitorUrls: string[]
+  searchMode?: string
+  searchModeLabel?: string | null
+  searchQueries: string[]
+  browserSearchEnabled: boolean
+  verifyResultPage: boolean
+  minVerifiedCandidates: number | null
+  preferredDomains: string[]
+  candidateCount: number
+  selectedCount: number
+  successCollected: number
+  totalCollected: number
+  discoveryNotes?: string | null
+  searchProgress: SearchProgressInfo | null
+  searchExecutionPlan: SearchExecutionPlanInfo | null
+  searchExecutionTrace?: SearchExecutionTraceInfo | null
+  searchProgressSnapshots?: SearchProgressInfo[] | null
+  sourceCandidates: SourceCandidateInfo[]
+  selectedTargets: CollectorSelectedTargetSummary[]
 }
 
 export interface TaskNodeInfo {
@@ -34,6 +104,8 @@ export interface TaskNodeInfo {
   displayName: string
   nodeConfig: string | null
   configSummary?: string | null
+  configSummaryData?: TaskNodeConfigSummary | null
+  collectorInsight?: CollectorNodeInsightData | null
   nodeNotes?: string | null
   allowFailedDependency?: boolean
   agentType: AgentType
@@ -43,7 +115,9 @@ export interface TaskNodeInfo {
   maxRetries?: number
   retryCount?: number
   status: NodeStatus
+  controlState?: 'NONE' | 'TERMINATE_REQUESTED'
   errorMessage: string | null
+  interventionReason?: string | null
   executionOrder: number
   inputSummary: string | null
   outputSummary: string | null
@@ -51,6 +125,120 @@ export interface TaskNodeInfo {
   outputData?: string | null
   startedAt: string | null
   completedAt: string | null
+  canRerun?: boolean
+  canUpdateConfigAndRerun?: boolean
+  affectedNodeCount?: number
+  affectedNodeNames?: string[]
+  canReuseCheckpoint?: boolean
+  canPause?: boolean
+  canResumeNode?: boolean
+  canSkip?: boolean
+  canTerminate?: boolean
+  interventionSummary?: string | null
+}
+
+export interface SourceCandidateInfo {
+  url: string
+  title?: string
+  sourceType?: string
+  discoveryMethod?: string
+  reason?: string
+  domain?: string
+  publishedAt?: string
+  relevanceScore?: number
+  freshnessScore?: number
+  qualityScore?: number
+  totalScore?: number
+  searchQuery?: string
+  searchEngine?: string
+  resultRank?: number
+  browserTraceId?: string
+  verified?: boolean
+  verificationReason?: string
+  matchedSignals?: string[]
+  selectionStage?: string
+  selectionReason?: string
+}
+
+export interface SearchExecutionStepInfo {
+  stepCode: string
+  goal: string
+  expectedDurationMs: number
+  dependency: string
+  status?: 'PENDING' | 'RUNNING' | 'SKIPPED' | 'SUCCESS' | 'FAILED'
+  message?: string | null
+  startedAt?: string | null
+  completedAt?: string | null
+}
+
+export interface SearchExecutionPlanInfo {
+  stage?: string
+  steps: SearchExecutionStepInfo[]
+}
+
+export interface SearchProgressInfo {
+  currentStep?: string
+  currentStepCode?: string
+  completedSteps?: number
+  totalSteps?: number
+  progressPercent?: number
+  status?: 'PENDING' | 'RUNNING' | 'SKIPPED' | 'SUCCESS' | 'FAILED' | 'DEGRADED' | string
+  message?: string | null
+  degraded?: boolean
+  degradationReason?: string | null
+  updatedAt?: string | null
+}
+
+export interface SearchExecutionTraceInfo {
+  traceVersion?: string
+  searchMode?: string
+  searchQueries?: string[]
+  fallbackOrder?: string[]
+  plannedCandidateCount?: number
+  verifiedCandidateCount?: number
+  supplementedCandidateCount?: number
+  selectedCandidateCount?: number
+  selectedUrls?: string[]
+  supplementMethod?: string
+  browserSearchEngine?: string
+  browserTraceId?: string
+  browserExecutedQueries?: string[]
+  browserSearchSummary?: string
+  providerFallbackUsed?: boolean
+  searchTimeoutMillis?: number
+  searchElapsedMillis?: number
+  circuitBroken?: boolean
+  degraded?: boolean
+  degradationReason?: string
+  browserBlockedReason?: string
+  browserBlockedCount?: number
+  fallbackDecision?: string
+  recoveryCheckpoint?: string
+  recoveryAdvice?: string
+  resumedFromCheckpoint?: boolean
+  checkpointSource?: string
+  runtimePolicy?: {
+    verifyResultPage?: boolean
+    maxRetries?: number
+    minIntervalMillis?: number
+    maxSearchesPerTask?: number
+    pageTimeoutMillis?: number
+    maxOpenResultPages?: number
+    userAgents?: string[]
+    blockedSignals?: string[]
+    recoveryHint?: string
+  }
+  generatedAt?: string
+}
+
+export interface SelectedTargetInfo {
+  url: string
+  title?: string
+  verified?: boolean
+  browserTraceId?: string
+  selectionStage?: string
+  selectionReason?: string
+  hasPrefetchedPage?: boolean
 }
 
 export interface AgentLog {
@@ -80,6 +268,90 @@ export interface EvidenceInfo {
   contentSnippet: string | null
   competitorName: string
   collectedAt: string
+  sourceType?: string
+  discoveryMethod?: string
+  sourceDomain?: string
+  discoveryReason?: string
+  publishedAt?: string
+  sourceScore?: number
+  verified?: boolean
+  verificationReason?: string
+  searchQuery?: string
+  searchEngine?: string
+  resultRank?: number
+  browserTraceId?: string
+  selectionReason?: string
+  selectionStage?: string
+  matchedSignals?: string[]
+  pageMetadata?: Record<string, unknown>
+}
+
+export interface CollectorSearchAuditInfo {
+  nodeName: string
+  nodeStatus?: NodeStatus | null
+  competitorName?: string | null
+  sourceType?: string | null
+  traceRecorded?: boolean | null
+  auditMessage?: string | null
+  supplementMethod?: string | null
+  resumedFromCheckpoint?: boolean | null
+  checkpointSource?: string | null
+  degraded?: boolean | null
+  degradationReason?: string | null
+  providerFallbackUsed?: boolean | null
+  fallbackDecision?: string | null
+  browserTraceId?: string | null
+  browserBlockedReason?: string | null
+  browserBlockedCount?: number | null
+  recoveryCheckpoint?: string | null
+  plannedCandidateCount?: number | null
+  verifiedCandidateCount?: number | null
+  supplementedCandidateCount?: number | null
+  selectedCandidateCount?: number | null
+  selectedUrls?: string[]
+  errorMessage?: string | null
+}
+
+export interface SearchAuditOverviewInfo {
+  collectorNodeCount?: number | null
+  traceRecordedCount?: number | null
+  checkpointRecoveredCount?: number | null
+  degradedCount?: number | null
+  providerFallbackCount?: number | null
+  browserBlockedCount?: number | null
+  plannedCandidateCount?: number | null
+  verifiedCandidateCount?: number | null
+  supplementedCandidateCount?: number | null
+  selectedCandidateCount?: number | null
+  collectors?: CollectorSearchAuditInfo[]
+}
+
+export interface SectionEvidenceCoverageInfo {
+  sectionKey: string
+  sectionTitle: string
+  totalFields: number
+  traceableFields: number
+  missingEvidenceFields: number
+  emptyFields: number
+  missingFields: string[]
+}
+
+export interface CompetitorEvidenceCoverageInfo {
+  competitorName: string
+  totalFields: number
+  traceableFields: number
+  missingEvidenceFields: number
+  emptyFields: number
+  missingSections: string[]
+}
+
+export interface EvidenceCoverageOverviewInfo {
+  totalFields: number
+  traceableFields: number
+  missingEvidenceFields: number
+  emptyFields: number
+  sections: SectionEvidenceCoverageInfo[]
+  competitors: CompetitorEvidenceCoverageInfo[]
 }
 
 export interface QualityIssue {
@@ -87,6 +359,14 @@ export interface QualityIssue {
   section: string
   severity: 'ERROR' | 'WARNING' | 'INFO'
   suggestion: string
+}
+
+export interface ReviewNextAction {
+  title: string
+  description: string
+  actionType: 'SUPPLEMENT_EVIDENCE' | 'RERUN_NODE' | 'REWRITE_CLAIM' | 'MANUAL_REVIEW' | string
+  targetNode: string | null
+  priority: 'HIGH' | 'MEDIUM' | 'LOW' | string
 }
 
 export interface RevisionItem {
@@ -108,8 +388,11 @@ export interface ReviewCheckpointInfo {
   nodeStatus: NodeStatus
   score: number | null
   passed: boolean | null
+  requiresHumanIntervention?: boolean | null
+  autoRewriteAllowed?: boolean | null
   summary: string | null
   issues: QualityIssue[]
+  nextActions: ReviewNextAction[]
 }
 
 export interface CompetitorKnowledgeInfo {
@@ -138,6 +421,8 @@ export interface ReportInfo {
   finalReview: ReviewCheckpointInfo | null
   evidenceCount: number
   evidences: EvidenceInfo[]
+  searchAuditOverview?: SearchAuditOverviewInfo | null
+  evidenceCoverageOverview?: EvidenceCoverageOverviewInfo | null
   competitorKnowledges: CompetitorKnowledgeInfo[]
   createdAt: string
   updatedAt: string

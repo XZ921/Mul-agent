@@ -58,11 +58,11 @@ ai:
   temperature: 0.3
   timeout-seconds: 120
   providers:
-#    ollama:
-#      url: http://localhost:11434
-#      endpoints:
-#        chat: /v1/chat/completions
-#        embedding: /v1/embeddings
+    #    ollama:
+    #      url: http://localhost:11434
+    #      endpoints:
+    #        chat: /v1/chat/completions
+    #        embedding: /v1/embeddings
     bailian:
       url: https://dashscope.aliyuncs.com
       api-key: ${BAILIAN_API_KEY:}
@@ -101,23 +101,86 @@ springdoc:
   api-docs:
     path: /v3/api-docs
 
-# ==================== Mock 开关（开发演示用） ====================
-llm:
-  mock: true       # true=使用模拟 LLM，false=使用真实 AI 提供商 API
-
-# ==================== Playwright 配置 ====================
 playwright:
   browser: chromium
-  headless: true
+  channel: msedge
+  headless: false
   timeout-millis: 30000
   screenshot-on-collect: false
+  health-check-interval-millis: 60000
+  health-check-initial-delay-millis: 15000
 
 # ==================== 采集配置 ====================
 collector:
-  mock: true       # true=使用模拟采集器，false=使用 Playwright 真实抓取
   max-pages-per-competitor: 5
   page-timeout-seconds: 30
   user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+# ==================== 搜索式补源配置 ====================
+source-discovery:
+  search:
+    browser-preview-enabled: true
+    endpoint: ${SEARCH_API_ENDPOINT:}
+    api-key: ${SEARCH_API_KEY:}
+    api-key-header: ${SEARCH_API_KEY_HEADER:Authorization}
+    api-key-prefix: ${SEARCH_API_KEY_PREFIX:Bearer }
+    query-param: ${SEARCH_API_QUERY_PARAM:q}
+    limit-param: ${SEARCH_API_LIMIT_PARAM:limit}
+    results-per-scope: 5
+    timeout-seconds: 15
+    max-retries: 2
+    results-path: ${SEARCH_API_RESULTS_PATH:results}
+    title-field: ${SEARCH_API_TITLE_FIELD:title}
+    url-field: ${SEARCH_API_URL_FIELD:url}
+    snippet-field: ${SEARCH_API_SNIPPET_FIELD:snippet}
+    published-at-field: ${SEARCH_API_PUBLISHED_AT_FIELD:publishedAt}
+
+search:
+  mode: hybrid
+  engines:
+    bing:
+      name: Bing
+      base-url: https://www.bing.com/search
+      query-param: q
+      enabled: true
+    baidu:
+      name: 百度
+      base-url: https://www.baidu.com/s
+      query-param: wd
+      enabled: true
+    google:
+      name: Google
+      base-url: https://www.google.com/search
+      query-param: q
+      enabled: false
+  browser:
+    enabled: true
+    engine: bing
+    fallback-engines:
+      - baidu
+    verify-result-page: true
+    max-results-per-query: 5
+    max-open-result-pages: 3
+    max-retries: 2
+    min-interval-millis: 3000
+    max-searches-per-task: 10
+    page-timeout-millis: 15000
+    user-agents:
+      - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      - "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
+      - "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+      - "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0"
+    blocked-signals:
+      - captcha
+      - unusual traffic
+      - verify you are human
+      - access denied
+      - robot check
+
+serpapi:
+  api-key: ${SERPAPI_API_KEY:}
+  endpoint: https://serpapi.com/search
+  default-engine: google
 
 # ==================== 日志配置 ====================
 logging:

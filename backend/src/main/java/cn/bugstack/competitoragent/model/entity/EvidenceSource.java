@@ -23,7 +23,9 @@ import java.time.LocalDateTime;
 @Table(name = "evidence_source", indexes = {
         @Index(name = "idx_evidence_task_id", columnList = "taskId"),
         @Index(name = "idx_evidence_competitor", columnList = "competitorName"),
-        @Index(name = "idx_evidence_evidence_id", columnList = "evidenceId")
+        @Index(name = "idx_evidence_evidence_id", columnList = "evidenceId"),
+        @Index(name = "idx_evidence_source_type", columnList = "sourceType"),
+        @Index(name = "idx_evidence_discovery_method", columnList = "discoveryMethod")
 })
 @Schema(description = "证据来源")
 public class EvidenceSource {
@@ -73,6 +75,30 @@ public class EvidenceSource {
     @Column(columnDefinition = "TEXT")
     @Schema(description = "页面元数据 (JSON)：发布时间、作者等")
     private String pageMetadata;
+
+    @Column(length = 50)
+    @Schema(description = "来源类型", example = "DOCS")
+    private String sourceType;
+
+    @Column(length = 50)
+    @Schema(description = "补源方式", example = "SEARCH")
+    private String discoveryMethod;
+
+    @Column(length = 255)
+    @Schema(description = "来源域名", example = "docs.notion.so")
+    private String sourceDomain;
+
+    @Column(length = 500)
+    @Schema(description = "来源筛选说明")
+    private String discoveryReason;
+
+    @Column(length = 30)
+    @Schema(description = "页面发布时间或等价时间", example = "2026-05-20")
+    private String publishedAt;
+
+    @Column
+    @Schema(description = "补源排序总分", example = "0.893")
+    private Double sourceScore;
 
     @Schema(description = "采集时间", example = "2026-05-26 10:31:00")
     private LocalDateTime collectedAt;

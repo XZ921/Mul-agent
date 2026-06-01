@@ -4,6 +4,7 @@ import cn.bugstack.competitoragent.common.ApiResponse;
 import cn.bugstack.competitoragent.model.dto.CreateTaskRequest;
 import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
 import cn.bugstack.competitoragent.model.dto.TaskResponse;
+import cn.bugstack.competitoragent.model.dto.UpdateNodeConfigRequest;
 import cn.bugstack.competitoragent.task.AnalysisTaskService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -94,6 +95,43 @@ public class TaskController {
     public ApiResponse<String> rerunNode(@PathVariable Long id, @PathVariable String nodeName) {
         taskService.rerunFromNode(id, nodeName);
         return ApiResponse.success("Node rerun scheduled", "Task rerun scheduled from node " + nodeName);
+    }
+
+    @PostMapping("/{id}/nodes/{nodeName}/config-rerun")
+    @Operation(summary = "Update node config and rerun from the node")
+    public ApiResponse<String> updateNodeConfigAndRerun(@PathVariable Long id,
+                                                        @PathVariable String nodeName,
+                                                        @Valid @RequestBody UpdateNodeConfigRequest request) {
+        taskService.updateNodeConfigAndRerun(id, nodeName, request);
+        return ApiResponse.success("Node config updated", "Task rerun scheduled from node " + nodeName);
+    }
+
+    @PostMapping("/{id}/nodes/{nodeName}/pause")
+    @Operation(summary = "Pause a pending node")
+    public ApiResponse<String> pauseNode(@PathVariable Long id, @PathVariable String nodeName) {
+        taskService.pauseNode(id, nodeName);
+        return ApiResponse.success("Node paused", "Node paused: " + nodeName);
+    }
+
+    @PostMapping("/{id}/nodes/{nodeName}/resume")
+    @Operation(summary = "Resume a paused node")
+    public ApiResponse<String> resumeNode(@PathVariable Long id, @PathVariable String nodeName) {
+        taskService.resumeNode(id, nodeName);
+        return ApiResponse.success("Node resumed", "Node resumed: " + nodeName);
+    }
+
+    @PostMapping("/{id}/nodes/{nodeName}/skip")
+    @Operation(summary = "Skip a pending or paused node")
+    public ApiResponse<String> skipNode(@PathVariable Long id, @PathVariable String nodeName) {
+        taskService.skipNode(id, nodeName);
+        return ApiResponse.success("Node skipped", "Node skipped: " + nodeName);
+    }
+
+    @PostMapping("/{id}/nodes/{nodeName}/terminate")
+    @Operation(summary = "Terminate or request termination for a node")
+    public ApiResponse<String> terminateNode(@PathVariable Long id, @PathVariable String nodeName) {
+        taskService.terminateNode(id, nodeName);
+        return ApiResponse.success("Node terminate requested", "Node terminate requested: " + nodeName);
     }
 
     @DeleteMapping("/{id}")

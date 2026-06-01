@@ -35,6 +35,7 @@ import java.util.Set;
 @Component
 public class SchemaExtractorAgent extends BaseAgent {
 
+    private static final int EXTRACT_JSON_MAX_ATTEMPTS = 3;
     private static final List<String> COVERAGE_FIELDS = List.of(
             "summary",
             "positioning",
@@ -77,9 +78,16 @@ public class SchemaExtractorAgent extends BaseAgent {
 
     @Override
     protected AgentResult doExecute(AgentContext context) {
-        List<EvidenceSource> evidences = evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(context.getTaskId());
+        List<EvidenceSource> allEvidences = evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(context.getTaskId());
+        List<EvidenceSource> evidences = allEvidences.stream()
+                .filter(this::isUsableEvidence)
+                .toList();
         if (evidences.isEmpty()) {
             return AgentResult.failed("暂无可用于抽取的证据来源");
+        }
+        if (evidences.size() < allEvidences.size()) {
+            log.warn("extractor skipped unusable evidences, taskId={}, usableCount={}, totalCount={}",
+                    context.getTaskId(), evidences.size(), allEvidences.size());
         }
 
         // 抽取阶段按竞品聚合证据，保证每次提示词只处理单个竞品上下文。
@@ -146,17 +154,33 @@ public class SchemaExtractorAgent extends BaseAgent {
                 "evidenceCatalog", buildEvidenceCatalog(competitorEvidence),
                 "collectedContent", buildCollectedContent(competitorEvidence)
         ));
+        JsonProcessingException lastParseException = null;
 
-        String llmResponse = llmClient.chatForJson(
-                "你是一名竞品知识抽取专家，请只返回 JSON。",
-                prompt,
-                "ExtractedSchema"
-        );
-        JsonNode schemaJson = objectMapper.readTree(cleanJson(llmResponse));
-        if (!(schemaJson instanceof ObjectNode objectNode)) {
-            throw new JsonProcessingException("Extractor output must be a JSON object") {};
+        for (int attempt = 1; attempt <= EXTRACT_JSON_MAX_ATTEMPTS; attempt++) {
+            String attemptPrompt = attempt == 1
+                    ? prompt
+                    : prompt + "\n\n【补充要求】上一次返回的 JSON 解析失败，请重新输出一个完整、闭合、合法的 JSON 对象，不要附加解释。";
+            String llmResponse = llmClient.chatForJson(
+                    "你是一名竞品知识抽取专家，请只返回 JSON。",
+                    attemptPrompt,
+                    "ExtractedSchema"
+            );
+            try {
+                JsonNode schemaJson = objectMapper.readTree(extractJsonObject(cleanJson(llmResponse)));
+                if (!(schemaJson instanceof ObjectNode objectNode)) {
+                    throw new JsonProcessingException("Extractor output must be a JSON object") {};
+                }
+                return normalizeSchema(objectNode, competitorEvidence);
+            } catch (JsonProcessingException e) {
+                lastParseException = e;
+                log.warn("extractor json parse failed, competitor={}, attempt={}/{}",
+                        competitorName, attempt, EXTRACT_JSON_MAX_ATTEMPTS, e);
+            }
         }
-        return normalizeSchema(objectNode, competitorEvidence);
+
+        throw lastParseException != null
+                ? lastParseException
+                : new JsonProcessingException("Extractor output JSON parse failed") {};
     }
 
     /**
@@ -442,6 +466,19 @@ public class SchemaExtractorAgent extends BaseAgent {
         return cleaned.trim();
     }
 
+    /**
+     * 真实模型偶尔会在 JSON 前后夹带说明文本，这里尽量截出最外层对象主体；
+     * 如果模型输出本身不完整，后续 readTree 会继续抛错并触发重试。
+     */
+    private String extractJsonObject(String cleanedResponse) {
+        int start = cleanedResponse.indexOf('{');
+        int end = cleanedResponse.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            return cleanedResponse.substring(start, end + 1);
+        }
+        return cleanedResponse;
+    }
+
     private String truncate(String value, int maxLength) {
         if (value == null || value.length() <= maxLength) {
             return safe(value);
@@ -451,5 +488,14 @@ public class SchemaExtractorAgent extends BaseAgent {
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private boolean isUsableEvidence(EvidenceSource evidence) {
+        if (evidence == null) {
+            return false;
+        }
+        boolean hasContent = evidence.getFullContent() != null && !evidence.getFullContent().isBlank();
+        boolean hasSnippet = evidence.getContentSnippet() != null && !evidence.getContentSnippet().isBlank();
+        return hasContent || hasSnippet;
     }
 }

@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.model.dto;
 
+import cn.bugstack.competitoragent.security.HttpUrlOnly;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -30,7 +31,7 @@ public class CreateTaskRequest {
     private List<String> competitorNames;
 
     @Schema(description = "竞品官网 URL 列表（可选，不填则自动搜索）", example = "[\"https://www.notion.so\",\"https://www.glean.com\"]")
-    private List<String> competitorUrls;
+    private List<@HttpUrlOnly(message = "竞品 URL 仅支持 http/https 协议") String> competitorUrls;
 
     @Schema(description = "分析维度", example = "[\"产品功能\",\"目标用户\",\"价格策略\",\"技术能力\",\"市场定位\"]")
     private List<String> analysisDimensions;

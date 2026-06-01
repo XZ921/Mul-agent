@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.model.dto;
 
 import cn.bugstack.competitoragent.model.enums.AgentType;
+import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
@@ -9,6 +10,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -31,6 +33,12 @@ public class TaskNodeResponse {
 
     @Schema(description = "Node configuration summary")
     private String configSummary;
+
+    @Schema(description = "Structured node configuration summary")
+    private TaskNodeConfigSummary configSummaryData;
+
+    @Schema(description = "Structured collector node insight")
+    private CollectorNodeInsightResponse collectorInsight;
 
     @Schema(description = "Node note")
     private String nodeNotes;
@@ -59,8 +67,14 @@ public class TaskNodeResponse {
     @Schema(description = "Node status", example = "SUCCESS")
     private TaskNodeStatus status;
 
+    @Schema(description = "Node control state", example = "NONE")
+    private TaskNodeControlState controlState;
+
     @Schema(description = "Error message")
     private String errorMessage;
+
+    @Schema(description = "Intervention reason")
+    private String interventionReason;
 
     @Schema(description = "Execution order", example = "0")
     private int executionOrder;
@@ -82,4 +96,34 @@ public class TaskNodeResponse {
 
     @Schema(description = "Completed at")
     private LocalDateTime completedAt;
+
+    @Schema(description = "是否允许从该节点重跑")
+    private Boolean canRerun;
+
+    @Schema(description = "是否允许修改节点配置后继续执行")
+    private Boolean canUpdateConfigAndRerun;
+
+    @Schema(description = "从该节点重跑会影响的节点总数（含当前节点）")
+    private Integer affectedNodeCount;
+
+    @Schema(description = "从该节点重跑会影响的节点名称列表（含当前节点）")
+    private List<String> affectedNodeNames;
+
+    @Schema(description = "该节点是否具备可复用检查点")
+    private Boolean canReuseCheckpoint;
+
+    @Schema(description = "是否允许暂停该节点")
+    private Boolean canPause;
+
+    @Schema(description = "是否允许恢复该节点")
+    private Boolean canResumeNode;
+
+    @Schema(description = "是否允许手动跳过该节点")
+    private Boolean canSkip;
+
+    @Schema(description = "是否允许终止该节点")
+    private Boolean canTerminate;
+
+    @Schema(description = "节点级人工干预规则摘要")
+    private String interventionSummary;
 }

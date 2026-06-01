@@ -60,6 +60,12 @@ public class ReportResponse {
     @Schema(description = "Evidence list")
     private List<EvidenceInfo> evidences;
 
+    @Schema(description = "Search audit overview aggregated from collector nodes")
+    private SearchAuditOverview searchAuditOverview;
+
+    @Schema(description = "Evidence coverage overview aggregated from structured competitor knowledge")
+    private EvidenceCoverageOverview evidenceCoverageOverview;
+
     @Schema(description = "Structured competitor knowledge")
     private List<CompetitorKnowledgeInfo> competitorKnowledges;
 
@@ -79,8 +85,11 @@ public class ReportResponse {
         private TaskNodeStatus nodeStatus;
         private Integer score;
         private Boolean passed;
+        private Boolean requiresHumanIntervention;
+        private Boolean autoRewriteAllowed;
         private String summary;
         private List<QualityIssue> issues;
+        private List<ReviewNextAction> nextActions;
     }
 
     @Data
@@ -97,6 +106,18 @@ public class ReportResponse {
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
+    @Schema(description = "Recommended action after a failed final review")
+    public static class ReviewNextAction {
+        private String title;
+        private String description;
+        private String actionType;
+        private String targetNode;
+        private String priority;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
     @Schema(description = "Evidence info")
     public static class EvidenceInfo {
         private String evidenceId;
@@ -105,6 +126,115 @@ public class ReportResponse {
         private String contentSnippet;
         private String competitorName;
         private LocalDateTime collectedAt;
+        private String sourceType;
+        private String discoveryMethod;
+        private String sourceDomain;
+        private String discoveryReason;
+        private String publishedAt;
+        private Double sourceScore;
+        private Boolean verified;
+        private String verificationReason;
+        private String searchQuery;
+        private String searchEngine;
+        private Integer resultRank;
+        private String browserTraceId;
+        private String selectionReason;
+        private String selectionStage;
+        private List<String> matchedSignals;
+        private Map<String, Object> pageMetadata;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Schema(description = "Search audit overview")
+    public static class SearchAuditOverview {
+        private Integer collectorNodeCount;
+        private Integer traceRecordedCount;
+        private Integer checkpointRecoveredCount;
+        private Integer degradedCount;
+        private Integer providerFallbackCount;
+        private Integer browserBlockedCount;
+        private Integer plannedCandidateCount;
+        private Integer verifiedCandidateCount;
+        private Integer supplementedCandidateCount;
+        private Integer selectedCandidateCount;
+        private List<CollectorSearchAudit> collectors;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Schema(description = "Evidence coverage overview")
+    public static class EvidenceCoverageOverview {
+        private Integer totalFields;
+        private Integer traceableFields;
+        private Integer missingEvidenceFields;
+        private Integer emptyFields;
+        private List<SectionEvidenceCoverage> sections;
+        private List<CompetitorEvidenceCoverage> competitors;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Schema(description = "Section-level evidence coverage")
+    public static class SectionEvidenceCoverage {
+        private String sectionKey;
+        private String sectionTitle;
+        private Integer totalFields;
+        private Integer traceableFields;
+        private Integer missingEvidenceFields;
+        private Integer emptyFields;
+        private List<String> missingFields;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Schema(description = "Competitor-level evidence coverage")
+    public static class CompetitorEvidenceCoverage {
+        private String competitorName;
+        private Integer totalFields;
+        private Integer traceableFields;
+        private Integer missingEvidenceFields;
+        private Integer emptyFields;
+        private List<String> missingSections;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Schema(description = "Collector-level search audit")
+    public static class CollectorSearchAudit {
+        private String nodeName;
+        private TaskNodeStatus nodeStatus;
+        private String competitorName;
+        private String sourceType;
+        private Boolean traceRecorded;
+        private String auditMessage;
+        private String supplementMethod;
+        private Boolean resumedFromCheckpoint;
+        private String checkpointSource;
+        private Boolean degraded;
+        private String degradationReason;
+        private Boolean providerFallbackUsed;
+        private String fallbackDecision;
+        private String browserTraceId;
+        private String browserBlockedReason;
+        private Integer browserBlockedCount;
+        private String recoveryCheckpoint;
+        private Integer plannedCandidateCount;
+        private Integer verifiedCandidateCount;
+        private Integer supplementedCandidateCount;
+        private Integer selectedCandidateCount;
+        private List<String> selectedUrls;
+        private String errorMessage;
     }
 
     @Data

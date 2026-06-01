@@ -6,6 +6,7 @@ import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
+import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
@@ -21,9 +22,14 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
- * DAG 执行器，负责按节点顺序驱动各类 Agent，并处理依赖、重试、条件分支和任务收口。
+ * DAG 执行器，负责按 DAG 依赖驱动各类 Agent，并处理依赖、重试、条件分支和任务收口。
  */
 @Slf4j
 @Component
@@ -61,71 +67,43 @@ public class DagExecutor {
         Map<String, TaskNode> nodeMap = buildNodeMap(nodes);
         validateExecutableNodes(taskId, nodes, nodeMap);
 
-        boolean hasFailedRequiredNode = false;
-        for (TaskNode node : nodes) {
-            if (isTaskStopped(taskId)) {
-                stopRemainingNodes(taskId, nodes, node);
-                return;
-            }
-
-            // 续跑场景下，已成功节点直接跳过，避免覆盖已产出的稳定结果。
-            if (node.getStatus() == TaskNodeStatus.SUCCESS) {
-                continue;
-            }
-
-            if (hasFailedRequiredNode && node.isRequired()) {
-                skipNode(node, "Upstream required node failed");
-                continue;
-            }
-
-            if (!shouldExecuteNode(node, context, nodes)) {
-                skipNode(node, buildConditionalSkipReason(node, context, nodes));
-                continue;
-            }
-
-            if (!dependenciesSatisfied(node, nodeMap)) {
-                skipNode(node, buildDependencyFailureReason(node, nodeMap));
-                if (node.isRequired()) {
-                    hasFailedRequiredNode = true;
+        TaskNode lastTouchedNode = null;
+        ExecutorService executor = Executors.newFixedThreadPool(resolveParallelism(nodes.size()));
+        CompletionService<NodeExecutionResult> completionService = new ExecutorCompletionService<>(executor);
+        int runningCount = 0;
+        try {
+            while (true) {
+                refreshNodeStates(taskId, nodes);
+                if (isTaskStopped(taskId)) {
+                    stopRemainingNodes(taskId, nodes, lastTouchedNode);
+                    return;
                 }
-                continue;
-            }
 
-            Agent agent = agentRegistry.get(node.getAgentType());
-            if (agent == null) {
-                failNode(node, "Missing agent implementation: " + node.getAgentType());
-                if (node.isRequired()) {
-                    hasFailedRequiredNode = true;
+                DispatchCycleResult dispatchResult = dispatchExecutableNodes(taskId, context, nodes, nodeMap, completionService);
+                runningCount += dispatchResult.getSubmittedCount();
+                if (dispatchResult.getLastTouchedNode() != null) {
+                    lastTouchedNode = dispatchResult.getLastTouchedNode();
                 }
-                continue;
-            }
 
-            context.setCurrentNodeName(node.getNodeName());
-            context.setCurrentNodeConfig(node.getNodeConfig());
-            markNodeRunning(node, context);
+                if (dispatchResult.isSkippedAny()) {
+                    continue;
+                }
 
-            AgentResult result = executeNodeWithRetry(agent, context, node);
-            node.setStatus(result.getStatus());
-            node.setOutputData(result.getOutputData());
-            node.setCompletedAt(LocalDateTime.now());
+                if (runningCount == 0) {
+                    if (!dispatchResult.isProgressed()) {
+                        break;
+                    }
+                    continue;
+                }
 
-            if (result.getStatus() == TaskNodeStatus.SUCCESS) {
-                // 成功节点的输出要立刻回写共享上下文，供下游节点在同一轮执行中读取。
-                node.setErrorMessage(null);
-                context.putSharedOutput(node.getNodeName(), result.getOutputData());
-            } else {
-                node.setErrorMessage(result.getErrorMessage());
-                if (node.isRequired()) {
-                    hasFailedRequiredNode = true;
+                NodeExecutionResult completedResult = awaitNextCompletedNode(completionService);
+                runningCount--;
+                if (completedResult != null) {
+                    lastTouchedNode = completedResult.getNode();
                 }
             }
-
-            nodeRepository.save(node);
-
-            if (isTaskStopped(taskId)) {
-                stopRemainingNodes(taskId, nodes, node);
-                return;
-            }
+        } finally {
+            executor.shutdown();
         }
 
         updateTaskFinalStatus(taskId);
@@ -174,6 +152,145 @@ public class DagExecutor {
         return lastResult != null ? lastResult : AgentResult.failed("Unknown node execution failure");
     }
 
+    private DispatchCycleResult dispatchExecutableNodes(Long taskId,
+                                                        AgentContext sharedContext,
+                                                        List<TaskNode> nodes,
+                                                        Map<String, TaskNode> nodeMap,
+                                                        CompletionService<NodeExecutionResult> completionService) {
+        boolean progressed = false;
+        boolean skippedAny = false;
+        int submittedCount = 0;
+        TaskNode lastTouchedNode = null;
+        for (TaskNode node : nodes) {
+            if (node.getStatus() == TaskNodeStatus.SUCCESS
+                    || node.getStatus() == TaskNodeStatus.FAILED
+                    || node.getStatus() == TaskNodeStatus.SKIPPED
+                    || node.getStatus() == TaskNodeStatus.RUNNING) {
+                continue;
+            }
+            if (node.getControlState() == TaskNodeControlState.TERMINATE_REQUESTED
+                    && (node.getStatus() == TaskNodeStatus.PENDING || node.getStatus() == TaskNodeStatus.PAUSED)) {
+                skipNode(node, defaultIfBlank(node.getInterventionReason(), "节点已收到终止请求，执行前终止"));
+                node.setInterventionReason(defaultIfBlank(node.getInterventionReason(), "节点已收到终止请求，执行前终止"));
+                progressed = true;
+                skippedAny = true;
+                lastTouchedNode = node;
+                continue;
+            }
+            if (node.getStatus() == TaskNodeStatus.PAUSED) {
+                continue;
+            }
+
+            DependencyState dependencyState = resolveDependencyState(node, nodeMap);
+            if (dependencyState == DependencyState.BLOCKED) {
+                skipNode(node, buildDependencyFailureReason(node, nodeMap));
+                progressed = true;
+                skippedAny = true;
+                lastTouchedNode = node;
+                continue;
+            }
+            if (dependencyState == DependencyState.WAITING) {
+                continue;
+            }
+
+            if (!shouldExecuteNode(node, sharedContext, nodes)) {
+                skipNode(node, buildConditionalSkipReason(node, sharedContext, nodes));
+                progressed = true;
+                skippedAny = true;
+                lastTouchedNode = node;
+                continue;
+            }
+
+            AgentContext nodeContext = forkNodeContext(sharedContext, node);
+            markNodeRunning(node, nodeContext);
+            completionService.submit(() -> executeRunningNode(taskId, sharedContext, node, nodeContext));
+            progressed = true;
+            submittedCount++;
+            lastTouchedNode = node;
+        }
+        return new DispatchCycleResult(progressed, skippedAny, submittedCount, lastTouchedNode);
+    }
+
+    private NodeExecutionResult awaitNextCompletedNode(CompletionService<NodeExecutionResult> completionService) {
+        try {
+            return completionService.take().get();
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed while waiting node completion", e);
+        }
+    }
+
+    private NodeExecutionResult executeRunningNode(Long taskId,
+                                                   AgentContext sharedContext,
+                                                   TaskNode node,
+                                                   AgentContext nodeContext) {
+        if (isTaskStopped(taskId)) {
+            markNodeStopped(node);
+            return new NodeExecutionResult(node);
+        }
+        Agent agent = agentRegistry.get(node.getAgentType());
+        if (agent == null) {
+            failNode(node, "Missing agent implementation: " + node.getAgentType());
+            return new NodeExecutionResult(node);
+        }
+
+        AgentResult result = executeNodeWithRetry(agent, nodeContext, node);
+        TaskNode latestNode = nodeRepository.findById(node.getId()).orElse(node);
+        if (latestNode.getControlState() == TaskNodeControlState.TERMINATE_REQUESTED) {
+            node.setStatus(TaskNodeStatus.SKIPPED);
+            node.setOutputData(null);
+            node.setErrorMessage(defaultIfBlank(
+                    latestNode.getInterventionReason(),
+                    "节点已收到终止请求，当前轮执行结果已丢弃"));
+            node.setInterventionReason(defaultIfBlank(
+                    latestNode.getInterventionReason(),
+                    "节点已收到终止请求，当前轮执行结果已丢弃"));
+            node.setControlState(TaskNodeControlState.NONE);
+            node.setCompletedAt(LocalDateTime.now());
+            nodeRepository.save(node);
+            return new NodeExecutionResult(node);
+        }
+
+        node.setStatus(result.getStatus());
+        node.setOutputData(result.getOutputData());
+        node.setCompletedAt(LocalDateTime.now());
+        node.setControlState(TaskNodeControlState.NONE);
+        node.setInterventionReason(null);
+
+        if (result.getStatus() == TaskNodeStatus.SUCCESS) {
+            node.setErrorMessage(null);
+            sharedContext.putSharedOutput(node.getNodeName(), result.getOutputData());
+        } else {
+            node.setErrorMessage(result.getErrorMessage());
+        }
+
+        nodeRepository.save(node);
+        return new NodeExecutionResult(node);
+    }
+
+    private AgentContext forkNodeContext(AgentContext sharedContext, TaskNode node) {
+        return AgentContext.builder()
+                .taskId(sharedContext.getTaskId())
+                .taskName(sharedContext.getTaskName())
+                .subjectProduct(sharedContext.getSubjectProduct())
+                .competitorNames(sharedContext.getCompetitorNames())
+                .competitorUrls(sharedContext.getCompetitorUrls())
+                .analysisDimensions(sharedContext.getAnalysisDimensions())
+                .sourceScope(sharedContext.getSourceScope())
+                .reportLanguage(sharedContext.getReportLanguage())
+                .reportTemplate(sharedContext.getReportTemplate())
+                .currentNodeName(node.getNodeName())
+                .currentNodeConfig(node.getNodeConfig())
+                .traceId(sharedContext.getTraceId())
+                .sharedState(sharedContext.getSharedState())
+                .createdAt(sharedContext.getCreatedAt())
+                .build();
+    }
+
+    private int resolveParallelism(int candidateNodeCount) {
+        int cpuBoundLimit = Math.max(1, Runtime.getRuntime().availableProcessors());
+        return Math.max(1, Math.min(candidateNodeCount, Math.min(4, cpuBoundLimit)));
+    }
+
     private Map<AgentType, Agent> buildAgentRegistry(List<Agent> agents) {
         EnumMap<AgentType, Agent> registry = new EnumMap<>(AgentType.class);
         for (Agent agent : agents) {
@@ -204,8 +321,10 @@ public class DagExecutor {
 
     private void markNodeRunning(TaskNode node, AgentContext context) {
         node.setStatus(TaskNodeStatus.RUNNING);
+        node.setControlState(TaskNodeControlState.NONE);
         node.setInputData(buildNodeInput(node, context));
         node.setErrorMessage(null);
+        node.setInterventionReason(null);
         node.setStartedAt(LocalDateTime.now());
         node.setCompletedAt(null);
         nodeRepository.save(node);
@@ -229,8 +348,13 @@ public class DagExecutor {
 
     private void skipNode(TaskNode node, String reason) {
         node.setStatus(TaskNodeStatus.SKIPPED);
+        node.setControlState(TaskNodeControlState.NONE);
         node.setInputData(null);
+        node.setOutputData(null);
         node.setErrorMessage(reason);
+        if (node.getInterventionReason() == null || node.getInterventionReason().isBlank()) {
+            node.setInterventionReason(null);
+        }
         node.setStartedAt(node.getStartedAt() == null ? LocalDateTime.now() : node.getStartedAt());
         node.setCompletedAt(LocalDateTime.now());
         nodeRepository.save(node);
@@ -239,11 +363,22 @@ public class DagExecutor {
 
     private void failNode(TaskNode node, String errorMessage) {
         node.setStatus(TaskNodeStatus.FAILED);
+        node.setControlState(TaskNodeControlState.NONE);
         node.setErrorMessage(errorMessage);
+        node.setInterventionReason(null);
         node.setStartedAt(node.getStartedAt() == null ? LocalDateTime.now() : node.getStartedAt());
         node.setCompletedAt(LocalDateTime.now());
         nodeRepository.save(node);
         log.error("node failed: {}, reason={}", node.getNodeName(), errorMessage);
+    }
+
+    private void markNodeStopped(TaskNode node) {
+        node.setStatus(TaskNodeStatus.SKIPPED);
+        node.setControlState(TaskNodeControlState.NONE);
+        node.setErrorMessage("任务已被用户主动停止");
+        node.setInterventionReason(null);
+        node.setCompletedAt(LocalDateTime.now());
+        nodeRepository.save(node);
     }
 
     /**
@@ -275,6 +410,36 @@ public class DagExecutor {
         return true;
     }
 
+    private DependencyState resolveDependencyState(TaskNode node, Map<String, TaskNode> nodeMap) {
+        List<String> dependencyNames = parseDependencyNames(node.getDependsOn());
+        if (dependencyNames.isEmpty()) {
+            return DependencyState.READY;
+        }
+        boolean waiting = false;
+        for (String dependencyName : dependencyNames) {
+            TaskNode dependencyNode = nodeMap.get(dependencyName);
+            if (dependencyNode == null) {
+                return DependencyState.BLOCKED;
+            }
+            if (dependencyNode.getStatus() == TaskNodeStatus.SUCCESS) {
+                continue;
+            }
+            if (node.isAllowFailedDependency()
+                    && (dependencyNode.getStatus() == TaskNodeStatus.FAILED
+                    || dependencyNode.getStatus() == TaskNodeStatus.SKIPPED)) {
+                continue;
+            }
+            if (dependencyNode.getStatus() == TaskNodeStatus.PENDING
+                    || dependencyNode.getStatus() == TaskNodeStatus.RUNNING
+                    || dependencyNode.getStatus() == TaskNodeStatus.PAUSED) {
+                waiting = true;
+                continue;
+            }
+            return DependencyState.BLOCKED;
+        }
+        return waiting ? DependencyState.WAITING : DependencyState.READY;
+    }
+
     private List<String> parseDependencyNames(String dependsOn) {
         if (dependsOn == null || dependsOn.isBlank() || "[]".equals(dependsOn)) {
             return List.of();
@@ -293,6 +458,14 @@ public class DagExecutor {
     private void updateTaskFinalStatus(Long taskId) {
         taskRepository.findById(taskId).ifPresent(task -> {
             List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
+            boolean hasPausedNode = nodes.stream().anyMatch(node -> node.getStatus() == TaskNodeStatus.PAUSED);
+            if (hasPausedNode) {
+                task.setStatus(AnalysisTaskStatus.STOPPED);
+                task.setErrorMessage("存在已暂停节点，等待人工恢复");
+                task.setCompletedAt(LocalDateTime.now());
+                taskRepository.save(task);
+                return;
+            }
 
             boolean hasFailedOrSkippedRequiredNode = nodes.stream()
                     .filter(TaskNode::isRequired)
@@ -307,6 +480,9 @@ public class DagExecutor {
             boolean initialReviewPassed = nodes.stream()
                     .filter(node -> "quality_check".equals(node.getNodeName()))
                     .anyMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && isPassedReview(node.getOutputData()));
+            boolean initialReviewRequiresHumanIntervention = nodes.stream()
+                    .filter(node -> "quality_check".equals(node.getNodeName()))
+                    .anyMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && requiresHumanIntervention(node.getOutputData()));
             boolean finalReviewPassed = nodes.stream()
                     .filter(node -> "quality_check_final".equals(node.getNodeName()))
                     .anyMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && isPassedReview(node.getOutputData()));
@@ -317,6 +493,9 @@ public class DagExecutor {
             if (hasFailedOrSkippedRequiredNode) {
                 task.setStatus(AnalysisTaskStatus.FAILED);
                 task.setErrorMessage("任务执行失败，请检查节点日志。");
+            } else if (initialReviewRequiresHumanIntervention && !revisionFlowUsed) {
+                task.setStatus(AnalysisTaskStatus.STOPPED);
+                task.setErrorMessage("初审未通过且证据缺口较大，系统已停止自动改写，请先补证据或调整采集策略。");
             } else if (finalReviewPassed || (!initialReviewPresent && allRequiredSuccess) || initialReviewPassed) {
                 task.setStatus(AnalysisTaskStatus.SUCCESS);
                 task.setErrorMessage(null);
@@ -346,10 +525,16 @@ public class DagExecutor {
     }
 
     private void stopRemainingNodes(Long taskId, List<TaskNode> nodes, TaskNode currentNode) {
+        if (currentNode == null) {
+            currentNode = nodes.stream()
+                    .filter(node -> node.getStatus() == TaskNodeStatus.RUNNING)
+                    .findFirst()
+                    .orElse(nodes.isEmpty() ? null : nodes.get(0));
+        }
         boolean afterCurrent = false;
         for (TaskNode candidate : nodes) {
             if (!afterCurrent) {
-                if (candidate.getId().equals(currentNode.getId())) {
+                if (currentNode != null && candidate.getId().equals(currentNode.getId())) {
                     afterCurrent = true;
                 }
                 continue;
@@ -360,7 +545,9 @@ public class DagExecutor {
                 continue;
             }
             candidate.setStatus(TaskNodeStatus.SKIPPED);
+            candidate.setControlState(TaskNodeControlState.NONE);
             candidate.setErrorMessage("任务已被用户主动停止");
+            candidate.setInterventionReason(null);
             candidate.setCompletedAt(LocalDateTime.now());
             nodeRepository.save(candidate);
         }
@@ -371,7 +558,8 @@ public class DagExecutor {
             task.setCompletedAt(LocalDateTime.now());
             taskRepository.save(task);
         });
-        log.info("task stopped during dag execution, taskId={}, currentNode={}", taskId, currentNode.getNodeName());
+        log.info("task stopped during dag execution, taskId={}, currentNode={}",
+                taskId, currentNode == null ? "unknown" : currentNode.getNodeName());
     }
 
     /**
@@ -486,6 +674,30 @@ public class DagExecutor {
         return json != null && json.path("passed").asBoolean(false);
     }
 
+    private boolean requiresHumanIntervention(String outputData) {
+        JsonNode json = readJson(outputData);
+        if (json == null) {
+            return false;
+        }
+        if (json.has("requiresHumanIntervention")) {
+            return json.path("requiresHumanIntervention").asBoolean(false);
+        }
+        if (json.path("passed").asBoolean(false)) {
+            return false;
+        }
+        int score = json.has("score") ? json.path("score").asInt(100) : 100;
+        int errorCount = 0;
+        JsonNode issues = json.get("issues");
+        if (issues != null && issues.isArray()) {
+            for (JsonNode issue : issues) {
+                if ("ERROR".equalsIgnoreCase(issue.path("severity").asText())) {
+                    errorCount++;
+                }
+            }
+        }
+        return score <= 20 || errorCount >= 4;
+    }
+
     /**
      * 条件节点根据 trigger 决定是否执行，例如“质检失败才重写”“重写成功后才终审”。
      */
@@ -497,7 +709,10 @@ public class DagExecutor {
         return switch (trigger) {
             case "review_failed" -> {
                 JsonNode reviewOutput = readJson(context.getSharedOutput("quality_check"));
-                yield reviewOutput != null && !reviewOutput.path("passed").asBoolean(true);
+                yield reviewOutput != null
+                        && !reviewOutput.path("passed").asBoolean(true)
+                        && !requiresHumanIntervention(context.getSharedOutput("quality_check"))
+                        && reviewOutput.path("autoRewriteAllowed").asBoolean(true);
             }
             case "rewrite_executed" -> allNodes.stream()
                     .anyMatch(current -> "rewrite_report".equals(current.getNodeName())
@@ -512,6 +727,9 @@ public class DagExecutor {
             JsonNode reviewOutput = readJson(context.getSharedOutput("quality_check"));
             if (reviewOutput == null) {
                 return "跳过修订：缺少有效的评审结果";
+            }
+            if (requiresHumanIntervention(context.getSharedOutput("quality_check"))) {
+                return "跳过修订：初审严重失败，需先人工补证据、调整搜索范围或重跑采集链路";
             }
             if (!reviewOutput.has("passed")) {
                 return "跳过修订：评审输出不完整";
@@ -532,7 +750,7 @@ public class DagExecutor {
             return switch (rewriteNode.getStatus()) {
                 case SKIPPED -> "跳过终审：本轮未触发改写";
                 case FAILED -> "跳过终审：改写执行失败";
-                case PENDING, RUNNING -> "跳过终审：改写尚未完成";
+                case PENDING, RUNNING, PAUSED -> "跳过终审：改写尚未完成";
                 default -> "跳过终审：改写结果不可用";
             };
         }
@@ -579,5 +797,85 @@ public class DagExecutor {
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r");
+    }
+
+    private void refreshNodeStates(Long taskId, List<TaskNode> nodes) {
+        Map<Long, TaskNode> latestMap = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)
+                .stream()
+                .filter(node -> node.getId() != null)
+                .collect(Collectors.toMap(TaskNode::getId, node -> node, (left, right) -> right));
+        for (TaskNode node : nodes) {
+            if (node.getId() == null) {
+                continue;
+            }
+            TaskNode latest = latestMap.get(node.getId());
+            if (latest == null) {
+                continue;
+            }
+            node.setStatus(latest.getStatus());
+            node.setControlState(latest.getControlState());
+            node.setNodeConfig(latest.getNodeConfig());
+            node.setInputData(latest.getInputData());
+            node.setOutputData(latest.getOutputData());
+            node.setErrorMessage(latest.getErrorMessage());
+            node.setInterventionReason(latest.getInterventionReason());
+            node.setStartedAt(latest.getStartedAt());
+            node.setCompletedAt(latest.getCompletedAt());
+            node.setRetryCount(latest.getRetryCount());
+        }
+    }
+
+    private String defaultIfBlank(String value, String defaultValue) {
+        return value == null || value.isBlank() ? defaultValue : value;
+    }
+
+    private enum DependencyState {
+        READY,
+        WAITING,
+        BLOCKED
+    }
+
+    private static final class DispatchCycleResult {
+
+        private final boolean progressed;
+        private final boolean skippedAny;
+        private final int submittedCount;
+        private final TaskNode lastTouchedNode;
+
+        private DispatchCycleResult(boolean progressed, boolean skippedAny, int submittedCount, TaskNode lastTouchedNode) {
+            this.progressed = progressed;
+            this.skippedAny = skippedAny;
+            this.submittedCount = submittedCount;
+            this.lastTouchedNode = lastTouchedNode;
+        }
+
+        private boolean isProgressed() {
+            return progressed;
+        }
+
+        private boolean isSkippedAny() {
+            return skippedAny;
+        }
+
+        private int getSubmittedCount() {
+            return submittedCount;
+        }
+
+        private TaskNode getLastTouchedNode() {
+            return lastTouchedNode;
+        }
+    }
+
+    private static final class NodeExecutionResult {
+
+        private final TaskNode node;
+
+        private NodeExecutionResult(TaskNode node) {
+            this.node = node;
+        }
+
+        private TaskNode getNode() {
+            return node;
+        }
     }
 }

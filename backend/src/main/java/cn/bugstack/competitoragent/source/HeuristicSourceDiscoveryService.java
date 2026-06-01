@@ -14,38 +14,68 @@ import java.util.Set;
 
 /**
  * 启发式信息源发现服务。
- * 当前版本不依赖外部搜索 API，而是根据竞品名称、用户输入 URL、采集范围规则拼装候选来源。
+ * V2 第二阶段开始，统一收口启发式与搜索式补源结果，并在节点配置中保留候选来源的排序与说明。
  */
 @Component
 public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
 
-    private static final List<String> DEFAULT_SCOPES = List.of("OFFICIAL", "DOCS", "PRICING");
+    private static final List<String> DEFAULT_SCOPES = List.of("OFFICIAL", "DOCS", "PRICING", "NEWS", "REVIEW");
+    private static final int MAX_CANDIDATES_PER_SCOPE = 5;
+
+    private final SearchSourceProvider searchSourceProvider;
+    private final SourceCandidateRanker candidateRanker;
+
+    public HeuristicSourceDiscoveryService(SearchSourceProvider searchSourceProvider,
+                                           SourceCandidateRanker candidateRanker) {
+        this.searchSourceProvider = searchSourceProvider;
+        this.candidateRanker = candidateRanker;
+    }
 
     @Override
     public List<SourcePlan> discover(String competitorName, List<String> providedUrls, List<String> requestedScopes) {
-        // 先确定根域名，再基于 scope 派生文档、价格、新闻、评测等不同入口。
+        // 先确定根域名，再把启发式与搜索式候选来源按 scope 合并、去重和排序。
+        // 如果用户没有提供 URL，则不要盲猜 notionai.com 这类高误判域名，改为保留搜索驱动的占位计划。
         List<String> normalizedRoots = normalizeRoots(competitorName, providedUrls);
         List<String> scopes = normalizeScopes(requestedScopes);
         List<SourcePlan> plans = new ArrayList<>();
+        List<SourceCandidate> searchCandidates = searchSourceProvider.search(competitorName, scopes);
 
         for (String scope : scopes) {
-            List<String> urls = discoverUrlsByScope(scope, normalizedRoots, competitorName);
-            if (urls.isEmpty()) {
+            List<SourceCandidate> mergedCandidates = mergeCandidates(
+                    buildHeuristicCandidates(scope, normalizedRoots, competitorName, providedUrls),
+                    filterSearchCandidates(scope, searchCandidates)
+            );
+            if (mergedCandidates.isEmpty()) {
+                if (shouldCreateSearchOnlyPlan(normalizedRoots, scope, searchCandidates)) {
+                    plans.add(SourcePlan.builder()
+                            .sourceType(scope)
+                            .urls(List.of())
+                            .candidates(List.of())
+                            .notes(buildSearchOnlyNotes(scope))
+                            .build());
+                }
                 continue;
             }
+
+            List<String> urls = mergedCandidates.stream()
+                    .map(SourceCandidate::getUrl)
+                    .toList();
             plans.add(SourcePlan.builder()
                     .sourceType(scope)
                     .urls(urls)
+                    .candidates(mergedCandidates)
                     // notes 会显示在任务节点详情中，帮助用户理解系统为何选择这些入口。
-                    .notes(buildNotes(scope, urls.size(), providedUrls))
+                    .notes(buildNotes(scope, mergedCandidates, providedUrls))
                     .build());
         }
 
         // 如果 scope 没有扩展出额外路径，至少保留根域名作为兜底采集入口。
         if (plans.isEmpty() && !normalizedRoots.isEmpty()) {
+            List<SourceCandidate> fallbackCandidates = buildHeuristicCandidates("OFFICIAL", normalizedRoots, competitorName, providedUrls);
             plans.add(SourcePlan.builder()
                     .sourceType("OFFICIAL")
-                    .urls(normalizedRoots)
+                    .urls(fallbackCandidates.stream().map(SourceCandidate::getUrl).toList())
+                    .candidates(fallbackCandidates)
                     .notes("Fallback to root-domain collection")
                     .build());
         }
@@ -53,7 +83,7 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
         return plans;
     }
 
-    // 优先使用用户提供的 URL；如果没有，则尝试由竞品名称推导常见域名。
+    // 优先使用用户提供的 URL；如果没有可靠 URL，则交给后续搜索补源处理，不再盲猜域名。
     private List<String> normalizeRoots(String competitorName, List<String> providedUrls) {
         LinkedHashSet<String> roots = new LinkedHashSet<>();
         if (providedUrls != null) {
@@ -68,17 +98,7 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
         if (!roots.isEmpty()) {
             return new ArrayList<>(roots);
         }
-
-        String slug = toDomainSlug(competitorName);
-        if (!StringUtils.hasText(slug)) {
-            return List.of();
-        }
-
-        roots.add("https://" + slug + ".com");
-        roots.add("https://www." + slug + ".com");
-        roots.add("https://" + slug + ".ai");
-        roots.add("https://" + slug + ".io");
-        return new ArrayList<>(roots);
+        return List.of();
     }
 
     // 采集范围支持中英文别名输入，最终统一映射成系统内部固定 scope。
@@ -97,25 +117,46 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
         return scopes.isEmpty() ? DEFAULT_SCOPES : new ArrayList<>(scopes);
     }
 
-    // 每种 scope 都对应一组固定的候选入口规则，方便后续继续扩展更多来源类型。
-    private List<String> discoverUrlsByScope(String scope, List<String> roots, String competitorName) {
-        LinkedHashSet<String> urls = new LinkedHashSet<>();
+    // 每种 scope 都先构建启发式候选项，再由统一排序器做去重和优先级计算。
+    private List<SourceCandidate> buildHeuristicCandidates(String scope,
+                                                           List<String> roots,
+                                                           String competitorName,
+                                                           List<String> providedUrls) {
+        List<SourceCandidate> candidates = new ArrayList<>();
         for (String root : roots) {
             switch (scope) {
-                case "OFFICIAL" -> urls.add(root);
-                case "DOCS" -> addPaths(urls, root, List.of("/docs", "/documentation", "/help", "/guide"));
-                case "PRICING" -> addPaths(urls, root, List.of("/pricing", "/plans", "/enterprise"));
-                case "NEWS" -> addPaths(urls, root, List.of("/blog", "/news", "/changelog", "/resources"));
-                case "REVIEW" -> addReviewSources(urls, root, competitorName);
-                default -> urls.add(root);
+                case "OFFICIAL" -> candidates.add(buildCandidate(root, scope, competitorName, "HEURISTIC",
+                        "根据官网根域名推导官网入口", null, providedUrls));
+                case "DOCS" -> addPathCandidates(candidates, root, scope, competitorName,
+                        List.of("/docs", "/documentation", "/help", "/guide"), providedUrls);
+                case "PRICING" -> addPathCandidates(candidates, root, scope, competitorName,
+                        List.of("/pricing", "/plans", "/enterprise"), providedUrls);
+                case "NEWS" -> addPathCandidates(candidates, root, scope, competitorName,
+                        List.of("/blog", "/news", "/changelog", "/resources"), providedUrls);
+                case "REVIEW" -> addReviewSources(candidates, root, competitorName, providedUrls);
+                default -> candidates.add(buildCandidate(root, "OFFICIAL", competitorName, "HEURISTIC",
+                        "未识别范围，回退到官网根域名", null, providedUrls));
             }
         }
-        return new ArrayList<>(urls);
+        return mergeCandidates(candidates, List.of());
     }
 
-    private void addPaths(Set<String> urls, String root, List<String> paths) {
+    private void addPathCandidates(List<SourceCandidate> candidates,
+                                   String root,
+                                   String scope,
+                                   String competitorName,
+                                   List<String> paths,
+                                   List<String> providedUrls) {
         for (String path : paths) {
-            urls.add(root + path);
+            candidates.add(buildCandidate(
+                    root + path,
+                    scope,
+                    competitorName,
+                    "HEURISTIC",
+                    "根据根域名自动拼接 " + scope + " 入口",
+                    null,
+                    providedUrls
+            ));
         }
     }
 
@@ -123,18 +164,42 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
      * 评测来源除了站内案例页，也补充 G2 / Capterra 这类公开评价入口，
      * 避免信息源完全依赖官网首页导致视角单一。
      */
-    private void addReviewSources(Set<String> urls, String root, String competitorName) {
-        addPaths(urls, root, List.of("/customers", "/case-studies", "/compare"));
+    private void addReviewSources(List<SourceCandidate> candidates,
+                                  String root,
+                                  String competitorName,
+                                  List<String> providedUrls) {
+        addPathCandidates(candidates, root, "REVIEW", competitorName,
+                List.of("/customers", "/case-studies", "/compare"), providedUrls);
 
         String encodedName = competitorName == null ? "" : competitorName.trim().replace(" ", "+");
         if (!encodedName.isBlank()) {
-            urls.add("https://www.g2.com/search?query=" + encodedName);
-            urls.add("https://www.capterra.com/search/?query=" + encodedName);
+            candidates.add(SourceCandidate.builder()
+                    .url("https://www.g2.com/search?query=" + encodedName)
+                    .title(competitorName + " G2 Search")
+                    .sourceType("REVIEW")
+                    .discoveryMethod("HEURISTIC")
+                    .reason("启发式补充第三方测评入口")
+                    .domain("www.g2.com")
+                    .relevanceScore(0.78)
+                    .freshnessScore(0.55)
+                    .qualityScore(0.88)
+                    .build());
+            candidates.add(SourceCandidate.builder()
+                    .url("https://www.capterra.com/search/?query=" + encodedName)
+                    .title(competitorName + " Capterra Search")
+                    .sourceType("REVIEW")
+                    .discoveryMethod("HEURISTIC")
+                    .reason("启发式补充第三方测评入口")
+                    .domain("www.capterra.com")
+                    .relevanceScore(0.76)
+                    .freshnessScore(0.55)
+                    .qualityScore(0.86)
+                    .build());
         }
     }
 
     // notes 面向人类阅读，用于解释该批来源的业务含义和推导来源。
-    private String buildNotes(String scope, int urlCount, List<String> providedUrls) {
+    private String buildNotes(String scope, List<SourceCandidate> candidates, List<String> providedUrls) {
         Map<String, String> labels = new LinkedHashMap<>();
         labels.put("OFFICIAL", "Official site");
         labels.put("DOCS", "Documentation");
@@ -143,9 +208,18 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
         labels.put("REVIEW", "Public reviews");
 
         String origin = providedUrls == null || providedUrls.isEmpty()
-                ? "derived from heuristic root-domain inference"
-                : "expanded from user-provided URLs";
-        return labels.getOrDefault(scope, scope) + ": " + urlCount + " candidates, " + origin;
+                ? "由根域名推导并结合搜索式补源"
+                : "基于用户提供 URL 扩展并结合搜索式补源";
+        long searchCount = candidates.stream()
+                .filter(candidate -> isSearchLikeDiscoveryMethod(candidate.getDiscoveryMethod()))
+                .count();
+        return labels.getOrDefault(scope, scope)
+                + "：保留 " + candidates.size() + " 个候选来源，其中搜索补源 " + searchCount + " 个，" + origin;
+    }
+
+    private boolean isSearchLikeDiscoveryMethod(String discoveryMethod) {
+        return "SEARCH".equalsIgnoreCase(discoveryMethod)
+                || "BROWSER_PREVIEW".equalsIgnoreCase(discoveryMethod);
     }
 
     // 兼容中文关键词、英文关键词与常见站点名，降低前端传参复杂度。
@@ -201,13 +275,98 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
         }
     }
 
-    // 例如 "Notion AI" 会被推导成 "notionai"，作为候选域名 slug。
-    private String toDomainSlug(String competitorName) {
-        if (!StringUtils.hasText(competitorName)) {
-            return "";
+    private List<SourceCandidate> filterSearchCandidates(String scope, List<SourceCandidate> searchCandidates) {
+        if (searchCandidates == null || searchCandidates.isEmpty()) {
+            return List.of();
         }
-        return competitorName.toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "")
-                .trim();
+        return searchCandidates.stream()
+                .filter(candidate -> scope.equals(candidate.getSourceType()))
+                .toList();
+    }
+
+    private List<SourceCandidate> mergeCandidates(List<SourceCandidate> heuristicCandidates,
+                                                  List<SourceCandidate> searchCandidates) {
+        List<SourceCandidate> merged = new ArrayList<>();
+        if (heuristicCandidates != null) {
+            merged.addAll(heuristicCandidates);
+        }
+        if (searchCandidates != null) {
+            merged.addAll(searchCandidates);
+        }
+        List<SourceCandidate> ranked = candidateRanker.rankAndDeduplicate(merged);
+        return ranked.size() > MAX_CANDIDATES_PER_SCOPE ? ranked.subList(0, MAX_CANDIDATES_PER_SCOPE) : ranked;
+    }
+
+    private SourceCandidate buildCandidate(String url,
+                                           String scope,
+                                           String competitorName,
+                                           String discoveryMethod,
+                                           String reason,
+                                           String publishedAt,
+                                           List<String> providedUrls) {
+        String domain = extractDomain(url);
+        double relevanceScore = switch (scope) {
+            case "OFFICIAL" -> 0.95;
+            case "DOCS" -> 0.91;
+            case "PRICING" -> 0.93;
+            case "NEWS" -> 0.74;
+            case "REVIEW" -> 0.77;
+            default -> 0.70;
+        };
+        double freshnessScore = "NEWS".equals(scope) ? 0.72 : 0.60;
+        double qualityScore = (providedUrls != null && !providedUrls.isEmpty()) ? 0.90 : 0.84;
+
+        return SourceCandidate.builder()
+                .url(url)
+                .title(buildTitle(url, scope, competitorName))
+                .sourceType(scope)
+                .discoveryMethod(discoveryMethod)
+                .reason(reason)
+                .domain(domain)
+                .publishedAt(publishedAt)
+                .relevanceScore(relevanceScore)
+                .freshnessScore(freshnessScore)
+                .qualityScore(qualityScore)
+                .build();
+    }
+
+    private String buildTitle(String url, String scope, String competitorName) {
+        String label = switch (scope) {
+            case "OFFICIAL" -> "官网";
+            case "DOCS" -> "文档";
+            case "PRICING" -> "定价";
+            case "NEWS" -> "新闻";
+            case "REVIEW" -> "测评";
+            default -> "来源";
+        };
+        return (StringUtils.hasText(competitorName) ? competitorName : "竞品") + " - " + label + "入口（" + url + "）";
+    }
+
+    private String extractDomain(String url) {
+        try {
+            URI uri = URI.create(url);
+            return uri.getHost();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private boolean shouldCreateSearchOnlyPlan(List<String> normalizedRoots,
+                                               String scope,
+                                               List<SourceCandidate> searchCandidates) {
+        if (normalizedRoots != null && !normalizedRoots.isEmpty()) {
+            return false;
+        }
+        return filterSearchCandidates(scope, searchCandidates).isEmpty();
+    }
+
+    private String buildSearchOnlyNotes(String scope) {
+        return switch (scope) {
+            case "DOCS" -> "未提供可靠官网 URL，跳过域名猜测；执行阶段将优先通过浏览器或 HTTP 搜索补源定位文档入口";
+            case "PRICING" -> "未提供可靠官网 URL，跳过域名猜测；执行阶段将优先通过浏览器或 HTTP 搜索补源定位定价入口";
+            case "NEWS" -> "未提供可靠官网 URL，跳过域名猜测；执行阶段将优先通过浏览器或 HTTP 搜索补源定位新闻与更新入口";
+            case "REVIEW" -> "未提供可靠官网 URL，跳过域名猜测；执行阶段将优先通过浏览器或 HTTP 搜索补源定位测评入口";
+            default -> "未提供可靠官网 URL，跳过域名猜测；执行阶段将优先通过浏览器或 HTTP 搜索补源定位官网入口";
+        };
     }
 }

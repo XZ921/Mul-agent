@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 
 /**
@@ -84,6 +85,7 @@ public class ReportWriterAgent extends BaseAgent {
         String currentReport = reportRepository.findByTaskId(context.getTaskId())
                 .map(Report::getContent)
                 .orElse("");
+        String revisionFocus = buildRevisionFocus(revisionPlan);
 
         // 同一套 writer 模板通过 revisionMode 与 revisionPlan 控制“首稿/重写”分支。
         String prompt = promptService.render("writer", Map.of(
@@ -94,7 +96,8 @@ public class ReportWriterAgent extends BaseAgent {
                 "currentReport", currentReport,
                 "evidenceList", evidenceList.toString(),
                 "revisionMode", String.valueOf(revisionMode),
-                "revisionPlan", revisionPlan == null ? "[]" : revisionPlan.toPrettyString()
+                "revisionPlan", revisionPlan == null ? "[]" : revisionPlan.toPrettyString(),
+                "revisionFocus", revisionFocus
         ));
 
         try {
@@ -157,6 +160,51 @@ public class ReportWriterAgent extends BaseAgent {
 
     private String safe(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    /**
+     * 把修订计划压缩成 Writer 更容易消费的“重点章节 + 证据动作”摘要，避免模型只做表面润色。
+     */
+    private String buildRevisionFocus(JsonNode revisionPlan) {
+        if (revisionPlan == null || revisionPlan.isMissingNode() || revisionPlan.isNull()) {
+            return "无";
+        }
+        List<String> focusItems = new ArrayList<>();
+        JsonNode items = revisionPlan.path("items");
+        if (items.isArray()) {
+            for (JsonNode item : items) {
+                String section = item.path("section").asText("通用");
+                String type = item.path("type").asText("UNKNOWN");
+                String severity = item.path("severity").asText("WARNING");
+                String suggestion = item.path("suggestion").asText("请补充完善");
+                if (isEvidenceDrivenIssue(type)) {
+                    focusItems.add(section + " [" + severity + "]：必须补充可回指证据引用，建议为 " + suggestion);
+                } else {
+                    focusItems.add(section + " [" + severity + "]：" + suggestion);
+                }
+            }
+        }
+        JsonNode guidelines = revisionPlan.path("rewriteGuidelines");
+        if (guidelines.isArray()) {
+            for (JsonNode item : guidelines) {
+                String value = item.asText("");
+                if (!value.isBlank()) {
+                    focusItems.add(value);
+                }
+            }
+        }
+        if (focusItems.isEmpty()) {
+            return "请优先修复评审中标记的问题，并确保关键判断附带 [证据：EID] 形式引用。";
+        }
+        return String.join("\n", focusItems);
+    }
+
+    private boolean isEvidenceDrivenIssue(String type) {
+        String normalized = type == null ? "" : type.toLowerCase();
+        return normalized.contains("evidence")
+                || normalized.contains("claim")
+                || normalized.contains("证据")
+                || normalized.contains("支撑");
     }
 
     // Reviewer 结果既可能是对象，也可能被序列化成字符串，这里统一兜底解析。

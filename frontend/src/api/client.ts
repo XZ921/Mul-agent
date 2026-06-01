@@ -4,6 +4,7 @@ import type {
   AnalysisSchema,
   ApiResponse,
   CreateTaskRequest,
+  EvidenceInfo,
   ReportInfo,
   TaskInfo,
   TaskNodeInfo,
@@ -64,12 +65,41 @@ export async function rerunTaskNode(id: number, nodeName: string) {
   return api.post(`/task/${id}/nodes/${encodeURIComponent(nodeName)}/rerun`) as Promise<ApiResponse<string>>
 }
 
+export async function updateTaskNodeConfigAndRerun(id: number, nodeName: string, nodeConfig: string) {
+  return api.post(`/task/${id}/nodes/${encodeURIComponent(nodeName)}/config-rerun`, {
+    nodeConfig,
+  }) as Promise<ApiResponse<string>>
+}
+
+export async function pauseTaskNode(id: number, nodeName: string) {
+  return api.post(`/task/${id}/nodes/${encodeURIComponent(nodeName)}/pause`) as Promise<ApiResponse<string>>
+}
+
+export async function resumeTaskNode(id: number, nodeName: string) {
+  return api.post(`/task/${id}/nodes/${encodeURIComponent(nodeName)}/resume`) as Promise<ApiResponse<string>>
+}
+
+export async function skipTaskNode(id: number, nodeName: string) {
+  return api.post(`/task/${id}/nodes/${encodeURIComponent(nodeName)}/skip`) as Promise<ApiResponse<string>>
+}
+
+export async function terminateTaskNode(id: number, nodeName: string) {
+  return api.post(`/task/${id}/nodes/${encodeURIComponent(nodeName)}/terminate`) as Promise<ApiResponse<string>>
+}
+
 export async function deleteTask(id: number) {
   return api.delete(`/task/${id}`) as Promise<ApiResponse<string>>
 }
 
 export async function getReport(taskId: number) {
   return api.get(`/report/${taskId}`) as Promise<ApiResponse<ReportInfo>>
+}
+
+export async function listReportEvidences(
+  taskId: number,
+  filters?: { competitorName?: string; sourceType?: string; discoveryMethod?: string },
+) {
+  return api.get(`/report/${taskId}/evidences`, { params: filters }) as Promise<ApiResponse<EvidenceInfo[]>>
 }
 
 export function getExportUrl(taskId: number) {

@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.task;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
+import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
@@ -77,7 +78,15 @@ public class TaskRecoveryService {
         for (TaskNode node : nodes) {
             if (node.getStatus() == TaskNodeStatus.PENDING) {
                 node.setStatus(TaskNodeStatus.SKIPPED);
+                node.setControlState(TaskNodeControlState.NONE);
                 node.setErrorMessage("任务已被用户主动停止");
+                node.setInterventionReason(null);
+                node.setCompletedAt(LocalDateTime.now());
+            } else if (node.getStatus() == TaskNodeStatus.PAUSED) {
+                node.setStatus(TaskNodeStatus.SKIPPED);
+                node.setControlState(TaskNodeControlState.NONE);
+                node.setErrorMessage("任务已被用户主动停止");
+                node.setInterventionReason(null);
                 node.setCompletedAt(LocalDateTime.now());
             }
         }
@@ -99,11 +108,13 @@ public class TaskRecoveryService {
             TaskNodeStatus originalStatus = node.getStatus();
             if (originalStatus == TaskNodeStatus.RUNNING || originalStatus == TaskNodeStatus.PENDING) {
                 node.setStatus(TaskNodeStatus.PENDING);
+                node.setControlState(TaskNodeControlState.NONE);
                 node.setInputData(null);
                 node.setOutputData(originalStatus == TaskNodeStatus.RUNNING ? null : node.getOutputData());
                 node.setErrorMessage(originalStatus == TaskNodeStatus.RUNNING
                         ? "Node interrupted by service restart"
                         : node.getErrorMessage());
+                node.setInterventionReason(null);
                 node.setStartedAt(null);
                 node.setCompletedAt(null);
                 node.setRetryCount(0);

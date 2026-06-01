@@ -6,19 +6,15 @@ import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
 /**
- * OpenAI 兼容 LLM 客户端 — 支持 ollama / bailian / deepseek / siliconflow 等多提供商
- * <p>
- * 当 llm.mock=false 时启用，根据 ai.active-provider 选择实际的 AI 服务。
+ * OpenAI 兼容 LLM 客户端 — 支持 ollama / bailian / deepseek / siliconflow 等多提供商。
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(name = "llm.mock", havingValue = "false")
 public class OpenAiCompatibleClient implements LlmClient {
 
     private final ChatLanguageModel model;

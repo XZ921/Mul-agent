@@ -1,13 +1,24 @@
 package cn.bugstack.competitoragent.workflow;
 
+import cn.bugstack.competitoragent.agent.collector.CollectorNodeConfig;
+import cn.bugstack.competitoragent.config.CollectorProperties;
+import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.model.entity.AnalysisSchema;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.search.SearchBrowserProperties;
 import cn.bugstack.competitoragent.repository.AnalysisSchemaRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
+import cn.bugstack.competitoragent.search.SearchExecutionPlan;
+import cn.bugstack.competitoragent.search.SearchProperties;
+import cn.bugstack.competitoragent.search.SearchExecutionStep;
+import cn.bugstack.competitoragent.search.SearchRuntimePolicy;
+import cn.bugstack.competitoragent.source.SourceCandidate;
+import cn.bugstack.competitoragent.source.SourceCandidateRanker;
 import cn.bugstack.competitoragent.source.SourceDiscoveryService;
+import cn.bugstack.competitoragent.source.SourcePlan;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,8 +30,11 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 工作流工厂，负责把任务配置翻译成可执行的 DAG 节点列表。
@@ -33,8 +47,13 @@ public class WorkflowFactory {
     private final TaskNodeRepository nodeRepository;
     private final AnalysisSchemaRepository schemaRepository;
     private final SourceDiscoveryService sourceDiscoveryService;
+    private final SourceCandidateRanker sourceCandidateRanker;
     private final WorkflowPlanValidator workflowPlanValidator;
     private final ObjectMapper objectMapper;
+    private final PromptTemplateService promptTemplateService;
+    private final SearchBrowserProperties searchBrowserProperties;
+    private final SearchProperties searchProperties;
+    private final CollectorProperties collectorProperties;
 
     /**
      * 根据规划结果创建并落库存量节点，供执行器后续顺序消费。
@@ -87,16 +106,23 @@ public class WorkflowFactory {
             String competitorName = competitorNames.get(competitorIndex);
             List<String> providedUrls = resolveCompetitorProvidedUrls(
                     competitorNames, competitorUrls, competitorIndex);
-            List<SourceDiscoveryService.SourcePlan> sourcePlans = sourceDiscoveryService.discover(
+            List<SourcePlan> sourcePlans = sourceDiscoveryService.discover(
                     competitorName,
                     providedUrls,
                     requestedScopes);
+            sourcePlans = deduplicateSourcePlans(sourcePlans);
 
             // 按信息源计划动态展开采集节点，让 DAG 随竞品数量和来源范围变化。
             for (int planIndex = 0; planIndex < sourcePlans.size(); planIndex++) {
-                SourceDiscoveryService.SourcePlan sourcePlan = sourcePlans.get(planIndex);
+                SourcePlan sourcePlan = sourcePlans.get(planIndex);
                 String nodeName = String.format("collect_sources_%02d_%02d", competitorIndex + 1, planIndex + 1);
                 collectNodeNames.add(nodeName);
+                CollectorNodeConfig collectorNodeConfig = buildCollectorNodeConfig(
+                        competitorName,
+                        requestedScopes,
+                        schema.map(AnalysisSchema::getName).orElse(null),
+                        sourcePlan
+                );
 
                 planNodes.add(WorkflowPlan.WorkflowPlanNode.builder()
                         .nodeName(nodeName)
@@ -105,15 +131,8 @@ public class WorkflowFactory {
                         .dependsOn(Collections.emptyList())
                         .required(true)
                         .executionOrder(order++)
-                        .nodeConfig(toJson(orderedMap(
-                                "competitorName", competitorName,
-                                "competitorUrls", sourcePlan.getUrls(),
-                                "sourceType", sourcePlan.getSourceType(),
-                                "sourceScope", requestedScopes,
-                                "schemaName", schema.map(AnalysisSchema::getName).orElse(null),
-                                "discoveryNotes", sourcePlan.getNotes()
-                        )))
-                        .notes("由信息源发现策略自动生成")
+                        .nodeConfig(toJson(collectorNodeConfig))
+                        .notes(buildCollectorNodeNotes(sourcePlan))
                         .build());
             }
         }
@@ -285,8 +304,273 @@ public class WorkflowFactory {
         }
     }
 
+    private List<SourcePlan> deduplicateSourcePlans(List<SourcePlan> sourcePlans) {
+        if (sourcePlans == null || sourcePlans.isEmpty()) {
+            return List.of();
+        }
+
+        List<SourcePlan> deduplicatedPlans = new ArrayList<>();
+        Set<String> seenUrls = new LinkedHashSet<>();
+
+        for (SourcePlan sourcePlan : sourcePlans) {
+            if (sourcePlan == null) {
+                continue;
+            }
+
+            List<SourceCandidate> rankedCandidates = sourceCandidateRanker.rankAndDeduplicate(sourcePlan.getCandidates());
+            List<SourceCandidate> keptCandidates = new ArrayList<>();
+            Set<String> planUrlKeys = new LinkedHashSet<>();
+            Set<String> candidateUrlKeys = new LinkedHashSet<>();
+            int duplicateCount = 0;
+
+            for (String url : safeList(sourcePlan.getUrls())) {
+                String normalizedUrl = normalizeUrl(url);
+                if (!StringUtils.hasText(normalizedUrl)) {
+                    continue;
+                }
+                if (seenUrls.contains(normalizedUrl) || !planUrlKeys.add(normalizedUrl)) {
+                    duplicateCount++;
+                    continue;
+                }
+            }
+
+            for (SourceCandidate candidate : rankedCandidates) {
+                String normalizedUrl = normalizeUrl(candidate == null ? null : candidate.getUrl());
+                if (!StringUtils.hasText(normalizedUrl)) {
+                    continue;
+                }
+                if (seenUrls.contains(normalizedUrl) || !candidateUrlKeys.add(normalizedUrl)) {
+                    duplicateCount++;
+                    continue;
+                }
+                keptCandidates.add(candidate);
+            }
+
+            LinkedHashMap<String, String> mergedUrls = new LinkedHashMap<>();
+            for (String url : safeList(sourcePlan.getUrls())) {
+                String normalizedUrl = normalizeUrl(url);
+                if (planUrlKeys.contains(normalizedUrl)) {
+                    mergedUrls.putIfAbsent(normalizedUrl, url);
+                }
+            }
+            for (SourceCandidate candidate : keptCandidates) {
+                String normalizedUrl = normalizeUrl(candidate.getUrl());
+                if (candidateUrlKeys.contains(normalizedUrl)) {
+                    mergedUrls.putIfAbsent(normalizedUrl, candidate.getUrl());
+                }
+            }
+
+            if (mergedUrls.isEmpty() && keptCandidates.isEmpty()) {
+                if (duplicateCount > 0) {
+                    log.info("skip duplicated source plan, sourceType={}, duplicateCount={}",
+                            sourcePlan.getSourceType(), duplicateCount);
+                }
+                continue;
+            }
+
+            seenUrls.addAll(mergedUrls.keySet());
+            String notes = appendDedupeNote(sourcePlan.getNotes(), duplicateCount);
+            deduplicatedPlans.add(SourcePlan.builder()
+                    .sourceType(sourcePlan.getSourceType())
+                    .urls(new ArrayList<>(mergedUrls.values()))
+                    .notes(notes)
+                    .candidates(keptCandidates)
+                    .build());
+        }
+
+        return deduplicatedPlans;
+    }
+
+    private List<String> safeList(List<String> values) {
+        return values == null ? List.of() : values;
+    }
+
+    private String appendDedupeNote(String notes, int duplicateCount) {
+        if (duplicateCount <= 0) {
+            return notes;
+        }
+        String dedupeNote = "已与前序范围去重 " + duplicateCount + " 条重复来源";
+        if (!StringUtils.hasText(notes)) {
+            return dedupeNote;
+        }
+        if (notes.contains(dedupeNote)) {
+            return notes;
+        }
+        return notes + "；" + dedupeNote;
+    }
+
+    private String buildCollectorNodeNotes(SourcePlan sourcePlan) {
+        if (sourcePlan == null || !StringUtils.hasText(sourcePlan.getNotes())) {
+            return "由信息源发现策略自动生成";
+        }
+        return "由信息源发现策略自动生成；" + sourcePlan.getNotes();
+    }
+
+    private String normalizeUrl(String url) {
+        if (!StringUtils.hasText(url)) {
+            return null;
+        }
+        try {
+            java.net.URI uri = java.net.URI.create(url.trim());
+            String scheme = StringUtils.hasText(uri.getScheme()) ? uri.getScheme().toLowerCase(Locale.ROOT) : "https";
+            String host = StringUtils.hasText(uri.getHost()) ? uri.getHost().toLowerCase(Locale.ROOT) : "";
+            String path = uri.getPath() == null || uri.getPath().isBlank()
+                    ? ""
+                    : uri.getPath().replaceAll("/+$", "");
+            return scheme + "://" + host + path;
+        } catch (Exception e) {
+            return url.trim().toLowerCase(Locale.ROOT);
+        }
+    }
+
     /**
-     * 用有序 Map 保证前端展示配置时字段顺序稳定，减少 trace 面板阅读噪音。
+     * 采集节点配置在规划阶段一次性写全，便于后续搜索执行、进度展示和前端计划预览复用同一份契约。
+     */
+    private CollectorNodeConfig buildCollectorNodeConfig(String competitorName,
+                                                         List<String> requestedScopes,
+                                                         String schemaName,
+                                                         SourcePlan sourcePlan) {
+        return CollectorNodeConfig.builder()
+                .competitorName(competitorName)
+                .competitorUrls(sourcePlan.getUrls())
+                .sourceType(sourcePlan.getSourceType())
+                .sourceScope(requestedScopes)
+                .schemaName(schemaName)
+                .discoveryNotes(sourcePlan.getNotes())
+                .sourceCandidates(sourcePlan.getCandidates())
+                .searchMode(resolveSearchMode())
+                .searchQueries(buildDefaultSearchQueries(competitorName, sourcePlan.getSourceType(), sourcePlan.getCandidates()))
+                .searchFallbackOrder(buildSearchFallbackOrder())
+                .verifyCandidates(Boolean.TRUE)
+                .verifyResultPage(searchBrowserProperties.isVerifyResultPage())
+                .minVerifiedCandidates(Math.min(2, Math.max(1, sourcePlan.getUrls() == null ? 1 : sourcePlan.getUrls().size())))
+                .preferredDomains(buildPreferredDomains(sourcePlan.getCandidates()))
+                .blockedDomains(List.of())
+                .browserSearchEnabled(isBrowserSearchEnabledForMode(resolveSearchMode()))
+                .maxSearchResults(resolveMaxSearchResults(sourcePlan))
+                .searchTimeoutMillis(15000L)
+                .searchRuntimePolicy(buildDefaultSearchRuntimePolicy())
+                .searchExecutionPlan(buildDefaultSearchExecutionPlan())
+                .build();
+    }
+
+    private SearchRuntimePolicy buildDefaultSearchRuntimePolicy() {
+        List<String> defaultUserAgents = new ArrayList<>();
+        if (StringUtils.hasText(collectorProperties.getUserAgent())) {
+            defaultUserAgents.add(collectorProperties.getUserAgent());
+        }
+        if (searchBrowserProperties.getUserAgents() != null) {
+            for (String userAgent : searchBrowserProperties.getUserAgents()) {
+                if (StringUtils.hasText(userAgent) && !defaultUserAgents.contains(userAgent)) {
+                    defaultUserAgents.add(userAgent);
+                }
+            }
+        }
+        return SearchRuntimePolicy.builder()
+                .verifyResultPage(searchBrowserProperties.isVerifyResultPage())
+                .maxRetries(2)
+                .minIntervalMillis(3000L)
+                .maxSearchesPerTask(10)
+                .pageTimeoutMillis(Math.max(1000, collectorProperties.getPageTimeoutSeconds() * 1000))
+                .maxOpenResultPages(searchBrowserProperties.getMaxOpenResultPages())
+                .userAgents(defaultUserAgents)
+                .blockedSignals(List.of(
+                        "captcha",
+                        "unusual traffic",
+                        "verify you are human",
+                        "access denied",
+                        "robot check"
+                ))
+                .recoveryHint("如搜索中断，优先从 VERIFY_TOP_CANDIDATES 或 BROWSER_SUPPLEMENT_SEARCH 继续排查。")
+                .build();
+    }
+
+    private List<String> buildSearchFallbackOrder() {
+        return switch (resolveSearchMode()) {
+            case "BROWSER_ONLY" -> List.of("PLANNED", "BROWSER");
+            case "HTTP_ONLY" -> List.of("PLANNED", "HTTP");
+            case "HEURISTIC_ONLY" -> List.of("PLANNED", "HEURISTIC");
+            default -> List.of("PLANNED", "BROWSER", "HEURISTIC", "HTTP");
+        };
+    }
+
+    private List<String> buildDefaultSearchQueries(String competitorName,
+                                                   String sourceType,
+                                                   List<SourceCandidate> candidates) {
+        String domainHint = candidates == null ? null : candidates.stream()
+                .map(SourceCandidate::getDomain)
+                .filter(StringUtils::hasText)
+                .findFirst()
+                .orElse(null);
+        return promptTemplateService.buildSearchQueries(competitorName, sourceType, domainHint);
+    }
+
+    private List<String> buildPreferredDomains(List<SourceCandidate> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> domains = new LinkedHashSet<>();
+        for (SourceCandidate candidate : candidates) {
+            if (candidate != null && StringUtils.hasText(candidate.getDomain())) {
+                domains.add(candidate.getDomain());
+            }
+        }
+        return new ArrayList<>(domains);
+    }
+
+    private SearchExecutionPlan buildDefaultSearchExecutionPlan() {
+        return SearchExecutionPlan.builder()
+                .stage("COLLECTOR_SEARCH_AND_COLLECT")
+                .steps(List.of(
+                        step("LOAD_CANDIDATES", "读取规划期候选来源", 500, "nodeConfig"),
+                        step("VERIFY_TOP_CANDIDATES", "验证高优先级候选来源是否可用", 5000, "browser"),
+                        step("BROWSER_SUPPLEMENT_SEARCH", "候选不足时执行浏览器增补搜索", 8000, "searchEngine"),
+                        step("SELECT_TARGETS", "合并候选并选出最终采集目标", 1000, "ranker"),
+                        step("COLLECT_PAGES", "抓取页面正文并持久化证据", 12000, "collector")
+                ))
+                .build();
+    }
+
+    private SearchExecutionStep step(String stepCode, String goal, long expectedDurationMs, String dependency) {
+        return SearchExecutionStep.builder()
+                .stepCode(stepCode)
+                .goal(goal)
+                .expectedDurationMs(expectedDurationMs)
+                .dependency(dependency)
+                .status(SearchExecutionStep.StepStatus.PENDING)
+                .build();
+    }
+
+    private String resolveSearchMode() {
+        String configuredMode = searchProperties == null ? null : searchProperties.getMode();
+        String normalizedMode = StringUtils.hasText(configuredMode)
+                ? configuredMode.trim().toUpperCase(java.util.Locale.ROOT)
+                : "HYBRID";
+        if (!searchBrowserProperties.isEnabled() && "HYBRID".equals(normalizedMode)) {
+            return "HTTP_ONLY";
+        }
+        if (!searchBrowserProperties.isEnabled() && "BROWSER_ONLY".equals(normalizedMode)) {
+            return "HTTP_ONLY";
+        }
+        return normalizedMode;
+    }
+
+    private boolean isBrowserSearchEnabledForMode(String searchMode) {
+        return searchBrowserProperties.isEnabled()
+                && ("HYBRID".equalsIgnoreCase(searchMode) || "BROWSER_ONLY".equalsIgnoreCase(searchMode));
+    }
+
+    private int resolveMaxSearchResults(SourcePlan sourcePlan) {
+        int configuredLimit = collectorProperties == null ? 5 : Math.max(1, collectorProperties.getMaxPagesPerCompetitor());
+        int plannedUrlCount = sourcePlan.getUrls() == null ? 0 : sourcePlan.getUrls().size();
+        if (plannedUrlCount <= 0) {
+            return configuredLimit;
+        }
+        return Math.min(configuredLimit, plannedUrlCount);
+    }
+
+    /**
+     * 用有序 Map 保证前端展示配置时字段顺序稳定，同时兼容空值字段。
      */
     private LinkedHashMap<String, Object> orderedMap(Object... kvPairs) {
         LinkedHashMap<String, Object> map = new LinkedHashMap<>();

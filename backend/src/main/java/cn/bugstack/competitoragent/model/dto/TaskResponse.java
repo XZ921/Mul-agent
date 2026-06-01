@@ -37,6 +37,9 @@ public class TaskResponse {
     @Schema(description = "分析维度")
     private String analysisDimensions;
 
+    @Schema(description = "信息源范围")
+    private String sourceScope;
+
     @Schema(description = "任务状态", example = "RUNNING")
     private AnalysisTaskStatus status;
 
@@ -57,4 +60,22 @@ public class TaskResponse {
 
     @Schema(description = "任务完成时间")
     private LocalDateTime completedAt;
+
+    @Schema(description = "是否允许直接执行任务")
+    private Boolean canExecute;
+
+    @Schema(description = "是否允许基于检查点恢复任务")
+    private Boolean canResume;
+
+    @Schema(description = "是否允许整任务重置后重试")
+    private Boolean canRetry;
+
+    @Schema(description = "是否允许停止任务")
+    private Boolean canStop;
+
+    @Schema(description = "是否允许查看报告")
+    private Boolean canViewReport;
+
+    @Schema(description = "人工干预规则摘要")
+    private String interventionSummary;
 }

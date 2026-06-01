@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.model.entity;
 
 import cn.bugstack.competitoragent.model.enums.AgentType;
+import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
@@ -93,6 +94,12 @@ public class TaskNode {
     @Schema(description = "节点执行状态", example = "PENDING")
     private TaskNodeStatus status = TaskNodeStatus.PENDING;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    @Builder.Default
+    @Schema(description = "节点人工控制状态", example = "NONE")
+    private TaskNodeControlState controlState = TaskNodeControlState.NONE;
+
     @Column(columnDefinition = "TEXT")
     @Schema(description = "节点输入数据 (JSON)")
     private String inputData;
@@ -104,6 +111,10 @@ public class TaskNode {
     @Column(columnDefinition = "TEXT")
     @Schema(description = "失败时的错误信息")
     private String errorMessage;
+
+    @Column(columnDefinition = "TEXT")
+    @Schema(description = "人工干预原因")
+    private String interventionReason;
 
     @Schema(description = "执行顺序（从 0 开始）", example = "0")
     private int executionOrder;
