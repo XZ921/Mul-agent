@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.report;
 
 import cn.bugstack.competitoragent.model.dto.ReportResponse.EvidenceInfo;
+import cn.bugstack.competitoragent.model.dto.ReportResponse.EvidenceReference;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -15,6 +16,8 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -83,6 +86,73 @@ public class EvidenceQueryService {
                 readStringList(metadata, "matchedSignals"),
                 metadata
         );
+    }
+
+    public EvidenceReference toEvidenceReference(EvidenceInfo evidence) {
+        if (evidence == null) {
+            return null;
+        }
+        return EvidenceReference.builder()
+                .evidenceId(evidence.getEvidenceId())
+                .title(evidence.getTitle())
+                .url(evidence.getUrl())
+                .competitorName(evidence.getCompetitorName())
+                .sourceType(evidence.getSourceType())
+                .contentSnippet(evidence.getContentSnippet())
+                .build();
+    }
+
+    /**
+     * 诊断条目可能只带 evidenceIds，也可能只带 sourceUrls。
+     * 这里统一解析成轻量 EvidenceReference，前端就不需要再自己做“编号匹配 + URL 回退”的二次组装。
+     */
+    public List<EvidenceReference> resolveEvidenceReferences(List<EvidenceInfo> evidences,
+                                                             List<String> evidenceIds,
+                                                             List<String> sourceUrls) {
+        LinkedHashMap<String, EvidenceInfo> byEvidenceId = new LinkedHashMap<>();
+        LinkedHashMap<String, EvidenceInfo> byUrl = new LinkedHashMap<>();
+        for (EvidenceInfo evidence : evidences == null ? List.<EvidenceInfo>of() : evidences) {
+            if (evidence.getEvidenceId() != null && !evidence.getEvidenceId().isBlank()) {
+                byEvidenceId.putIfAbsent(evidence.getEvidenceId().trim(), evidence);
+            }
+            if (evidence.getUrl() != null && !evidence.getUrl().isBlank()) {
+                byUrl.putIfAbsent(evidence.getUrl().trim(), evidence);
+            }
+        }
+
+        List<EvidenceReference> resolved = new ArrayList<>();
+        LinkedHashSet<String> addedKeys = new LinkedHashSet<>();
+        for (String evidenceId : evidenceIds == null ? List.<String>of() : evidenceIds) {
+            if (evidenceId == null || evidenceId.isBlank()) {
+                continue;
+            }
+            EvidenceInfo matched = byEvidenceId.get(evidenceId.trim());
+            if (matched == null) {
+                continue;
+            }
+            String key = "ID:" + matched.getEvidenceId();
+            if (addedKeys.add(key)) {
+                resolved.add(toEvidenceReference(matched));
+            }
+        }
+
+        for (String sourceUrl : sourceUrls == null ? List.<String>of() : sourceUrls) {
+            if (sourceUrl == null || sourceUrl.isBlank()) {
+                continue;
+            }
+            String normalizedUrl = sourceUrl.trim();
+            EvidenceInfo matched = byUrl.get(normalizedUrl);
+            String key = matched != null && matched.getEvidenceId() != null && !matched.getEvidenceId().isBlank()
+                    ? "ID:" + matched.getEvidenceId().trim()
+                    : "URL:" + normalizedUrl;
+            if (!addedKeys.add(key)) {
+                continue;
+            }
+            resolved.add(matched != null
+                    ? toEvidenceReference(matched)
+                    : EvidenceReference.builder().url(normalizedUrl).build());
+        }
+        return resolved;
     }
 
     /**

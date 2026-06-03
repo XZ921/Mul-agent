@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.task;
 
 import cn.bugstack.competitoragent.common.BusinessException;
 import cn.bugstack.competitoragent.common.ResultCode;
+import cn.bugstack.competitoragent.model.dto.CreateTaskRequest;
 import cn.bugstack.competitoragent.model.dto.TaskResponse;
 import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
 import cn.bugstack.competitoragent.model.dto.UpdateNodeConfigRequest;
@@ -19,6 +20,7 @@ import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
 import cn.bugstack.competitoragent.workflow.WorkflowFactory;
+import cn.bugstack.competitoragent.workflow.WorkflowPlan;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -39,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -78,6 +81,35 @@ class AnalysisTaskServiceTest {
 
     @InjectMocks
     private AnalysisTaskService taskService;
+
+    @Test
+    void shouldUsePreviewPlanInsteadOfLiveWorkflowBuildWhenPreviewingTask() {
+        WorkflowPlan previewPlan = WorkflowPlan.builder()
+                .nodes(List.of(WorkflowPlan.WorkflowPlanNode.builder()
+                        .nodeName("collect_sources_01_01")
+                        .displayName("Notion AI - DOCS采集")
+                        .agentType(AgentType.COLLECTOR.name())
+                        .dependsOn(List.of())
+                        .nodeConfig("{\"competitorName\":\"Notion AI\",\"sourceType\":\"DOCS\"}")
+                        .executionOrder(0)
+                        .build()))
+                .build();
+        when(workflowFactory.buildPreviewPlan(any(AnalysisTask.class))).thenReturn(previewPlan);
+
+        CreateTaskRequest request = new CreateTaskRequest();
+        request.setTaskName("预览任务");
+        request.setSubjectProduct("本方产品");
+        request.setCompetitorNames(List.of("Notion AI"));
+        request.setCompetitorUrls(List.of("https://www.notion.so"));
+        request.setAnalysisDimensions(List.of("产品功能"));
+        request.setSourceScope(List.of("官网", "产品文档"));
+
+        List<TaskNodeResponse> responses = taskService.previewWorkflow(request);
+
+        assertEquals(1, responses.size());
+        verify(workflowFactory, times(1)).buildPreviewPlan(any(AnalysisTask.class));
+        verify(workflowFactory, never()).buildPlan(any(AnalysisTask.class));
+    }
 
     @Test
     void shouldRerunOnlyAffectedBranchFromSpecifiedNode() {
@@ -271,6 +303,7 @@ class AnalysisTaskServiceTest {
 
         when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
         when(nodeRepository.findByTaskIdAndNodeName(taskId, "extract_schema")).thenReturn(Optional.of(node));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(node));
 
         taskService.resumeNode(taskId, "extract_schema");
 
@@ -285,6 +318,60 @@ class AnalysisTaskServiceTest {
     }
 
     @Test
+    void shouldKeepTaskStoppedWhenOtherPausedNodesStillExistAfterManualResume() {
+        Long taskId = 36_1L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.STOPPED)
+                .errorMessage("存在已暂停节点，等待人工恢复")
+                .build();
+        TaskNode resumedNode = pendingNode(taskId, "extract_schema", AgentType.EXTRACTOR, "[]", 0);
+        resumedNode.setStatus(TaskNodeStatus.PAUSED);
+        resumedNode.setErrorMessage("节点已由用户暂停，等待恢复");
+        resumedNode.setInterventionReason("节点已由用户暂停，等待恢复");
+        TaskNode stillPausedNode = pendingNode(taskId, "write_report", AgentType.WRITER, "[\"extract_schema\"]", 1);
+        stillPausedNode.setStatus(TaskNodeStatus.PAUSED);
+        stillPausedNode.setErrorMessage("节点已由用户暂停，等待恢复");
+        stillPausedNode.setInterventionReason("节点已由用户暂停，等待恢复");
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdAndNodeName(taskId, "extract_schema")).thenReturn(Optional.of(resumedNode));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(resumedNode, stillPausedNode));
+
+        taskService.resumeNode(taskId, "extract_schema");
+
+        assertEquals(TaskNodeStatus.PENDING, resumedNode.getStatus());
+        assertEquals(AnalysisTaskStatus.STOPPED, task.getStatus());
+        assertTrue(task.getErrorMessage().contains("暂停"));
+        verify(nodeRepository).save(resumedNode);
+        verify(taskRepository, never()).save(task);
+        verifyNoInteractions(taskRunner);
+    }
+
+    @Test
+    void shouldDeriveStoppedTaskStatusFromPausedNodesInTaskDetail() {
+        Long taskId = 56_1L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.FAILED)
+                .errorMessage("旧失败信息")
+                .build();
+        TaskNode pausedNode = pendingNode(taskId, "extract_schema", AgentType.EXTRACTOR, "[]", 0);
+        pausedNode.setStatus(TaskNodeStatus.PAUSED);
+        pausedNode.setInterventionReason("节点已由用户暂停，等待恢复");
+        TaskNode downstream = pendingNode(taskId, "analyze_competitors", AgentType.ANALYZER, "[\"extract_schema\"]", 1);
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(pausedNode, downstream));
+
+        TaskResponse response = taskService.getTask(taskId);
+
+        assertEquals(AnalysisTaskStatus.STOPPED, response.getStatus());
+        assertTrue(response.getErrorMessage().contains("暂停"));
+        assertEquals(Boolean.TRUE, response.getCanResume());
+    }
+
+    @Test
     void shouldSkipPausedNodeAndContinueTask() {
         Long taskId = 37L;
         AnalysisTask task = AnalysisTask.builder()
@@ -296,6 +383,7 @@ class AnalysisTaskServiceTest {
 
         when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
         when(nodeRepository.findByTaskIdAndNodeName(taskId, "extract_schema")).thenReturn(Optional.of(node));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(node));
 
         taskService.skipNode(taskId, "extract_schema");
 
@@ -632,6 +720,30 @@ class AnalysisTaskServiceTest {
         verify(taskRepository).save(task);
         verify(taskRecoveryService).markStoppedNodes(taskId);
         verifyNoInteractions(taskRunner);
+    }
+
+    @Test
+    void shouldKeepManualStoppedTaskStatusEvenWhenRunningNodesRemainInSnapshot() {
+        Long taskId = 102L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.STOPPED)
+                .errorMessage("任务已由用户主动停止")
+                .build();
+        TaskNode runningNode = pendingNode(taskId, "collect_sources_web", AgentType.COLLECTOR, "[]", 0);
+        runningNode.setStatus(TaskNodeStatus.RUNNING);
+        TaskNode pendingNode = pendingNode(taskId, "extract_schema", AgentType.EXTRACTOR, "[\"collect_sources_web\"]", 1);
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(runningNode, pendingNode));
+
+        TaskResponse response = taskService.getTask(taskId);
+
+        assertEquals(AnalysisTaskStatus.STOPPED, response.getStatus());
+        assertEquals(Boolean.FALSE, response.getCanStop());
+        assertEquals(Boolean.TRUE, response.getCanResume());
+        assertEquals(Boolean.FALSE, response.getCanExecute());
+        assertTrue(response.getInterventionSummary().contains("恢复"));
     }
 
     private static TaskNode successfulNode(Long taskId, String nodeName, AgentType agentType, String dependsOn, int order) {

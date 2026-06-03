@@ -39,6 +39,7 @@ public class DagExecutor {
     private final AnalysisTaskRepository taskRepository;
     private final Map<AgentType, Agent> agentRegistry;
     private final ObjectMapper objectMapper;
+    private final NodeExecutionRecoveryPolicy recoveryPolicy;
 
     public DagExecutor(TaskNodeRepository nodeRepository,
                        AnalysisTaskRepository taskRepository,
@@ -48,6 +49,7 @@ public class DagExecutor {
         this.taskRepository = taskRepository;
         this.agentRegistry = buildAgentRegistry(agents);
         this.objectMapper = objectMapper;
+        this.recoveryPolicy = new NodeExecutionRecoveryPolicy(objectMapper);
     }
 
     public void execute(Long taskId, AgentContext context) {
@@ -458,53 +460,11 @@ public class DagExecutor {
     private void updateTaskFinalStatus(Long taskId) {
         taskRepository.findById(taskId).ifPresent(task -> {
             List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
-            boolean hasPausedNode = nodes.stream().anyMatch(node -> node.getStatus() == TaskNodeStatus.PAUSED);
-            if (hasPausedNode) {
-                task.setStatus(AnalysisTaskStatus.STOPPED);
-                task.setErrorMessage("存在已暂停节点，等待人工恢复");
-                task.setCompletedAt(LocalDateTime.now());
-                taskRepository.save(task);
-                return;
-            }
-
-            boolean hasFailedOrSkippedRequiredNode = nodes.stream()
-                    .filter(TaskNode::isRequired)
-                    .anyMatch(node -> node.getStatus() == TaskNodeStatus.FAILED
-                            || node.getStatus() == TaskNodeStatus.SKIPPED);
-            boolean allRequiredSuccess = nodes.stream()
-                    .filter(TaskNode::isRequired)
-                    .allMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS);
-
-            boolean initialReviewPresent = nodes.stream()
-                    .anyMatch(node -> "quality_check".equals(node.getNodeName()));
-            boolean initialReviewPassed = nodes.stream()
-                    .filter(node -> "quality_check".equals(node.getNodeName()))
-                    .anyMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && isPassedReview(node.getOutputData()));
-            boolean initialReviewRequiresHumanIntervention = nodes.stream()
-                    .filter(node -> "quality_check".equals(node.getNodeName()))
-                    .anyMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && requiresHumanIntervention(node.getOutputData()));
-            boolean finalReviewPassed = nodes.stream()
-                    .filter(node -> "quality_check_final".equals(node.getNodeName()))
-                    .anyMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && isPassedReview(node.getOutputData()));
-            boolean revisionFlowUsed = nodes.stream()
-                    .anyMatch(node -> "rewrite_report".equals(node.getNodeName())
-                            && node.getStatus() == TaskNodeStatus.SUCCESS);
-
-            if (hasFailedOrSkippedRequiredNode) {
-                task.setStatus(AnalysisTaskStatus.FAILED);
-                task.setErrorMessage("任务执行失败，请检查节点日志。");
-            } else if (initialReviewRequiresHumanIntervention && !revisionFlowUsed) {
-                task.setStatus(AnalysisTaskStatus.STOPPED);
-                task.setErrorMessage("初审未通过且证据缺口较大，系统已停止自动改写，请先补证据或调整采集策略。");
-            } else if (finalReviewPassed || (!initialReviewPresent && allRequiredSuccess) || initialReviewPassed) {
-                task.setStatus(AnalysisTaskStatus.SUCCESS);
-                task.setErrorMessage(null);
-            } else if (initialReviewPresent || revisionFlowUsed) {
-                task.setStatus(AnalysisTaskStatus.FAILED);
-                task.setErrorMessage("质量闭环未达到通过状态，请检查评审反馈。");
-            }
-
-            task.setCompletedAt(LocalDateTime.now());
+            NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
+                    recoveryPolicy.resolveTaskExecution(task, nodes);
+            task.setStatus(resolution.getStatus());
+            task.setErrorMessage(resolution.getErrorMessage());
+            task.setCompletedAt(resolution.resolveCompletedAtForPersistence(task.getCompletedAt()));
             taskRepository.save(task);
         });
     }
@@ -709,10 +669,12 @@ public class DagExecutor {
         return switch (trigger) {
             case "review_failed" -> {
                 JsonNode reviewOutput = readJson(context.getSharedOutput("quality_check"));
+                boolean manualResumeApproved = isManualResumeApproved(node.getNodeConfig());
                 yield reviewOutput != null
                         && !reviewOutput.path("passed").asBoolean(true)
-                        && !requiresHumanIntervention(context.getSharedOutput("quality_check"))
-                        && reviewOutput.path("autoRewriteAllowed").asBoolean(true);
+                        && (manualResumeApproved
+                        || (!requiresHumanIntervention(context.getSharedOutput("quality_check"))
+                        && reviewOutput.path("autoRewriteAllowed").asBoolean(true)));
             }
             case "rewrite_executed" -> allNodes.stream()
                     .anyMatch(current -> "rewrite_report".equals(current.getNodeName())
@@ -728,7 +690,8 @@ public class DagExecutor {
             if (reviewOutput == null) {
                 return "跳过修订：缺少有效的评审结果";
             }
-            if (requiresHumanIntervention(context.getSharedOutput("quality_check"))) {
+            if (requiresHumanIntervention(context.getSharedOutput("quality_check"))
+                    && !isManualResumeApproved(node.getNodeConfig())) {
                 return "跳过修订：初审严重失败，需先人工补证据、调整搜索范围或重跑采集链路";
             }
             if (!reviewOutput.has("passed")) {
@@ -765,6 +728,15 @@ public class DagExecutor {
         }
         String trigger = config.path("trigger").asText("");
         return trigger.isBlank() ? null : trigger;
+    }
+
+    /**
+     * 当任务从人工阻断态恢复时，会在待改写节点配置里写入人工确认标记。
+     * 只有显式确认过，系统才允许绕过“requiresHumanIntervention=true”的自动拦截继续执行改写。
+     */
+    private boolean isManualResumeApproved(String nodeConfig) {
+        JsonNode config = readJson(nodeConfig);
+        return config != null && config.path("manualResumeApproved").asBoolean(false);
     }
 
     private JsonNode readJson(String raw) {

@@ -1,7 +1,7 @@
-import { Alert, Button, Card, Progress, Space, Tag, Typography } from 'antd'
-import { FileTextOutlined, PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons'
+import { Alert, Card, Progress, Space, Tag, Typography } from 'antd'
 import type { TaskInfo } from '../../types'
 import { taskStatusTag } from './shared'
+import TaskInterventionBar from './TaskInterventionBar'
 import type { HeroTone } from './types'
 
 const { Text } = Typography
@@ -76,31 +76,57 @@ export default function TaskStatusHero({
                   : task.interventionSummary || '系统会在任务执行中持续展示节点状态、人工干预能力与证据风险提示。'}
             </Text>
           </div>
-          <Space wrap className="hero-actions">
-            {task.canExecute && (
-              <Button type="primary" icon={<PlayCircleOutlined />} loading={actionLoading} onClick={onExecute}>
-                {task.status === 'FAILED' ? '重新执行' : '开始执行'}
-              </Button>
-            )}
-            {task.canStop && (
-              <Button danger loading={actionLoading} onClick={onStop}>
-                停止任务
-              </Button>
-            )}
-            {task.canResume && (
-              <Button type="primary" loading={actionLoading} onClick={onResume}>
-                恢复执行
-              </Button>
-            )}
-            {task.canRetry && (
-              <Button icon={<ReloadOutlined />} loading={actionLoading} onClick={onRetry}>
-                重置任务
-              </Button>
-            )}
-            <Button icon={<FileTextOutlined />} disabled={!task.canViewReport} onClick={onViewReport}>
-              查看报告
-            </Button>
-          </Space>
+          <div className="hero-actions">
+            <TaskInterventionBar
+              title="任务级操作"
+              description="这里统一承接任务的启动、恢复、停止、重置和报告查看入口。"
+              badgeText={pendingActionCount > 0 ? `待处理 ${pendingActionCount}` : '运行正常'}
+              tone={pendingActionCount > 0 ? 'warning' : task.status === 'FAILED' ? 'error' : 'info'}
+              actions={[
+                ...(task.canExecute
+                  ? [{
+                      key: 'execute',
+                      label: task.status === 'FAILED' ? '重新执行' : '开始执行',
+                      type: 'primary' as const,
+                      loading: actionLoading,
+                      onClick: onExecute,
+                    }]
+                  : []),
+                ...(task.canStop
+                  ? [{
+                      key: 'stop',
+                      label: '停止任务',
+                      danger: true,
+                      loading: actionLoading,
+                      onClick: onStop,
+                    }]
+                  : []),
+                ...(task.canResume
+                  ? [{
+                      key: 'resume',
+                      label: '恢复执行',
+                      type: 'primary' as const,
+                      loading: actionLoading,
+                      onClick: onResume,
+                    }]
+                  : []),
+                ...(task.canRetry
+                  ? [{
+                      key: 'retry',
+                      label: '重置任务',
+                      loading: actionLoading,
+                      onClick: onRetry,
+                    }]
+                  : []),
+                {
+                  key: 'report',
+                  label: '查看报告',
+                  disabled: !task.canViewReport,
+                  onClick: onViewReport,
+                },
+              ]}
+            />
+          </div>
         </div>
 
         <div className="hero-stats">

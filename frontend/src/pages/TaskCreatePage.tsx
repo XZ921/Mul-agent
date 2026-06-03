@@ -39,6 +39,31 @@ interface CompetitorInput {
   url?: string
 }
 
+/**
+ * 统一把表单值归一化为后端任务创建请求，避免页面层在预览、提交等多个入口重复拼装参数。
+ * 这里会主动裁剪空白、过滤空竞品，并把官网地址单独整理为后端约定的数组字段。
+ */
+export function buildCreateTaskRequest(values: Record<string, unknown>): CreateTaskRequest {
+  const competitors = ((values.competitors as CompetitorInput[]) || [])
+    .map((item) => ({
+      name: item.name?.trim(),
+      url: item.url?.trim(),
+    }))
+    .filter((item) => item.name)
+
+  return {
+    taskName: String(values.taskName || '').trim(),
+    subjectProduct: String(values.subjectProduct || '').trim(),
+    competitorNames: competitors.map((item) => item.name as string),
+    competitorUrls: competitors.map((item) => item.url || '').filter(Boolean),
+    analysisDimensions: values.analysisDimensions as string[],
+    sourceScope: values.sourceScope as string[],
+    reportLanguage: (values.reportLanguage as string) || '中文',
+    reportTemplate: (values.reportTemplate as string) || '标准版',
+    schemaId: values.schemaId as number | undefined,
+  }
+}
+
 function getErrorMessage(error: unknown, fallback: string) {
   if (
     error &&
@@ -67,6 +92,16 @@ function summarizeList(items: string[], limit = 3) {
 
 function compactUrl(url: string) {
   return url.replace(/^https?:\/\//, '').replace(/\/+$/, '')
+}
+
+function isValidHttpUrl(value?: string) {
+  if (!value) return true
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
 }
 
 function candidateLabel(candidate: { title?: string; url?: string; domain?: string }) {
@@ -139,6 +174,7 @@ export default function TaskCreatePage() {
   const [previewLoading, setPreviewLoading] = useState(false)
   const [schemas, setSchemas] = useState<AnalysisSchema[]>([])
   const [workflowPreview, setWorkflowPreview] = useState<TaskNodeInfo[]>([])
+  const [previewVersion, setPreviewVersion] = useState(0)
 
   useEffect(() => {
     listSchemas()
@@ -160,31 +196,10 @@ export default function TaskCreatePage() {
     [schemas],
   )
 
-  const buildRequest = (values: Record<string, unknown>): CreateTaskRequest => {
-    const competitors = ((values.competitors as CompetitorInput[]) || [])
-      .map((item) => ({
-        name: item.name?.trim(),
-        url: item.url?.trim(),
-      }))
-      .filter((item) => item.name)
-
-    return {
-      taskName: values.taskName as string,
-      subjectProduct: values.subjectProduct as string,
-      competitorNames: competitors.map((item) => item.name as string),
-      competitorUrls: competitors.map((item) => item.url || '').filter(Boolean),
-      analysisDimensions: values.analysisDimensions as string[],
-      sourceScope: values.sourceScope as string[],
-      reportLanguage: (values.reportLanguage as string) || '中文',
-      reportTemplate: (values.reportTemplate as string) || '标准版',
-      schemaId: values.schemaId as number | undefined,
-    }
-  }
-
   const refreshPreview = async () => {
     const values = form.getFieldsValue(true)
     try {
-      const request = buildRequest(values)
+      const request = buildCreateTaskRequest(values)
       if (!request.taskName || !request.subjectProduct || !request.competitorNames?.length) {
         setWorkflowPreview([])
         return
@@ -200,13 +215,16 @@ export default function TaskCreatePage() {
   }
 
   useEffect(() => {
-    void refreshPreview()
-  }, [])
+    const timer = window.setTimeout(() => {
+      void refreshPreview()
+    }, 450)
+    return () => window.clearTimeout(timer)
+  }, [previewVersion])
 
   const handleSubmit = async (values: Record<string, unknown>) => {
     setLoading(true)
     try {
-      const data = buildRequest(values)
+      const data = buildCreateTaskRequest(values)
       const res = await createTask(data)
       const taskId = res.data?.id
       if (!taskId) {
@@ -277,9 +295,8 @@ export default function TaskCreatePage() {
 
   const handleReset = () => {
     form.resetFields()
-    window.setTimeout(() => {
-      void refreshPreview()
-    }, 0)
+    setWorkflowPreview([])
+    setPreviewVersion((current) => current + 1)
   }
 
   return (
@@ -303,7 +320,7 @@ export default function TaskCreatePage() {
               layout="vertical"
               onFinish={handleSubmit}
               onValuesChange={() => {
-                void refreshPreview()
+                setPreviewVersion((current) => current + 1)
               }}
               initialValues={{
                 competitors: [{ name: '', url: '' }],
@@ -336,9 +353,16 @@ export default function TaskCreatePage() {
                 rules={[
                   {
                     validator: async (_, competitors: CompetitorInput[]) => {
-                      const valid = competitors?.some((item) => item?.name?.trim())
+                      const normalizedNames = (competitors || [])
+                        .map((item) => item?.name?.trim())
+                        .filter(Boolean) as string[]
+                      const uniqueNames = new Set(normalizedNames.map((item) => item.toLowerCase()))
+                      const valid = normalizedNames.length > 0
                       if (!valid) {
                         return Promise.reject(new Error('请至少添加一个竞品'))
+                      }
+                      if (uniqueNames.size !== normalizedNames.length) {
+                        return Promise.reject(new Error('竞品名称不能重复'))
                       }
                     },
                   },
@@ -346,34 +370,59 @@ export default function TaskCreatePage() {
               >
                 {(fields, { add, remove }) => (
                   <Space direction="vertical" style={{ width: '100%' }} size={8}>
-                    {fields.map((field, index) => (
-                      <Row gutter={8} key={field.key} align="middle">
-                        <Col xs={24} md={8}>
-                          <Form.Item
-                            {...field}
-                            name={[field.name, 'name']}
-                            label={index === 0 ? '竞品名称' : undefined}
-                            rules={[{ required: true, message: '请输入竞品名称' }]}
-                          >
-                            <Input placeholder="例如：Dify" />
-                          </Form.Item>
-                        </Col>
-                        <Col xs={24} md={13}>
-                          <Form.Item
-                            {...field}
-                            name={[field.name, 'url']}
-                            label={index === 0 ? '官网地址' : undefined}
-                          >
-                            <Input placeholder="https://..." />
-                          </Form.Item>
-                        </Col>
-                        <Col xs={24} md={3}>
-                          <Button danger disabled={fields.length === 1} onClick={() => remove(field.name)}>
-                            删除
-                          </Button>
-                        </Col>
-                      </Row>
-                    ))}
+                    {fields.map((field, index) => {
+                      const { key, ...restField } = field
+                      return (
+                        <Row gutter={8} key={key} align="middle">
+                          <Col xs={24} md={8}>
+                            <Form.Item
+                              {...restField}
+                              name={[field.name, 'name']}
+                              label={index === 0 ? '竞品名称' : undefined}
+                              rules={[
+                                { required: true, message: '请输入竞品名称' },
+                                {
+                                  validator: async (_, value?: string) => {
+                                    if (!value || value.trim()) {
+                                      return
+                                    }
+                                    return Promise.reject(new Error('竞品名称不能为空白'))
+                                  },
+                                },
+                              ]}
+                            >
+                              <Input placeholder="例如：Dify" />
+                            </Form.Item>
+                          </Col>
+                          <Col xs={24} md={13}>
+                            <Form.Item
+                              {...restField}
+                              name={[field.name, 'url']}
+                              label={index === 0 ? '官网地址' : undefined}
+                              rules={[
+                                {
+                                  validator: async (_, value?: string) => {
+                                    if (!value || !value.trim()) {
+                                      return
+                                    }
+                                    if (!isValidHttpUrl(value.trim())) {
+                                      return Promise.reject(new Error('请输入合法的 http/https 地址'))
+                                    }
+                                  },
+                                },
+                              ]}
+                            >
+                              <Input placeholder="https://..." />
+                            </Form.Item>
+                          </Col>
+                          <Col xs={24} md={3}>
+                            <Button danger disabled={fields.length === 1} onClick={() => remove(field.name)}>
+                              删除
+                            </Button>
+                          </Col>
+                        </Row>
+                      )
+                    })}
                     <Button type="dashed" icon={<PlusOutlined />} onClick={() => add()}>
                       添加竞品
                     </Button>

@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.report;
 
 import cn.bugstack.competitoragent.model.dto.ReportResponse.EvidenceInfo;
+import cn.bugstack.competitoragent.model.dto.ReportResponse.EvidenceReference;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -75,5 +76,43 @@ class EvidenceQueryServiceTest {
 
         assertEquals(List.of(), result);
         verify(evidenceRepository).findAll(any(Specification.class), any(Sort.class));
+    }
+
+    @Test
+    void shouldResolveEvidenceReferencesByIdAndSourceUrl() {
+        EvidenceInfo evidence = new EvidenceInfo(
+                "E001",
+                "Docs",
+                "https://docs.example.com",
+                "snippet",
+                "Notion AI",
+                LocalDateTime.now(),
+                "DOCS",
+                "SEARCH",
+                "docs.example.com",
+                "reason",
+                null,
+                0.91,
+                true,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                java.util.Map.of()
+        );
+
+        List<EvidenceReference> references = service.resolveEvidenceReferences(
+                List.of(evidence),
+                List.of("E001"),
+                List.of("https://missing.example.com", "https://docs.example.com")
+        );
+
+        assertEquals(2, references.size());
+        assertEquals("E001", references.get(0).getEvidenceId());
+        assertEquals("https://missing.example.com", references.get(1).getUrl());
     }
 }

@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.report;
 
 import cn.bugstack.competitoragent.model.dto.ReportResponse;
 import cn.bugstack.competitoragent.model.entity.CompetitorKnowledge;
+import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.model.entity.Report;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AgentType;
@@ -29,12 +30,15 @@ class ReportServiceTest {
     private final CompetitorKnowledgeRepository knowledgeRepository = mock(CompetitorKnowledgeRepository.class);
     private final TaskNodeRepository taskNodeRepository = mock(TaskNodeRepository.class);
     private final EvidenceQueryService evidenceQueryService = mock(EvidenceQueryService.class);
+    private final ReportDiagnosisAssembler reportDiagnosisAssembler =
+            new ReportDiagnosisAssembler(new ObjectMapper(), new EvidenceQueryService(mock(EvidenceSourceRepository.class), new ObjectMapper()));
     private final ReportService reportService = new ReportService(
             reportRepository,
             evidenceRepository,
             knowledgeRepository,
             taskNodeRepository,
             evidenceQueryService,
+            reportDiagnosisAssembler,
             new ObjectMapper()
     );
 
@@ -196,5 +200,167 @@ class ReportServiceTest {
         assertEquals(1, response.getEvidenceCoverageOverview().getCompetitors().size());
         assertTrue(response.getEvidenceCoverageOverview().getCompetitors().get(0).getMissingSections().contains("市场定位"));
         assertTrue(response.getEvidenceCoverageOverview().getCompetitors().get(0).getMissingSections().contains("定价策略"));
+    }
+
+    @Test
+    void shouldExposeExplainableReviewDiagnosisToFrontend() {
+        Report report = Report.builder()
+                .id(4L)
+                .taskId(400L)
+                .title("企业级竞品分析")
+                .content("# Report")
+                .summary("summary")
+                .qualityScore(72)
+                .qualityPassed(false)
+                .qualityIssues("""
+                        [
+                          {
+                            "type":"missing_evidence",
+                            "section":"结论",
+                            "severity":"ERROR",
+                            "level":"BLOCKER",
+                            "dimensionCode":"EVIDENCE_TRACEABILITY",
+                            "dimensionName":"证据可追溯性",
+                            "evidenceBasis":"关键结论缺少可回指的证据编号。",
+                            "sourceUrls":["https://docs.notion.so/security"],
+                            "suggestion":"补充证据编号或下调判断强度。"
+                          }
+                        ]
+                        """)
+                .evidenceCount(1)
+                .build();
+        EvidenceSource evidenceSource = EvidenceSource.builder()
+                .taskId(400L)
+                .competitorName("Notion AI")
+                .evidenceId("E-400")
+                .title("Security Page")
+                .url("https://docs.notion.so/security")
+                .contentSnippet("security snippet")
+                .sourceType("DOCS")
+                .build();
+        ReportResponse.EvidenceInfo evidenceInfo = new ReportResponse.EvidenceInfo(
+                "E-400",
+                "Security Page",
+                "https://docs.notion.so/security",
+                "security snippet",
+                "Notion AI",
+                null,
+                "DOCS",
+                "SEARCH",
+                "docs.notion.so",
+                "命中文档",
+                null,
+                0.91,
+                true,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                java.util.Map.of()
+        );
+
+        TaskNode reviewNode = TaskNode.builder()
+                .taskId(400L)
+                .nodeName("quality_check")
+                .status(TaskNodeStatus.SUCCESS)
+                .outputData("""
+                        {
+                          "score": 72,
+                          "passed": false,
+                          "requiresHumanIntervention": false,
+                          "autoRewriteAllowed": true,
+                          "summary": "证据可追溯性和结论支撑度存在明显缺口",
+                          "dimensions": [
+                            {
+                              "code":"EVIDENCE_TRACEABILITY",
+                              "name":"证据可追溯性",
+                              "description":"关键结论必须能回指到稳定来源",
+                              "evaluationStandard":"关键结论必须携带可追溯 evidenceId 或来源链接",
+                              "score":35,
+                              "maxScore":100,
+                              "status":"CRITICAL"
+                            }
+                          ],
+                          "diagnoses": [
+                            {
+                              "dimensionCode":"EVIDENCE_TRACEABILITY",
+                              "dimensionName":"证据可追溯性",
+                              "type":"missing_evidence",
+                              "section":"结论",
+                              "severity":"ERROR",
+                              "level":"BLOCKER",
+                              "title":"关键结论缺少来源引用",
+                              "detail":"结论章节中存在无法回指证据的判断。",
+                              "evidenceBasis":"关键结论缺少可回指的证据编号。",
+                              "sourceUrls":["https://docs.notion.so/security"],
+                              "repairSuggestion":"补充证据编号或下调判断强度。"
+                            }
+                          ],
+                          "issues": [
+                            {
+                              "type":"missing_evidence",
+                              "section":"结论",
+                              "severity":"ERROR",
+                              "level":"BLOCKER",
+                              "dimensionCode":"EVIDENCE_TRACEABILITY",
+                              "dimensionName":"证据可追溯性",
+                              "evidenceBasis":"关键结论缺少可回指的证据编号。",
+                              "sourceUrls":["https://docs.notion.so/security"],
+                              "suggestion":"补充证据编号或下调判断强度。"
+                            }
+                          ]
+                        }
+                        """)
+                .executionOrder(1)
+                .build();
+        TaskNode writerNode = TaskNode.builder()
+                .taskId(400L)
+                .nodeName("write_report")
+                .agentType(AgentType.WRITER)
+                .status(TaskNodeStatus.SUCCESS)
+                .outputData("""
+                        {
+                          "sourceUrls": ["https://docs.notion.so/security"],
+                          "evidenceFragments": [
+                            {
+                              "stage": "WRITE",
+                              "competitorName": "Notion AI",
+                              "fieldName": "report",
+                              "evidenceId": "E-400",
+                              "sourceUrl": "https://docs.notion.so/security",
+                              "title": "Security Page",
+                              "snippet": "security snippet",
+                              "issueFlags": ["MISSING_BASIS"]
+                            }
+                          ]
+                        }
+                        """)
+                .executionOrder(2)
+                .build();
+
+        when(reportRepository.findByTaskId(400L)).thenReturn(Optional.of(report));
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(400L)).thenReturn(List.of(evidenceSource));
+        when(evidenceQueryService.toEvidenceInfo(evidenceSource)).thenReturn(evidenceInfo);
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(400L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(400L)).thenReturn(List.of(reviewNode, writerNode));
+
+        ReportResponse response = reportService.getReport(400L);
+
+        assertNotNull(response.getInitialReview());
+        assertEquals(1, response.getInitialReview().getDimensions().size());
+        assertEquals("EVIDENCE_TRACEABILITY", response.getInitialReview().getDimensions().get(0).getCode());
+        assertEquals(1, response.getInitialReview().getDiagnoses().size());
+        assertEquals("BLOCKER", response.getInitialReview().getDiagnoses().get(0).getLevel());
+        assertTrue(response.getInitialReview().getDiagnoses().get(0).getRepairSuggestion().contains("证据"));
+        assertEquals("关键结论缺少可回指的证据编号。", response.getQualityIssues().get(0).getEvidenceBasis());
+        assertNotNull(response.getReportDiagnosis());
+        assertEquals(1, response.getReportDiagnosis().getDiagnosisCount());
+        assertEquals(1, response.getReportDiagnosis().getContentEvidences().size());
+        assertEquals("E-400", response.getReportDiagnosis().getContentEvidences().get(0).getEvidence().getEvidenceId());
+        assertEquals("INITIAL_REVIEW", response.getReportDiagnosis().getSections().get(0).getDiagnoses().get(0).getReviewStage());
     }
 }

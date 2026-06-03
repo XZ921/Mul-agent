@@ -25,6 +25,7 @@ public class PromptTemplateService {
     private final Map<String, String> templates = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper;
     private final YAMLMapper yamlMapper = new YAMLMapper();
+    private final Map<String, String> englishSearchTemplates = new ConcurrentHashMap<>();
 
     private static final Map<String, String> DEFAULT_TEMPLATES = Map.ofEntries(
             new AbstractMap.SimpleEntry<>("writer", """
@@ -211,14 +212,14 @@ public class PromptTemplateService {
                     """),
             new AbstractMap.SimpleEntry<>("search-official", "{competitorName} official website"),
             new AbstractMap.SimpleEntry<>("search-official-domain", "site:{domainHint} {competitorName}"),
-            new AbstractMap.SimpleEntry<>("search-docs-primary", "{competitorName} documentation"),
-            new AbstractMap.SimpleEntry<>("search-docs-secondary", "{competitorName} help center"),
-            new AbstractMap.SimpleEntry<>("search-pricing-primary", "{competitorName} pricing"),
-            new AbstractMap.SimpleEntry<>("search-pricing-secondary", "{competitorName} plans enterprise"),
-            new AbstractMap.SimpleEntry<>("search-news-primary", "{competitorName} product update blog"),
-            new AbstractMap.SimpleEntry<>("search-news-secondary", "{competitorName} changelog news"),
-            new AbstractMap.SimpleEntry<>("search-review-primary", "{competitorName} reviews"),
-            new AbstractMap.SimpleEntry<>("search-review-secondary", "{competitorName} G2 Capterra comparison"),
+            new AbstractMap.SimpleEntry<>("search-docs-primary", "{competitorName} documentation api reference"),
+            new AbstractMap.SimpleEntry<>("search-docs-secondary", "{competitorName} developer docs guide"),
+            new AbstractMap.SimpleEntry<>("search-pricing-primary", "{competitorName} pricing plans"),
+            new AbstractMap.SimpleEntry<>("search-pricing-secondary", "{competitorName} enterprise pricing quote"),
+            new AbstractMap.SimpleEntry<>("search-news-primary", "{competitorName} product updates changelog"),
+            new AbstractMap.SimpleEntry<>("search-news-secondary", "{competitorName} release notes blog"),
+            new AbstractMap.SimpleEntry<>("search-review-primary", "{competitorName} reviews g2 capterra"),
+            new AbstractMap.SimpleEntry<>("search-review-secondary", "{competitorName} alternatives comparison g2 capterra"),
             new AbstractMap.SimpleEntry<>("search-review-zhihu", "site:zhihu.com {competitorName} 评测 对比")
     );
 
@@ -242,6 +243,7 @@ public class PromptTemplateService {
                 log.warn("load prompt template {} failed, fallback to default", name, e);
             }
         }
+        loadEnglishSearchTemplates();
         loadSearchQueryTemplates();
     }
 
@@ -281,6 +283,15 @@ public class PromptTemplateService {
     public List<String> buildSearchQueries(String competitorName,
                                            String sourceType,
                                            String domainHint) {
+        if (containsChinese(competitorName)) {
+            return buildChineseSearchQueries(competitorName, sourceType, domainHint);
+        }
+        return buildEnglishSearchQueries(competitorName, sourceType, domainHint);
+    }
+
+    private List<String> buildChineseSearchQueries(String competitorName,
+                                                   String sourceType,
+                                                   String domainHint) {
         Map<String, String> variables = Map.of(
                 "competitorName", safe(competitorName),
                 "domainHint", safe(domainHint)
@@ -316,6 +327,44 @@ public class PromptTemplateService {
                 .toList();
     }
 
+    private List<String> buildEnglishSearchQueries(String competitorName,
+                                                   String sourceType,
+                                                   String domainHint) {
+        Map<String, String> variables = Map.of(
+                "competitorName", safe(competitorName),
+                "domainHint", safe(domainHint)
+        );
+        String normalizedType = sourceType == null ? "OFFICIAL" : sourceType.toUpperCase(Locale.ROOT);
+        List<String> queries = new ArrayList<>();
+        switch (normalizedType) {
+            case "DOCS" -> {
+                queries.add(renderEnglishSearchQuery("search-docs-primary", variables));
+                queries.add(renderEnglishSearchQuery("search-docs-secondary", variables));
+            }
+            case "PRICING" -> {
+                queries.add(renderEnglishSearchQuery("search-pricing-primary", variables));
+                queries.add(renderEnglishSearchQuery("search-pricing-secondary", variables));
+            }
+            case "NEWS" -> {
+                queries.add(renderEnglishSearchQuery("search-news-primary", variables));
+                queries.add(renderEnglishSearchQuery("search-news-secondary", variables));
+            }
+            case "REVIEW" -> {
+                queries.add(renderEnglishSearchQuery("search-review-primary", variables));
+                queries.add(renderEnglishSearchQuery("search-review-secondary", variables));
+                queries.add(renderEnglishSearchQuery("search-review-zhihu", variables));
+            }
+            default -> queries.add(renderEnglishSearchQuery("search-official", variables));
+        }
+        if (!safe(domainHint).isBlank()) {
+            queries.add(renderEnglishSearchQuery("search-official-domain", variables));
+        }
+        return queries.stream()
+                .filter(query -> !query.isBlank())
+                .distinct()
+                .toList();
+    }
+
     private void loadSearchQueryTemplates() {
         try {
             ClassPathResource resource = new ClassPathResource("prompts/search-queries.yml");
@@ -337,7 +386,39 @@ public class PromptTemplateService {
         }
     }
 
+    private void loadEnglishSearchTemplates() {
+        DEFAULT_TEMPLATES.forEach((key, value) -> {
+            if (key.startsWith("search-")) {
+                englishSearchTemplates.put(key, value);
+            }
+        });
+    }
+
     private String safe(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private boolean containsChinese(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        for (char ch : value.toCharArray()) {
+            if (Character.UnicodeScript.of(ch) == Character.UnicodeScript.HAN) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String renderEnglishSearchQuery(String templateName, Map<String, String> variables) {
+        String template = englishSearchTemplates.get(templateName);
+        if (template == null) {
+            return buildSearchQuery(templateName, variables);
+        }
+        String result = template;
+        for (Map.Entry<String, String> entry : variables.entrySet()) {
+            result = result.replace("{" + entry.getKey() + "}", entry.getValue());
+        }
+        return result.replaceAll("\\s+", " ").trim();
     }
 }

@@ -151,6 +151,32 @@ class WorkflowFactoryTest {
         assertTrue(collectNodes.get(0).getNotes().contains("官网入口"));
     }
 
+    @Test
+    void shouldBuildPreviewPlanWithoutInvokingLiveSearchDiscovery() throws Exception {
+        PreviewAwareSourceDiscoveryService previewDiscoveryService = new PreviewAwareSourceDiscoveryService();
+        WorkflowFactory workflowFactory = buildWorkflowFactory(buildBrowserProperties(), previewDiscoveryService);
+
+        AnalysisTask task = AnalysisTask.builder()
+                .taskName("preview")
+                .subjectProduct("subject")
+                .competitorNames(objectMapper.writeValueAsString(List.of("Notion AI")))
+                .competitorUrls(objectMapper.writeValueAsString(List.of()))
+                .sourceScope(objectMapper.writeValueAsString(List.of("官网", "产品文档")))
+                .build();
+
+        WorkflowPlan plan = workflowFactory.buildPreviewPlan(task);
+        WorkflowPlan.WorkflowPlanNode collectNode = plan.getNodes().stream()
+                .filter(node -> node.getNodeName().startsWith("collect_sources"))
+                .findFirst()
+                .orElseThrow();
+
+        JsonNode config = objectMapper.readTree(collectNode.getNodeConfig());
+        assertFalse(previewDiscoveryService.liveDiscoveryCalled);
+        assertTrue(previewDiscoveryService.previewDiscoveryCalled);
+        assertEquals(0, config.path("sourceCandidates").size());
+        assertTrue(config.path("discoveryNotes").asText().contains("执行阶段"));
+    }
+
     private SearchBrowserProperties buildBrowserProperties() {
         SearchBrowserProperties properties = new SearchBrowserProperties();
         properties.setEnabled(true);
@@ -199,5 +225,30 @@ class WorkflowFactoryTest {
                         .qualityScore(0.90)
                         .build()
         );
+    }
+
+    private static class PreviewAwareSourceDiscoveryService implements SourceDiscoveryService {
+
+        private boolean liveDiscoveryCalled;
+        private boolean previewDiscoveryCalled;
+
+        @Override
+        public List<SourcePlan> discover(String competitorName, List<String> providedUrls, List<String> requestedScopes) {
+            liveDiscoveryCalled = true;
+            throw new IllegalStateException("preview should not invoke live discovery");
+        }
+
+        @Override
+        public List<SourcePlan> discoverForPreview(String competitorName,
+                                                   List<String> providedUrls,
+                                                   List<String> requestedScopes) {
+            previewDiscoveryCalled = true;
+            return List.of(SourcePlan.builder()
+                    .sourceType("DOCS")
+                    .urls(List.of())
+                    .notes("未提供可靠官网 URL，执行阶段将补源")
+                    .candidates(List.of())
+                    .build());
+        }
     }
 }

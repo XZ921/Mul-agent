@@ -19,6 +19,9 @@ import cn.bugstack.competitoragent.search.SearchExecutionStep;
 import cn.bugstack.competitoragent.search.SearchExecutionUpdate;
 import cn.bugstack.competitoragent.source.SourceCollector;
 import cn.bugstack.competitoragent.source.SourceCandidate;
+import cn.bugstack.competitoragent.workflow.contract.CollectResult;
+import cn.bugstack.competitoragent.workflow.contract.CollectedDocument;
+import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,6 +31,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -186,6 +190,9 @@ public class CollectorAgent extends BaseAgent {
             resultEntry.put("browserTraceId", matchedCandidate == null ? null : matchedCandidate.getBrowserTraceId());
             resultEntry.put("selectionStage", matchedCandidate == null ? null : matchedCandidate.getSelectionStage());
             resultEntry.put("selectionReason", matchedCandidate == null ? null : matchedCandidate.getSelectionReason());
+            resultEntry.put("sourceUrls", List.of(url));
+            resultEntry.put("issueFlags", buildCollectionIssueFlags(page));
+            resultEntry.put("evidenceFragments", buildCollectedEvidenceFragments(config, sourceType, page, matchedCandidate, evidenceId, url));
             results.add(resultEntry);
 
             progressSnapshots.add(buildProgressSnapshot(executionPlan,
@@ -329,7 +336,173 @@ public class CollectorAgent extends BaseAgent {
         output.put("totalCollected", results.size());
         output.put("successCollected", successCounter);
         output.put("results", results);
+        CollectResult collectResult = buildCollectResult(config, results, successCounter);
+        output.put("contractVersion", collectResult.getContractVersion());
+        output.put("documents", collectResult.getDocuments());
+        output.put("sourceUrls", collectResult.getSourceUrls());
+        output.put("issueFlags", collectResult.getIssueFlags());
+        output.put("evidenceFragments", collectResult.getEvidenceFragments());
         return objectMapper.writeValueAsString(output);
+    }
+
+    /**
+     * Collector 的历史输出里已经有 results 明细，这里在不破坏旧字段的前提下，
+     * 再组装一份稳定契约给下游使用，确保 sourceUrls / issueFlags / evidenceFragments 不会再散落在不同命名里。
+     */
+    private CollectResult buildCollectResult(CollectorNodeConfig config,
+                                             List<Map<String, Object>> results,
+                                             int successCounter) {
+        List<CollectedDocument> documents = new ArrayList<>();
+        List<EvidenceFragment> fragments = new ArrayList<>();
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
+
+        for (Map<String, Object> result : results) {
+            List<String> documentSourceUrls = readStringList(result.get("sourceUrls"));
+            List<String> documentIssueFlags = readStringList(result.get("issueFlags"));
+            List<EvidenceFragment> documentFragments = readEvidenceFragments(result.get("evidenceFragments"));
+
+            sourceUrls.addAll(documentSourceUrls);
+            issueFlags.addAll(documentIssueFlags);
+            fragments.addAll(documentFragments);
+
+            documents.add(CollectedDocument.builder()
+                    .competitor(toText(result.get("competitor")))
+                    .url(toText(result.get("url")))
+                    .evidenceId(toText(result.get("evidenceId")))
+                    .success(Boolean.TRUE.equals(result.get("success")))
+                    .title(toText(result.get("title")))
+                    .cleanedText(null)
+                    .snippet(null)
+                    .contentLength(parseInt(result.get("contentLength")))
+                    .errorMessage(toText(result.get("errorMessage")))
+                    .sourceUrls(documentSourceUrls)
+                    .issueFlags(documentIssueFlags)
+                    .evidenceFragments(documentFragments)
+                    .collectedAt(LocalDateTime.now())
+                    .build());
+        }
+
+        if (successCounter > 0 && successCounter < results.size()) {
+            issueFlags.add("PARTIAL_COLLECTION_FAILURE");
+        }
+        if (successCounter == 0 && !results.isEmpty()) {
+            issueFlags.add("NO_USABLE_CONTENT");
+        }
+        if (sourceUrls.isEmpty() && config != null && config.getCompetitorUrls() != null) {
+            sourceUrls.addAll(config.getCompetitorUrls());
+            issueFlags.add("SOURCE_URLS_BACKFILLED");
+        }
+
+        return CollectResult.builder()
+                .totalCollected(results.size())
+                .totalEvidenceIds(successCounter)
+                .documents(documents)
+                .sourceUrls(new ArrayList<>(sourceUrls))
+                .issueFlags(new ArrayList<>(issueFlags))
+                .evidenceFragments(normalizeEvidenceFragments(fragments))
+                .build();
+    }
+
+    private List<String> buildCollectionIssueFlags(SourceCollector.CollectedPage page) {
+        List<String> issueFlags = new ArrayList<>();
+        if (page == null) {
+            issueFlags.add("COLLECT_FAILED");
+            return issueFlags;
+        }
+        if (!page.isSuccess()) {
+            issueFlags.add("COLLECT_FAILED");
+        }
+        if ((page.getContent() == null || page.getContent().isBlank())
+                && (page.getSnippet() == null || page.getSnippet().isBlank())) {
+            issueFlags.add("CONTENT_GAP");
+        }
+        return issueFlags;
+    }
+
+    /**
+     * 每个采集结果都至少生成一个 EvidenceFragment。
+     * 即使页面抓取失败，也要把“失败发生在哪个 URL、对应哪个 evidenceId”传下去，避免后续链路只能看到一个抽象错误。
+     */
+    private List<EvidenceFragment> buildCollectedEvidenceFragments(CollectorNodeConfig config,
+                                                                  String sourceType,
+                                                                  SourceCollector.CollectedPage page,
+                                                                  SourceCandidate matchedCandidate,
+                                                                  String evidenceId,
+                                                                  String url) {
+        String snippet = page == null ? null : firstNonBlank(page.getSnippet(), page.getErrorMessage());
+        String title = page == null ? null : firstNonBlank(page.getTitle(), matchedCandidate == null ? null : matchedCandidate.getTitle());
+        EvidenceFragment fragment = EvidenceFragment.builder()
+                .stage("COLLECT")
+                .competitorName(config == null ? null : config.getCompetitorName())
+                .fieldName(sourceType)
+                .evidenceId(evidenceId)
+                .sourceUrl(url)
+                .title(title)
+                .snippet(snippet)
+                .issueFlags(buildCollectionIssueFlags(page))
+                .build()
+                .normalized();
+        return List.of(fragment);
+    }
+
+    private List<String> readStringList(Object value) {
+        if (value instanceof List<?> items) {
+            List<String> values = new ArrayList<>();
+            for (Object item : items) {
+                String text = toText(item);
+                if (text != null && !text.isBlank()) {
+                    values.add(text);
+                }
+            }
+            return values;
+        }
+        return List.of();
+    }
+
+    private List<EvidenceFragment> readEvidenceFragments(Object value) {
+        if (!(value instanceof List<?> items)) {
+            return List.of();
+        }
+        List<EvidenceFragment> fragments = new ArrayList<>();
+        for (Object item : items) {
+            EvidenceFragment fragment = objectMapper.convertValue(item, EvidenceFragment.class);
+            if (fragment != null) {
+                fragments.add(fragment.normalized());
+            }
+        }
+        return fragments;
+    }
+
+    private List<EvidenceFragment> normalizeEvidenceFragments(List<EvidenceFragment> fragments) {
+        List<EvidenceFragment> normalized = new ArrayList<>();
+        for (EvidenceFragment fragment : fragments) {
+            if (fragment != null) {
+                normalized.add(fragment.normalized());
+            }
+        }
+        return normalized;
+    }
+
+    private int parseInt(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value == null) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
+        }
+        return fallback;
     }
 
     // evidenceId 同时编码 taskId、nodeName 和序号，方便跨页面回查来源。

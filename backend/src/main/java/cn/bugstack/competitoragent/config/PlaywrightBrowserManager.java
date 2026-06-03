@@ -11,6 +11,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -97,26 +99,92 @@ public class PlaywrightBrowserManager {
     }
 
     private Browser launchBrowser(String reason) {
-        try {
-            String browserType = normalizeBrowserType(props.getBrowser());
-            BrowserType.LaunchOptions options = new BrowserType.LaunchOptions()
-                    .setHeadless(props.isHeadless())
-                    .setTimeout((double) props.getTimeoutMillis());
-            if ("chromium".equals(browserType) && StringUtils.hasText(props.getChannel())) {
-                options.setChannel(props.getChannel().trim());
+        String browserType = normalizeBrowserType(props.getBrowser());
+        List<LaunchAttempt> attempts = buildLaunchAttempts(browserType);
+        Exception lastError = null;
+
+        for (int index = 0; index < attempts.size(); index++) {
+            LaunchAttempt attempt = attempts.get(index);
+            try {
+                log.info("启动 Playwright 浏览器: browser={}, channel={}, headless={}, reason={}, attempt={}/{}",
+                        browserType,
+                        attempt.channel(),
+                        attempt.headless(),
+                        reason,
+                        index + 1,
+                        attempts.size());
+                Browser browser = doLaunch(browserType, attempt.options());
+                if (index > 0) {
+                    log.warn("Playwright 浏览器已通过降级参数启动成功, browser={}, strategy={}, reason={}",
+                            browserType, attempt.label(), reason);
+                }
+                return browser;
+            } catch (Exception e) {
+                lastError = e;
+                if (index < attempts.size() - 1) {
+                    log.warn("启动 Playwright 浏览器失败，准备降级重试, browser={}, strategy={}, reason={}, error={}",
+                            browserType, attempt.label(), reason, e.getMessage());
+                    continue;
+                }
+                log.error("启动 Playwright 浏览器失败, browser={}, reason={}, error={}",
+                        props.getBrowser(), reason, e.getMessage(), e);
             }
-            log.info("启动 Playwright 浏览器: browser={}, channel={}, headless={}, reason={}",
-                    browserType, props.getChannel(), props.isHeadless(), reason);
-            return switch (browserType) {
-                case "firefox" -> playwright.firefox().launch(options);
-                case "webkit" -> playwright.webkit().launch(options);
-                default -> playwright.chromium().launch(options);
-            };
-        } catch (Exception e) {
-            log.error("启动 Playwright 浏览器失败, browser={}, reason={}, error={}",
-                    props.getBrowser(), reason, e.getMessage(), e);
+        }
+        return null;
+    }
+
+    /**
+     * 浏览器启动属于整个采集与搜索链路的基础设施入口。
+     * 这里显式构造“主配置 -> 保守降级配置”的候选序列，确保：
+     * 1. 优先尊重用户当前配置；
+     * 2. 在 Edge channel 或有头模式受限时，自动尝试更稳妥的 Chromium 兜底；
+     * 3. 只有所有启动策略都失败时，才把本次启动判定为真正失败。
+     */
+    private List<LaunchAttempt> buildLaunchAttempts(String browserType) {
+        List<LaunchAttempt> attempts = new ArrayList<>();
+        attempts.add(new LaunchAttempt(
+                "configured",
+                buildLaunchOptions(props.isHeadless(), normalizedChannel(browserType)),
+                normalizedChannel(browserType),
+                props.isHeadless()
+        ));
+
+        if ("chromium".equals(browserType)
+                && StringUtils.hasText(normalizedChannel(browserType))
+                && !props.isHeadless()) {
+            attempts.add(new LaunchAttempt(
+                    "chromium-safe-fallback",
+                    buildLaunchOptions(true, null),
+                    null,
+                    true
+            ));
+        }
+        return attempts;
+    }
+
+    private BrowserType.LaunchOptions buildLaunchOptions(boolean headless, String channel) {
+        BrowserType.LaunchOptions options = new BrowserType.LaunchOptions()
+                .setHeadless(headless)
+                .setTimeout((double) props.getTimeoutMillis());
+        if (StringUtils.hasText(channel)) {
+            options.setChannel(channel);
+        }
+        return options;
+    }
+
+    private Browser doLaunch(String browserType, BrowserType.LaunchOptions options) {
+        return switch (browserType) {
+            case "firefox" -> playwright.firefox().launch(options);
+            case "webkit" -> playwright.webkit().launch(options);
+            default -> playwright.chromium().launch(options);
+        };
+    }
+
+    private String normalizedChannel(String browserType) {
+        if (!"chromium".equals(browserType) || !StringUtils.hasText(props.getChannel())) {
             return null;
         }
+        return props.getChannel().trim();
     }
 
     private boolean isHealthy(Browser browser) {
@@ -149,5 +217,11 @@ public class PlaywrightBrowserManager {
             return "chromium";
         }
         return browser.trim().toLowerCase();
+    }
+
+    private record LaunchAttempt(String label,
+                                 BrowserType.LaunchOptions options,
+                                 String channel,
+                                 boolean headless) {
     }
 }

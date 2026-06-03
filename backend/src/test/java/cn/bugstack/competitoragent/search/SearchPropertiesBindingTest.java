@@ -20,11 +20,20 @@ class SearchPropertiesBindingTest {
                     "search.engines.baidu.base-url=https://www.baidu.com/s",
                     "search.engines.baidu.query-param=wd",
                     "search.engines.baidu.enabled=true",
-                    "search.browser.engine=bing",
-                    "search.browser.fallback-engines[0]=baidu",
+                    "search.browser.engine=baidu",
+                    "search.browser.fallback-engines[0]=bing",
+                    "search.browser.result-page-timeout-millis=9000",
+                    "search.browser.max-content-length-per-page=600",
+                    "search.browser.continue-on-browser-unavailable=false",
+                    "search.browser.continue-on-search-timeout=true",
+                    "search.browser.continue-on-page-collect-failure=false",
+                    "search.browser.recover-partial-content-on-timeout=true",
                     "serpapi.api-key=test-serp-key",
                     "serpapi.endpoint=https://serpapi.com/search",
-                    "serpapi.default-engine=google"
+                    "serpapi.default-engine=google",
+                    "qianfan-search.api-key=test-qianfan-key",
+                    "qianfan-search.endpoint=https://qianfan.baidubce.com/v2/ai_search/web_search",
+                    "qianfan-search.default-engine=baidu"
             );
 
     @Test
@@ -33,14 +42,24 @@ class SearchPropertiesBindingTest {
             SearchEngineProperties searchEngineProperties = context.getBean(SearchEngineProperties.class);
             SearchBrowserProperties searchBrowserProperties = context.getBean(SearchBrowserProperties.class);
             SerpApiProperties serpApiProperties = context.getBean(SerpApiProperties.class);
+            QianfanSearchProperties qianfanSearchProperties = context.getBean(QianfanSearchProperties.class);
 
             assertThat(searchEngineProperties.resolve("bing")).isNotNull();
             assertThat(searchEngineProperties.resolve("bing").getBaseUrl())
                     .isEqualTo("https://www.bing.com/search");
             assertThat(searchEngineProperties.resolve("baidu").getQueryParam()).isEqualTo("wd");
-            assertThat(searchBrowserProperties.getFallbackEngines()).containsExactly("baidu");
+            assertThat(searchBrowserProperties.getEngine()).isEqualTo("baidu");
+            assertThat(searchBrowserProperties.getFallbackEngines()).containsExactly("bing");
+            assertThat(searchBrowserProperties.getResultPageTimeoutMillis()).isEqualTo(9000);
+            assertThat(searchBrowserProperties.getMaxContentLengthPerPage()).isEqualTo(600);
+            assertThat(searchBrowserProperties.isContinueOnBrowserUnavailable()).isFalse();
+            assertThat(searchBrowserProperties.isContinueOnSearchTimeout()).isTrue();
+            assertThat(searchBrowserProperties.isContinueOnPageCollectFailure()).isFalse();
+            assertThat(searchBrowserProperties.isRecoverPartialContentOnTimeout()).isTrue();
             assertThat(serpApiProperties.getApiKey()).isEqualTo("test-serp-key");
             assertThat(serpApiProperties.getDefaultEngine()).isEqualTo("google");
+            assertThat(qianfanSearchProperties.getApiKey()).isEqualTo("test-qianfan-key");
+            assertThat(qianfanSearchProperties.getDefaultEngine()).isEqualTo("baidu");
         });
     }
 
@@ -66,7 +85,8 @@ class SearchPropertiesBindingTest {
     @EnableConfigurationProperties({
             SearchEngineProperties.class,
             SearchBrowserProperties.class,
-            SerpApiProperties.class
+            SerpApiProperties.class,
+            QianfanSearchProperties.class
     })
     static class TestConfiguration {
     }

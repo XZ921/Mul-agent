@@ -107,4 +107,53 @@ class TaskRecoveryServiceTest {
         verify(taskRunner, never()).runTask(8L);
         verify(taskRepository).save(task);
     }
+
+    @Test
+    void shouldKeepRecoveredTaskStoppedWhenPausedNodeStillBlocksWorkflow() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(9L)
+                .status(AnalysisTaskStatus.RUNNING)
+                .build();
+        TaskNode pausedNode = TaskNode.builder()
+                .nodeName("extract")
+                .status(TaskNodeStatus.PAUSED)
+                .interventionReason("节点已由用户暂停，等待恢复")
+                .build();
+        TaskNode pendingNode = TaskNode.builder()
+                .nodeName("analyze")
+                .status(TaskNodeStatus.PENDING)
+                .build();
+
+        when(taskRepository.findAllByStatus(AnalysisTaskStatus.RUNNING)).thenReturn(List.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(9L)).thenReturn(List.of(pausedNode, pendingNode));
+
+        recoveryService.recoverInterruptedTasks();
+
+        assertEquals(AnalysisTaskStatus.STOPPED, task.getStatus());
+        assertTrue(task.getErrorMessage().contains("暂停"));
+        verify(taskRunner, never()).runTask(9L);
+        verify(taskRepository).save(task);
+    }
+
+    @Test
+    void shouldMarkRecoveredTaskSuccessfulWithoutRerunWhenAllNodesAlreadySucceeded() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(10L)
+                .status(AnalysisTaskStatus.RUNNING)
+                .build();
+        TaskNode successNode = TaskNode.builder()
+                .nodeName("write_report")
+                .status(TaskNodeStatus.SUCCESS)
+                .outputData("{\"ok\":true}")
+                .build();
+
+        when(taskRepository.findAllByStatus(AnalysisTaskStatus.RUNNING)).thenReturn(List.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(10L)).thenReturn(List.of(successNode));
+
+        recoveryService.recoverInterruptedTasks();
+
+        assertEquals(AnalysisTaskStatus.SUCCESS, task.getStatus());
+        verify(taskRunner, never()).runTask(10L);
+        verify(taskRepository).save(task);
+    }
 }

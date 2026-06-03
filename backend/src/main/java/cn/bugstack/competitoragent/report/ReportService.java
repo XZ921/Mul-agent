@@ -10,6 +10,7 @@ import cn.bugstack.competitoragent.model.dto.ReportResponse.EvidenceCoverageOver
 import cn.bugstack.competitoragent.model.dto.ReportResponse.QualityIssue;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.ReviewCheckpoint;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.ReviewNextAction;
+import cn.bugstack.competitoragent.model.dto.ReportResponse.ReportDiagnosisInfo;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.SearchAuditOverview;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.SectionEvidenceCoverage;
 import cn.bugstack.competitoragent.model.dto.RevisionPlan;
@@ -23,6 +24,8 @@ import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
+import cn.bugstack.competitoragent.workflow.contract.QualityDiagnosis;
+import cn.bugstack.competitoragent.workflow.contract.QualityDimension;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -51,6 +54,7 @@ public class ReportService {
     private final CompetitorKnowledgeRepository knowledgeRepository;
     private final TaskNodeRepository taskNodeRepository;
     private final EvidenceQueryService evidenceQueryService;
+    private final ReportDiagnosisAssembler reportDiagnosisAssembler;
     private final ObjectMapper objectMapper;
     private static final List<CoverageFieldDefinition> COVERAGE_FIELD_DEFINITIONS = List.of(
             new CoverageFieldDefinition("summary", "overview", "产品概览"),
@@ -94,6 +98,16 @@ public class ReportService {
         TaskNode finalReviewNode = findNode(nodes, "quality_check_final");
         SearchAuditOverview searchAuditOverview = buildSearchAuditOverview(nodes);
         EvidenceCoverageOverview evidenceCoverageOverview = buildEvidenceCoverageOverview(knowledgeInfos);
+        ReviewCheckpoint initialReview = toReviewCheckpoint(initialReviewNode);
+        ReviewCheckpoint finalReview = toReviewCheckpoint(finalReviewNode);
+        ReportDiagnosisInfo reportDiagnosis = reportDiagnosisAssembler.assemble(
+                evidenceInfos,
+                issues,
+                initialReview,
+                finalReview,
+                evidenceCoverageOverview,
+                nodes
+        );
 
         // 这里把闭环节点状态和证据摘要一起返回，前端无需再自己拼接多份接口结果。
         return ReportResponse.builder()
@@ -105,15 +119,16 @@ public class ReportService {
                 .qualityScore(report.getQualityScore())
                 .qualityPassed(report.isQualityPassed())
                 .qualityIssues(issues)
-                .initialReview(toReviewCheckpoint(initialReviewNode))
+                .initialReview(initialReview)
                 .revisionPlan(parseRevisionPlan(initialReviewNode))
                 .rewriteApplied(rewriteNode != null && rewriteNode.getStatus() == TaskNodeStatus.SUCCESS)
-                .finalReview(toReviewCheckpoint(finalReviewNode))
+                .finalReview(finalReview)
                 .evidenceCount(report.getEvidenceCount())
                 .evidences(evidenceInfos)
                 .searchAuditOverview(searchAuditOverview)
                 .evidenceCoverageOverview(evidenceCoverageOverview)
                 .competitorKnowledges(knowledgeInfos)
+                .reportDiagnosis(reportDiagnosis)
                 .createdAt(report.getCreatedAt())
                 .updatedAt(report.getUpdatedAt())
                 .build();
@@ -381,6 +396,30 @@ public class ReportService {
         }
     }
 
+    private List<QualityDimension> parseQualityDimensions(String json) {
+        if (json == null || json.isBlank() || "null".equals(json) || "[]".equals(json)) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<QualityDimension>>() {});
+        } catch (JsonProcessingException e) {
+            log.warn("parse quality dimensions failed", e);
+            return List.of();
+        }
+    }
+
+    private List<QualityDiagnosis> parseQualityDiagnoses(String json) {
+        if (json == null || json.isBlank() || "null".equals(json) || "[]".equals(json)) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<QualityDiagnosis>>() {});
+        } catch (JsonProcessingException e) {
+            log.warn("parse quality diagnoses failed", e);
+            return List.of();
+        }
+    }
+
     private TaskNode findNode(List<TaskNode> nodes, String nodeName) {
         return nodes.stream()
                 .filter(node -> nodeName.equals(node.getNodeName()))
@@ -584,6 +623,12 @@ public class ReportService {
                 .requiresHumanIntervention(readBoolean(output, "requiresHumanIntervention"))
                 .autoRewriteAllowed(readBoolean(output, "autoRewriteAllowed"))
                 .summary(output == null ? null : output.path("summary").asText(null))
+                .dimensions(output == null || !output.has("dimensions")
+                        ? List.of()
+                        : parseQualityDimensions(output.path("dimensions").toString()))
+                .diagnoses(output == null || !output.has("diagnoses")
+                        ? List.of()
+                        : parseQualityDiagnoses(output.path("diagnoses").toString()))
                 .issues(output == null ? List.of() : parseQualityIssues(output.path("issues").toString()))
                 .nextActions(output == null || !output.has("nextActions")
                         ? List.of()

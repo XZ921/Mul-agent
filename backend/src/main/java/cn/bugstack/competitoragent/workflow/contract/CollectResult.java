@@ -22,4 +22,13 @@ public class CollectResult {
 
     /** 采集结果明细 */
     private List<CollectedDocument> documents;
+
+    /** 采集阶段聚合后的全部可追溯来源链接 */
+    private List<String> sourceUrls;
+
+    /** 采集阶段的问题标记汇总 */
+    private List<String> issueFlags;
+
+    /** 采集阶段对下游公开的统一证据片段 */
+    private List<EvidenceFragment> evidenceFragments;
 }

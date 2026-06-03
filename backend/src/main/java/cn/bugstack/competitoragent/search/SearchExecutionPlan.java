@@ -18,5 +18,9 @@ import java.util.List;
 public class SearchExecutionPlan {
 
     private String stage;
+    private List<String> searchQueries;
+    private List<String> fallbackOrder;
+    private Integer targetCount;
+    private Integer minVerifiedCount;
     private List<SearchExecutionStep> steps;
 }

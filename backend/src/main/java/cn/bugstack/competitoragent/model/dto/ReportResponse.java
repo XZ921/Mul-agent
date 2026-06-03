@@ -1,6 +1,8 @@
 package cn.bugstack.competitoragent.model.dto;
 
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.workflow.contract.QualityDiagnosis;
+import cn.bugstack.competitoragent.workflow.contract.QualityDimension;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -69,11 +71,89 @@ public class ReportResponse {
     @Schema(description = "Structured competitor knowledge")
     private List<CompetitorKnowledgeInfo> competitorKnowledges;
 
+    /**
+     * 报告诊断聚合模型。
+     * 这里把报告正文关联的证据片段、质检诊断和修复建议统一挂到一个出口，
+     * 让前端直接消费，不必再自己拼装证据、章节问题和建议动作。
+     */
+    @Schema(description = "Aggregated report diagnosis model")
+    private ReportDiagnosisInfo reportDiagnosis;
+
     @Schema(description = "Created time")
     private LocalDateTime createdAt;
 
     @Schema(description = "Updated time")
     private LocalDateTime updatedAt;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Schema(description = "Aggregated report diagnosis model")
+    public static class ReportDiagnosisInfo {
+        private Integer diagnosisCount;
+        private Integer blockerCount;
+        private Integer evidenceGapCount;
+        private List<String> sourceUrls;
+        private List<ContentEvidenceFragment> contentEvidences;
+        private List<DiagnosisSection> sections;
+        private List<ReviewNextAction> nextActions;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Schema(description = "Writer stage evidence fragment returned to report response")
+    public static class ContentEvidenceFragment {
+        private String stage;
+        private String competitorName;
+        private String fieldName;
+        private String evidenceId;
+        private String sourceUrl;
+        private String title;
+        private String snippet;
+        private List<String> issueFlags;
+        private EvidenceReference evidence;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Schema(description = "Diagnosis section grouped for frontend rendering")
+    public static class DiagnosisSection {
+        private String section;
+        private Boolean evidenceInsufficient;
+        private List<String> sourceUrls;
+        private List<String> repairSuggestions;
+        private List<DiagnosisItem> diagnoses;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Schema(description = "Diagnosis item linked with evidence references")
+    public static class DiagnosisItem {
+        private String reviewStage;
+        private QualityDiagnosis diagnosis;
+        private List<EvidenceReference> evidenceReferences;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Schema(description = "Lightweight evidence reference nested in diagnosis model")
+    public static class EvidenceReference {
+        private String evidenceId;
+        private String title;
+        private String url;
+        private String competitorName;
+        private String sourceType;
+        private String contentSnippet;
+    }
 
     @Data
     @Builder
@@ -88,6 +168,8 @@ public class ReportResponse {
         private Boolean requiresHumanIntervention;
         private Boolean autoRewriteAllowed;
         private String summary;
+        private List<QualityDimension> dimensions;
+        private List<QualityDiagnosis> diagnoses;
         private List<QualityIssue> issues;
         private List<ReviewNextAction> nextActions;
     }
@@ -100,6 +182,12 @@ public class ReportResponse {
         private String type;
         private String section;
         private String severity;
+        private String level;
+        private String dimensionCode;
+        private String dimensionName;
+        private String evidenceBasis;
+        private List<String> evidenceIds;
+        private List<String> sourceUrls;
         private String suggestion;
     }
 

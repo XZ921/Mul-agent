@@ -14,6 +14,7 @@ import cn.bugstack.competitoragent.source.SearchSourceProvider;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
 import cn.bugstack.competitoragent.source.SourceCollector;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -30,6 +31,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class CollectorAgentTest {
+
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     private final AgentExecutionLogRepository logRepository = mock(AgentExecutionLogRepository.class);
     private final SourceCollector sourceCollector = mock(SourceCollector.class);
@@ -50,7 +53,7 @@ class CollectorAgentTest {
             evidenceRepository,
             nodeRepository,
             searchExecutionCoordinator,
-            new ObjectMapper().findAndRegisterModules()
+            objectMapper
     );
 
     @Test
@@ -116,6 +119,45 @@ class CollectorAgentTest {
         verify(evidenceRepository, times(1)).save(evidenceCaptor.capture());
         assertTrue(evidenceCaptor.getValue().getPageMetadata().contains("browserTraceId"));
         assertTrue(result.getOutputData().contains("browserTraceId"));
+    }
+
+    @Test
+    void shouldEmitTraceableCollectContractWithSourceUrlsAndIssueFlags() throws Exception {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of())
+                .summary("mock browser search disabled")
+                .fallbackSuggested(true)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        when(sourceCollector.collect("https://example.com/docs", "Feishu", "DOCS"))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://example.com/docs")
+                        .title("Docs")
+                        .content("useful docs content with api reference")
+                        .snippet("api reference")
+                        .competitorName("Feishu")
+                        .sourceType("DOCS")
+                        .success(true)
+                        .build());
+        when(sourceCollector.collect("https://example.com/help", "Feishu", "DOCS"))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://example.com/help")
+                        .competitorName("Feishu")
+                        .sourceType("DOCS")
+                        .success(false)
+                        .errorMessage("timeout")
+                        .build());
+
+        AgentResult result = collectorAgent.execute(buildContext("[\"https://example.com/docs\",\"https://example.com/help\"]"));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertEquals("https://example.com/docs", output.path("documents").get(0).path("sourceUrls").get(0).asText());
+        assertEquals("https://example.com/help", output.path("documents").get(1).path("sourceUrls").get(0).asText());
+        assertTrue(output.path("documents").get(1).path("issueFlags").toString().contains("COLLECT_FAILED"));
+        assertTrue(output.path("issueFlags").toString().contains("PARTIAL_COLLECTION_FAILURE"));
+        assertTrue(output.path("evidenceFragments").isArray());
     }
 
     @Test

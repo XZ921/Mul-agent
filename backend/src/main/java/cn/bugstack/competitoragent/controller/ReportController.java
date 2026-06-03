@@ -32,7 +32,7 @@ public class ReportController {
     private final EvidenceQueryService evidenceQueryService;
 
     @GetMapping("/{taskId}")
-    @Operation(summary = "Get report detail")
+    @Operation(summary = "Get report detail with evidence and diagnosis closure")
     public ApiResponse<ReportResponse> getReport(
             @Parameter(description = "Task ID", example = "1")
             @PathVariable Long taskId) {

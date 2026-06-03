@@ -12,6 +12,12 @@ import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
+import cn.bugstack.competitoragent.workflow.contract.CompetitorKnowledgeDraft;
+import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
+import cn.bugstack.competitoragent.workflow.contract.ExtractResult;
+import cn.bugstack.competitoragent.workflow.contract.FeatureItem;
+import cn.bugstack.competitoragent.workflow.contract.PricingItem;
+import cn.bugstack.competitoragent.workflow.contract.StrengthWeaknessItem;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -93,6 +99,10 @@ public class SchemaExtractorAgent extends BaseAgent {
         // 抽取阶段按竞品聚合证据，保证每次提示词只处理单个竞品上下文。
         Map<String, List<EvidenceSource>> evidencesByCompetitor = groupByCompetitor(evidences);
         List<Map<String, Object>> extractionSummaries = new ArrayList<>();
+        List<CompetitorKnowledgeDraft> drafts = new ArrayList<>();
+        LinkedHashSet<String> aggregatedSourceUrls = new LinkedHashSet<>();
+        LinkedHashSet<String> aggregatedIssueFlags = new LinkedHashSet<>();
+        List<EvidenceFragment> aggregatedFragments = new ArrayList<>();
         int successCount = 0;
 
         for (Map.Entry<String, List<EvidenceSource>> entry : evidencesByCompetitor.entrySet()) {
@@ -100,15 +110,21 @@ public class SchemaExtractorAgent extends BaseAgent {
             List<EvidenceSource> competitorEvidence = entry.getValue();
 
             try {
-                ObjectNode normalizedSchema = extractAndNormalize(competitorName, competitorEvidence);
-                CompetitorKnowledge knowledge = buildKnowledge(context, competitorName, normalizedSchema);
+                NormalizedSchema normalizedSchema = extractAndNormalize(competitorName, competitorEvidence);
+                CompetitorKnowledge knowledge = buildKnowledge(context, competitorName, normalizedSchema.schema());
                 knowledgeRepository.save(knowledge);
 
                 extractionSummaries.add(Map.of(
                         "competitor", competitorName,
-                        "sourceUrls", readStringList(normalizedSchema.path("sourceUrls")),
-                        "coverage", objectMapper.convertValue(normalizedSchema.path("evidenceCoverage"), Map.class)
+                        "sourceUrls", readStringList(normalizedSchema.schema().path("sourceUrls")),
+                        "coverage", objectMapper.convertValue(normalizedSchema.schema().path("evidenceCoverage"), Map.class),
+                        "issueFlags", normalizedSchema.issueFlags()
                 ));
+                CompetitorKnowledgeDraft draft = buildKnowledgeDraft(competitorName, normalizedSchema);
+                drafts.add(draft);
+                aggregatedSourceUrls.addAll(draft.getSourceUrls());
+                aggregatedIssueFlags.addAll(draft.getIssueFlags());
+                aggregatedFragments.addAll(draft.getEvidenceFragments());
                 successCount++;
             } catch (Exception e) {
                 log.error("extract competitor schema failed: {}", competitorName, e);
@@ -124,11 +140,23 @@ public class SchemaExtractorAgent extends BaseAgent {
         }
 
         try {
-            String outputJson = objectMapper.writeValueAsString(Map.of(
-                    "totalCompetitors", evidencesByCompetitor.size(),
-                    "successCount", successCount,
-                    "results", extractionSummaries
-            ));
+            ExtractResult extractResult = ExtractResult.builder()
+                    .totalCompetitors(successCount)
+                    .drafts(drafts)
+                    .sourceUrls(new ArrayList<>(aggregatedSourceUrls))
+                    .issueFlags(new ArrayList<>(aggregatedIssueFlags))
+                    .evidenceFragments(normalizeEvidenceFragments(aggregatedFragments))
+                    .build();
+            Map<String, Object> output = new LinkedHashMap<>();
+            output.put("contractVersion", extractResult.getContractVersion());
+            output.put("totalCompetitors", evidencesByCompetitor.size());
+            output.put("successCount", successCount);
+            output.put("results", extractionSummaries);
+            output.put("drafts", extractResult.getDrafts());
+            output.put("sourceUrls", extractResult.getSourceUrls());
+            output.put("issueFlags", extractResult.getIssueFlags());
+            output.put("evidenceFragments", extractResult.getEvidenceFragments());
+            String outputJson = objectMapper.writeValueAsString(output);
             return AgentResult.success(outputJson,
                     "已抽取竞品知识：" + successCount + "/" + evidencesByCompetitor.size());
         } catch (JsonProcessingException e) {
@@ -147,7 +175,7 @@ public class SchemaExtractorAgent extends BaseAgent {
     /**
      * 提示词同时注入证据目录和正文内容，方便模型既输出结构化字段，又能引用 evidenceId。
      */
-    private ObjectNode extractAndNormalize(String competitorName, List<EvidenceSource> competitorEvidence)
+    private NormalizedSchema extractAndNormalize(String competitorName, List<EvidenceSource> competitorEvidence)
             throws LlmException, JsonProcessingException {
         String prompt = promptService.render("extractor", Map.of(
                 "competitorName", competitorName,
@@ -166,11 +194,12 @@ public class SchemaExtractorAgent extends BaseAgent {
                     "ExtractedSchema"
             );
             try {
-                JsonNode schemaJson = objectMapper.readTree(extractJsonObject(cleanJson(llmResponse)));
-                if (!(schemaJson instanceof ObjectNode objectNode)) {
-                    throw new JsonProcessingException("Extractor output must be a JSON object") {};
+                ParsedSchemaRoot parsedRoot = parseSchemaRoot(llmResponse);
+                if (parsedRoot.recovered()) {
+                    log.warn("extractor recovered non-object json root, competitor={}, attempt={}/{}",
+                            competitorName, attempt, EXTRACT_JSON_MAX_ATTEMPTS);
                 }
-                return normalizeSchema(objectNode, competitorEvidence);
+                return normalizeSchema(parsedRoot.objectNode(), competitorEvidence, parsedRoot.issueFlags());
             } catch (JsonProcessingException e) {
                 lastParseException = e;
                 log.warn("extractor json parse failed, competitor={}, attempt={}/{}",
@@ -186,16 +215,23 @@ public class SchemaExtractorAgent extends BaseAgent {
     /**
      * 这里统一补齐 sourceUrls 与 evidenceCoverage，避免字段级溯源完全依赖模型自觉输出。
      */
-    private ObjectNode normalizeSchema(ObjectNode schemaJson, List<EvidenceSource> competitorEvidence) {
+    private NormalizedSchema normalizeSchema(ObjectNode schemaJson,
+                                            List<EvidenceSource> competitorEvidence,
+                                            List<String> inheritedIssueFlags) {
         Map<String, EvidenceSource> evidenceById = new LinkedHashMap<>();
         for (EvidenceSource evidence : competitorEvidence) {
             evidenceById.put(evidence.getEvidenceId(), evidence);
+        }
+        LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
+        if (inheritedIssueFlags != null) {
+            issueFlags.addAll(inheritedIssueFlags);
         }
 
         ArrayNode sources = buildSourcesNode(schemaJson.path("sources"), competitorEvidence);
         schemaJson.set("sources", sources);
 
         LinkedHashSet<String> topLevelSourceUrls = new LinkedHashSet<>(readStringList(schemaJson.path("sourceUrls")));
+        boolean modelProvidedSourceUrls = !topLevelSourceUrls.isEmpty();
         if (topLevelSourceUrls.isEmpty()) {
             topLevelSourceUrls.addAll(readUrlsFromSources(sources));
         }
@@ -212,10 +248,62 @@ public class SchemaExtractorAgent extends BaseAgent {
                     .filter(url -> url != null && !url.isBlank())
                     .toList());
         }
+        if (!modelProvidedSourceUrls && !topLevelSourceUrls.isEmpty()) {
+            issueFlags.add("SOURCE_URLS_BACKFILLED");
+        }
 
         schemaJson.set("sourceUrls", buildStringArray(topLevelSourceUrls));
-        schemaJson.set("evidenceCoverage", buildCoverage(schemaJson, evidenceById));
-        return schemaJson;
+        ObjectNode coverage = buildCoverage(schemaJson, evidenceById);
+        schemaJson.set("evidenceCoverage", coverage);
+        issueFlags.addAll(collectCoverageIssueFlags(coverage));
+        return new NormalizedSchema(schemaJson, new ArrayList<>(issueFlags),
+                buildEvidenceFragments("EXTRACT", competitorEvidence, issueFlags));
+    }
+
+    /**
+     * 抽取模型偶尔会返回数组、字符串包裹 JSON，甚至直接给空数组。
+     * 这里把“还能救回来”的根节点统一归一成 ObjectNode，尽量不要因为输出形态抖动直接打断整条工作流。
+     */
+    private ParsedSchemaRoot parseSchemaRoot(String llmResponse) throws JsonProcessingException {
+        return parseSchemaRootValue(extractJsonObject(cleanJson(llmResponse)), 0);
+    }
+
+    private ParsedSchemaRoot parseSchemaRootValue(String rawValue, int depth) throws JsonProcessingException {
+        if (depth > 2) {
+            throw new JsonProcessingException("Extractor output must be a JSON object") {};
+        }
+        JsonNode schemaJson = objectMapper.readTree(rawValue);
+        if (schemaJson instanceof ObjectNode objectNode) {
+            return new ParsedSchemaRoot(objectNode.deepCopy(), List.of());
+        }
+        if (schemaJson == null || schemaJson.isNull()) {
+            return new ParsedSchemaRoot(objectMapper.createObjectNode(), List.of("MODEL_OUTPUT_RECOVERED"));
+        }
+        if (schemaJson.isTextual()) {
+            String nested = cleanJson(schemaJson.asText(""));
+            if (nested.isBlank()) {
+                return new ParsedSchemaRoot(objectMapper.createObjectNode(), List.of("MODEL_OUTPUT_RECOVERED"));
+            }
+            ParsedSchemaRoot parsed = parseSchemaRootValue(extractJsonObject(nested), depth + 1);
+            return parsed.appendIssueFlag("MODEL_OUTPUT_RECOVERED");
+        }
+        if (schemaJson.isArray()) {
+            ArrayNode arrayNode = (ArrayNode) schemaJson;
+            if (arrayNode.isEmpty()) {
+                return new ParsedSchemaRoot(objectMapper.createObjectNode(), List.of("MODEL_OUTPUT_RECOVERED"));
+            }
+            for (JsonNode item : arrayNode) {
+                if (item instanceof ObjectNode objectItem) {
+                    return new ParsedSchemaRoot(objectItem.deepCopy(), List.of("MODEL_OUTPUT_RECOVERED"));
+                }
+                if (item != null && item.isTextual() && !item.asText("").isBlank()) {
+                    ParsedSchemaRoot parsed = parseSchemaRootValue(extractJsonObject(cleanJson(item.asText())), depth + 1);
+                    return parsed.appendIssueFlag("MODEL_OUTPUT_RECOVERED");
+                }
+            }
+            return new ParsedSchemaRoot(objectMapper.createObjectNode(), List.of("MODEL_OUTPUT_RECOVERED"));
+        }
+        throw new JsonProcessingException("Extractor output must be a JSON object") {};
     }
 
     private ArrayNode buildSourcesNode(JsonNode existingSources, List<EvidenceSource> competitorEvidence) {
@@ -445,6 +533,32 @@ public class SchemaExtractorAgent extends BaseAgent {
                 .build();
     }
 
+    /**
+     * 抽取结果除了落库，还要组装成稳定的 Draft 契约继续往下传。
+     * 这里显式带上 sourceUrls / evidenceCoverage / issueFlags，防止分析阶段再去猜哪些字段可信。
+     */
+    private CompetitorKnowledgeDraft buildKnowledgeDraft(String competitorName, NormalizedSchema normalizedSchema) {
+        ObjectNode schemaJson = normalizedSchema.schema();
+        Map<String, Object> coverage = objectMapper.convertValue(schemaJson.path("evidenceCoverage"), Map.class);
+        return CompetitorKnowledgeDraft.builder()
+                .competitorName(competitorName)
+                .officialUrl(schemaJson.path("officialUrl").asText(null))
+                .summary(schemaJson.path("summary").asText(null))
+                .positioning(schemaJson.path("positioning").asText(null))
+                .targetUsers(readStringList(schemaJson.path("targetUsers")))
+                .coreFeatures(convertValue(schemaJson.path("coreFeatures"), FeatureItem.class))
+                .pricing(convertSingleValue(schemaJson.path("pricing"), PricingItem.class))
+                .strengths(convertValue(schemaJson.path("strengths"), StrengthWeaknessItem.class))
+                .weaknesses(convertValue(schemaJson.path("weaknesses"), StrengthWeaknessItem.class))
+                .sourceUrls(readStringList(schemaJson.path("sourceUrls")))
+                .evidenceFragments(normalizeEvidenceFragments(normalizedSchema.evidenceFragments()))
+                .issueFlags(normalizedSchema.issueFlags())
+                .evidenceCoverage(coverage)
+                .fieldsExtracted(countExtractedFields(schemaJson))
+                .status(normalizedSchema.issueFlags().contains("MISSING_EVIDENCE") ? "PARTIAL" : "TRACEABLE")
+                .build();
+    }
+
     private String readJsonField(ObjectNode schemaJson, String fieldName, String defaultValue) {
         JsonNode field = schemaJson.get(fieldName);
         if (field == null || field.isNull() || field.isMissingNode()) {
@@ -497,5 +611,97 @@ public class SchemaExtractorAgent extends BaseAgent {
         boolean hasContent = evidence.getFullContent() != null && !evidence.getFullContent().isBlank();
         boolean hasSnippet = evidence.getContentSnippet() != null && !evidence.getContentSnippet().isBlank();
         return hasContent || hasSnippet;
+    }
+
+    private List<String> collectCoverageIssueFlags(ObjectNode coverage) {
+        LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
+        if (coverage == null) {
+            return List.of();
+        }
+        coverage.fields().forEachRemaining(entry -> {
+            String status = entry.getValue().path("status").asText("");
+            if ("MISSING_EVIDENCE".equalsIgnoreCase(status)) {
+                issueFlags.add("MISSING_EVIDENCE");
+            }
+        });
+        return new ArrayList<>(issueFlags);
+    }
+
+    /**
+     * 抽取阶段统一把 sources 节点转成 EvidenceFragment，后续分析与写作都只需要消费这一种证据格式。
+     */
+    private List<EvidenceFragment> buildEvidenceFragments(String stage,
+                                                          List<EvidenceSource> competitorEvidence,
+                                                          LinkedHashSet<String> inheritedIssueFlags) {
+        List<EvidenceFragment> fragments = new ArrayList<>();
+        for (EvidenceSource evidence : competitorEvidence) {
+            fragments.add(EvidenceFragment.builder()
+                    .stage(stage)
+                    .competitorName(evidence.getCompetitorName())
+                    .fieldName("knowledge")
+                    .evidenceId(evidence.getEvidenceId())
+                    .sourceUrl(evidence.getUrl())
+                    .title(evidence.getTitle())
+                    .snippet(truncate(evidence.getContentSnippet(), 180))
+                    .issueFlags(new ArrayList<>(inheritedIssueFlags))
+                    .build()
+                    .normalized());
+        }
+        return fragments;
+    }
+
+    private <T> List<T> convertValue(JsonNode node, Class<T> type) {
+        if (node == null || node.isMissingNode() || node.isNull() || !node.isArray()) {
+            return List.of();
+        }
+        List<T> values = new ArrayList<>();
+        for (JsonNode item : node) {
+            values.add(objectMapper.convertValue(item, type));
+        }
+        return values;
+    }
+
+    private <T> T convertSingleValue(JsonNode node, Class<T> type) {
+        if (node == null || node.isMissingNode() || node.isNull() || node.isEmpty()) {
+            return null;
+        }
+        return objectMapper.convertValue(node, type);
+    }
+
+    private int countExtractedFields(ObjectNode schemaJson) {
+        int count = 0;
+        for (String field : COVERAGE_FIELDS) {
+            if (hasMeaningfulValue(schemaJson.path(field))) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private List<EvidenceFragment> normalizeEvidenceFragments(List<EvidenceFragment> fragments) {
+        List<EvidenceFragment> normalized = new ArrayList<>();
+        for (EvidenceFragment fragment : fragments) {
+            if (fragment != null) {
+                normalized.add(fragment.normalized());
+            }
+        }
+        return normalized;
+    }
+
+    private record NormalizedSchema(ObjectNode schema, List<String> issueFlags, List<EvidenceFragment> evidenceFragments) {
+    }
+
+    private record ParsedSchemaRoot(ObjectNode objectNode, List<String> issueFlags) {
+        private boolean recovered() {
+            return issueFlags != null && !issueFlags.isEmpty();
+        }
+
+        private ParsedSchemaRoot appendIssueFlag(String issueFlag) {
+            LinkedHashSet<String> merged = new LinkedHashSet<>(issueFlags == null ? List.of() : issueFlags);
+            if (issueFlag != null && !issueFlag.isBlank()) {
+                merged.add(issueFlag);
+            }
+            return new ParsedSchemaRoot(objectNode, new ArrayList<>(merged));
+        }
     }
 }

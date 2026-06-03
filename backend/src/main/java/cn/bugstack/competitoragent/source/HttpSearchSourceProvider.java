@@ -70,6 +70,9 @@ public class HttpSearchSourceProvider implements SearchSourceProvider {
                 lastError = e;
                 log.warn("search source request failed, competitor={}, scope={}, attempt={}/{}",
                         competitorName, scope, attempt, maxAttempts);
+                if (!isRetryable(e)) {
+                    break;
+                }
             }
         }
         log.error("search source request exhausted retries, competitor={}, scope={}, error={}",
@@ -79,25 +82,46 @@ public class HttpSearchSourceProvider implements SearchSourceProvider {
 
     private List<SourceCandidate> searchScope(String competitorName, String scope) {
         String query = buildQuery(competitorName, scope);
-        HttpRequest request = HttpRequest.newBuilder(buildUri(query))
-                .timeout(Duration.ofSeconds(properties.getTimeoutSeconds()))
-                .header("Accept", "application/json")
-                .header(properties.getApiKeyHeader(), properties.getApiKeyPrefix() + properties.getApiKey())
-                .GET()
-                .build();
+        HttpRequest request = buildRequest(query);
 
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IllegalStateException("search api status=" + response.statusCode());
+                throw new SearchApiException("search api status=" + response.statusCode(), response.statusCode());
             }
             return parseCandidates(response.body(), competitorName, scope);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("search api interrupted", e);
+        } catch (SearchApiException e) {
+            throw e;
         } catch (Exception e) {
             throw new IllegalStateException("search api request failed: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 兼容 GET / POST 两种通用搜索 API 形态，减少 405 带来的无效重试。
+     */
+    private HttpRequest buildRequest(String query) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(resolveEndpointUri(query))
+                .timeout(Duration.ofSeconds(properties.getTimeoutSeconds()))
+                .header("Accept", "application/json")
+                .header(properties.getApiKeyHeader(), properties.getApiKeyPrefix() + properties.getApiKey());
+        if ("POST".equalsIgnoreCase(properties.getRequestMethod())) {
+            return builder
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString(buildFormBody(query)))
+                    .build();
+        }
+        return builder.GET().build();
+    }
+
+    private URI resolveEndpointUri(String query) {
+        if ("POST".equalsIgnoreCase(properties.getRequestMethod())) {
+            return URI.create(properties.getEndpoint());
+        }
+        return buildUri(query);
     }
 
     private URI buildUri(String query) {
@@ -105,6 +129,12 @@ public class HttpSearchSourceProvider implements SearchSourceProvider {
         String encodedQuery = encode(properties.getQueryParam()) + "=" + encode(query);
         String limit = encode(properties.getLimitParam()) + "=" + Math.max(1, properties.getResultsPerScope());
         return URI.create(properties.getEndpoint() + separator + encodedQuery + "&" + limit);
+    }
+
+    private String buildFormBody(String query) {
+        return encode(properties.getQueryParam()) + "=" + encode(query)
+                + "&"
+                + encode(properties.getLimitParam()) + "=" + Math.max(1, properties.getResultsPerScope());
     }
 
     /**
@@ -234,5 +264,26 @@ public class HttpSearchSourceProvider implements SearchSourceProvider {
 
     private String defaultText(String value, String fallback) {
         return StringUtils.hasText(value) ? value : fallback;
+    }
+
+    private boolean isRetryable(RuntimeException exception) {
+        if (exception instanceof SearchApiException searchApiException) {
+            return searchApiException.getStatusCode() != 405;
+        }
+        return true;
+    }
+
+    private static final class SearchApiException extends RuntimeException {
+
+        private final int statusCode;
+
+        private SearchApiException(String message, int statusCode) {
+            super(message);
+            this.statusCode = statusCode;
+        }
+
+        private int getStatusCode() {
+            return statusCode;
+        }
     }
 }

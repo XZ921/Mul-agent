@@ -7,6 +7,7 @@ import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
+import cn.bugstack.competitoragent.workflow.NodeExecutionRecoveryPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationRunner;
@@ -30,6 +31,7 @@ public class TaskRecoveryService {
     private final AnalysisTaskRepository taskRepository;
     private final TaskNodeRepository nodeRepository;
     private final AnalysisTaskRunner taskRunner;
+    private final NodeExecutionRecoveryPolicy recoveryPolicy = new NodeExecutionRecoveryPolicy();
 
     @Component
     @RequiredArgsConstructor
@@ -63,12 +65,19 @@ public class TaskRecoveryService {
                 continue;
             }
 
-            task.setStatus(AnalysisTaskStatus.PENDING);
-            task.setCompletedAt(null);
-            task.setErrorMessage("Recovered after service restart, resuming from node checkpoints");
+            List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(task.getId());
+            NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
+                    recoveryPolicy.resolveTaskExecution(task, nodes);
+            task.setStatus(resolution.getStatus());
+            task.setCompletedAt(resolution.resolveCompletedAtForPersistence(task.getCompletedAt()));
+            task.setErrorMessage(resolution.getStatus() == AnalysisTaskStatus.PENDING
+                    ? "Recovered after service restart, resuming from node checkpoints"
+                    : resolution.getErrorMessage());
             taskRepository.save(task);
-            runAfterCommit(task.getId());
-            log.info("schedule interrupted task recovery, taskId={}", task.getId());
+            if (resolution.getStatus() == AnalysisTaskStatus.PENDING && recoveryPolicy.canAutoContinue(nodes)) {
+                runAfterCommit(task.getId());
+                log.info("schedule interrupted task recovery, taskId={}", task.getId());
+            }
         }
     }
 
@@ -103,24 +112,7 @@ public class TaskRecoveryService {
             return false;
         }
 
-        boolean changed = false;
-        for (TaskNode node : nodes) {
-            TaskNodeStatus originalStatus = node.getStatus();
-            if (originalStatus == TaskNodeStatus.RUNNING || originalStatus == TaskNodeStatus.PENDING) {
-                node.setStatus(TaskNodeStatus.PENDING);
-                node.setControlState(TaskNodeControlState.NONE);
-                node.setInputData(null);
-                node.setOutputData(originalStatus == TaskNodeStatus.RUNNING ? null : node.getOutputData());
-                node.setErrorMessage(originalStatus == TaskNodeStatus.RUNNING
-                        ? "Node interrupted by service restart"
-                        : node.getErrorMessage());
-                node.setInterventionReason(null);
-                node.setStartedAt(null);
-                node.setCompletedAt(null);
-                node.setRetryCount(0);
-                changed = true;
-            }
-        }
+        boolean changed = recoveryPolicy.resetInterruptedNodes(nodes);
 
         if (changed) {
             nodeRepository.saveAll(nodes);

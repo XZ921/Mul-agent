@@ -40,6 +40,11 @@ public class SearchBrowserConfigurationGuard implements ApplicationRunner {
                 mode,
                 searchBrowserProperties.isVerifyResultPage(),
                 searchBrowserProperties.getMaxOpenResultPages());
+        log.info("浏览器搜索容错策略: continueOnBrowserUnavailable={}, continueOnSearchTimeout={}, continueOnPageCollectFailure={}, recoverPartialContentOnTimeout={}",
+                searchBrowserProperties.isContinueOnBrowserUnavailable(),
+                searchBrowserProperties.isContinueOnSearchTimeout(),
+                searchBrowserProperties.isContinueOnPageCollectFailure(),
+                searchBrowserProperties.isRecoverPartialContentOnTimeout());
     }
 
     private String normalizeMode(String mode) {

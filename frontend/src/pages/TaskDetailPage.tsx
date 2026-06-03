@@ -19,6 +19,7 @@ import dayjs from 'dayjs'
 import {
   executeTask,
   getTask,
+  getReport,
   getTaskNodes,
   pauseTaskNode,
   resumeTask,
@@ -34,6 +35,7 @@ import AgentLogPanel from '../components/AgentLogPanel'
 import DagOverviewBoard from '../components/task-detail/DagOverviewBoard'
 import NodeAccordionList from '../components/task-detail/NodeAccordionList'
 import NodeTraceDrawer from '../components/task-detail/NodeTraceDrawer'
+import ReportDiagnosisPanel from '../components/task-detail/ReportDiagnosisPanel'
 import SearchActivityPanel from '../components/task-detail/SearchActivityPanel'
 import TaskActionQueue from '../components/task-detail/TaskActionQueue'
 import TaskConfigPanel from '../components/task-detail/TaskConfigPanel'
@@ -55,6 +57,7 @@ import {
 import type { ReadableField, TaskActionQueueItem } from '../components/task-detail/types'
 import type {
   SourceCandidateInfo,
+  ReportInfo,
   TaskInfo,
   TaskNodeInfo,
 } from '../types'
@@ -466,6 +469,17 @@ function buildReadableOutput(
   }))
 }
 
+export function shouldFetchTaskReport(task: TaskInfo | null, nodes: TaskNodeInfo[]) {
+  if (!task) return false
+  if (task.canViewReport) return true
+  return nodes.some(
+    (node) =>
+      node.agentType === 'WRITER' &&
+      (node.nodeName === 'write_report' || node.nodeName === 'rewrite_report') &&
+      node.status === 'SUCCESS',
+  )
+}
+
 export default function TaskDetailPage() {
   const { id } = useParams<{ id: string }>()
   const location = useLocation()
@@ -476,6 +490,7 @@ export default function TaskDetailPage() {
   const [nodes, setNodes] = useState<TaskNodeInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
+  const [report, setReport] = useState<ReportInfo | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
   const [configEditorOpen, setConfigEditorOpen] = useState(false)
   const [configEditorValue, setConfigEditorValue] = useState('')
@@ -484,8 +499,20 @@ export default function TaskDetailPage() {
   const fetchData = useCallback(async () => {
     try {
       const [taskRes, nodesRes] = await Promise.all([getTask(taskId), getTaskNodes(taskId)])
-      setTask(taskRes.data)
-      setNodes(nodesRes.data || [])
+      const nextTask = taskRes.data
+      const nextNodes = nodesRes.data || []
+      setTask(nextTask)
+      setNodes(nextNodes)
+      if (shouldFetchTaskReport(nextTask, nextNodes)) {
+        try {
+          const reportRes = await getReport(taskId)
+          setReport(reportRes.data || null)
+        } catch {
+          setReport(null)
+        }
+      } else {
+        setReport(null)
+      }
     } catch {
       message.error('加载任务详情失败')
     } finally {
@@ -717,6 +744,40 @@ export default function TaskDetailPage() {
       { label: '创建时间', value: dayjs(task.createdAt).format('YYYY-MM-DD HH:mm:ss') },
     ]
   }, [task])
+
+  const handleDiagnosisAction = async (action: {
+    actionType?: string
+    targetNode?: string | null
+    title?: string
+  }) => {
+    if (action.actionType === 'SUPPLEMENT_EVIDENCE' || action.actionType === 'MANUAL_REVIEW') {
+      const matchedNode = action.targetNode ? nodes.find((node) => node.nodeName === action.targetNode) : null
+      if (matchedNode) {
+        setSelectedNodeId(matchedNode.id)
+        message.info(`已定位到 ${matchedNode.displayName || matchedNode.nodeName}，请结合节点追踪继续处理。`)
+      } else {
+        navigate(`/task/${taskId}/report`)
+      }
+      return
+    }
+
+    const targetNode = action.actionType === 'REWRITE_CLAIM' ? 'rewrite_report' : action.targetNode
+    if (!targetNode) {
+      navigate(`/task/${taskId}/report`)
+      return
+    }
+
+    setActionLoading(true)
+    try {
+      await rerunTaskNode(taskId, targetNode)
+      message.success(`已触发 ${targetNode} 重跑`)
+      await fetchData()
+    } catch {
+      message.error('执行诊断建议失败')
+    } finally {
+      setActionLoading(false)
+    }
+  }
 
   const handleExecute = async () => {
     setActionLoading(true)
@@ -1015,7 +1076,17 @@ export default function TaskDetailPage() {
               actionLoading={actionLoading}
               overflowCount={actionQueueOverflowCount}
             />
-            
+
+            {report?.reportDiagnosis && (
+              <Card title="报告诊断回流" className="work-card">
+                <ReportDiagnosisPanel
+                  diagnosis={report.reportDiagnosis}
+                  compact
+                  actionLoading={actionLoading}
+                  onAction={handleDiagnosisAction}
+                />
+              </Card>
+            )}
 
             <Card title="实时采集活动" className="work-card">
               {activeCollectorViews.length > 0 ? (

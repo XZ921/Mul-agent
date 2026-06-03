@@ -14,6 +14,9 @@ import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
+import cn.bugstack.competitoragent.workflow.contract.QualityDiagnosis;
+import cn.bugstack.competitoragent.workflow.contract.QualityDimension;
+import cn.bugstack.competitoragent.workflow.contract.QualityIssue;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -94,8 +97,10 @@ public class QualityReviewAgent extends BaseAgent {
         }
 
         List<EvidenceSource> evidences = evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(context.getTaskId());
+        List<CompetitorKnowledge> knowledges = knowledgeRepository.findByTaskIdOrderByIdAsc(context.getTaskId());
         String evidenceList = buildEvidenceList(evidences);
-        String evidenceCoverageSummary = buildEvidenceCoverageSummary(context.getTaskId());
+        String evidenceCoverageSummary = buildEvidenceCoverageSummary(knowledges);
+        CoverageSnapshot coverageSnapshot = buildCoverageSnapshot(knowledges);
         String claimAuditChecklist = buildClaimAuditChecklist(report.getContent(), evidenceCoverageSummary);
         boolean finalPass = isFinalReview(context.getCurrentNodeConfig());
 
@@ -116,8 +121,8 @@ public class QualityReviewAgent extends BaseAgent {
             );
 
             JsonNode reviewJson = objectMapper.readTree(cleanJson(llmResponse));
-            int score = reviewJson.path("score").asInt(0);
-            boolean passed = reviewJson.path("passed").asBoolean(false);
+            int llmScore = reviewJson.path("score").asInt(0);
+            boolean llmPassed = reviewJson.path("passed").asBoolean(false);
 
             // issues 会被标准化成 RevisionItem，后续既能前端展示，也能供 Writer 重写消费。
             List<RevisionPlan.RevisionItem> items = new ArrayList<>();
@@ -132,15 +137,14 @@ public class QualityReviewAgent extends BaseAgent {
                 }
             }
             items = mergeRuleBasedIssues(items, report.getContent(), evidenceCoverageSummary);
-            boolean hasError = items.stream().anyMatch(item -> "ERROR".equalsIgnoreCase(item.getSeverity()));
-            if (hasError) {
-                passed = false;
-            }
-            score = normalizeScore(score - calculateScorePenalty(items));
-            boolean requiresHumanIntervention = requiresHumanIntervention(score, items, passed);
+            List<QualityDiagnosis> diagnoses = buildDiagnoses(items, evidences, coverageSnapshot);
+            List<QualityDimension> dimensions = buildDimensions(llmScore, items, diagnoses, coverageSnapshot);
+            int score = calculateDiagnosisDrivenScore(llmScore, dimensions);
+            boolean passed = isDiagnosisPassed(llmPassed, dimensions, diagnoses);
+            boolean requiresHumanIntervention = requiresHumanIntervention(score, dimensions, diagnoses, finalPass);
             boolean autoRewriteAllowed = !passed && !requiresHumanIntervention;
 
-            String summary = reviewJson.path("summary").asText("");
+            String summary = buildDiagnosisSummary(reviewJson.path("summary").asText(""), dimensions, diagnoses, passed);
             RevisionPlan revisionPlan = RevisionPlan.builder()
                     .rewriteRequired(!passed)
                     .summary(summary)
@@ -153,7 +157,7 @@ public class QualityReviewAgent extends BaseAgent {
             // 报告主表同步回写最新评分与问题列表，方便报告页直接展示当前质量状态。
             report.setQualityScore(score);
             report.setQualityPassed(passed);
-            report.setQualityIssues(objectMapper.writeValueAsString(toQualityIssuePayload(items)));
+            report.setQualityIssues(objectMapper.writeValueAsString(toQualityIssuePayload(diagnoses)));
             reportRepository.save(report);
 
             Map<String, Object> output = new LinkedHashMap<>();
@@ -162,7 +166,9 @@ public class QualityReviewAgent extends BaseAgent {
             output.put("passed", passed);
             output.put("requiresHumanIntervention", requiresHumanIntervention);
             output.put("autoRewriteAllowed", autoRewriteAllowed);
-            output.put("issues", objectMapper.valueToTree(toQualityIssuePayload(items)));
+            output.put("dimensions", objectMapper.valueToTree(dimensions));
+            output.put("diagnoses", objectMapper.valueToTree(diagnoses));
+            output.put("issues", objectMapper.valueToTree(toQualityIssuePayload(diagnoses)));
             output.put("summary", summary);
             output.put("revisionPlan", objectMapper.readTree(revisionPlanJson));
             output.put("nextActions", resolveNextActions(reviewJson, finalPass, passed, items));
@@ -274,8 +280,7 @@ public class QualityReviewAgent extends BaseAgent {
         return evidenceList.toString();
     }
 
-    private String buildEvidenceCoverageSummary(Long taskId) {
-        List<CompetitorKnowledge> knowledges = knowledgeRepository.findByTaskIdOrderByIdAsc(taskId);
+    private String buildEvidenceCoverageSummary(List<CompetitorKnowledge> knowledges) {
         if (knowledges == null || knowledges.isEmpty()) {
             return "暂无结构化字段证据覆盖摘要，可根据报告正文与证据列表执行保守评审。";
         }
@@ -306,6 +311,25 @@ public class QualityReviewAgent extends BaseAgent {
         return String.join("\n", lines);
     }
 
+    private CoverageSnapshot buildCoverageSnapshot(List<CompetitorKnowledge> knowledges) {
+        LinkedHashSet<String> traceableSections = new LinkedHashSet<>();
+        LinkedHashSet<String> missingSections = new LinkedHashSet<>();
+        LinkedHashSet<String> emptySections = new LinkedHashSet<>();
+        if (knowledges != null) {
+            for (CompetitorKnowledge knowledge : knowledges) {
+                Map<String, Object> coverage = parseJsonMap(knowledge.getEvidenceCoverage());
+                collectCoverageStatus(coverage, "summary", "产品概览", traceableSections, missingSections, emptySections);
+                collectCoverageStatus(coverage, "positioning", "市场定位", traceableSections, missingSections, emptySections);
+                collectCoverageStatus(coverage, "targetUsers", "目标用户", traceableSections, missingSections, emptySections);
+                collectCoverageStatus(coverage, "coreFeatures", "核心能力", traceableSections, missingSections, emptySections);
+                collectCoverageStatus(coverage, "pricing", "定价策略", traceableSections, missingSections, emptySections);
+                collectCoverageStatus(coverage, "strengths", "优势判断", traceableSections, missingSections, emptySections);
+                collectCoverageStatus(coverage, "weaknesses", "短板与风险", traceableSections, missingSections, emptySections);
+            }
+        }
+        return new CoverageSnapshot(traceableSections, missingSections, emptySections);
+    }
+
     private List<RevisionPlan.RevisionItem> mergeRuleBasedIssues(List<RevisionPlan.RevisionItem> llmItems,
                                                                  String reportContent,
                                                                  String evidenceCoverageSummary) {
@@ -324,50 +348,298 @@ public class QualityReviewAgent extends BaseAgent {
         return merged;
     }
 
-    private List<Map<String, String>> toQualityIssuePayload(List<RevisionPlan.RevisionItem> items) {
-        List<Map<String, String>> payload = new ArrayList<>();
-        for (RevisionPlan.RevisionItem item : items) {
-            payload.add(Map.of(
-                    "type", safeValue(item.getType(), "UNKNOWN"),
-                    "section", safeValue(item.getSection(), "通用"),
-                    "severity", safeValue(item.getSeverity(), "WARNING"),
-                    "suggestion", safeValue(item.getSuggestion(), "请补充并完善这一部分")
-            ));
+    /**
+     * 兼容旧 issues 字段，但底层来源已经切到可解释诊断模型。
+     * 这样工作流和报告页仍可复用 issues，同时前端也能直接读取 diagnoses 做更细展示。
+     */
+    private List<QualityIssue> toQualityIssuePayload(List<QualityDiagnosis> diagnoses) {
+        List<QualityIssue> payload = new ArrayList<>();
+        for (QualityDiagnosis diagnosis : diagnoses) {
+            if (diagnosis != null) {
+                payload.add(diagnosis.toQualityIssue());
+            }
         }
         return payload;
     }
 
-    private int calculateScorePenalty(List<RevisionPlan.RevisionItem> items) {
-        int penalty = 0;
-        for (RevisionPlan.RevisionItem item : items) {
-            String severity = safeValue(item.getSeverity(), "WARNING").toUpperCase(Locale.ROOT);
-            if ("ERROR".equals(severity)) {
-                penalty += 10;
-            } else if ("WARNING".equals(severity)) {
-                penalty += 4;
-            } else {
-                penalty += 1;
-            }
+    /**
+     * 维度得分是新的主判断信号：
+     * 1. LLM 原始分数只作为一个参考输入；
+     * 2. 真正决定总分的是各质量维度的健康度，而不是单一硬编码阈值。
+     */
+    private int calculateDiagnosisDrivenScore(int llmScore, List<QualityDimension> dimensions) {
+        if (dimensions == null || dimensions.isEmpty()) {
+            return normalizeScore(llmScore);
         }
-        return penalty;
+        int total = 0;
+        for (QualityDimension dimension : dimensions) {
+            total += dimension.normalized().getScore();
+        }
+        int dimensionAverage = total / dimensions.size();
+        return normalizeScore((normalizeScore(llmScore) + dimensionAverage) / 2);
     }
 
     private int normalizeScore(int score) {
         return Math.max(0, Math.min(100, score));
     }
 
+    private boolean isDiagnosisPassed(boolean llmPassed,
+                                      List<QualityDimension> dimensions,
+                                      List<QualityDiagnosis> diagnoses) {
+        boolean hasBlocker = diagnoses.stream()
+                .anyMatch(diagnosis -> "BLOCKER".equalsIgnoreCase(safeValue(diagnosis.getLevel(), "")));
+        boolean hasCriticalCoreDimension = dimensions.stream()
+                .map(QualityDimension::normalized)
+                .anyMatch(dimension -> isCoreDimension(dimension.getCode())
+                        && "CRITICAL".equalsIgnoreCase(safeValue(dimension.getStatus(), "")));
+        return llmPassed && !hasBlocker && !hasCriticalCoreDimension;
+    }
+
+    /**
+     * 人工介入判断也改成看“问题是否阻断闭环”，而不是只看总分低不低。
+     * 当核心维度已进入 CRITICAL 或出现 BLOCKER 诊断时，即使总分还不算极低，也要停止自动改写。
+     */
     private boolean requiresHumanIntervention(int score,
-                                             List<RevisionPlan.RevisionItem> items,
-                                             boolean passed) {
-        if (passed) {
-            return false;
-        }
-        long errorCount = items.stream().filter(item -> "ERROR".equalsIgnoreCase(item.getSeverity())).count();
-        long evidenceErrorCount = items.stream()
-                .filter(item -> "ERROR".equalsIgnoreCase(item.getSeverity()))
-                .filter(item -> requiresEvidenceCitation(item))
+                                              List<QualityDimension> dimensions,
+                                              List<QualityDiagnosis> diagnoses,
+                                              boolean finalPass) {
+        long blockerCount = diagnoses.stream()
+                .filter(diagnosis -> "BLOCKER".equalsIgnoreCase(safeValue(diagnosis.getLevel(), "")))
                 .count();
-        return score <= 20 || errorCount >= 4 || evidenceErrorCount >= 2;
+        long majorCount = diagnoses.stream()
+                .filter(diagnosis -> "MAJOR".equalsIgnoreCase(safeValue(diagnosis.getLevel(), "")))
+                .count();
+        boolean hasCriticalEvidenceDimension = dimensions.stream()
+                .map(QualityDimension::normalized)
+                .anyMatch(dimension -> ("EVIDENCE_TRACEABILITY".equalsIgnoreCase(safeValue(dimension.getCode(), ""))
+                        || "CLAIM_SUPPORT".equalsIgnoreCase(safeValue(dimension.getCode(), "")))
+                        && "CRITICAL".equalsIgnoreCase(safeValue(dimension.getStatus(), "")));
+        if (blockerCount > 0 || hasCriticalEvidenceDimension) {
+            return true;
+        }
+        if (finalPass && majorCount >= 2) {
+            return true;
+        }
+        return score <= 35;
+    }
+
+    /**
+     * 每条修订项都会被提升为结构化诊断，并补齐来源链接、证据依据和修复建议。
+     * 同时追加一次结构化字段覆盖缺口诊断，避免只审正文而忽略上游抽取质量。
+     */
+    private List<QualityDiagnosis> buildDiagnoses(List<RevisionPlan.RevisionItem> items,
+                                                  List<EvidenceSource> evidences,
+                                                  CoverageSnapshot coverageSnapshot) {
+        List<QualityDiagnosis> diagnoses = new ArrayList<>();
+        List<String> evidenceIds = evidences.stream()
+                .map(EvidenceSource::getEvidenceId)
+                .filter(id -> id != null && !id.isBlank())
+                .toList();
+        List<String> sourceUrls = evidences.stream()
+                .map(EvidenceSource::getUrl)
+                .filter(url -> url != null && !url.isBlank())
+                .distinct()
+                .toList();
+
+        for (RevisionPlan.RevisionItem item : items) {
+            String dimensionCode = resolveDimensionCode(item);
+            diagnoses.add(QualityDiagnosis.builder()
+                    .dimensionCode(dimensionCode)
+                    .dimensionName(resolveDimensionName(dimensionCode))
+                    .type(safeValue(item.getType(), "UNKNOWN"))
+                    .section(safeValue(item.getSection(), "通用"))
+                    .severity(safeValue(item.getSeverity(), "WARNING"))
+                    .title(resolveDiagnosisTitle(item, dimensionCode))
+                    .detail(safeValue(item.getSuggestion(), "请补充并完善这一部分"))
+                    .evidenceBasis(buildDiagnosisEvidenceBasis(item, coverageSnapshot))
+                    .evidenceIds(requiresEvidenceCitation(item) ? List.of() : evidenceIds)
+                    .sourceUrls(sourceUrls)
+                    .repairSuggestion(item.getSuggestion())
+                    .build()
+                    .normalized());
+        }
+
+        if (!coverageSnapshot.missingSections().isEmpty() || !coverageSnapshot.emptySections().isEmpty()) {
+            diagnoses.add(QualityDiagnosis.builder()
+                    .dimensionCode("STRUCTURE_COMPLETENESS")
+                    .dimensionName("结构完整性")
+                    .type("coverage_gap")
+                    .section(joinSectionsForSummary(coverageSnapshot))
+                    .severity(coverageSnapshot.missingSections().size() >= 2 ? "ERROR" : "WARNING")
+                    .title("结构化字段仍存在覆盖缺口")
+                    .detail("上游抽取结果中仍有字段缺证据或为空，说明报告链路输出质量不稳定。")
+                    .evidenceBasis("缺证据章节=" + joinSections(coverageSnapshot.missingSections())
+                            + "；空字段章节=" + joinSections(coverageSnapshot.emptySections()))
+                    .sourceUrls(sourceUrls)
+                    .repairSuggestion("请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。")
+                    .build()
+                    .normalized());
+        }
+        return diagnoses;
+    }
+
+    /**
+     * 维度评分用固定规则映射为解释性结果：
+     * - 证据可追溯性：看缺证据问题和 coverage 缺口；
+     * - 结论支撑度：看 unsupported claim / blocker 诊断；
+     * - 结构完整性：看字段缺口与空字段数量；
+     * - 可执行性：看修订项是否足够明确、是否还能继续自动改写。
+     */
+    private List<QualityDimension> buildDimensions(int llmScore,
+                                                   List<RevisionPlan.RevisionItem> items,
+                                                   List<QualityDiagnosis> diagnoses,
+                                                   CoverageSnapshot coverageSnapshot) {
+        long evidenceIssueCount = diagnoses.stream()
+                .filter(diagnosis -> "EVIDENCE_TRACEABILITY".equalsIgnoreCase(safeValue(diagnosis.getDimensionCode(), ""))
+                        || "missing_evidence".equalsIgnoreCase(safeValue(diagnosis.getType(), "")))
+                .count();
+        long claimIssueCount = diagnoses.stream()
+                .filter(diagnosis -> "CLAIM_SUPPORT".equalsIgnoreCase(safeValue(diagnosis.getDimensionCode(), "")))
+                .count();
+        long blockerCount = diagnoses.stream()
+                .filter(diagnosis -> "BLOCKER".equalsIgnoreCase(safeValue(diagnosis.getLevel(), "")))
+                .count();
+        int missingCoverageCount = coverageSnapshot.missingSections().size();
+        int emptyCoverageCount = coverageSnapshot.emptySections().size();
+
+        int evidenceScore = normalizeScore(100 - (int) evidenceIssueCount * 22 - missingCoverageCount * 12 - emptyCoverageCount * 6);
+        int claimScore = normalizeScore(100 - (int) claimIssueCount * 20 - (int) blockerCount * 12);
+        int structureScore = normalizeScore(100 - missingCoverageCount * 14 - emptyCoverageCount * 16);
+        int actionabilityScore = normalizeScore(100 - Math.max(0, items.size() - 1) * 10 - (blockerCount > 0 ? 25 : 0));
+
+        return List.of(
+                QualityDimension.builder()
+                        .code("EVIDENCE_TRACEABILITY")
+                        .name("证据可追溯性")
+                        .description("关键结论是否都能回指到稳定的 evidenceId 与来源链接。")
+                        .evaluationStandard("关键结论必须携带可追溯 evidenceId 或 sourceUrls。")
+                        .score(evidenceScore)
+                        .build()
+                        .normalized(),
+                QualityDimension.builder()
+                        .code("CLAIM_SUPPORT")
+                        .name("结论支撑度")
+                        .description("判断性结论是否有明确证据支撑，而非只靠模型主观归纳。")
+                        .evaluationStandard("关键结论不得出现 unsupported claim 或 BLOCKER 级别支撑缺口。")
+                        .score(claimScore)
+                        .build()
+                        .normalized(),
+                QualityDimension.builder()
+                        .code("STRUCTURE_COMPLETENESS")
+                        .name("结构完整性")
+                        .description("上游抽取字段与报告章节是否同时完整，避免信息漂移和字段缺口。")
+                        .evaluationStandard("关键字段不应长期处于缺证据或空字段状态。")
+                        .score(structureScore)
+                        .build()
+                        .normalized(),
+                QualityDimension.builder()
+                        .code("ACTIONABILITY")
+                        .name("修订可执行性")
+                        .description("当前质检结果是否足够明确，能够驱动下一轮自动改写。")
+                        .evaluationStandard("修订项应清晰、可执行，且不依赖大量人工补证据。")
+                        .score(Math.min(actionabilityScore, normalizeScore((llmScore + actionabilityScore) / 2)))
+                        .build()
+                        .normalized()
+        );
+    }
+
+    private String buildDiagnosisSummary(String llmSummary,
+                                         List<QualityDimension> dimensions,
+                                         List<QualityDiagnosis> diagnoses,
+                                         boolean passed) {
+        if (passed) {
+            return llmSummary == null || llmSummary.isBlank()
+                    ? "各质量维度均达到可发布状态。"
+                    : llmSummary;
+        }
+        List<String> criticalDimensions = dimensions.stream()
+                .map(QualityDimension::normalized)
+                .filter(dimension -> "CRITICAL".equalsIgnoreCase(safeValue(dimension.getStatus(), "")))
+                .map(QualityDimension::getName)
+                .distinct()
+                .toList();
+        long blockerCount = diagnoses.stream()
+                .filter(diagnosis -> "BLOCKER".equalsIgnoreCase(safeValue(diagnosis.getLevel(), "")))
+                .count();
+        String prefix = criticalDimensions.isEmpty()
+                ? "当前报告存在待修复质量问题"
+                : String.join("、", criticalDimensions) + "存在关键缺口";
+        if (blockerCount > 0) {
+            prefix += "，且已有 " + blockerCount + " 条阻断级诊断";
+        }
+        if (llmSummary != null && !llmSummary.isBlank()) {
+            return prefix + "。模型摘要：" + llmSummary;
+        }
+        return prefix + "。请先补齐证据链，再继续自动改写。";
+    }
+
+    private boolean isCoreDimension(String dimensionCode) {
+        return "EVIDENCE_TRACEABILITY".equalsIgnoreCase(safeValue(dimensionCode, ""))
+                || "CLAIM_SUPPORT".equalsIgnoreCase(safeValue(dimensionCode, ""))
+                || "STRUCTURE_COMPLETENESS".equalsIgnoreCase(safeValue(dimensionCode, ""));
+    }
+
+    private String resolveDimensionCode(RevisionPlan.RevisionItem item) {
+        String type = safeValue(item.getType(), "").toLowerCase(Locale.ROOT);
+        if (type.contains("claim")) {
+            return "CLAIM_SUPPORT";
+        }
+        if (type.contains("evidence") || type.contains("证据") || type.contains("support")) {
+            return "EVIDENCE_TRACEABILITY";
+        }
+        if (type.contains("section") || type.contains("structure")) {
+            return "STRUCTURE_COMPLETENESS";
+        }
+        return "ACTIONABILITY";
+    }
+
+    private String resolveDimensionName(String dimensionCode) {
+        return switch (safeValue(dimensionCode, "")) {
+            case "EVIDENCE_TRACEABILITY" -> "证据可追溯性";
+            case "CLAIM_SUPPORT" -> "结论支撑度";
+            case "STRUCTURE_COMPLETENESS" -> "结构完整性";
+            default -> "修订可执行性";
+        };
+    }
+
+    private String resolveDiagnosisTitle(RevisionPlan.RevisionItem item, String dimensionCode) {
+        if ("CLAIM_SUPPORT".equals(dimensionCode)) {
+            return "关键结论缺少充分支撑";
+        }
+        if ("EVIDENCE_TRACEABILITY".equals(dimensionCode)) {
+            return "关键结论缺少来源引用";
+        }
+        if ("STRUCTURE_COMPLETENESS".equals(dimensionCode)) {
+            return "结构化字段存在缺口";
+        }
+        return "需要修订的质量问题";
+    }
+
+    private String buildDiagnosisEvidenceBasis(RevisionPlan.RevisionItem item, CoverageSnapshot coverageSnapshot) {
+        String section = safeValue(item.getSection(), "通用");
+        if (coverageSnapshot.missingSections().contains(section)) {
+            return section + "在结构化 evidenceCoverage 中已被标记为缺证据，同时正文审计也命中了修订问题。";
+        }
+        if (coverageSnapshot.emptySections().contains(section)) {
+            return section + "在结构化 evidenceCoverage 中仍为空字段，说明当前结论缺少稳定上游支撑。";
+        }
+        if (requiresEvidenceCitation(item)) {
+            return section + "存在无法回指到 [证据：EID] 的判断，需要补齐来源编号与链接。";
+        }
+        return section + "存在需要收紧或重写的表达，请结合当前诊断继续复核。";
+    }
+
+    private String joinSectionsForSummary(CoverageSnapshot coverageSnapshot) {
+        String missing = joinSections(coverageSnapshot.missingSections());
+        String empty = joinSections(coverageSnapshot.emptySections());
+        if (!missing.isBlank() && !empty.isBlank()) {
+            return missing + " / " + empty;
+        }
+        return missing.isBlank() ? empty : missing;
+    }
+
+    private String joinSections(Set<String> sections) {
+        return sections == null || sections.isEmpty() ? "无" : String.join("、", sections);
     }
 
     private boolean requiresEvidenceCitation(RevisionPlan.RevisionItem item) {
@@ -680,6 +952,11 @@ public class QualityReviewAgent extends BaseAgent {
                                   boolean hasEvidenceCitation,
                                   boolean coverageMissing,
                                   String severity) {
+    }
+
+    private record CoverageSnapshot(LinkedHashSet<String> traceableSections,
+                                    LinkedHashSet<String> missingSections,
+                                    LinkedHashSet<String> emptySections) {
     }
 
     private record ReportSection(String title, String content) {

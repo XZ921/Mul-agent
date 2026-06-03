@@ -89,6 +89,61 @@ class HttpSearchSourceProviderTest {
         assertTrue(provider.search("Notion AI", List.of("DOCS")).isEmpty());
     }
 
+    @Test
+    void shouldUsePostWhenConfigured() throws IOException {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/search", exchange -> {
+            assertEquals("POST", exchange.getRequestMethod());
+            byte[] body = """
+                    {
+                      "results": [
+                        {
+                          "title": "Notion AI Docs",
+                          "url": "https://docs.notion.so/getting-started",
+                          "snippet": "Official documentation for Notion AI"
+                        }
+                      ]
+                    }
+                    """.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+
+        SearchProviderProperties props = properties();
+        props.setRequestMethod("POST");
+        HttpSearchSourceProvider provider = new HttpSearchSourceProvider(props, new ObjectMapper());
+
+        List<SourceCandidate> candidates = provider.search("Notion AI", List.of("DOCS"));
+
+        assertEquals(1, candidates.size());
+        assertEquals("https://docs.notion.so/getting-started", candidates.get(0).getUrl());
+    }
+
+    @Test
+    void shouldNotRetryWhenSearchApiReturnsMethodNotAllowed() throws IOException {
+        AtomicInteger calls = new AtomicInteger();
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/search", exchange -> {
+            calls.incrementAndGet();
+            byte[] body = "{}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(405, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+
+        SearchProviderProperties props = properties();
+        props.setMaxRetries(2);
+        HttpSearchSourceProvider provider = new HttpSearchSourceProvider(props, new ObjectMapper());
+
+        List<SourceCandidate> candidates = provider.search("Notion AI", List.of("DOCS"));
+
+        assertTrue(candidates.isEmpty());
+        assertEquals(1, calls.get());
+    }
+
     private void startServer(int statusCode, String responseBody) throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/search", exchange -> {

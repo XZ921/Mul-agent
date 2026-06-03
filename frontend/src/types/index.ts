@@ -358,7 +358,38 @@ export interface QualityIssue {
   type: string
   section: string
   severity: 'ERROR' | 'WARNING' | 'INFO'
+  level?: 'BLOCKER' | 'MAJOR' | 'MINOR' | string
+  dimensionCode?: string | null
+  dimensionName?: string | null
+  evidenceBasis?: string | null
+  evidenceIds?: string[]
+  sourceUrls?: string[]
   suggestion: string
+}
+
+export interface QualityDimensionInfo {
+  code: string
+  name: string
+  description?: string | null
+  evaluationStandard?: string | null
+  score?: number | null
+  maxScore?: number | null
+  status?: string | null
+}
+
+export interface QualityDiagnosisInfo {
+  dimensionCode?: string | null
+  dimensionName?: string | null
+  type: string
+  section: string
+  severity?: 'ERROR' | 'WARNING' | 'INFO' | string
+  level?: 'BLOCKER' | 'MAJOR' | 'MINOR' | string
+  title?: string | null
+  detail?: string | null
+  evidenceBasis?: string | null
+  evidenceIds?: string[]
+  sourceUrls?: string[]
+  repairSuggestion?: string | null
 }
 
 export interface ReviewNextAction {
@@ -391,6 +422,8 @@ export interface ReviewCheckpointInfo {
   requiresHumanIntervention?: boolean | null
   autoRewriteAllowed?: boolean | null
   summary: string | null
+  dimensions?: QualityDimensionInfo[]
+  diagnoses?: QualityDiagnosisInfo[]
   issues: QualityIssue[]
   nextActions: ReviewNextAction[]
 }
@@ -404,6 +437,51 @@ export interface CompetitorKnowledgeInfo {
   pricing: Record<string, unknown>
   sourceUrls: string[]
   evidenceCoverage: Record<string, unknown>
+}
+
+export interface EvidenceReferenceInfo {
+  evidenceId?: string | null
+  title?: string | null
+  url?: string | null
+  competitorName?: string | null
+  sourceType?: string | null
+  contentSnippet?: string | null
+}
+
+export interface ContentEvidenceFragmentInfo {
+  stage?: string | null
+  competitorName?: string | null
+  fieldName?: string | null
+  evidenceId?: string | null
+  sourceUrl?: string | null
+  title?: string | null
+  snippet?: string | null
+  issueFlags?: string[]
+  evidence?: EvidenceReferenceInfo | null
+}
+
+export interface DiagnosisItemInfo {
+  reviewStage: 'REPORT' | 'INITIAL_REVIEW' | 'FINAL_REVIEW' | string
+  diagnosis: QualityDiagnosisInfo
+  evidenceReferences: EvidenceReferenceInfo[]
+}
+
+export interface DiagnosisSectionInfo {
+  section: string
+  evidenceInsufficient?: boolean | null
+  sourceUrls?: string[]
+  repairSuggestions?: string[]
+  diagnoses: DiagnosisItemInfo[]
+}
+
+export interface ReportDiagnosisInfo {
+  diagnosisCount?: number | null
+  blockerCount?: number | null
+  evidenceGapCount?: number | null
+  sourceUrls?: string[]
+  contentEvidences?: ContentEvidenceFragmentInfo[]
+  sections: DiagnosisSectionInfo[]
+  nextActions?: ReviewNextAction[]
 }
 
 export interface ReportInfo {
@@ -424,6 +502,7 @@ export interface ReportInfo {
   searchAuditOverview?: SearchAuditOverviewInfo | null
   evidenceCoverageOverview?: EvidenceCoverageOverviewInfo | null
   competitorKnowledges: CompetitorKnowledgeInfo[]
+  reportDiagnosis?: ReportDiagnosisInfo | null
   createdAt: string
   updatedAt: string
 }

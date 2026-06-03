@@ -121,6 +121,7 @@ source-discovery:
   search:
     browser-preview-enabled: true
     endpoint: ${SEARCH_API_ENDPOINT:}
+    request-method: ${SEARCH_API_REQUEST_METHOD:GET}
     api-key: ${SEARCH_API_KEY:}
     api-key-header: ${SEARCH_API_KEY_HEADER:Authorization}
     api-key-prefix: ${SEARCH_API_KEY_PREFIX:Bearer }
@@ -136,7 +137,7 @@ source-discovery:
     published-at-field: ${SEARCH_API_PUBLISHED_AT_FIELD:publishedAt}
 
 search:
-  mode: hybrid
+  mode: HYBRID
   engines:
     bing:
       name: Bing
@@ -155,16 +156,22 @@ search:
       enabled: false
   browser:
     enabled: true
-    engine: bing
+    engine: baidu
     fallback-engines:
-      - baidu
+      - bing
     verify-result-page: true
     max-results-per-query: 5
     max-open-result-pages: 3
+    result-page-timeout-millis: 8000
+    max-content-length-per-page: 500
     max-retries: 2
     min-interval-millis: 3000
     max-searches-per-task: 10
     page-timeout-millis: 15000
+    continue-on-browser-unavailable: true
+    continue-on-search-timeout: true
+    continue-on-page-collect-failure: true
+    recover-partial-content-on-timeout: true
     user-agents:
       - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
       - "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
@@ -182,6 +189,11 @@ serpapi:
   endpoint: https://serpapi.com/search
   default-engine: google
 
+qianfan-search:
+  api-key: ${QIANFAN_API_KEY:}
+  endpoint: https://qianfan.baidubce.com/v2/ai_search/web_search
+  default-engine: baidu
+
 # ==================== 日志配置 ====================
 logging:
   level:
@@ -196,6 +208,80 @@ logging:
     name: ./logs/competitor-agent.log
     max-size: 10MB
     max-history: 7
+
+---
+# ==================== 测试环境配置 ====================
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    driver-class-name: org.h2.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+    url: jdbc:h2:mem:competitor-agent-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    hikari:
+      connection-timeout: 5000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      maximum-pool-size: 4
+      minimum-idle: 1
+      pool-name: CompetitorAgentTestPool
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    open-in-view: false
+  flyway:
+    enabled: false
+
+playwright:
+  browser: chromium
+  channel:
+  headless: true
+  timeout-millis: 10000
+  screenshot-on-collect: false
+  health-check-interval-millis: 60000
+  health-check-initial-delay-millis: 60000
+
+collector:
+  max-pages-per-competitor: 5
+  page-timeout-seconds: 15
+  user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+search:
+  mode: HYBRID
+  browser:
+    enabled: true
+    engine: bing
+    fallback-engines:
+      - baidu
+    verify-result-page: true
+    max-results-per-query: 5
+    max-open-result-pages: 3
+    max-retries: 2
+    min-interval-millis: 3000
+    max-searches-per-task: 10
+    page-timeout-millis: 15000
+    continue-on-browser-unavailable: true
+    continue-on-search-timeout: true
+    continue-on-page-collect-failure: true
+    recover-partial-content-on-timeout: true
+
+source-discovery:
+  search:
+    browser-preview-enabled: false
+    results-per-scope: 5
+    timeout-seconds: 15
+    max-retries: 2
+
+logging:
+  level:
+    root: INFO
+    cn.bugstack.competitoragent: INFO
+    com.microsoft.playwright: ERROR
 
 ---
 # ==================== 生产环境配置 ====================

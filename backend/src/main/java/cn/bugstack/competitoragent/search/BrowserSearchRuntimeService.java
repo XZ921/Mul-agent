@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.search;
 import cn.bugstack.competitoragent.agent.collector.CollectorNodeConfig;
 import cn.bugstack.competitoragent.config.PlaywrightBrowserManager;
 import cn.bugstack.competitoragent.security.UrlSecurityUtils;
+import cn.bugstack.competitoragent.source.PageContentExtractionSupport;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -50,6 +51,7 @@ public class BrowserSearchRuntimeService {
     private final SearchBrowserProperties properties;
     private final SearchEngineProperties searchEngineProperties;
     private final ObjectMapper objectMapper;
+    private final SearchRuntimeFallbackPolicy fallbackPolicy;
 
     public String getSearchEngineName() {
         return resolvePrimarySearchEngineKey();
@@ -79,12 +81,15 @@ public class BrowserSearchRuntimeService {
 
         Browser browser = browserManager.getBrowser();
         if (browser == null) {
+            String summary = fallbackPolicy.buildSearchFallbackSummary("browser_unavailable",
+                    "请检查 Playwright 浏览器依赖、系统内存或稍后重试");
             return BrowserSearchRuntimeResult.builder()
                     .candidates(List.of())
                     .executedQueries(List.of())
                     .searchEngine(getSearchEngineName())
-                    .summary("浏览器实例不可用，已回退到 HTTP 补源。请检查 Playwright 浏览器依赖或稍后重试")
-                    .fallbackSuggested(true)
+                    .summary(summary)
+                    .fallbackSuggested(fallbackPolicy.shouldContinueOnBrowserUnavailable(config.getSearchRuntimePolicy()))
+                    .blockedReason("browser_unavailable")
                     .browserTraceId(null)
                     .build();
         }
@@ -173,6 +178,7 @@ public class BrowserSearchRuntimeService {
         for (String engineKey : engineSequence) {
             int attempts = Math.max(1, resolveMaxRetries(config) + 1);
             RuntimeException lastError = null;
+            String failureCode = null;
             for (int attempt = 1; attempt <= attempts; attempt++) {
                 try {
                     Browser runtimeBrowser = browserManager.getBrowser();
@@ -197,13 +203,14 @@ public class BrowserSearchRuntimeService {
                     break;
                 } catch (RuntimeException e) {
                     lastError = e;
+                    failureCode = fallbackPolicy.classifyRuntimeFailure(e);
                     log.warn("browser runtime search failed, competitor={}, sourceType={}, query={}, engine={}, attempt={}/{}",
                             UrlSecurityUtils.maskForLog(config.getCompetitorName()),
                             config.getSourceType(),
                             UrlSecurityUtils.maskForLog(query),
                             engineKey,
                             attempt,
-                            attempts);
+                        attempts);
                     browserManager.restartBrowser("browser runtime search failed: " + e.getMessage());
                 }
             }
@@ -214,6 +221,14 @@ public class BrowserSearchRuntimeService {
                         UrlSecurityUtils.maskForLog(query),
                         engineKey,
                         lastError.getMessage());
+                if ("search_timeout".equals(failureCode)
+                        && fallbackPolicy.shouldContinueOnSearchTimeout(config.getSearchRuntimePolicy())) {
+                    return new SearchAttemptResult(List.of(), failureCode);
+                }
+                if ("browser_unavailable".equals(failureCode)
+                        && fallbackPolicy.shouldContinueOnBrowserUnavailable(config.getSearchRuntimePolicy())) {
+                    return new SearchAttemptResult(List.of(), failureCode);
+                }
             }
         }
         return new SearchAttemptResult(List.of(), blockedReason);
@@ -263,12 +278,8 @@ public class BrowserSearchRuntimeService {
         } catch (Exception e) {
             throw new IllegalStateException("browser search failed: " + e.getMessage(), e);
         } finally {
-            if (page != null) {
-                page.close();
-            }
-            if (browserContext != null) {
-                browserContext.close();
-            }
+            closePageQuietly(page, "browser search page");
+            closeContextQuietly(browserContext, "browser search context");
         }
     }
 
@@ -370,25 +381,29 @@ public class BrowserSearchRuntimeService {
         try {
             openedResultPages.incrementAndGet();
             previewPage = browserContext.newPage();
-            previewPage.setDefaultTimeout(resolvePageTimeoutMillis(config));
+            previewPage.setDefaultTimeout(resolveResultPageTimeoutMillis(config));
             previewPage.navigate(candidate.getUrl(),
                     new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
             String finalUrl = safe(previewPage.url());
             String finalTitle = safe(previewPage.title());
             String finalDomain = extractDomain(finalUrl);
+            String previewContent = PageContentExtractionSupport.extractMainContent(previewPage);
+            String previewSummary = PageContentExtractionSupport.truncateForSummary(
+                    previewContent,
+                    resolveMaxContentLengthPerPage(config)
+            );
             return candidate.toBuilder()
                     .url(StringUtils.hasText(finalUrl) ? finalUrl : candidate.getUrl())
                     .title(StringUtils.hasText(finalTitle) ? finalTitle : candidate.getTitle())
                     .domain(StringUtils.hasText(finalDomain) ? finalDomain : candidate.getDomain())
+                    .reason(mergeReasonWithPreview(candidate.getReason(), previewSummary))
                     .build();
         } catch (Exception e) {
             log.debug("preview browser result page failed, url={}, reason={}",
                     UrlSecurityUtils.maskForLog(candidate.getUrl()), e.getMessage());
             return candidate;
         } finally {
-            if (previewPage != null) {
-                previewPage.close();
-            }
+            closePageQuietly(previewPage, "browser preview page");
         }
     }
 
@@ -409,7 +424,7 @@ public class BrowserSearchRuntimeService {
                 return rows;
             }
         }
-        return List.of();
+        return extractRowsFromAnchors(page);
     }
 
     private List<Map<String, Object>> evaluateRows(Page page, String selector, List<String> snippetSelectors) {
@@ -449,6 +464,45 @@ public class BrowserSearchRuntimeService {
                   };
                 })
                 """, snippetSelectors);
+        List<Map<String, Object>> rows = objectMapper.convertValue(
+                raw,
+                new TypeReference<List<Map<String, Object>>>() {}
+        );
+        return rows == null ? List.of() : rows;
+    }
+
+    /**
+     * 当搜索引擎页面结构变化时，最后回退到整页链接提取。
+     * 这里不追求完美结构化，而是优先保证“至少拿到一批可点进去再读正文的候选链接”。
+     */
+    private List<Map<String, Object>> extractRowsFromAnchors(Page page) {
+        Object raw = page.evaluate("""
+                () => {
+                  const anchors = Array.from(document.querySelectorAll('a[href]'));
+                  const rows = [];
+                  const seen = new Set();
+                  for (const anchor of anchors) {
+                    const href = anchor && anchor.href ? anchor.href.trim() : '';
+                    const title = anchor && anchor.innerText ? anchor.innerText.trim() : '';
+                    if (!href || !title || title.length < 4) continue;
+                    const container = anchor.closest ? (anchor.closest('article, section, div, li') || anchor.parentElement || anchor) : anchor;
+                    const snippet = container && container.innerText
+                      ? container.innerText.split('\\n').map(line => line.trim()).filter(Boolean)
+                          .find(line => line.length >= 24 && line !== title) || ''
+                      : '';
+                    const key = `${href}::${title}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    rows.push({
+                      title,
+                      url: href,
+                      snippet,
+                      resultRank: rows.length + 1
+                    });
+                  }
+                  return rows.slice(0, 20);
+                }
+                """);
         List<Map<String, Object>> rows = objectMapper.convertValue(
                 raw,
                 new TypeReference<List<Map<String, Object>>>() {}
@@ -572,7 +626,7 @@ public class BrowserSearchRuntimeService {
         if (!sequence.isEmpty()) {
             return sequence.get(0);
         }
-        return "bing";
+        return "baidu";
     }
 
     private String buildReason(String sourceType, String snippet) {
@@ -587,6 +641,18 @@ public class BrowserSearchRuntimeService {
             return label;
         }
         return label + "：" + snippet.substring(0, Math.min(160, snippet.length()));
+    }
+
+    /**
+     * 结果页预览读到正文后，把可读摘要并回 reason。
+     * 这样候选来源不仅知道“搜到了什么链接”，也知道“页内到底讲了什么”。
+     */
+    private String mergeReasonWithPreview(String originalReason, String previewSummary) {
+        if (!StringUtils.hasText(previewSummary)) {
+            return originalReason;
+        }
+        String prefix = StringUtils.hasText(originalReason) ? originalReason : "浏览器搜索命中结果页";
+        return prefix + "；正文摘要：" + previewSummary;
     }
 
     private double inferRelevance(Integer rank, String domain, List<String> preferredDomains) {
@@ -675,10 +741,38 @@ public class BrowserSearchRuntimeService {
         if (!StringUtils.hasText(blockedReason)) {
             return "浏览器搜索未提取到有效候选，建议回退到 HTTP 补源";
         }
-        if ("browser_unavailable".equalsIgnoreCase(blockedReason)) {
-            return "浏览器搜索实例当前不可用，建议检查 Playwright 依赖并暂时回退到 HTTP 补源";
+        if ("browser_unavailable".equalsIgnoreCase(blockedReason)
+                || "search_timeout".equalsIgnoreCase(blockedReason)
+                || "runtime_failure".equalsIgnoreCase(blockedReason)) {
+            return fallbackPolicy.buildSearchFallbackSummary(blockedReason, null);
         }
         return "浏览器搜索疑似被阻断[" + blockedReason + "]，建议稍后重试或回退到 HTTP 补源";
+    }
+
+    /**
+     * Playwright 的关闭动作本身也可能抛异常。
+     * 这里统一吞掉关闭阶段异常，避免“结果已经拿到，却在 finally 再把整条链路打断”。
+     */
+    private void closePageQuietly(Page page, String scene) {
+        if (page == null) {
+            return;
+        }
+        try {
+            page.close();
+        } catch (Exception e) {
+            log.debug("close playwright page failed, scene={}, error={}", scene, e.getMessage());
+        }
+    }
+
+    private void closeContextQuietly(BrowserContext browserContext, String scene) {
+        if (browserContext == null) {
+            return;
+        }
+        try {
+            browserContext.close();
+        } catch (Exception e) {
+            log.debug("close playwright browser context failed, scene={}, error={}", scene, e.getMessage());
+        }
     }
 
     private String safe(String value) {
@@ -718,11 +812,27 @@ public class BrowserSearchRuntimeService {
         return Math.max(1000, properties.getPageTimeoutMillis());
     }
 
+    private int resolveResultPageTimeoutMillis(CollectorNodeConfig config) {
+        if (config.getSearchRuntimePolicy() != null
+                && config.getSearchRuntimePolicy().getResultPageTimeoutMillis() != null) {
+            return Math.max(1000, config.getSearchRuntimePolicy().getResultPageTimeoutMillis());
+        }
+        return Math.max(1000, properties.getResultPageTimeoutMillis());
+    }
+
     private int resolveMaxOpenResultPages(CollectorNodeConfig config) {
         if (config.getSearchRuntimePolicy() != null && config.getSearchRuntimePolicy().getMaxOpenResultPages() != null) {
             return Math.max(0, config.getSearchRuntimePolicy().getMaxOpenResultPages());
         }
         return Math.max(0, properties.getMaxOpenResultPages());
+    }
+
+    private int resolveMaxContentLengthPerPage(CollectorNodeConfig config) {
+        if (config.getSearchRuntimePolicy() != null
+                && config.getSearchRuntimePolicy().getMaxContentLengthPerPage() != null) {
+            return Math.max(80, config.getSearchRuntimePolicy().getMaxContentLengthPerPage());
+        }
+        return Math.max(80, properties.getMaxContentLengthPerPage());
     }
 
     private String resolveUserAgent(CollectorNodeConfig config, String query) {
@@ -768,7 +878,11 @@ public class BrowserSearchRuntimeService {
             );
             case "baidu" -> new SearchEngineProfile(
                     "baidu",
-                    List.of("#content_left .result", "#content_left .c-container", "#content_left > div"),
+                    List.of(
+                            "#content_left .result",
+                            "#content_left .c-container",
+                            "#content_left .result, #content_left .c-container, #content_left > div, #content_left > div[data-log], .result-op, .result-op.c-container"
+                    ),
                     List.of(".c-abstract", ".content-right_8Zs40", ".c-span-last p", "p")
             );
             case "duckduckgo" -> new SearchEngineProfile(

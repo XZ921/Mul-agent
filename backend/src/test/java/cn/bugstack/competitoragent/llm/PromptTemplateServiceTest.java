@@ -15,11 +15,11 @@ class PromptTemplateServiceTest {
         PromptTemplateService service = new PromptTemplateService(new ObjectMapper());
         service.init();
 
-        List<String> queries = service.buildSearchQueries("Notion AI", "DOCS", "docs.notion.so");
+        List<String> queries = service.buildSearchQueries("哔哩哔哩", "DOCS", "www.bilibili.com");
 
-        assertTrue(queries.contains("Notion AI documentation"));
-        assertTrue(queries.contains("Notion AI help center"));
-        assertTrue(queries.contains("site:docs.notion.so Notion AI"));
+        assertTrue(queries.contains("哔哩哔哩 文档 API 开发指南"));
+        assertTrue(queries.contains("哔哩哔哩 文档"));
+        assertTrue(queries.contains("site:www.bilibili.com 哔哩哔哩 文档"));
     }
 
     @Test
@@ -27,9 +27,9 @@ class PromptTemplateServiceTest {
         PromptTemplateService service = new PromptTemplateService(new ObjectMapper());
         service.init();
 
-        String content = service.render("search-official", java.util.Map.of("competitorName", "Notion AI"));
+        String content = service.render("search-official", java.util.Map.of("competitorName", "哔哩哔哩"));
 
-        assertEquals("Notion AI official website", content);
+        assertEquals("哔哩哔哩 官方网站", content);
     }
 
     @Test
@@ -37,9 +37,10 @@ class PromptTemplateServiceTest {
         PromptTemplateService service = new PromptTemplateService(new ObjectMapper());
         service.init();
 
-        List<String> queries = service.buildSearchQueries("Notion AI", "REVIEW", null);
+        List<String> queries = service.buildSearchQueries("哔哩哔哩", "REVIEW", null);
 
-        assertTrue(queries.contains("site:zhihu.com Notion AI 评测 对比"));
+        assertTrue(queries.contains("哔哩哔哩 评测 评价 对比"));
+        assertTrue(queries.contains("哔哩哔哩 怎么样 好不好用"));
     }
 
     @Test
@@ -48,9 +49,20 @@ class PromptTemplateServiceTest {
 
         String query = service.buildSearchQuery(
                 "search-review-zhihu",
-                java.util.Map.of("competitorName", "Notion AI", "domainHint", "")
+                java.util.Map.of("competitorName", "哔哩哔哩", "domainHint", "")
         );
 
-        assertEquals("site:zhihu.com Notion AI 评测 对比", query);
+        assertEquals("site:zhihu.com 哔哩哔哩 评测 对比", query);
+    }
+
+    @Test
+    void shouldKeepEnglishQueriesAsSupplementForPureEnglishCompetitor() {
+        PromptTemplateService service = new PromptTemplateService(new ObjectMapper());
+        service.init();
+
+        List<String> queries = service.buildSearchQueries("Notion AI", "DOCS", "docs.notion.so");
+
+        assertTrue(queries.contains("Notion AI documentation api reference"));
+        assertTrue(queries.contains("site:docs.notion.so Notion AI"));
     }
 }

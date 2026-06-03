@@ -31,6 +31,12 @@ const reviewSeverityTextMap: Record<string, string> = {
   INFO: '提示',
 }
 
+const reviewLevelTextMap: Record<string, string> = {
+  BLOCKER: '阻塞',
+  MAJOR: '主要问题',
+  MINOR: '轻微问题',
+}
+
 const reviewTypeTextMap: Record<string, string> = {
   data_accuracy: '数据准确性',
   grammar_error: '语法表达问题',
@@ -157,6 +163,11 @@ export function getReviewSeverityText(severity?: string | null) {
   return reviewSeverityTextMap[severity] || severity
 }
 
+export function getReviewLevelText(level?: string | null) {
+  if (!level) return '提示'
+  return reviewLevelTextMap[level] || level
+}
+
 export function getReviewTypeText(type?: string | null) {
   if (!type) return '问题'
   const key = toLookupKey(type)
@@ -172,6 +183,13 @@ export function getReviewSectionText(section?: string | null) {
 export function getReviewPassedText(passed: boolean | null | undefined) {
   if (passed == null) return '未判定'
   return passed ? '已通过' : '需修订'
+}
+
+export function getDiagnosisStageText(stage?: string | null) {
+  if (stage === 'INITIAL_REVIEW') return '初审诊断'
+  if (stage === 'FINAL_REVIEW') return '终审诊断'
+  if (stage === 'REPORT') return '报告回流诊断'
+  return stage || '诊断'
 }
 
 export function normalizeReportTitle(title: string) {

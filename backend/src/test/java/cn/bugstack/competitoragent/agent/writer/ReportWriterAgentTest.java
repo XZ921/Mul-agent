@@ -10,6 +10,7 @@ import cn.bugstack.competitoragent.model.entity.Report;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +28,8 @@ import static org.mockito.Mockito.when;
 
 class ReportWriterAgentTest {
 
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     private final AgentExecutionLogRepository logRepository = mock(AgentExecutionLogRepository.class);
     private final ReportRepository reportRepository = mock(ReportRepository.class);
     private final EvidenceSourceRepository evidenceRepository = mock(EvidenceSourceRepository.class);
@@ -38,7 +41,7 @@ class ReportWriterAgentTest {
             evidenceRepository,
             llmClient,
             promptService,
-            new ObjectMapper()
+            objectMapper
     );
 
     @Test
@@ -105,5 +108,53 @@ class ReportWriterAgentTest {
         assertTrue(result.getOutputData().contains("[证据：E001]"));
         verify(promptService).render(eq("writer"), any());
         verify(reportRepository).save(any());
+    }
+
+    @Test
+    void shouldBackfillWriterSourceUrlsWhenAnalyzerOutputDropsThem() throws Exception {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E001")
+                        .title("Docs")
+                        .url("https://docs.notion.so")
+                        .contentSnippet("documentation snippet")
+                        .build()
+        ));
+        when(reportRepository.findByTaskId(1L)).thenReturn(Optional.empty());
+        when(promptService.render(eq("writer"), any())).thenAnswer(invocation -> {
+            Map<String, String> variables = invocation.getArgument(1);
+            return variables.get("analysisResult");
+        });
+        when(llmClient.chat(any(), any())).thenReturn("""
+                # 竞品报告
+                基于现有证据整理结论。
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .subjectProduct("Our Product")
+                .reportLanguage("中文")
+                .currentNodeName("write_report")
+                .build();
+        context.putSharedOutput("analyze_competitors", """
+                {
+                  "overview": "分析完成",
+                  "issueFlags": ["MISSING_EVIDENCE"]
+                }
+                """);
+
+        AgentResult result = agent.execute(context);
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertEquals("https://docs.notion.so", output.path("sourceUrls").get(0).asText());
+        assertTrue(output.path("issueFlags").toString().contains("MISSING_EVIDENCE"));
+        assertTrue(output.path("issueFlags").toString().contains("SOURCE_URLS_BACKFILLED"));
+        assertTrue(output.path("evidenceFragments").isArray());
     }
 }

@@ -23,7 +23,13 @@ public class SearchRuntimePolicy {
     private Integer maxSearchesPerTask;
     private Integer pageTimeoutMillis;
     private Integer maxOpenResultPages;
+    private Integer resultPageTimeoutMillis;
+    private Integer maxContentLengthPerPage;
     private List<String> userAgents;
     private List<String> blockedSignals;
+    private Boolean continueOnBrowserUnavailable;
+    private Boolean continueOnSearchTimeout;
+    private Boolean continueOnPageCollectFailure;
+    private Boolean recoverPartialContentOnTimeout;
     private String recoveryHint;
 }

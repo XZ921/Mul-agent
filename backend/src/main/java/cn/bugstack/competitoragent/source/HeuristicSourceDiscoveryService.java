@@ -33,12 +33,29 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
 
     @Override
     public List<SourcePlan> discover(String competitorName, List<String> providedUrls, List<String> requestedScopes) {
+        return discoverInternal(competitorName, providedUrls, requestedScopes, false);
+    }
+
+    @Override
+    public List<SourcePlan> discoverForPreview(String competitorName,
+                                               List<String> providedUrls,
+                                               List<String> requestedScopes) {
+        // 预览阶段只展示规划结构与启发式占位，不等待实时搜索结果。
+        return discoverInternal(competitorName, providedUrls, requestedScopes, true);
+    }
+
+    private List<SourcePlan> discoverInternal(String competitorName,
+                                              List<String> providedUrls,
+                                              List<String> requestedScopes,
+                                              boolean previewOnly) {
         // 先确定根域名，再把启发式与搜索式候选来源按 scope 合并、去重和排序。
         // 如果用户没有提供 URL，则不要盲猜 notionai.com 这类高误判域名，改为保留搜索驱动的占位计划。
         List<String> normalizedRoots = normalizeRoots(competitorName, providedUrls);
         List<String> scopes = normalizeScopes(requestedScopes);
         List<SourcePlan> plans = new ArrayList<>();
-        List<SourceCandidate> searchCandidates = searchSourceProvider.search(competitorName, scopes);
+        List<SourceCandidate> searchCandidates = previewOnly
+                ? List.of()
+                : searchSourceProvider.search(competitorName, scopes);
 
         for (String scope : scopes) {
             List<SourceCandidate> mergedCandidates = mergeCandidates(

@@ -25,7 +25,7 @@ public class SearchEngineProperties extends LinkedHashMap<String, SearchEnginePr
         // 保留一组默认引擎，避免配置缺失时整个浏览器搜索链路直接失效。
         put("bing", new EngineConfig("Bing", "https://www.bing.com/search", "q", true));
         put("google", new EngineConfig("Google", "https://www.google.com/search", "q", false));
-        put("baidu", new EngineConfig("百度", "https://www.baidu.com/s", "wd", false));
+        put("baidu", new EngineConfig("百度", "https://www.baidu.com/s", "wd", true));
         put("duckduckgo", new EngineConfig("DuckDuckGo", "https://duckduckgo.com/", "q", false));
     }
 

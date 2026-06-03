@@ -17,6 +17,9 @@ public class SearchProviderProperties {
     /** 搜索 API 地址，例如 https://api.search.example.com/search。 */
     private String endpoint;
 
+    /** HTTP 请求方式，默认 GET；如接入方仅支持 POST，可通过配置切换。 */
+    private String requestMethod = "GET";
+
     /** 搜索 API Key。为空时真实搜索会直接返回空结果，避免启动失败。 */
     private String apiKey;
 

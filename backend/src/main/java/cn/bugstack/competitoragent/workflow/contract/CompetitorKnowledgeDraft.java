@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.workflow.contract;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.Map;
 import java.util.List;
 
 /**
@@ -36,6 +37,18 @@ public class CompetitorKnowledgeDraft {
 
     /** 劣势列表及 evidenceIds */
     private List<StrengthWeaknessItem> weaknesses;
+
+    /** 草稿层面的统一来源链接 */
+    private List<String> sourceUrls;
+
+    /** 草稿层面的统一证据片段 */
+    private List<EvidenceFragment> evidenceFragments;
+
+    /** 草稿层面的缺口/问题标记 */
+    private List<String> issueFlags;
+
+    /** 字段级证据覆盖摘要，供分析/质检阶段继续使用 */
+    private Map<String, Object> evidenceCoverage;
 
     /** 成功抽取的字段数 */
     private int fieldsExtracted;

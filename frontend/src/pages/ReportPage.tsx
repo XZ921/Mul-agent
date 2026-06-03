@@ -32,6 +32,7 @@ import {
 } from '../api/client'
 import EvidenceList from '../components/EvidenceList'
 import MarkdownReport from '../components/MarkdownReport'
+import ReportDiagnosisPanel from '../components/task-detail/ReportDiagnosisPanel'
 import type {
   CompetitorEvidenceCoverageInfo,
   CompetitorKnowledgeInfo,
@@ -570,6 +571,7 @@ export default function ReportPage() {
   }, [taskId])
 
   const qualityIssueCount = useMemo(() => report?.qualityIssues?.length || 0, [report])
+  const diagnosisCount = useMemo(() => report?.reportDiagnosis?.diagnosisCount || qualityIssueCount, [qualityIssueCount, report?.reportDiagnosis?.diagnosisCount])
   const latestReview = useMemo(() => report?.finalReview || report?.initialReview || null, [report])
   const rewriteRecommended = Boolean(
     !report?.qualityPassed
@@ -587,7 +589,7 @@ export default function ReportPage() {
     }
   }, [report])
 
-  const reviewProblemCount = latestReview?.issues?.length || qualityIssueCount
+  const reviewProblemCount = latestReview?.issues?.length || diagnosisCount
   const evidenceMissingCount = report?.evidenceCoverageOverview?.missingEvidenceFields ?? 0
   const searchAuditDegradedCount = report?.searchAuditOverview?.degradedCount ?? 0
 
@@ -811,6 +813,12 @@ export default function ReportPage() {
               ) : (
                 <Alert type="success" showIcon message="当前报告没有新增质量问题" />
               )}
+
+              <ReportDiagnosisPanel
+                diagnosis={report.reportDiagnosis}
+                actionLoading={actionLoading}
+                onAction={handleReviewAction}
+              />
 
               <ReviewCheckpointPanel
                 title="初审结果"

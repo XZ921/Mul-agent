@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.source;
 
 import cn.bugstack.competitoragent.config.CollectorProperties;
 import cn.bugstack.competitoragent.config.PlaywrightBrowserManager;
+import cn.bugstack.competitoragent.search.SearchRuntimeFallbackPolicy;
 import cn.bugstack.competitoragent.security.UrlSecurityUtils;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.Page;
@@ -50,6 +51,7 @@ public class PlaywrightPageCollector implements SourceCollector {
 
     private final PlaywrightBrowserManager browserManager;
     private final CollectorProperties collectorProperties;
+    private final SearchRuntimeFallbackPolicy fallbackPolicy;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .followRedirects(HttpClient.Redirect.NORMAL)
@@ -57,29 +59,41 @@ public class PlaywrightPageCollector implements SourceCollector {
 
     @Override
     public CollectedPage collect(String url, String competitorName, String sourceType) {
-        if (!UrlSecurityUtils.isHttpUrl(url)) {
-            return failed(url, competitorName, sourceType, "仅允许采集 http/https 页面");
-        }
-        log.info("开始采集页面, url={}, competitor={}, sourceType={}",
-                UrlSecurityUtils.maskForLog(url),
-                UrlSecurityUtils.maskForLog(competitorName),
-                sourceType);
+        try {
+            if (!UrlSecurityUtils.isHttpUrl(url)) {
+                return failed(url, competitorName, sourceType, "仅允许采集 http/https 页面");
+            }
+            log.info("开始采集页面, url={}, competitor={}, sourceType={}",
+                    UrlSecurityUtils.maskForLog(url),
+                    UrlSecurityUtils.maskForLog(competitorName),
+                    sourceType);
 
-        CollectedPage httpPage = collectByHttp(url, competitorName, sourceType);
-        if (httpPage.isSuccess()) {
-            return httpPage;
-        }
+            CollectedPage httpPage = collectByHttp(url, competitorName, sourceType);
+            if (httpPage.isSuccess()) {
+                return httpPage;
+            }
 
-        log.info("轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url={}",
-                UrlSecurityUtils.maskForLog(url));
-        return collectByBrowser(url, competitorName, sourceType, httpPage.getErrorMessage());
+            log.info("轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url={}",
+                    UrlSecurityUtils.maskForLog(url));
+            return collectByBrowser(url, competitorName, sourceType, httpPage.getErrorMessage());
+        } catch (Exception e) {
+            String failureCode = fallbackPolicy.classifyRuntimeFailure(e);
+            return failed(url, competitorName, sourceType,
+                    fallbackPolicy.buildCollectionFailureMessage(failureCode, e.getMessage()));
+        }
     }
 
     @Override
     public List<CollectedPage> collectBatch(List<String> urls, String competitorName, String sourceType) {
         List<CollectedPage> results = new ArrayList<>();
         for (String url : safelyLimitUrls(urls)) {
-            results.add(collect(url, competitorName, sourceType));
+            try {
+                results.add(collect(url, competitorName, sourceType));
+            } catch (Exception e) {
+                String failureCode = fallbackPolicy.classifyRuntimeFailure(e);
+                results.add(failed(url, competitorName, sourceType,
+                        fallbackPolicy.buildCollectionFailureMessage(failureCode, e.getMessage())));
+            }
         }
         return results;
     }
@@ -117,7 +131,8 @@ public class PlaywrightPageCollector implements SourceCollector {
         Browser browser = browserManager.getBrowser();
         if (browser == null) {
             return failed(url, competitorName, sourceType,
-                    "Playwright 浏览器不可用，请检查浏览器依赖、系统内存或稍后重试");
+                    fallbackPolicy.buildCollectionFailureMessage("browser_unavailable",
+                            "请检查浏览器依赖、系统内存或稍后重试"));
         }
         Page page = null;
         try {
@@ -138,11 +153,11 @@ public class PlaywrightPageCollector implements SourceCollector {
                 return retryCollectByBrowser(url, competitorName, sourceType, fallbackReason, e);
             }
             log.error("页面采集失败: url={}, error={}", UrlSecurityUtils.maskForLog(url), e.getMessage());
-            return failed(url, competitorName, sourceType, "Playwright 采集失败: " + e.getMessage());
+            String failureCode = fallbackPolicy.classifyRuntimeFailure(e);
+            return failed(url, competitorName, sourceType,
+                    fallbackPolicy.buildCollectionFailureMessage(failureCode, e.getMessage()));
         } finally {
-            if (page != null) {
-                page.close();
-            }
+            closePageQuietly(page, "page collect primary page");
         }
     }
 
@@ -154,7 +169,7 @@ public class PlaywrightPageCollector implements SourceCollector {
         Browser restartedBrowser = browserManager.getBrowser();
         if (restartedBrowser == null) {
             return failed(url, competitorName, sourceType,
-                    "Playwright 浏览器重启失败: " + originalException.getMessage());
+                    fallbackPolicy.buildCollectionFailureMessage("browser_unavailable", originalException.getMessage()));
         }
         Page retryPage = null;
         try {
@@ -168,12 +183,11 @@ public class PlaywrightPageCollector implements SourceCollector {
             if (recoveredPage != null) {
                 return recoveredPage;
             }
+            String failureCode = fallbackPolicy.classifyRuntimeFailure(retryException);
             return failed(url, competitorName, sourceType,
-                    "Playwright 重启后仍采集失败: " + retryException.getMessage());
+                    fallbackPolicy.buildCollectionFailureMessage(failureCode, retryException.getMessage()));
         } finally {
-            if (retryPage != null) {
-                retryPage.close();
-            }
+            closePageQuietly(retryPage, "page collect retry page");
         }
     }
 
@@ -252,6 +266,10 @@ public class PlaywrightPageCollector implements SourceCollector {
         if (page == null) {
             return null;
         }
+        if (!fallbackPolicy.shouldRecoverPartialContentOnTimeout(null)
+                && "search_timeout".equals(fallbackPolicy.classifyRuntimeFailure(originalException))) {
+            return null;
+        }
         try {
             String content = extractMainContent(page);
             if (content == null || content.isBlank()) {
@@ -272,121 +290,27 @@ public class PlaywrightPageCollector implements SourceCollector {
         }
     }
 
-    private String extractMainContent(Page page) {
-        try {
-            Object rawBlocks = page.evaluate("""
-                    () => {
-                      const selectors = [
-                        'article',
-                        'main',
-                        '[role="main"]',
-                        '.article',
-                        '.article-body',
-                        '.article-content',
-                        '.post-content',
-                        '.entry-content',
-                        '.markdown-body',
-                        '.docs-content',
-                        '.doc-content',
-                        '.documentation',
-                        '.content',
-                        '.content-body',
-                        '.prose',
-                        'section'
-                      ];
-                      const blocks = [];
-                      const seen = new Set();
-                      for (const selector of selectors) {
-                        const nodes = Array.from(document.querySelectorAll(selector)).slice(0, 8);
-                        for (const node of nodes) {
-                          const text = node && node.innerText ? node.innerText.trim() : '';
-                          if (!text || text.length < 40) continue;
-                          const key = `${selector}::${text.slice(0, 120)}`;
-                          if (seen.has(key)) continue;
-                          seen.add(key);
-                          const links = Array.from(node.querySelectorAll('a'));
-                          const linkTextLength = links
-                            .map(item => item && item.innerText ? item.innerText.trim().length : 0)
-                            .reduce((sum, len) => sum + len, 0);
-                          blocks.push({
-                            selector,
-                            tagName: node.tagName || '',
-                            className: node.className || '',
-                            idName: node.id || '',
-                            text,
-                            linkTextLength
-                          });
-                        }
-                      }
-                      if (document.body && document.body.innerText) {
-                        blocks.push({
-                          selector: 'body',
-                          tagName: 'BODY',
-                          className: document.body.className || '',
-                          idName: document.body.id || '',
-                          text: document.body.innerText.trim(),
-                          linkTextLength: Array.from(document.body.querySelectorAll('a'))
-                            .map(item => item && item.innerText ? item.innerText.trim().length : 0)
-                            .reduce((sum, len) => sum + len, 0)
-                        });
-                      }
-                      return blocks;
-                    }
-                    """);
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> blocks = rawBlocks instanceof List<?> ? (List<Map<String, Object>>) rawBlocks : List.of();
-            String content = selectBestContentBlock(blocks);
-            return cleanContent(content);
-        } catch (Exception e) {
-            log.warn("提取正文失败，回退到 HTML 文本: {}", e.getMessage());
-            return cleanContent(htmlToText(page.content()));
+    /**
+     * 关闭浏览器页面时只记录日志，不把清理阶段的异常再向上抛出。
+     * 这样即使单页资源回收失败，也不会把批量采集链路整体拖垮。
+     */
+    private void closePageQuietly(Page page, String scene) {
+        if (page == null) {
+            return;
         }
+        try {
+            page.close();
+        } catch (Exception e) {
+            log.debug("close playwright collect page failed, scene={}, error={}", scene, e.getMessage());
+        }
+    }
+
+    private String extractMainContent(Page page) {
+        return PageContentExtractionSupport.extractMainContent(page);
     }
 
     String selectBestContentBlock(List<Map<String, Object>> blocks) {
-        if (blocks == null || blocks.isEmpty()) {
-            return "";
-        }
-        return blocks.stream()
-                .map(this::toScoredContentBlock)
-                .filter(block -> !block.text().isBlank())
-                .max(Comparator.comparingDouble(ScoredContentBlock::score))
-                .map(ScoredContentBlock::text)
-                .orElse("");
-    }
-
-    private ScoredContentBlock toScoredContentBlock(Map<String, Object> block) {
-        String selector = stringValue(block.get("selector"));
-        String tagName = stringValue(block.get("tagName"));
-        String className = stringValue(block.get("className"));
-        String idName = stringValue(block.get("idName"));
-        String text = removeNoiseLines(cleanContent(stringValue(block.get("text"))));
-        int linkTextLength = parseInt(block.get("linkTextLength"));
-
-        double score = text.length();
-        String classifier = (selector + " " + tagName + " " + className + " " + idName).toLowerCase(Locale.ROOT);
-        if (classifier.contains("article")) {
-            score += 220;
-        }
-        if (classifier.contains("main")) {
-            score += 180;
-        }
-        if (classifier.contains("content") || classifier.contains("prose") || classifier.contains("markdown")) {
-            score += 140;
-        }
-        if (classifier.contains("docs") || classifier.contains("documentation")) {
-            score += 120;
-        }
-        if (classifier.contains("body")) {
-            score -= 260;
-        }
-        if (containsNoiseMarker(classifier)) {
-            score -= 360;
-        }
-        double linkDensity = text.isBlank() ? 0D : Math.min(1D, (double) linkTextLength / Math.max(1, text.length()));
-        score -= linkDensity * 280;
-        score += countLongLines(text) * 22D;
-        return new ScoredContentBlock(text, score);
+        return PageContentExtractionSupport.selectBestContentBlock(blocks);
     }
 
     private String extractTitle(String html) {
@@ -532,18 +456,6 @@ public class PlaywrightPageCollector implements SourceCollector {
                 || message.contains("playwright connection closed");
     }
 
-    private boolean containsNoiseMarker(String classifier) {
-        return classifier.contains("nav")
-                || classifier.contains("menu")
-                || classifier.contains("footer")
-                || classifier.contains("header")
-                || classifier.contains("sidebar")
-                || classifier.contains("breadcrumb")
-                || classifier.contains("cookie")
-                || classifier.contains("modal")
-                || classifier.contains("banner");
-    }
-
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value);
     }
@@ -560,8 +472,5 @@ public class PlaywrightPageCollector implements SourceCollector {
         } catch (NumberFormatException e) {
             return 0;
         }
-    }
-
-    private record ScoredContentBlock(String text, double score) {
     }
 }

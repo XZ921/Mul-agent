@@ -26,6 +26,7 @@ import cn.bugstack.competitoragent.search.SearchExecutionPlan;
 import cn.bugstack.competitoragent.search.SearchExecutionTrace;
 import cn.bugstack.competitoragent.search.SearchProgressSnapshot;
 import cn.bugstack.competitoragent.source.SourceCandidate;
+import cn.bugstack.competitoragent.workflow.NodeExecutionRecoveryPolicy;
 import cn.bugstack.competitoragent.workflow.WorkflowFactory;
 import cn.bugstack.competitoragent.workflow.WorkflowPlan;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -113,10 +114,11 @@ public class AnalysisTaskService {
     public List<TaskNodeResponse> getTaskNodes(Long taskId) {
         AnalysisTask task = getTaskOrThrow(taskId);
         List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
+        AnalysisTaskStatus resolvedStatus = recoveryPolicy().resolveTaskExecution(task, nodes).getStatus();
         Map<String, List<TaskNode>> rerunImpactMap = buildRerunImpactMap(nodes);
         return nodes
                 .stream()
-                .map(node -> toNodeResponse(node, task.getStatus(), rerunImpactMap.getOrDefault(node.getNodeName(), List.of())))
+                .map(node -> toNodeResponse(node, resolvedStatus, rerunImpactMap.getOrDefault(node.getNodeName(), List.of())))
                 .toList();
     }
 
@@ -133,7 +135,7 @@ public class AnalysisTaskService {
                 .schemaId(request.getSchemaId())
                 .build();
 
-        return workflowFactory.buildPlan(draftTask).getNodes().stream()
+        return workflowFactory.buildPreviewPlan(draftTask).getNodes().stream()
                 .map(this::toPreviewNodeResponse)
                 .toList();
     }
@@ -388,7 +390,7 @@ public class AnalysisTaskService {
 
         List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
         for (TaskNode node : nodes) {
-            resetNodeExecutionState(node, true);
+            recoveryPolicy().resetNodeForRerun(node, true);
         }
         nodeRepository.saveAll(nodes);
     }
@@ -420,8 +422,10 @@ public class AnalysisTaskService {
 
             hasWorkToResume = true;
             reuseSearchCheckpointIfPresent(node);
-            resetNodeExecutionState(node, true);
+            markManualResumeApprovalIfNecessary(node);
         }
+
+        recoveryPolicy().resetNodesForResume(nodes, true);
 
         if (!hasWorkToResume && hasSuccessfulCheckpoint) {
             throw new BusinessException(ResultCode.TASK_STATUS_INVALID, "Task already completed successfully");
@@ -431,26 +435,11 @@ public class AnalysisTaskService {
     }
 
     private void resetNodeExecutionState(TaskNode node, boolean clearOutput) {
-        node.setStatus(TaskNodeStatus.PENDING);
-        node.setControlState(TaskNodeControlState.NONE);
-        node.setInputData(null);
-        if (clearOutput) {
-            // 对未成功节点清空旧输出，避免 trace 面板和后续执行误读历史失败结果。
-            node.setOutputData(null);
-        }
-        node.setErrorMessage(null);
-        node.setInterventionReason(null);
-        node.setStartedAt(null);
-        node.setCompletedAt(null);
-        node.setRetryCount(0);
+        recoveryPolicy().resetNodeForRerun(node, clearOutput);
     }
 
     private void resetNodeForManualContinue(TaskNode node) {
-        node.setStatus(TaskNodeStatus.PENDING);
-        node.setControlState(TaskNodeControlState.NONE);
-        node.setErrorMessage(null);
-        node.setInterventionReason(null);
-        node.setCompletedAt(null);
+        recoveryPolicy().resetNodeForManualContinue(node);
     }
 
     private void markNodeSkippedByUser(TaskNode node, String reason) {
@@ -465,6 +454,21 @@ public class AnalysisTaskService {
     }
 
     private void continueTaskIfNecessary(AnalysisTask task) {
+        List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(task.getId());
+        NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
+                recoveryPolicy().resolveTaskExecution(task, nodes);
+        if (!recoveryPolicy().canAutoContinue(nodes)) {
+            LocalDateTime resolvedCompletedAt = resolution.resolveCompletedAt(task.getCompletedAt());
+            if (task.getStatus() != resolution.getStatus()
+                    || !java.util.Objects.equals(task.getErrorMessage(), resolution.getErrorMessage())
+                    || !java.util.Objects.equals(task.getCompletedAt(), resolvedCompletedAt)) {
+                task.setStatus(resolution.getStatus());
+                task.setErrorMessage(resolution.getErrorMessage());
+                task.setCompletedAt(resolvedCompletedAt);
+                taskRepository.save(task);
+            }
+            return;
+        }
         if (task.getStatus() == AnalysisTaskStatus.RUNNING || task.getStatus() == AnalysisTaskStatus.SUCCESS) {
             return;
         }
@@ -589,6 +593,26 @@ public class AnalysisTaskService {
         }
     }
 
+    /**
+     * 当初审要求人工介入后，用户触发 resume 代表已经确认可以继续闭环。
+     * 这里把确认信号写回待执行节点配置，供 DAG 条件判断放行 rewrite_report。
+     */
+    private void markManualResumeApprovalIfNecessary(TaskNode node) {
+        if (node == null || !hasText(node.getNodeConfig()) || !"rewrite_report".equals(node.getNodeName())) {
+            return;
+        }
+        try {
+            JsonNode configNode = objectMapper.readTree(node.getNodeConfig());
+            if (!configNode.isObject()) {
+                return;
+            }
+            ((com.fasterxml.jackson.databind.node.ObjectNode) configNode).put("manualResumeApproved", true);
+            node.setNodeConfig(objectMapper.writeValueAsString(configNode));
+        } catch (Exception e) {
+            log.warn("mark manual resume approval failed, nodeName={}", node.getNodeName(), e);
+        }
+    }
+
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
@@ -614,10 +638,9 @@ public class AnalysisTaskService {
 
     private TaskResponse toTaskResponse(AnalysisTask task) {
         List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(task.getId());
-        int totalNodes = nodes.size();
-        int completedNodes = (int) nodes.stream()
-                .filter(node -> isTerminalStatus(node.getStatus()))
-                .count();
+        NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
+                recoveryPolicy().resolveTaskExecution(task, nodes);
+        AnalysisTaskStatus resolvedStatus = resolution.getStatus();
 
         return TaskResponse.builder()
                 .id(task.getId())
@@ -627,19 +650,19 @@ public class AnalysisTaskService {
                 .competitorUrls(task.getCompetitorUrls())
                 .analysisDimensions(task.getAnalysisDimensions())
                 .sourceScope(task.getSourceScope())
-                .status(task.getStatus())
-                .errorMessage(task.getErrorMessage())
-                .totalNodes(totalNodes)
-                .completedNodes(completedNodes)
+                .status(resolvedStatus)
+                .errorMessage(resolution.getErrorMessage())
+                .totalNodes(resolution.getTotalNodes())
+                .completedNodes(resolution.getCompletedNodes())
                 .createdAt(task.getCreatedAt())
                 .updatedAt(task.getUpdatedAt())
-                .completedAt(task.getCompletedAt())
-                .canExecute(canExecuteTask(task.getStatus()))
-                .canResume(canResumeTask(task.getStatus()))
-                .canRetry(canRetryTask(task.getStatus()))
-                .canStop(canStopTask(task.getStatus()))
-                .canViewReport(task.getStatus() == AnalysisTaskStatus.SUCCESS)
-                .interventionSummary(buildTaskInterventionSummary(task.getStatus()))
+                .completedAt(resolution.resolveCompletedAt(task.getCompletedAt()))
+                .canExecute(canExecuteTask(resolvedStatus))
+                .canResume(canResumeTask(resolvedStatus))
+                .canRetry(canRetryTask(resolvedStatus))
+                .canStop(canStopTask(resolvedStatus))
+                .canViewReport(resolvedStatus == AnalysisTaskStatus.SUCCESS)
+                .interventionSummary(buildTaskInterventionSummary(resolvedStatus))
                 .build();
     }
 
@@ -1303,5 +1326,9 @@ public class AnalysisTaskService {
 
     private String defaultIfBlank(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value;
+    }
+
+    private NodeExecutionRecoveryPolicy recoveryPolicy() {
+        return new NodeExecutionRecoveryPolicy(objectMapper);
     }
 }

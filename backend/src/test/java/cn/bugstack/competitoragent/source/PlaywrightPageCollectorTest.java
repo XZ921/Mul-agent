@@ -2,6 +2,8 @@ package cn.bugstack.competitoragent.source;
 
 import cn.bugstack.competitoragent.config.CollectorProperties;
 import cn.bugstack.competitoragent.config.PlaywrightBrowserManager;
+import cn.bugstack.competitoragent.search.SearchBrowserProperties;
+import cn.bugstack.competitoragent.search.SearchRuntimeFallbackPolicy;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -11,13 +13,19 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 
 class PlaywrightPageCollectorTest {
 
     private final PlaywrightBrowserManager browserManager = mock(PlaywrightBrowserManager.class);
     private final CollectorProperties collectorProperties = new CollectorProperties();
-    private final PlaywrightPageCollector collector = new PlaywrightPageCollector(browserManager, collectorProperties);
+    private final SearchRuntimeFallbackPolicy fallbackPolicy =
+            new SearchRuntimeFallbackPolicy(new SearchBrowserProperties());
+    private final PlaywrightPageCollector collector =
+            new PlaywrightPageCollector(browserManager, collectorProperties, fallbackPolicy);
 
     @Test
     void shouldRejectSpaShellLikeHttpContent() {
@@ -97,5 +105,34 @@ class PlaywrightPageCollectorTest {
 
         assertFalse(page.isSuccess());
         assertEquals("仅允许采集 http/https 页面", page.getErrorMessage());
+    }
+
+    @Test
+    void shouldContinueBatchWhenSinglePageCollectThrowsUnexpectedError() {
+        PlaywrightPageCollector batchCollector = spy(new PlaywrightPageCollector(
+                browserManager,
+                collectorProperties,
+                fallbackPolicy
+        ));
+        SourceCollector.CollectedPage successPage = SourceCollector.CollectedPage.builder()
+                .url("https://docs.example.com/a")
+                .success(true)
+                .build();
+
+        doReturn(successPage).when(batchCollector).collect("https://docs.example.com/a", "Notion AI", "DOCS");
+        doThrow(new IllegalStateException("browser has been closed"))
+                .when(batchCollector)
+                .collect("https://docs.example.com/b", "Notion AI", "DOCS");
+
+        List<SourceCollector.CollectedPage> results = batchCollector.collectBatch(
+                List.of("https://docs.example.com/a", "https://docs.example.com/b"),
+                "Notion AI",
+                "DOCS"
+        );
+
+        assertEquals(2, results.size());
+        assertTrue(results.get(0).isSuccess());
+        assertFalse(results.get(1).isSuccess());
+        assertTrue(results.get(1).getErrorMessage().contains("浏览器不可用"));
     }
 }

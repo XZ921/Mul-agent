@@ -59,7 +59,8 @@ public class WorkflowFactory {
      * 根据规划结果创建并落库存量节点，供执行器后续顺序消费。
      */
     public List<TaskNode> createWorkflow(AnalysisTask task) {
-        WorkflowPlan plan = buildPlan(task);
+        // 创建任务阶段仅固化轻量工作流结构，真实补源延迟到执行期 Collector 再触发。
+        WorkflowPlan plan = buildPreviewPlan(task);
         workflowPlanValidator.validate(plan);
         List<TaskNode> nodes = new ArrayList<>();
         for (WorkflowPlan.WorkflowPlanNode planNode : plan.getNodes()) {
@@ -92,6 +93,17 @@ public class WorkflowFactory {
      * 这里会先根据竞品和来源范围展开多个采集节点，再接上抽取、分析、撰写、质检与重写闭环。
      */
     public WorkflowPlan buildPlan(AnalysisTask task) {
+        return buildPlanInternal(task, false);
+    }
+
+    /**
+     * 预览阶段只构建轻量 DAG，避免在表单编辑时阻塞等待实时搜索结果。
+     */
+    public WorkflowPlan buildPreviewPlan(AnalysisTask task) {
+        return buildPlanInternal(task, true);
+    }
+
+    private WorkflowPlan buildPlanInternal(AnalysisTask task, boolean previewOnly) {
         List<String> competitorNames = parseStringList(task.getCompetitorNames());
         List<String> competitorUrls = parseStringList(task.getCompetitorUrls());
         List<String> dimensions = resolveDimensions(task);
@@ -106,10 +118,9 @@ public class WorkflowFactory {
             String competitorName = competitorNames.get(competitorIndex);
             List<String> providedUrls = resolveCompetitorProvidedUrls(
                     competitorNames, competitorUrls, competitorIndex);
-            List<SourcePlan> sourcePlans = sourceDiscoveryService.discover(
-                    competitorName,
-                    providedUrls,
-                    requestedScopes);
+            List<SourcePlan> sourcePlans = previewOnly
+                    ? sourceDiscoveryService.discoverForPreview(competitorName, providedUrls, requestedScopes)
+                    : sourceDiscoveryService.discover(competitorName, providedUrls, requestedScopes);
             sourcePlans = deduplicateSourcePlans(sourcePlans);
 
             // 按信息源计划动态展开采集节点，让 DAG 随竞品数量和来源范围变化。
@@ -361,6 +372,17 @@ public class WorkflowFactory {
             }
 
             if (mergedUrls.isEmpty() && keptCandidates.isEmpty()) {
+                if (safeList(sourcePlan.getUrls()).isEmpty()
+                        && (sourcePlan.getCandidates() == null || sourcePlan.getCandidates().isEmpty())) {
+                    // 预览阶段会保留“执行时补源”的占位计划，不能因为当前没有候选 URL 就被去掉。
+                    deduplicatedPlans.add(SourcePlan.builder()
+                            .sourceType(sourcePlan.getSourceType())
+                            .urls(List.of())
+                            .notes(appendDedupeNote(sourcePlan.getNotes(), duplicateCount))
+                            .candidates(List.of())
+                            .build());
+                    continue;
+                }
                 if (duplicateCount > 0) {
                     log.info("skip duplicated source plan, sourceType={}, duplicateCount={}",
                             sourcePlan.getSourceType(), duplicateCount);
@@ -473,6 +495,8 @@ public class WorkflowFactory {
                 .maxSearchesPerTask(10)
                 .pageTimeoutMillis(Math.max(1000, collectorProperties.getPageTimeoutSeconds() * 1000))
                 .maxOpenResultPages(searchBrowserProperties.getMaxOpenResultPages())
+                .resultPageTimeoutMillis(searchBrowserProperties.getResultPageTimeoutMillis())
+                .maxContentLengthPerPage(searchBrowserProperties.getMaxContentLengthPerPage())
                 .userAgents(defaultUserAgents)
                 .blockedSignals(List.of(
                         "captcha",

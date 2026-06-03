@@ -323,6 +323,87 @@ class DagExecutorTest {
         assertEquals(AnalysisTaskStatus.FAILED, task.getStatus());
     }
 
+    @Test
+    void shouldSeedHistoricalCheckpointOutputWhenContinuingFromPendingBranch() {
+        Long taskId = 505L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode completedCollector = TaskNode.builder()
+                .id(41L)
+                .taskId(taskId)
+                .nodeName("collect_a")
+                .displayName("collect_a")
+                .agentType(AgentType.COLLECTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .maxRetries(0)
+                .status(TaskNodeStatus.SUCCESS)
+                .outputData("{\"node\":\"collect_a\"}")
+                .executionOrder(0)
+                .build();
+
+        TaskNode pendingCollector = TaskNode.builder()
+                .id(42L)
+                .taskId(taskId)
+                .nodeName("collect_b")
+                .displayName("collect_b")
+                .agentType(AgentType.COLLECTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .maxRetries(0)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+
+        TaskNode analyzer = TaskNode.builder()
+                .id(43L)
+                .taskId(taskId)
+                .nodeName("analyze_competitors")
+                .displayName("analyze_competitors")
+                .agentType(AgentType.ANALYZER)
+                .dependsOn("[\"collect_a\",\"collect_b\"]")
+                .required(true)
+                .retryable(false)
+                .maxRetries(0)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(2)
+                .build();
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId))
+                .thenReturn(List.of(completedCollector, pendingCollector, analyzer));
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = new DagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new ResumeCollectorAgent(), new ResumeAnalyzerAgent()),
+                new ObjectMapper()
+        );
+
+        AgentContext context = AgentContext.builder()
+                .taskId(taskId)
+                .taskName("resume-context-test")
+                .build();
+
+        executor.execute(taskId, context);
+
+        assertEquals(TaskNodeStatus.SUCCESS, completedCollector.getStatus());
+        assertEquals(TaskNodeStatus.SUCCESS, pendingCollector.getStatus());
+        assertEquals(TaskNodeStatus.SUCCESS, analyzer.getStatus());
+        assertTrue(analyzer.getOutputData().contains("collect_a"));
+        assertTrue(analyzer.getOutputData().contains("collect_b"));
+        assertEquals(AnalysisTaskStatus.SUCCESS, task.getStatus());
+    }
+
     private static final class TestCollectorAgent implements Agent {
 
         @Override
@@ -441,6 +522,53 @@ class DagExecutorTest {
                     .status(upstream == null || upstream.isBlank() ? TaskNodeStatus.FAILED : TaskNodeStatus.SUCCESS)
                     .outputData("{\"analyzed\":true}")
                     .errorMessage(upstream == null || upstream.isBlank() ? "missing collect_fast output" : null)
+                    .build();
+        }
+    }
+
+    private static final class ResumeCollectorAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.COLLECTOR;
+        }
+
+        @Override
+        public String getName() {
+            return "resume-collector";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("{\"node\":\"" + context.getCurrentNodeName() + "\"}")
+                    .build();
+        }
+    }
+
+    private static final class ResumeAnalyzerAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.ANALYZER;
+        }
+
+        @Override
+        public String getName() {
+            return "resume-analyzer";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            String collectA = context.getSharedOutput("collect_a");
+            String collectB = context.getSharedOutput("collect_b");
+            boolean allReady = collectA != null && collectA.contains("collect_a")
+                    && collectB != null && collectB.contains("collect_b");
+            return AgentResult.builder()
+                    .status(allReady ? TaskNodeStatus.SUCCESS : TaskNodeStatus.FAILED)
+                    .outputData("{\"upstreams\":[\"" + collectA + "\",\"" + collectB + "\"]}")
+                    .errorMessage(allReady ? null : "missing historical checkpoint output")
                     .build();
         }
     }

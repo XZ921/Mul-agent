@@ -20,6 +20,7 @@ import java.util.List;
 public class RoutingSearchSourceProvider implements SearchSourceProvider {
 
     private final SearchProviderProperties properties;
+    private final QianfanSearchSourceProvider qianfanSearchSourceProvider;
     private final SerpApiSearchSourceProvider serpApiSearchSourceProvider;
     private final BrowserPreviewSearchSourceProvider browserPreviewProvider;
     private final HttpSearchSourceProvider httpSearchSourceProvider;
@@ -28,6 +29,11 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
     @Override
     public List<SourceCandidate> search(String competitorName, List<String> requestedScopes) {
         List<SourceCandidate> mergedCandidates = new ArrayList<>();
+
+        List<SourceCandidate> qianfanCandidates = qianfanSearchSourceProvider.search(competitorName, requestedScopes);
+        if (!qianfanCandidates.isEmpty()) {
+            mergedCandidates.addAll(qianfanCandidates);
+        }
 
         List<SourceCandidate> serpApiCandidates = serpApiSearchSourceProvider.search(competitorName, requestedScopes);
         if (!serpApiCandidates.isEmpty()) {

@@ -31,6 +31,7 @@ import {
   stepStatusTag,
   supplementMethodTag,
 } from './shared'
+import TaskInterventionBar from './TaskInterventionBar'
 import type { ReadableField, ReviewPayload } from './types'
 
 const { Text } = Typography
@@ -126,36 +127,70 @@ export default function NodeTraceDrawer({
             selectedNode.canTerminate ||
             selectedNode.canRerun ||
             selectedNode.canUpdateConfigAndRerun) && (
-            <Space wrap>
-              {selectedNode.canPause && (
-                <Button loading={actionLoading} onClick={() => onPauseNode(selectedNode.nodeName)}>
-                  暂停节点
-                </Button>
-              )}
-              {selectedNode.canResumeNode && (
-                <Button type="primary" loading={actionLoading} onClick={() => onResumeNode(selectedNode.nodeName)}>
-                  恢复节点
-                </Button>
-              )}
-              {selectedNode.canSkip && (
-                <Button loading={actionLoading} onClick={() => onSkipNode(selectedNode.nodeName)}>
-                  手动跳过
-                </Button>
-              )}
-              {selectedNode.canTerminate && (
-                <Button danger loading={actionLoading} onClick={() => onTerminateNode(selectedNode.nodeName)}>
-                  {selectedNode.status === 'RUNNING' ? '请求终止' : '强制终止'}
-                </Button>
-              )}
-              {selectedNode.canRerun && (
-                <Button type="primary" loading={actionLoading} onClick={() => onRerunNode(selectedNode.nodeName)}>
-                  从该节点重跑
-                </Button>
-              )}
-              {selectedNode.canUpdateConfigAndRerun && (
-                <Button onClick={() => onOpenConfigEditor(selectedNode)}>应用建议 / 高级修改</Button>
-              )}
-            </Space>
+            <TaskInterventionBar
+              title="节点干预操作"
+              description="这里的动作只影响当前节点及其受影响下游，系统会自动保留可复用的检查点。"
+              tone={
+                selectedNode.status === 'FAILED'
+                  ? 'error'
+                  : selectedNode.status === 'PAUSED' || selectedNode.controlState === 'TERMINATE_REQUESTED'
+                    ? 'warning'
+                    : 'info'
+              }
+              badgeText={selectedNode.status}
+              actions={[
+                ...(selectedNode.canPause
+                  ? [{
+                      key: 'pause',
+                      label: '暂停节点',
+                      loading: actionLoading,
+                      onClick: () => onPauseNode(selectedNode.nodeName),
+                    }]
+                  : []),
+                ...(selectedNode.canResumeNode
+                  ? [{
+                      key: 'resume',
+                      label: '恢复节点',
+                      type: 'primary' as const,
+                      loading: actionLoading,
+                      onClick: () => onResumeNode(selectedNode.nodeName),
+                    }]
+                  : []),
+                ...(selectedNode.canSkip
+                  ? [{
+                      key: 'skip',
+                      label: '手动跳过',
+                      loading: actionLoading,
+                      onClick: () => onSkipNode(selectedNode.nodeName),
+                    }]
+                  : []),
+                ...(selectedNode.canTerminate
+                  ? [{
+                      key: 'terminate',
+                      label: selectedNode.status === 'RUNNING' ? '请求终止' : '强制终止',
+                      danger: true,
+                      loading: actionLoading,
+                      onClick: () => onTerminateNode(selectedNode.nodeName),
+                    }]
+                  : []),
+                ...(selectedNode.canRerun
+                  ? [{
+                      key: 'rerun',
+                      label: '从该节点重跑',
+                      type: 'primary' as const,
+                      loading: actionLoading,
+                      onClick: () => onRerunNode(selectedNode.nodeName),
+                    }]
+                  : []),
+                ...(selectedNode.canUpdateConfigAndRerun
+                  ? [{
+                      key: 'config-rerun',
+                      label: '应用建议 / 高级修改',
+                      onClick: () => onOpenConfigEditor(selectedNode),
+                    }]
+                  : []),
+              ]}
+            />
           )}
 
           {selectedNode.interventionSummary && (

@@ -45,4 +45,13 @@ public class AnalysisResult {
 
     /** 产品策略建议 */
     private List<String> recommendations;
+
+    /** 分析结果可回指的来源链接 */
+    private List<String> sourceUrls;
+
+    /** 分析阶段的问题标记，例如字段漂移已矫正、仍存在证据缺口 */
+    private List<String> issueFlags;
+
+    /** 提供给 Writer 的统一证据片段 */
+    private List<EvidenceFragment> evidenceFragments;
 }

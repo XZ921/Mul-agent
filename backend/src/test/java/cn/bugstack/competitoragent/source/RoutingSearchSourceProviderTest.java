@@ -18,19 +18,23 @@ class RoutingSearchSourceProviderTest {
         SearchProviderProperties properties = new SearchProviderProperties();
         properties.setBrowserPreviewEnabled(true);
 
+        QianfanSearchSourceProvider qianfanSearchSourceProvider = mock(QianfanSearchSourceProvider.class);
         SerpApiSearchSourceProvider serpApiSearchSourceProvider = mock(SerpApiSearchSourceProvider.class);
         BrowserPreviewSearchSourceProvider browserPreviewProvider = mock(BrowserPreviewSearchSourceProvider.class);
         HttpSearchSourceProvider httpSearchSourceProvider = mock(HttpSearchSourceProvider.class);
         SourceCandidateRanker sourceCandidateRanker = mock(SourceCandidateRanker.class);
 
+        List<SourceCandidate> qianfanCandidates = List.of(SourceCandidate.builder().url("https://www.example.com").build());
         List<SourceCandidate> serpCandidates = List.of(SourceCandidate.builder().url("https://docs.example.com").build());
         List<SourceCandidate> previewCandidates = List.of(SourceCandidate.builder().url("https://preview.example.com").build());
         List<SourceCandidate> httpCandidates = List.of(SourceCandidate.builder().url("https://api.example.com/docs").build());
         List<SourceCandidate> ranked = List.of(
+                qianfanCandidates.get(0),
                 serpCandidates.get(0),
                 httpCandidates.get(0),
                 previewCandidates.get(0)
         );
+        when(qianfanSearchSourceProvider.search("Notion AI", List.of("DOCS"))).thenReturn(qianfanCandidates);
         when(serpApiSearchSourceProvider.search("Notion AI", List.of("DOCS"))).thenReturn(serpCandidates);
         when(browserPreviewProvider.search("Notion AI", List.of("DOCS"))).thenReturn(previewCandidates);
         when(httpSearchSourceProvider.search("Notion AI", List.of("DOCS"))).thenReturn(httpCandidates);
@@ -38,6 +42,7 @@ class RoutingSearchSourceProviderTest {
 
         RoutingSearchSourceProvider provider = new RoutingSearchSourceProvider(
                 properties,
+                qianfanSearchSourceProvider,
                 serpApiSearchSourceProvider,
                 browserPreviewProvider,
                 httpSearchSourceProvider,
@@ -45,6 +50,7 @@ class RoutingSearchSourceProviderTest {
         );
 
         assertEquals(ranked, provider.search("Notion AI", List.of("DOCS")));
+        verify(qianfanSearchSourceProvider).search("Notion AI", List.of("DOCS"));
         verify(serpApiSearchSourceProvider).search("Notion AI", List.of("DOCS"));
         verify(browserPreviewProvider).search("Notion AI", List.of("DOCS"));
         verify(httpSearchSourceProvider).search("Notion AI", List.of("DOCS"));
@@ -56,12 +62,14 @@ class RoutingSearchSourceProviderTest {
         SearchProviderProperties properties = new SearchProviderProperties();
         properties.setBrowserPreviewEnabled(true);
 
+        QianfanSearchSourceProvider qianfanSearchSourceProvider = mock(QianfanSearchSourceProvider.class);
         SerpApiSearchSourceProvider serpApiSearchSourceProvider = mock(SerpApiSearchSourceProvider.class);
         BrowserPreviewSearchSourceProvider browserPreviewProvider = mock(BrowserPreviewSearchSourceProvider.class);
         HttpSearchSourceProvider httpSearchSourceProvider = mock(HttpSearchSourceProvider.class);
         SourceCandidateRanker sourceCandidateRanker = mock(SourceCandidateRanker.class);
 
         List<SourceCandidate> httpCandidates = List.of(SourceCandidate.builder().url("https://api.example.com/docs").build());
+        when(qianfanSearchSourceProvider.search("Notion AI", List.of("DOCS"))).thenReturn(List.of());
         when(serpApiSearchSourceProvider.search("Notion AI", List.of("DOCS"))).thenReturn(List.of());
         when(browserPreviewProvider.search("Notion AI", List.of("DOCS"))).thenReturn(List.of());
         when(httpSearchSourceProvider.search("Notion AI", List.of("DOCS"))).thenReturn(httpCandidates);
@@ -69,6 +77,7 @@ class RoutingSearchSourceProviderTest {
 
         RoutingSearchSourceProvider provider = new RoutingSearchSourceProvider(
                 properties,
+                qianfanSearchSourceProvider,
                 serpApiSearchSourceProvider,
                 browserPreviewProvider,
                 httpSearchSourceProvider,
@@ -84,19 +93,23 @@ class RoutingSearchSourceProviderTest {
         SearchProviderProperties properties = new SearchProviderProperties();
         properties.setBrowserPreviewEnabled(false);
 
+        QianfanSearchSourceProvider qianfanSearchSourceProvider = mock(QianfanSearchSourceProvider.class);
         SerpApiSearchSourceProvider serpApiSearchSourceProvider = mock(SerpApiSearchSourceProvider.class);
         BrowserPreviewSearchSourceProvider browserPreviewProvider = mock(BrowserPreviewSearchSourceProvider.class);
         HttpSearchSourceProvider httpSearchSourceProvider = mock(HttpSearchSourceProvider.class);
         SourceCandidateRanker sourceCandidateRanker = mock(SourceCandidateRanker.class);
+        List<SourceCandidate> qianfanCandidates = List.of(SourceCandidate.builder().url("https://www.qianfan.example.com").build());
         List<SourceCandidate> serpCandidates = List.of(SourceCandidate.builder().url("https://www.example.com").build());
         List<SourceCandidate> httpCandidates = List.of(SourceCandidate.builder().url("https://www.example.com/pricing").build());
-        List<SourceCandidate> ranked = List.of(serpCandidates.get(0), httpCandidates.get(0));
+        List<SourceCandidate> ranked = List.of(qianfanCandidates.get(0), serpCandidates.get(0), httpCandidates.get(0));
+        when(qianfanSearchSourceProvider.search("Notion AI", List.of("OFFICIAL"))).thenReturn(qianfanCandidates);
         when(serpApiSearchSourceProvider.search("Notion AI", List.of("OFFICIAL"))).thenReturn(serpCandidates);
         when(httpSearchSourceProvider.search("Notion AI", List.of("OFFICIAL"))).thenReturn(httpCandidates);
         when(sourceCandidateRanker.rankAndDeduplicate(anyList())).thenReturn(ranked);
 
         RoutingSearchSourceProvider provider = new RoutingSearchSourceProvider(
                 properties,
+                qianfanSearchSourceProvider,
                 serpApiSearchSourceProvider,
                 browserPreviewProvider,
                 httpSearchSourceProvider,

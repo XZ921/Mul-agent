@@ -57,6 +57,7 @@ public class SearchExecutionCoordinator {
         }
         int targetCount = resolveTargetCount(config, allCandidates);
         int minVerifiedCount = resolveMinVerifiedCount(config, targetCount);
+        executionPlan = enrichExecutionPlan(executionPlan, config, targetCount, minVerifiedCount);
         boolean circuitBroken = false;
         String degradationReason = null;
 
@@ -142,63 +143,24 @@ public class SearchExecutionCoordinator {
                 markStepRunning(executionPlan, "BROWSER_SUPPLEMENT_SEARCH", supplementStartMessage);
                 appendSnapshotAndPublish(progressSnapshots, executionPlan, "BROWSER_SUPPLEMENT_SEARCH",
                         supplementStartMessage, false, null, progressListener, allCandidates, List.of(), null);
-                List<SourceCandidate> supplementedCandidates;
-                boolean browserModeEnabled = Boolean.TRUE.equals(config.getBrowserSearchEnabled())
-                        && !"HTTP_ONLY".equalsIgnoreCase(config.getSearchMode());
-                boolean httpModeEnabled = !"BROWSER_ONLY".equalsIgnoreCase(config.getSearchMode())
-                        && !"HEURISTIC_ONLY".equalsIgnoreCase(config.getSearchMode());
-                if (browserModeEnabled) {
-                    browserSearchResult = browserSearchRuntimeService.search(config);
-                    supplementedCandidates = normalizeCandidates(
-                            browserSearchResult.getCandidates(),
-                            "BROWSER",
-                            config
-                    );
-                    if (!supplementedCandidates.isEmpty()) {
-                        supplementMethod = "BROWSER";
-                        fallbackDecision = "USE_BROWSER_SUPPLEMENT";
-                    } else if (httpModeEnabled) {
-                        supplementedCandidates = normalizeCandidates(
-                                searchSourceProvider.search(config.getCompetitorName(), List.of(config.getSourceType())),
-                                "HTTP",
-                                config
-                        );
-                        providerFallbackUsed = !supplementedCandidates.isEmpty();
-                        if (providerFallbackUsed) {
-                            supplementMethod = "HTTP_FALLBACK";
-                            fallbackDecision = "USE_HTTP_FALLBACK";
-                        }
-                    } else {
-                        supplementedCandidates = List.of();
-                        fallbackDecision = "BROWSER_ONLY_KEEP_PLANNED";
-                    }
-                } else {
-                    browserSearchResult = BrowserSearchRuntimeResult.builder()
-                            .candidates(List.of())
-                            .executedQueries(List.of())
-                            .summary("运行期浏览器补源已关闭，直接尝试 HTTP 回退补源")
-                            .fallbackSuggested(true)
-                            .blockedCount(0)
-                            .build();
-                    if (httpModeEnabled) {
-                        supplementedCandidates = normalizeCandidates(
-                                searchSourceProvider.search(config.getCompetitorName(), List.of(config.getSourceType())),
-                                "HTTP",
-                                config
-                        );
-                        providerFallbackUsed = !supplementedCandidates.isEmpty();
-                        if (providerFallbackUsed) {
-                            supplementMethod = "HTTP_FALLBACK";
-                            fallbackDecision = "BROWSER_DISABLED_USE_HTTP_FALLBACK";
-                        } else {
-                            fallbackDecision = "BROWSER_DISABLED_KEEP_PLANNED";
-                        }
-                    } else {
-                        supplementedCandidates = List.of();
-                        fallbackDecision = "SEARCH_MODE_KEEP_PLANNED";
-                    }
-                }
-                supplementedCandidates = removeExistingCandidates(supplementedCandidates, allCandidates);
+                int supplementTargetPoolSize = resolveSupplementTargetPoolSize(
+                        config,
+                        resultPageVerificationEnabled,
+                        allCandidates.size(),
+                        verifiedCount,
+                        minVerifiedCount,
+                        targetCount
+                );
+                SupplementExecutionOutcome supplementOutcome = executeSupplementByFallbackOrder(
+                        config,
+                        allCandidates,
+                        supplementTargetPoolSize
+                );
+                List<SourceCandidate> supplementedCandidates = supplementOutcome.getSupplementedCandidates();
+                browserSearchResult = supplementOutcome.getBrowserSearchResult();
+                supplementMethod = supplementOutcome.getSupplementMethod();
+                providerFallbackUsed = supplementOutcome.isProviderFallbackUsed();
+                fallbackDecision = supplementOutcome.getFallbackDecision();
                 supplementedCount = supplementedCandidates.size();
                 if (!supplementedCandidates.isEmpty()) {
                     allCandidates = sourceCandidateRanker.rankAndDeduplicate(concat(allCandidates, supplementedCandidates));
@@ -263,8 +225,8 @@ public class SearchExecutionCoordinator {
         SearchExecutionTrace executionTrace = SearchExecutionTrace.builder()
                 .traceVersion("v1")
                 .searchMode(config.getSearchMode())
-                .searchQueries(config.getSearchQueries() == null ? List.of() : config.getSearchQueries())
-                .fallbackOrder(config.getSearchFallbackOrder() == null ? List.of() : config.getSearchFallbackOrder())
+                .searchQueries(executionPlan.getSearchQueries() == null ? List.of() : executionPlan.getSearchQueries())
+                .fallbackOrder(executionPlan.getFallbackOrder() == null ? List.of() : executionPlan.getFallbackOrder())
                 .plannedCandidateCount(config.getSourceCandidates() == null ? 0 : config.getSourceCandidates().size())
                 .verifiedCandidateCount(verifiedCount)
                 .supplementedCandidateCount(supplementedCount)
@@ -397,6 +359,23 @@ public class SearchExecutionCoordinator {
                 .build();
     }
 
+    /**
+     * 搜索执行计划除了步骤本身，还需要把 query、补源顺序和目标数量显式挂出来，
+     * 方便任务详情页和审计日志直接解释“系统准备怎么搜、为什么这样搜”。
+     */
+    private SearchExecutionPlan enrichExecutionPlan(SearchExecutionPlan executionPlan,
+                                                    CollectorNodeConfig config,
+                                                    int targetCount,
+                                                    int minVerifiedCount) {
+        SearchExecutionPlan basePlan = executionPlan == null ? initializePlan(null) : executionPlan;
+        return basePlan.toBuilder()
+                .searchQueries(resolveSearchQueries(config, basePlan))
+                .fallbackOrder(resolveSearchFallbackOrder(config))
+                .targetCount(targetCount)
+                .minVerifiedCount(minVerifiedCount)
+                .build();
+    }
+
     private List<SearchExecutionStep> defaultSteps() {
         return List.of(
                 SearchExecutionStep.builder()
@@ -433,8 +412,77 @@ public class SearchExecutionCoordinator {
                         .expectedDurationMs(12000L)
                         .dependency("collector")
                         .status(SearchExecutionStep.StepStatus.PENDING)
-                        .build()
+                .build()
         );
+    }
+
+    /**
+     * 运行期补源不再硬编码“浏览器优先”，而是严格尊重节点配置中的 fallback 顺序。
+     * 这样同类研究任务可以稳定复现相同的补源策略，避免顺序失控。
+     */
+    private SupplementExecutionOutcome executeSupplementByFallbackOrder(CollectorNodeConfig config,
+                                                                       List<SourceCandidate> existingCandidates,
+                                                                       int targetPoolSize) {
+        BrowserSearchRuntimeResult browserSearchResult = defaultBrowserSupplementResult(config);
+        List<SourceCandidate> supplementedCandidates = new ArrayList<>();
+        boolean providerFallbackUsed = false;
+        String supplementMethod = "NONE";
+        String fallbackDecision = "USE_PLANNED_CANDIDATES";
+        boolean browserModeEnabled = Boolean.TRUE.equals(config.getBrowserSearchEnabled())
+                && !"HTTP_ONLY".equalsIgnoreCase(config.getSearchMode());
+        boolean httpModeEnabled = !"BROWSER_ONLY".equalsIgnoreCase(config.getSearchMode())
+                && !"HEURISTIC_ONLY".equalsIgnoreCase(config.getSearchMode());
+        boolean browserExecuted = false;
+        boolean httpExecuted = false;
+
+        for (String stage : resolveSearchFallbackOrder(config)) {
+            if (existingCandidates.size() + supplementedCandidates.size() >= targetPoolSize) {
+                break;
+            }
+
+            if ("BROWSER".equals(stage) && browserModeEnabled && !browserExecuted) {
+                browserSearchResult = browserSearchRuntimeService.search(config);
+                browserExecuted = true;
+                List<SourceCandidate> browserCandidates = removeExistingCandidates(
+                        normalizeCandidates(browserSearchResult.getCandidates(), "BROWSER", config),
+                        concat(existingCandidates, supplementedCandidates)
+                );
+                if (!browserCandidates.isEmpty()) {
+                    supplementedCandidates.addAll(browserCandidates);
+                    supplementMethod = "BROWSER";
+                    fallbackDecision = "USE_BROWSER_SUPPLEMENT";
+                }
+                continue;
+            }
+
+            if ("HTTP".equals(stage) && httpModeEnabled && !httpExecuted) {
+                List<SourceCandidate> httpCandidates = removeExistingCandidates(
+                        normalizeCandidates(
+                                searchSourceProvider.search(config.getCompetitorName(), List.of(config.getSourceType())),
+                                "HTTP",
+                                config
+                        ),
+                        concat(existingCandidates, supplementedCandidates)
+                );
+                httpExecuted = true;
+                if (!httpCandidates.isEmpty()) {
+                    supplementedCandidates.addAll(httpCandidates);
+                    providerFallbackUsed = true;
+                    supplementMethod = "HTTP_FALLBACK";
+                    fallbackDecision = browserModeEnabled ? "USE_HTTP_FALLBACK" : "BROWSER_DISABLED_USE_HTTP_FALLBACK";
+                }
+            }
+        }
+
+        if (supplementedCandidates.isEmpty()) {
+            fallbackDecision = resolveEmptySupplementDecision(browserModeEnabled, httpModeEnabled, browserExecuted, httpExecuted);
+        }
+
+        return new SupplementExecutionOutcome(browserSearchResult,
+                supplementedCandidates,
+                supplementMethod,
+                fallbackDecision,
+                providerFallbackUsed);
     }
 
     /**
@@ -463,6 +511,94 @@ public class SearchExecutionCoordinator {
                 .filter(candidate -> !isBlockedDomain(candidate, config.getBlockedDomains()))
                 .toList();
         return sourceCandidateRanker.rankAndDeduplicate(normalized);
+    }
+
+    private List<String> resolveSearchQueries(CollectorNodeConfig config, SearchExecutionPlan executionPlan) {
+        if (config.getSearchQueries() != null && !config.getSearchQueries().isEmpty()) {
+            return config.getSearchQueries();
+        }
+        if (executionPlan != null && executionPlan.getSearchQueries() != null) {
+            return executionPlan.getSearchQueries();
+        }
+        return List.of();
+    }
+
+    private List<String> resolveSearchFallbackOrder(CollectorNodeConfig config) {
+        List<String> configuredOrder = config.getSearchFallbackOrder();
+        if (configuredOrder == null || configuredOrder.isEmpty()) {
+            return defaultSearchFallbackOrder(config.getSearchMode());
+        }
+        LinkedHashSet<String> normalizedOrder = new LinkedHashSet<>();
+        for (String stage : configuredOrder) {
+            if (StringUtils.hasText(stage)) {
+                normalizedOrder.add(stage.trim().toUpperCase(Locale.ROOT));
+            }
+        }
+        if (normalizedOrder.isEmpty()) {
+            return defaultSearchFallbackOrder(config.getSearchMode());
+        }
+        return new ArrayList<>(normalizedOrder);
+    }
+
+    private List<String> defaultSearchFallbackOrder(String searchMode) {
+        if ("BROWSER_ONLY".equalsIgnoreCase(searchMode)) {
+            return List.of("PLANNED", "BROWSER");
+        }
+        if ("HTTP_ONLY".equalsIgnoreCase(searchMode)) {
+            return List.of("PLANNED", "HTTP");
+        }
+        if ("HEURISTIC_ONLY".equalsIgnoreCase(searchMode)) {
+            return List.of("PLANNED", "HEURISTIC");
+        }
+        return List.of("PLANNED", "BROWSER", "HEURISTIC", "HTTP");
+    }
+
+    private BrowserSearchRuntimeResult defaultBrowserSupplementResult(CollectorNodeConfig config) {
+        if (!Boolean.TRUE.equals(config.getBrowserSearchEnabled())) {
+            return BrowserSearchRuntimeResult.builder()
+                    .candidates(List.of())
+                    .executedQueries(List.of())
+                    .summary("运行期浏览器补源已关闭，直接尝试 HTTP 回退补源")
+                    .fallbackSuggested(true)
+                    .blockedCount(0)
+                    .build();
+        }
+        return BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of())
+                .summary("未触发运行期浏览器补源")
+                .fallbackSuggested(false)
+                .blockedCount(0)
+                .build();
+    }
+
+    private String resolveEmptySupplementDecision(boolean browserModeEnabled,
+                                                  boolean httpModeEnabled,
+                                                  boolean browserExecuted,
+                                                  boolean httpExecuted) {
+        if (!browserModeEnabled && !httpModeEnabled) {
+            return "SEARCH_MODE_KEEP_PLANNED";
+        }
+        if (!browserModeEnabled) {
+            return httpExecuted ? "BROWSER_DISABLED_KEEP_PLANNED" : "SEARCH_MODE_KEEP_PLANNED";
+        }
+        if (!httpModeEnabled && browserExecuted) {
+            return "BROWSER_ONLY_KEEP_PLANNED";
+        }
+        return "NO_NEW_CANDIDATES_KEEP_PLANNED";
+    }
+
+    private int resolveSupplementTargetPoolSize(CollectorNodeConfig config,
+                                                boolean resultPageVerificationEnabled,
+                                                int currentCandidateCount,
+                                                int verifiedCount,
+                                                int minVerifiedCount,
+                                                int targetCount) {
+        if (Boolean.TRUE.equals(config.getVerifyCandidates()) && resultPageVerificationEnabled) {
+            int requiredNewCandidates = Math.max(1, minVerifiedCount - verifiedCount);
+            return currentCandidateCount + requiredNewCandidates;
+        }
+        return targetCount;
     }
 
     private boolean isBlockedDomain(SourceCandidate candidate, List<String> blockedDomains) {
@@ -788,5 +924,50 @@ public class SearchExecutionCoordinator {
             return "候选不足，" + prefix + "，Query：" + queries.get(0);
         }
         return "候选不足，" + prefix + "，共 " + queries.size() + " 个 Query，当前首个 Query：" + queries.get(0);
+    }
+
+    /**
+     * 把补源阶段的中间结果收口成一个小对象，避免 execute 主流程里堆积过多临时变量，
+     * 同时方便测试精确覆盖“顺序、来源、回退决策”三个关键信号。
+     */
+    private static class SupplementExecutionOutcome {
+
+        private final BrowserSearchRuntimeResult browserSearchResult;
+        private final List<SourceCandidate> supplementedCandidates;
+        private final String supplementMethod;
+        private final String fallbackDecision;
+        private final boolean providerFallbackUsed;
+
+        private SupplementExecutionOutcome(BrowserSearchRuntimeResult browserSearchResult,
+                                           List<SourceCandidate> supplementedCandidates,
+                                           String supplementMethod,
+                                           String fallbackDecision,
+                                           boolean providerFallbackUsed) {
+            this.browserSearchResult = browserSearchResult;
+            this.supplementedCandidates = supplementedCandidates;
+            this.supplementMethod = supplementMethod;
+            this.fallbackDecision = fallbackDecision;
+            this.providerFallbackUsed = providerFallbackUsed;
+        }
+
+        private BrowserSearchRuntimeResult getBrowserSearchResult() {
+            return browserSearchResult;
+        }
+
+        private List<SourceCandidate> getSupplementedCandidates() {
+            return supplementedCandidates;
+        }
+
+        private String getSupplementMethod() {
+            return supplementMethod;
+        }
+
+        private String getFallbackDecision() {
+            return fallbackDecision;
+        }
+
+        private boolean isProviderFallbackUsed() {
+            return providerFallbackUsed;
+        }
     }
 }

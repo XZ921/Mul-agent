@@ -11,6 +11,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -387,5 +388,87 @@ class SearchExecutionCoordinatorTest {
         assertEquals("NONE", result.getExecutionTrace().getSupplementMethod());
         verify(searchSourceProvider, never()).search(any(), any());
         verify(browserSearchRuntimeService, never()).search(any());
+    }
+
+    @Test
+    void shouldRespectConfiguredFallbackOrderBeforeTriggeringBrowserSupplement() {
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of(
+                SourceCandidate.builder()
+                        .url("https://docs.notion.so/api")
+                        .title("HTTP Docs")
+                        .sourceType("DOCS")
+                        .discoveryMethod("SEARCH")
+                        .reason("HTTP 搜索补源")
+                        .domain("docs.notion.so")
+                        .relevanceScore(0.93)
+                        .freshnessScore(0.66)
+                        .qualityScore(0.91)
+                        .build()
+        ));
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Notion AI")
+                .sourceType("DOCS")
+                .sourceCandidates(List.of(SourceCandidate.builder()
+                        .url("https://planned.example.com/docs")
+                        .title("Planned Docs")
+                        .sourceType("DOCS")
+                        .discoveryMethod("HEURISTIC")
+                        .reason("规划期候选")
+                        .domain("planned.example.com")
+                        .relevanceScore(0.83)
+                        .freshnessScore(0.61)
+                        .qualityScore(0.80)
+                        .build()))
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.TRUE)
+                .searchMode("HYBRID")
+                .searchFallbackOrder(List.of("PLANNED", "HTTP", "BROWSER"))
+                .maxSearchResults(2)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertEquals("HTTP_FALLBACK", result.getExecutionTrace().getSupplementMethod());
+        assertEquals("USE_HTTP_FALLBACK", result.getExecutionTrace().getFallbackDecision());
+        assertTrue(result.getSelectedTargets().stream()
+                .anyMatch(target -> "https://docs.notion.so/api".equals(target.getCandidate().getUrl())));
+        verify(browserSearchRuntimeService, never()).search(any());
+    }
+
+    @Test
+    void shouldExposeSearchQueriesAndFallbackOrderInExecutionPlan() {
+        List<String> searchQueries = List.of(
+                "Notion AI documentation api reference",
+                "site:docs.notion.so Notion AI"
+        );
+        List<String> fallbackOrder = List.of("PLANNED", "HTTP");
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Notion AI")
+                .sourceType("DOCS")
+                .sourceCandidates(List.of(SourceCandidate.builder()
+                        .url("https://docs.notion.so/guide")
+                        .title("Planned Docs")
+                        .sourceType("DOCS")
+                        .discoveryMethod("HEURISTIC")
+                        .reason("规划期候选")
+                        .domain("docs.notion.so")
+                        .relevanceScore(0.90)
+                        .freshnessScore(0.68)
+                        .qualityScore(0.90)
+                        .build()))
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .searchQueries(searchQueries)
+                .searchFallbackOrder(fallbackOrder)
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertIterableEquals(searchQueries, result.getExecutionPlan().getSearchQueries());
+        assertIterableEquals(fallbackOrder, result.getExecutionPlan().getFallbackOrder());
+        assertEquals(1, result.getExecutionPlan().getTargetCount());
+        assertEquals(1, result.getExecutionPlan().getMinVerifiedCount());
     }
 }

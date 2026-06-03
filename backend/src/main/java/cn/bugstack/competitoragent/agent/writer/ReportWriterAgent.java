@@ -11,13 +11,17 @@ import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
+import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -86,13 +90,14 @@ public class ReportWriterAgent extends BaseAgent {
                 .map(Report::getContent)
                 .orElse("");
         String revisionFocus = buildRevisionFocus(revisionPlan);
+        NormalizedAnalysisPayload normalizedAnalysis = normalizeAnalysisPayload(analysisResult, evidences);
 
         // 同一套 writer 模板通过 revisionMode 与 revisionPlan 控制“首稿/重写”分支。
         String prompt = promptService.render("writer", Map.of(
                 "taskName", safe(context.getTaskName()),
                 "subjectProduct", safe(context.getSubjectProduct()),
                 "reportLanguage", safe(context.getReportLanguage(), "中文"),
-                "analysisResult", analysisResult,
+                "analysisResult", normalizedAnalysis.serializedAnalysis(),
                 "currentReport", currentReport,
                 "evidenceList", evidenceList.toString(),
                 "revisionMode", String.valueOf(revisionMode),
@@ -119,7 +124,18 @@ public class ReportWriterAgent extends BaseAgent {
             log.info("report writing done, taskId={}, revisionMode={}, length={}",
                     context.getTaskId(), revisionMode, reportContent.length());
 
-            return AgentResult.success(reportContent,
+            Map<String, Object> output = new LinkedHashMap<>();
+            output.put("contractVersion", "1.0");
+            output.put("content", reportContent);
+            output.put("summary", report.getSummary());
+            output.put("revisionMode", revisionMode);
+            output.put("sourceUrls", normalizedAnalysis.sourceUrls());
+            output.put("issueFlags", normalizedAnalysis.issueFlags());
+            output.put("evidenceFragments", normalizedAnalysis.evidenceFragments());
+            output.put("revisionFocus", revisionFocus);
+            String outputJson = objectMapper.writeValueAsString(output);
+
+            return AgentResult.success(outputJson,
                     String.format("报告已生成，长度=%d，证据数=%d", reportContent.length(), evidences.size()),
                     System.currentTimeMillis(),
                     llmClient.getModelName(),
@@ -229,5 +245,106 @@ public class ReportWriterAgent extends BaseAgent {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * Writer 只接收 Analyzer 的共享输出字符串，但 Analyzer 可能处于新旧契约切换期。
+     * 这里统一把旧格式补齐成“分析内容 + sourceUrls + issueFlags + evidenceFragments”，保证写作阶段不再丢证据引用。
+     */
+    private NormalizedAnalysisPayload normalizeAnalysisPayload(String analysisResult, List<EvidenceSource> evidences) {
+        JsonNode rawJson = readJson(analysisResult);
+        ObjectNode normalized = rawJson instanceof ObjectNode objectNode
+                ? objectNode.deepCopy()
+                : objectMapper.createObjectNode().put("legacyAnalysisText", safe(analysisResult));
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>(readStringList(normalized.path("sourceUrls")));
+        LinkedHashSet<String> issueFlags = new LinkedHashSet<>(readStringList(normalized.path("issueFlags")));
+        List<EvidenceFragment> evidenceFragments = readEvidenceFragments(normalized.path("evidenceFragments"));
+
+        if (sourceUrls.isEmpty()) {
+            for (EvidenceSource evidence : evidences) {
+                if (evidence.getUrl() != null && !evidence.getUrl().isBlank()) {
+                    sourceUrls.add(evidence.getUrl());
+                }
+            }
+            if (!sourceUrls.isEmpty()) {
+                issueFlags.add("SOURCE_URLS_BACKFILLED");
+            }
+        }
+
+        if (evidenceFragments.isEmpty()) {
+            evidenceFragments = buildEvidenceFragmentsFromEvidence(evidences, issueFlags);
+        }
+
+        normalized.putPOJO("sourceUrls", new ArrayList<>(sourceUrls));
+        normalized.putPOJO("issueFlags", new ArrayList<>(issueFlags));
+        normalized.putPOJO("evidenceFragments", normalizeEvidenceFragments(evidenceFragments));
+        return new NormalizedAnalysisPayload(normalized.toPrettyString(),
+                new ArrayList<>(sourceUrls),
+                new ArrayList<>(issueFlags),
+                normalizeEvidenceFragments(evidenceFragments));
+    }
+
+    private List<String> readStringList(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        for (JsonNode item : node) {
+            String value = item.asText();
+            if (!value.isBlank()) {
+                values.add(value);
+            }
+        }
+        return new ArrayList<>(values);
+    }
+
+    private List<EvidenceFragment> readEvidenceFragments(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        List<EvidenceFragment> fragments = new ArrayList<>();
+        for (JsonNode item : node) {
+            fragments.add(objectMapper.convertValue(item, EvidenceFragment.class).normalized());
+        }
+        return fragments;
+    }
+
+    /**
+     * 当 Analyzer 没显式传 evidenceFragments 时，Writer 退回到任务证据列表补齐。
+     * 这样报告输出至少还能明确告诉后续阶段“哪些 URL 被拿来支撑了本次写作”。
+     */
+    private List<EvidenceFragment> buildEvidenceFragmentsFromEvidence(List<EvidenceSource> evidences,
+                                                                      LinkedHashSet<String> issueFlags) {
+        List<EvidenceFragment> fragments = new ArrayList<>();
+        for (EvidenceSource evidence : evidences) {
+            fragments.add(EvidenceFragment.builder()
+                    .stage("WRITE")
+                    .competitorName(evidence.getCompetitorName())
+                    .fieldName("report")
+                    .evidenceId(evidence.getEvidenceId())
+                    .sourceUrl(evidence.getUrl())
+                    .title(evidence.getTitle())
+                    .snippet(evidence.getContentSnippet())
+                    .issueFlags(new ArrayList<>(issueFlags))
+                    .build()
+                    .normalized());
+        }
+        return fragments;
+    }
+
+    private List<EvidenceFragment> normalizeEvidenceFragments(List<EvidenceFragment> fragments) {
+        List<EvidenceFragment> normalized = new ArrayList<>();
+        for (EvidenceFragment fragment : fragments) {
+            if (fragment != null) {
+                normalized.add(fragment.normalized());
+            }
+        }
+        return normalized;
+    }
+
+    private record NormalizedAnalysisPayload(String serializedAnalysis,
+                                             List<String> sourceUrls,
+                                             List<String> issueFlags,
+                                             List<EvidenceFragment> evidenceFragments) {
     }
 }

@@ -660,6 +660,20 @@ body {
   background: linear-gradient(180deg, #fcfeff 0%, #f1f8fc 100%);
 }
 
+.intervention-bar {
+  border-color: #d7e4f0;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+}
+
+.hero-actions .intervention-bar {
+  min-width: 280px;
+  margin-left: auto;
+}
+
+.hero-actions .intervention-bar .ant-card-body {
+  padding: 14px;
+}
+
 .task-config-card {
   margin-top: 16px;
 }
@@ -810,6 +824,69 @@ body {
   border: 1px solid #dce5ef;
   border-radius: 12px;
   background: #f9fbfd;
+}
+
+.diagnosis-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.diagnosis-summary-card {
+  padding: 14px 16px;
+  border: 1px solid #dce5ef;
+  border-radius: 12px;
+  background: #f8fbfd;
+}
+
+.diagnosis-summary-value {
+  display: block;
+  color: #123456;
+  font-size: 28px;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.diagnosis-summary-label {
+  display: block;
+  margin-top: 8px;
+  color: #5b6776;
+  font-size: 12px;
+}
+
+.diagnosis-section {
+  padding: 14px;
+  border: 1px solid #dce5ef;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfd 100%);
+}
+
+.diagnosis-evidence-list,
+.diagnosis-next-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.diagnosis-evidence-item,
+.diagnosis-next-action {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid #dce5ef;
+  border-radius: 12px;
+  background: #f9fbfd;
+}
+
+.diagnosis-link {
+  color: #1f4f8f;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.diagnosis-snippet {
+  margin: 0;
+  color: #51606f;
+  font-size: 12px;
 }
 
 .report-inline-metrics {
@@ -1009,6 +1086,7 @@ body {
 
   .hero-stats,
   .create-preview-hero,
+  .diagnosis-summary-grid,
   .report-inline-metrics,
   .knowledge-coverage-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1017,6 +1095,11 @@ body {
   .preview-lane-grid,
   .preview-pipeline-board {
     grid-template-columns: 1fr;
+  }
+
+  .hero-actions .intervention-bar {
+    min-width: 0;
+    margin-left: 0;
   }
 
   .markdown-report {

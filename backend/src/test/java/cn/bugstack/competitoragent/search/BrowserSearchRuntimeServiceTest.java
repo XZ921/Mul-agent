@@ -5,6 +5,7 @@ import cn.bugstack.competitoragent.config.PlaywrightBrowserManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
+import com.microsoft.playwright.Page;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -12,9 +13,12 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,7 +37,8 @@ class BrowserSearchRuntimeServiceTest {
                 browserManager,
                 properties,
                 engines,
-                new ObjectMapper()
+                new ObjectMapper(),
+                new SearchRuntimeFallbackPolicy(properties)
         );
 
         String url = service.buildSearchUrl("Notion AI docs");
@@ -52,7 +57,8 @@ class BrowserSearchRuntimeServiceTest {
                 browserManager,
                 properties,
                 engines,
-                new ObjectMapper()
+                new ObjectMapper(),
+                new SearchRuntimeFallbackPolicy(properties)
         );
 
         String url = service.buildSearchUrl("Notion AI pricing");
@@ -69,7 +75,8 @@ class BrowserSearchRuntimeServiceTest {
                 browserManager,
                 properties,
                 defaultEngines(),
-                new ObjectMapper()
+                new ObjectMapper(),
+                new SearchRuntimeFallbackPolicy(properties)
         );
 
         String url = service.buildSearchUrl("Notion AI official site");
@@ -111,12 +118,14 @@ class BrowserSearchRuntimeServiceTest {
         ));
         when(previewPage.url()).thenReturn("https://docs.example.com/guide");
         when(previewPage.title()).thenReturn("Guide Final");
+        doThrow(new IllegalStateException("preview page close failed")).when(previewPage).close();
 
         BrowserSearchRuntimeService service = new BrowserSearchRuntimeService(
                 browserManager,
                 properties,
                 engines,
-                new ObjectMapper()
+                new ObjectMapper(),
+                new SearchRuntimeFallbackPolicy(properties)
         );
 
         BrowserSearchRuntimeResult result = service.search(CollectorNodeConfig.builder()
@@ -147,7 +156,8 @@ class BrowserSearchRuntimeServiceTest {
                 browserManager,
                 properties,
                 engines,
-                new ObjectMapper()
+                new ObjectMapper(),
+                new SearchRuntimeFallbackPolicy(properties)
         );
 
         String url = service.buildSearchUrl("Notion AI 评测");
@@ -184,7 +194,8 @@ class BrowserSearchRuntimeServiceTest {
                 browserManager,
                 properties,
                 engines,
-                new ObjectMapper()
+                new ObjectMapper(),
+                new SearchRuntimeFallbackPolicy(properties)
         );
 
         BrowserSearchRuntimeResult result = service.search(CollectorNodeConfig.builder()
@@ -196,6 +207,189 @@ class BrowserSearchRuntimeServiceTest {
                 .build());
 
         assertTrue(result.getCandidates().isEmpty());
+    }
+
+    @Test
+    void shouldReturnStructuredFallbackWhenSearchTimeoutExhaustsRetries() {
+        SearchBrowserProperties properties = new SearchBrowserProperties();
+        properties.setEnabled(true);
+        properties.setMaxRetries(1);
+        SearchEngineProperties engines = defaultEngines();
+
+        Browser browser = mock(Browser.class);
+        BrowserContext context = mock(BrowserContext.class);
+        com.microsoft.playwright.Page searchPage = mock(com.microsoft.playwright.Page.class);
+
+        when(browserManager.getBrowser()).thenReturn(browser);
+        when(browser.newContext(any(Browser.NewContextOptions.class))).thenReturn(context);
+        when(context.newPage()).thenReturn(searchPage);
+        when(searchPage.navigate(anyString(), any(Page.NavigateOptions.class)))
+                .thenThrow(new RuntimeException("Timeout 15000ms exceeded"));
+
+        BrowserSearchRuntimeService service = new BrowserSearchRuntimeService(
+                browserManager,
+                properties,
+                engines,
+                new ObjectMapper(),
+                new SearchRuntimeFallbackPolicy(properties)
+        );
+
+        BrowserSearchRuntimeResult result = service.search(CollectorNodeConfig.builder()
+                .competitorName("Notion AI")
+                .sourceType("DOCS")
+                .browserSearchEnabled(Boolean.TRUE)
+                .searchQueries(List.of("Notion AI docs"))
+                .maxSearchResults(1)
+                .build());
+
+        assertTrue(result.getCandidates().isEmpty());
+        assertTrue(result.isFallbackSuggested());
+        assertEquals("search_timeout", result.getBlockedReason());
+        assertTrue(result.getSummary().contains("超时"));
+        verify(browserManager, times(2)).restartBrowser(anyString());
+    }
+
+    @Test
+    void shouldFallbackToPageAnchorsWhenEngineSelectorsReturnNoRows() {
+        SearchBrowserProperties properties = new SearchBrowserProperties();
+        properties.setEnabled(true);
+        properties.setEngine("baidu");
+        properties.setFallbackEngines(List.of("bing"));
+        properties.setMaxOpenResultPages(0);
+        SearchEngineProperties engines = defaultEngines();
+        engines.put("baidu", engine("百度", "https://www.baidu.com/s", "wd", true));
+
+        Browser browser = mock(Browser.class);
+        BrowserContext context = mock(BrowserContext.class);
+        com.microsoft.playwright.Page searchPage = mock(com.microsoft.playwright.Page.class);
+
+        when(browserManager.getBrowser()).thenReturn(browser);
+        when(browser.newContext(any(Browser.NewContextOptions.class))).thenReturn(context);
+        when(context.newPage()).thenReturn(searchPage);
+        when(searchPage.title()).thenReturn("Baidu");
+        when(searchPage.content()).thenReturn("<html><body>search results</body></html>");
+        when(searchPage.evalOnSelectorAll(eq("#content_left .result"), anyString(), any())).thenReturn(List.of());
+        when(searchPage.evalOnSelectorAll(eq("#content_left .c-container"), anyString(), any())).thenReturn(List.of());
+        when(searchPage.evalOnSelectorAll(eq("#content_left .result, #content_left .c-container, #content_left > div, #content_left > div[data-log], .result-op, .result-op.c-container"), anyString(), any())).thenReturn(List.of());
+        when(searchPage.evalOnSelectorAll(eq("main article"), anyString(), any())).thenReturn(List.of());
+        when(searchPage.evalOnSelectorAll(eq("main section"), anyString(), any())).thenReturn(List.of());
+        when(searchPage.evalOnSelectorAll(eq("article"), anyString(), any())).thenReturn(List.of());
+        when(searchPage.evalOnSelectorAll(eq("a[href]"), anyString(), any())).thenReturn(List.of());
+        when(searchPage.evaluate(anyString())).thenReturn(List.of(
+                Map.of(
+                        "title", "哔哩哔哩 产品更新日志",
+                        "url", "https://www.bilibili.com/read/cv123",
+                        "snippet", "这里是更新日志与版本功能说明，包含推荐算法、创作者工具和商业化能力变化。",
+                        "resultRank", 1
+                ),
+                Map.of(
+                        "title", "百度搜索",
+                        "url", "https://www.baidu.com/link?url=internal",
+                        "snippet", "",
+                        "resultRank", 2
+                )
+        ));
+
+        BrowserSearchRuntimeService service = new BrowserSearchRuntimeService(
+                browserManager,
+                properties,
+                engines,
+                new ObjectMapper(),
+                new SearchRuntimeFallbackPolicy(properties)
+        );
+
+        BrowserSearchRuntimeResult result = service.search(CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩")
+                .sourceType("NEWS")
+                .browserSearchEnabled(Boolean.TRUE)
+                .searchQueries(List.of("哔哩哔哩 产品更新 发布日志"))
+                .maxSearchResults(3)
+                .build());
+
+        assertEquals(1, result.getCandidates().size());
+        assertEquals("https://www.bilibili.com/read/cv123", result.getCandidates().get(0).getUrl());
+        assertEquals("baidu", result.getCandidates().get(0).getSearchEngine());
+    }
+
+    @Test
+    void shouldEnrichCandidateReasonWithPreviewContentSnippet() {
+        SearchBrowserProperties properties = new SearchBrowserProperties();
+        properties.setEnabled(true);
+        properties.setMaxOpenResultPages(1);
+        properties.setResultPageTimeoutMillis(4000);
+        properties.setMaxContentLengthPerPage(80);
+        SearchEngineProperties engines = defaultEngines();
+
+        Browser browser = mock(Browser.class);
+        BrowserContext context = mock(BrowserContext.class);
+        com.microsoft.playwright.Page searchPage = mock(com.microsoft.playwright.Page.class);
+        com.microsoft.playwright.Page previewPage = mock(com.microsoft.playwright.Page.class);
+
+        when(browserManager.getBrowser()).thenReturn(browser);
+        when(browser.newContext(any(Browser.NewContextOptions.class))).thenReturn(context);
+        when(context.newPage()).thenReturn(searchPage, previewPage);
+        when(searchPage.title()).thenReturn("Search");
+        when(searchPage.content()).thenReturn("<html><body>search results</body></html>");
+        when(searchPage.evalOnSelectorAll(anyString(), anyString(), any())).thenReturn(List.of(
+                Map.of(
+                        "title", "Docs One",
+                        "url", "https://docs.example.com/guide",
+                        "snippet", "guide content",
+                        "resultRank", 1
+                )
+        ));
+        when(previewPage.url()).thenReturn("https://docs.example.com/guide");
+        when(previewPage.title()).thenReturn("Guide Final");
+        when(previewPage.evaluate(anyString())).thenReturn(List.of(
+                Map.of(
+                        "selector", ".article-body",
+                        "tagName", "DIV",
+                        "className", "article-body prose",
+                        "idName", "main-content",
+                        "text", """
+                                这是文档正文的关键内容，详细说明了接口认证、速率限制、回调事件、错误码处理方式，
+                                也补充了接入步骤、调试建议以及面向企业团队的治理能力说明。
+                                """,
+                        "linkTextLength", 12
+                )
+        ));
+
+        BrowserSearchRuntimeService service = new BrowserSearchRuntimeService(
+                browserManager,
+                properties,
+                engines,
+                new ObjectMapper(),
+                new SearchRuntimeFallbackPolicy(properties)
+        );
+
+        BrowserSearchRuntimeResult result = service.search(CollectorNodeConfig.builder()
+                .competitorName("Notion AI")
+                .sourceType("DOCS")
+                .browserSearchEnabled(Boolean.TRUE)
+                .searchQueries(List.of("Notion AI docs"))
+                .maxSearchResults(1)
+                .build());
+
+        assertEquals(1, result.getCandidates().size());
+        assertEquals("Guide Final", result.getCandidates().get(0).getTitle());
+        assertTrue(result.getCandidates().get(0).getReason().contains("接口认证"));
+        assertTrue(result.getCandidates().get(0).getReason().length() <= 140);
+    }
+
+    @Test
+    void shouldUseBaiduAsDefaultPrimaryEngine() {
+        SearchBrowserProperties properties = new SearchBrowserProperties();
+        BrowserSearchRuntimeService service = new BrowserSearchRuntimeService(
+                browserManager,
+                properties,
+                defaultEngines(),
+                new ObjectMapper(),
+                new SearchRuntimeFallbackPolicy(properties)
+        );
+
+        assertEquals("baidu", properties.getEngine());
+        assertFalse(properties.getFallbackEngines().contains("baidu"));
+        assertEquals("baidu", service.getSearchEngineName());
     }
 
     private SearchEngineProperties defaultEngines() {

@@ -23,6 +23,7 @@ public class SearchSecurityConfigurationGuard implements ApplicationRunner {
 
     private final SearchEngineProperties searchEngineProperties;
     private final SerpApiProperties serpApiProperties;
+    private final QianfanSearchProperties qianfanSearchProperties;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -40,8 +41,13 @@ public class SearchSecurityConfigurationGuard implements ApplicationRunner {
                 && !UrlSecurityUtils.isHttpsUrl(serpApiProperties.getEndpoint())) {
             throw new BusinessException(ResultCode.PARAM_INVALID, "serpapi.endpoint 必须使用 https URL");
         }
-        log.info("搜索安全配置校验通过: engineCount={}, serpapiConfigured={}",
+        if (StringUtils.hasText(qianfanSearchProperties.getEndpoint())
+                && !UrlSecurityUtils.isHttpsUrl(qianfanSearchProperties.getEndpoint())) {
+            throw new BusinessException(ResultCode.PARAM_INVALID, "qianfan-search.endpoint 必须使用 https URL");
+        }
+        log.info("搜索安全配置校验通过: engineCount={}, serpapiConfigured={}, qianfanConfigured={}",
                 searchEngineProperties.size(),
-                StringUtils.hasText(serpApiProperties.getApiKey()));
+                StringUtils.hasText(serpApiProperties.getApiKey()),
+                StringUtils.hasText(qianfanSearchProperties.getApiKey()));
     }
 }
