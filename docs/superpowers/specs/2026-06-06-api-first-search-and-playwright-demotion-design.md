@@ -146,6 +146,25 @@
 3. title、snippet、URL path 是否命中 `sourceType` 对应的关键词。
 4. 可选一次轻量 HTTP 读取少量正文或页面标题。
 
+关键词匹配策略不能继续沿用旧的“简单包含”语义，而应升级为：
+
+1. 大小写不敏感。
+2. 中英文双语同义词匹配。
+3. 支持正则模式或等价规则模板。
+4. 对 `DOCS / PRICING / NEWS / REVIEW / OFFICIAL` 分别维护稳定的关键词组。
+
+例如：
+
+1. `PRICING` 至少应覆盖 `pricing|price|plan|plans|价格|定价|计费|套餐`
+2. `DOCS` 至少应覆盖 `docs|documentation|api|guide|help|文档|开发指南|帮助中心`
+3. `NEWS` 至少应覆盖 `blog|news|release|changelog|更新|发布日志|公告`
+4. `REVIEW` 至少应覆盖 `review|reviews|rating|compare|评测|评价|对比`
+
+轻量验证必须采用“保守丢弃”原则：
+
+1. 只有危险协议、黑名单域名、明显无效 URL、明确错误站点等硬失败场景，才允许进入 `DISCARDED`。
+2. 只因信息过少、title/snippet 不足、关键词不全命中，不允许直接判成 `DISCARDED`，而应进入 `UNVERIFIED`，避免误杀高价值 URL。
+
 轻量验证只允许三种结果：
 
 1. `VERIFIED`
@@ -166,11 +185,23 @@
 3. 高质量 API 候选。
 4. 启发式未验证候选。
 
+针对 `UNVERIFIED` 候选，必须增加一层“防反客为主”硬拦截：
+
+1. 如果当前候选池里只有启发式推导出的 `UNVERIFIED` 链接，且没有用户明确提供的 URL，不允许无限制地补满 `targetCount`。
+2. 在该场景下，系统必须先执行一次廉价可达性预检，例如 `HTTP status / redirect / title` 级别检查，禁止直接进入 `Playwright`。
+3. 只有通过廉价预检的 `UNVERIFIED` 启发式候选，才允许进入最终采集队列。
+4. 即使允许进入，也必须受 `maxUnverifiedTargets` 限制，避免系统拿一批猜测型 `/pricing`、`/docs`、`/blog` 404 页面去撞墙。
+
+本设计固定采用以下默认规则：
+
+1. `maxUnverifiedTargets = 1`
+2. 若没有 `VERIFIED` 候选、没有用户 URL、且启发式 `UNVERIFIED` 候选未通过廉价预检，则返回“无安全采集目标”，而不是继续尝试正文采集。
+
 目标选择必须满足以下约束：
 
 1. 不因为补齐数量而重新进入浏览器搜索。
 2. API 全部不可用时，仍能保住用户明确提供的 URL。
-3. 若只有 `UNVERIFIED` 候选，也允许以结构化降级理由继续执行。
+3. 若只有 `UNVERIFIED` 候选，也只允许在“已通过廉价预检且未超过 `maxUnverifiedTargets`”的前提下，以结构化降级理由继续执行。
 
 ### 5.6 最终正文采集
 
@@ -199,6 +230,7 @@
 3. `VERIFY_SKIPPED_HTTP_ONLY`
 4. `NO_VERIFIED_TARGET_USE_FALLBACK_CANDIDATES`
 5. `NO_CANDIDATES_AVAILABLE`
+6. `NO_SAFE_UNVERIFIED_TARGETS`
 
 对应行为如下：
 
@@ -208,6 +240,8 @@
    结构化失败。
 3. 验证无足够信号但候选可用：
    保留为降级目标，而不是直接失败。
+4. 只有启发式 `UNVERIFIED` 候选且没有用户 URL，且廉价预检未通过：
+   返回 `NO_SAFE_UNVERIFIED_TARGETS`，不再继续推进正文采集。
 
 ## 7. 配置默认值调整
 
@@ -221,6 +255,7 @@
 2. `verifyCandidates = true`，但语义改为“轻量验证”
 3. `verifyResultPage` 改为“最终目标页质量校验”
 4. `searchFallbackOrder` 不再包含 `BROWSER`
+5. `maxUnverifiedTargets = 1`
 
 ### 7.2 搜索 Provider 默认顺序
 
@@ -243,6 +278,24 @@
 1. 字段保留。
 2. 主语义变化。
 3. 默认不启用浏览器搜索。
+
+### 7.4 历史任务配置清洗
+
+由于历史任务配置已经以 JSON 形式落盘在数据库中，不能只修改“新任务默认值”，还必须在运行时对旧配置执行强制清洗。
+
+运行时清洗必须满足以下要求：
+
+1. 即使历史任务 JSON 中写着 `browserSearchEnabled = true`，内存中的有效配置也必须被强制覆写为 `false`。
+2. 即使历史任务的 `searchFallbackOrder` 中仍包含 `BROWSER`、`browserPreview` 或其他浏览器相关步骤，运行时也必须在内存中剔除这些步骤。
+3. 即使历史任务的 `searchMode` 仍带有旧的浏览器语义，运行时也不得因此重新进入浏览器搜索分支。
+4. 即使历史任务配置中不存在 `maxUnverifiedTargets`，运行时也必须补齐为新的安全默认值 `1`，避免旧配置绕过新拦截规则。
+5. 该清洗逻辑不能只放在新建任务工厂里，必须同时覆盖“历史任务反序列化 -> CollectorNodeConfig 入内存 -> SearchExecutionCoordinator.execute() 真正执行”这条链路。
+
+也就是说，本次重构必须同时做到：
+
+1. 新任务默认不再生成浏览器搜索配置。
+2. 旧任务重跑时，历史浏览器搜索配置在内存中被强制失效。
+3. 旧任务缺失的新安全字段在运行时被补齐默认值。
 
 ## 8. 现有模块映射
 
@@ -298,9 +351,14 @@
    - API 不可用时，若 `sourceCandidates` 或 `competitorUrls` 存在，任务继续执行。
    - API 不可用且没有候选时，返回结构化失败。
    - 默认运行期补源不再调用 `BrowserSearchRuntimeService`。
+   - 历史任务配置中即使包含 `browserSearchEnabled = true` 和 `BROWSER` fallback，运行时也不会触发浏览器搜索。
+   - 历史任务配置缺失 `maxUnverifiedTargets` 时，运行时自动补齐为 `1`。
+   - 只有启发式 `UNVERIFIED` 候选且无用户 URL 时，命中 `maxUnverifiedTargets` 和廉价预检拦截规则。
 2. `CandidateVerifierTest`
    - 验证不再依赖 `SourceCollector`。
    - 能区分 `VERIFIED / UNVERIFIED / DISCARDED`。
+   - 中英文双语关键词、大小写不敏感匹配和正则规则生效。
+   - 信息不足时进入 `UNVERIFIED`，而不是被误杀成 `DISCARDED`。
 3. `RoutingSearchSourceProviderTest`
    - 默认 provider 顺序不再包含 `browserPreview`。
    - API 不可用时返回空候选，而不隐式转浏览器。
@@ -313,6 +371,7 @@
 2. 有 API Key 时，任务优先使用 API 候选完成搜索。
 3. 搜索阶段全程不触发 `Playwright`。
 4. 最终目标页在 HTTP 不足时才触发 `Playwright`。
+5. 历史数据库中的旧任务配置在重跑时，仍不会重新进入浏览器搜索。
 
 ### 10.3 验收标准
 
