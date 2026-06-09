@@ -2,307 +2,24 @@
 
 ## 1. 文档目标
 
-本文档用于确定后端从“按 package 松散分层”演进为“按业务域组织的模块化单体”的重构方案，目标是同时满足以下诉求：
+本文档用于定义后端从“按 package 松散分层”演进为“按业务域组织的模块化单体”的重构方案。此次设计不仅关注目录结构，更关注真正可落地的工程边界，目标如下：
 
-- 工程结构清晰，模块职责边界稳定。
-- 模块之间低耦合，跨模块依赖可被测试约束。
-- 每个模块可以单独优化，不必牵一发而动全身。
-- 支持双人并行开发，降低大类冲突概率。
-- 为后续是否拆成 Maven 多模块保留空间，但当前不强制执行物理拆分。
+- 支持双人按业务域并行开发，尽量减少同文件冲突。
+- 让每个模块可以单独优化，不必频繁触碰其他模块内部实现。
+- 通过结构约束降低跨模块耦合，而不是只依赖口头约定。
+- 为未来是否演进成 Maven 多模块保留空间，但当前阶段不以物理拆分为优先目标。
 
-## 2. 当前问题
+## 2. 当前主要问题
 
-当前后端已经出现明显的业务域雏形，但整体仍以单 `backend` 工程内的平铺 package 为主，典型问题如下：
+当前代码已经出现业务域雏形，但真正的工程边界仍然较弱，主要问题如下：
 
-- 核心流程类过大，且同时承担编排、持久化、视图聚合、外部能力调用等多种职责。
-- 业务 Agent、Agent 运行时抽象、任务运行时、采集能力、报告能力之间存在直接穿透式依赖。
-- 多个模块直接访问共享 `repository` 与 `entity`，导致代码边界主要依赖约定，而非结构约束。
-- 目前最容易引发双人冲突的类集中在以下几个热点：
-  - `AnalysisTaskService`
-  - `DagExecutor`
-  - `SearchExecutionCoordinator`
-  - `CollectorAgent`
-  - `ReportService`
-- 如果直接迁移为 Maven 多模块，很容易因为边界未收敛而退化为“大 shared 包 + 到处互相引用”的假模块化。
+- 关键大类同时承担编排、持久化、外部调用、视图组装等多种职责。
+- Agent 运行时抽象与具体业务 Agent 混在一起，导致任务编排和业务优化容易同时改动同一批类。
+- `model`、`repository` 仍为全局扁平结构，跨模块直接访问实体和仓储的成本过低。
+- 采集、证据、报告、知识、RAG 等能力边界部分存在“语义分开、实现混用”的问题。
+- 如果直接拆成 Maven 多模块，极容易演化成“大 shared 包 + 到处互相 import”的假模块化。
 
-## 3. 设计结论
-
-本次重构采用以下结论：
-
-- 采用“按业务域组织的模块化单体”，暂不直接拆成多个 Maven 子模块。
-- 先用 package 边界 + ArchUnit 规则模拟模块边界，再逐步搬迁代码。
-- 每个模块内部采用统一的 `api / application / domain / infrastructure` 分层。
-- 新增 `agent-runtime`，将 Agent 运行时抽象与具体业务 Agent 解耦。
-- `SchemaExtractorAgent` 与 `CompetitorAnalysisAgent` 在当前阶段先归入 `knowledge-intelligence`，不单独拆出 `analysis-intelligence`。
-- 模块之间只通过稳定的 `DTO / Command / Query / Result / Port / Facade` 交互。
-- 严禁跨模块直接访问他人的 `repository`、复用他人的内部 `entity`、依赖他人的基础设施实现。
-
-## 4. 重构目标与非目标
-
-### 4.1 重构目标
-
-- 建立业务域级别的工程边界，而非继续沿用技术层级为主的包组织。
-- 让每个业务域都可以指定 owner，并独立推进性能、规则和质量优化。
-- 让任务编排、采集、知识、报告等能力可以并行演进。
-- 让未来的工程拆分建立在稳定接口之上，而不是建立在目录搬迁之上。
-
-### 4.2 非目标
-
-- 本阶段不做微服务化。
-- 本阶段不一次性重命名或搬迁所有包。
-- 本阶段不将所有 DTO、Entity、Repository 统一下沉到 shared。
-- 本阶段不以 Maven 多模块数量作为成功标准。
-
-## 5. 目标模块划分
-
-最终采用 8 个模块：
-
-| 目标模块 | 核心职责 | 当前主要代码映射 |
-| --- | --- | --- |
-| `shared-kernel` | 最小共享契约、异常、通用标识与少量稳定 DTO | `common`、少量稳定 `dto/enum` |
-| `governance-platform` | 配额、预算、AI 审计、安全、运行约束、底层配置边界 | `governance`、`security`、部分 `config`、部分 `llm port` |
-| `agent-runtime` | Agent SPI、能力注册、执行上下文、执行返回、运行时治理 | `agent/Agent*`、`BaseAgent`、`agent/capability` |
-| `task-orchestration` | 任务定义、运行、DAG 编排、恢复、回放、事件流、节点控制 | `task`、`workflow`、`event`、`controller/Task*` |
-| `collection-intelligence` | 搜索计划、候选源筛选、网页抓取、采集编排、采集质量优化 | `search`、`source`、`agent/collector` |
-| `knowledge-intelligence` | 知识接入、RAG、记忆、索引、结构化抽取、分析能力 | `knowledge`、`rag`、`memory`、`context`、`agent/extractor`、`agent/analyzer` |
-| `report-delivery` | 报告生成、证据查询、质量复核、导出与交付 | `report`、`agent/writer`、`agent/reviewer` |
-| `conversation-entry` | 对话入口、意图识别、任务表单草稿、动作翻译、解释型问答 | `conversation`、`controller/ConversationController`、`agent/conversation` |
-
-## 6. 模块职责边界
-
-### 6.1 shared-kernel
-
-`shared-kernel` 只能放“跨模块稳定且不可避免共享”的内容：
-
-- `ResultCode`
-- `BusinessException`
-- `ApiResponse` 类通用响应封装
-- `TraceId` 等基础追踪标识
-- 通用分页对象
-- 少量跨模块 `Result DTO`
-- 通用枚举与值对象
-
-明确禁止进入 `shared-kernel` 的内容：
-
-- JPA `entity`
-- 具体业务 `repository`
-- 任意模块的内部领域模型
-- 为了省事而塞进去的临时 DTO
-
-### 6.2 governance-platform
-
-`governance-platform` 作为底座模块，负责：
-
-- 配额与预算控制
-- AI 调用审计
-- 模型路由与安全约束
-- 运行时安全校验
-- 与底层运行配置相关的治理规则
-
-该模块可以被业务域依赖，但不应反向依赖任何业务域。
-
-### 6.3 agent-runtime
-
-`agent-runtime` 只负责 Agent 运行时抽象，不负责承载具体业务 Agent。该模块包含：
-
-- `Agent`
-- `AgentContext`
-- `AgentResult`
-- `BaseAgent`
-- `AgentCapability`
-- `AgentCapabilityRegistry`
-- 统一执行上下文与能力注册机制
-
-该模块的价值是让 `task-orchestration` 调用的是 Agent 运行时能力，而不是直接知道具体业务 Agent 的实现细节。
-
-### 6.4 task-orchestration
-
-`task-orchestration` 是系统主控域，负责：
-
-- 任务创建、预览、执行、恢复、重试、停止
-- DAG 编排、节点状态推进、回放、恢复建议
-- 任务事件流、进度快照、任务详情视图
-- 任务生命周期上的应用编排
-
-该模块不应直接深入其他模块的持久化层，而应通过应用接口或 port 驱动外部能力。
-
-### 6.5 collection-intelligence
-
-`collection-intelligence` 负责采集闭环：
-
-- 搜索计划生成
-- 搜索执行协调
-- 候选源发现与过滤
-- 候选验证、评分、排序
-- 页面抓取、浏览器运行时、采集结果结构化
-- `CollectorAgent`
-
-该模块可以被单独优化，特别适合围绕“搜索质量、证据质量、采集稳定性”持续演进。
-
-### 6.6 knowledge-intelligence
-
-`knowledge-intelligence` 负责知识与分析闭环：
-
-- 组织知识接入
-- RAG 索引、切片、召回、重排
-- 任务记忆写回与复用
-- 结构化抽取与分析
-- `SchemaExtractorAgent`
-- `CompetitorAnalysisAgent`
-
-当前阶段将抽取与分析保留在同一模块内，是为了减少迁移成本，后续若分析复杂度继续增长，再考虑独立出 `analysis-intelligence`。
-
-### 6.7 report-delivery
-
-`report-delivery` 负责交付闭环：
-
-- 报告聚合与生成
-- 证据查询与证据追溯
-- 报告质量复核
-- 导出与正式交付记录
-- `ReportWriterAgent`
-- `QualityReviewAgent`
-
-该模块只消费任务、证据和知识视图，不应反向依赖 `search/source` 内部实现。
-
-### 6.8 conversation-entry
-
-`conversation-entry` 负责统一对话入口：
-
-- 会话处理
-- 意图识别
-- 模式路由
-- 表单草稿生成
-- 任务动作翻译
-- 解释型问答与研究型回复
-- `ConversationAgent`
-
-该模块可以调用其他模块暴露的应用接口，但不应绕过接口直接操纵运行时内部对象。
-
-## 7. 模块内部统一分层
-
-每个业务模块内部采用统一结构：
-
-### 7.1 api
-
-职责如下：
-
-- `controller`
-- 入参出参适配
-- REST 与序列化边界
-
-禁止事项如下：
-
-- 不在 `api` 中编排核心业务流程
-- 不在 `api` 中直接访问 `repository`
-- 不在 `api` 中实现跨模块业务逻辑
-
-### 7.2 application
-
-职责如下：
-
-- `command / query / use case`
-- 模块 facade 的接口与实现
-- 事务边界
-- 跨领域编排，但仅基于接口
-
-说明：
-
-- 对外暴露给其他模块的应用接口放在 `application` 更清晰。
-- `api` 只负责承接外部请求，不负责对模块外暴露内部应用能力。
-
-### 7.3 domain
-
-职责如下：
-
-- 领域模型
-- 规则、策略、领域服务
-- 模块内部 port 接口
-- 与业务含义强绑定的对象
-
-说明：
-
-- `domain` 不直接依赖具体基础设施实现。
-- 所有关键业务规则优先下沉到 `domain`，而不是堆在大 `service` 类中。
-
-### 7.4 infrastructure
-
-职责如下：
-
-- JPA repository 实现与适配
-- 外部系统客户端
-- 缓存、消息、搜索、浏览器、模型供应商适配器
-- 持久化转换
-
-说明：
-
-- `infrastructure` 是实现层，不是对外契约层。
-- 其他模块不允许直接依赖某模块的 `infrastructure`。
-
-## 8. 模块依赖规则
-
-### 8.1 顶层规则
-
-- `shared-kernel` 不依赖任何业务模块。
-- `governance-platform` 只依赖 `shared-kernel` 与底层技术实现。
-- `agent-runtime` 依赖 `shared-kernel` 与必要的治理接口，不依赖具体业务 Agent。
-- 业务域之间只依赖对方 `application` 暴露的稳定接口或 `domain` 中的 port 契约。
-
-### 8.2 强制禁令
-
-以下三条为重构硬约束，优先级高于目录命名：
-
-- 不允许跨模块直接访问别人的 `repository`
-- 不允许跨模块复用内部 `entity`
-- 跨模块只传稳定的 `DTO / Command / Query / Result`
-
-此外继续补充以下禁令：
-
-- 不允许跨模块依赖对方 `infrastructure`
-- 不允许 `controller` 直接依赖 `workflow` 等运行时内部实现
-- 不允许以“临时方便”为理由直接共享领域模型
-
-### 8.3 建议依赖方向
-
-- `conversation-entry` 可依赖 `task-orchestration`、`knowledge-intelligence`、`report-delivery` 的应用接口。
-- `task-orchestration` 可依赖 `agent-runtime` 与各业务模块暴露的应用接口。
-- `collection-intelligence`、`knowledge-intelligence`、`report-delivery` 可依赖 `governance-platform`。
-- 业务域默认都可以依赖 `shared-kernel`。
-
-## 9. 包级落地策略
-
-本阶段采用“模块化单体”，因此优先做 package 组织，而非 Maven 物理拆分。
-
-建议 package 组织方式保持“模块根包 + 四层子包”的结构，例如：
-
-```text
-cn.bugstack.competitoragent.task.api
-cn.bugstack.competitoragent.task.application
-cn.bugstack.competitoragent.task.domain
-cn.bugstack.competitoragent.task.infrastructure
-```
-
-其他模块可采用同样规则：
-
-- `cn.bugstack.competitoragent.collection.*`
-- `cn.bugstack.competitoragent.knowledge.*`
-- `cn.bugstack.competitoragent.report.*`
-- `cn.bugstack.competitoragent.conversation.*`
-- `cn.bugstack.competitoragent.governance.*`
-- `cn.bugstack.competitoragent.agentruntime.*`
-- `cn.bugstack.competitoragent.shared.*`
-
-说明：
-
-- 任务域和报告域可以较平滑地从现有包迁移。
-- 采集域与知识域需要整合当前分散在 `search/source/agent.*`、`knowledge/rag/memory/context` 的实现。
-- 包重构优先目标是建立稳定边界，而不是追求一次性命名完美。
-
-## 10. 现有代码映射建议
-
-### 10.1 第一批关键大类
-
-这些类是第一批必须重点拆解的对象：
+当前最容易引发双人冲突的热点类包括：
 
 - `AnalysisTaskService`
 - `DagExecutor`
@@ -310,15 +27,356 @@ cn.bugstack.competitoragent.task.infrastructure
 - `CollectorAgent`
 - `ReportService`
 
-原因如下：
+## 3. 设计结论
 
-- 它们既是高频变更点，也是跨职责堆积点。
-- 它们是双人并行时最容易产生冲突的入口。
-- 拆开后能最快体现模块化收益。
+### 3.1 总体结论
 
-### 10.2 task-orchestration 映射建议
+- 当前阶段采用“按业务域组织的模块化单体”。
+- 当前阶段优先做职责拆分和结构约束，不优先做大规模文件搬迁。
+- 当前阶段先用 package 边界 + ArchUnit 模拟模块边界，不直接拆成多个 Maven 子模块。
 
-建议优先整理如下类：
+### 3.2 关键修正结论
+
+- `agent-runtime` 不再放在后续阶段抽取，而是前置为“阶段 1 前置基线”。
+- 跨模块调用只允许依赖对方 `application facade`，不允许直接依赖对方 `domain`。
+- 将原本偏大的 `governance-platform` 拆分为：
+  - `governance-platform`
+  - `ai-platform`
+- 证据能力采用明确归属：当前阶段证据归 `collection-intelligence`，`report-delivery` 只读 evidence facade。
+- `knowledge-intelligence` 当前可以先承载抽取与分析，但必须设定未来拆分触发条件。
+
+## 4. 重构目标与非目标
+
+### 4.1 重构目标
+
+- 建立业务域级别的清晰边界。
+- 让跨模块依赖收敛到稳定应用接口。
+- 让 `task-orchestration`、`collection-intelligence` 等热点领域可独立演进。
+- 让后续架构演进建立在可验证的结构规则上。
+
+### 4.2 非目标
+
+- 本阶段不做微服务化。
+- 本阶段不以 Maven 模块数量作为成功指标。
+- 本阶段不一次性搬迁全部包、DTO、Entity、Repository。
+- 本阶段不允许把共享问题简单转移到 `shared-kernel`。
+
+## 5. 目标模块划分
+
+当前阶段建议收敛为 9 个模块：
+
+| 模块 | 核心职责 | 当前主要映射 |
+| --- | --- | --- |
+| `shared-kernel` | 最小共享契约、错误码、trace、通用分页、极少量稳定跨模块结果对象 | `common`、少量稳定 `dto/enum` |
+| `governance-platform` | 配额、审计、策略、安全约束、运行治理 | `governance`、`security`、部分 `log` |
+| `ai-platform` | 模型网关、provider、routing、prompt、embedding、rerank、AI 客户端配置 | `llm`、部分 `config` |
+| `agent-runtime` | Agent SPI、执行上下文、执行结果、能力注册、运行时抽象 | `agent/Agent*`、`BaseAgent`、`agent/capability` |
+| `task-orchestration` | 任务创建、执行、恢复、回放、事件流、DAG 编排、节点控制 | `task`、`workflow`、`event`、`controller/Task*` |
+| `collection-intelligence` | 搜索、候选源筛选、采集、证据沉淀、采集质量优化 | `search`、`source`、`agent/collector`、`EvidenceSourceRepository` 相关能力 |
+| `knowledge-intelligence` | 知识接入、RAG、记忆、上下文装配、结构化抽取、竞品分析 | `knowledge`、`rag`、`memory`、`context`、`agent/extractor`、`agent/analyzer` |
+| `report-delivery` | 报告生成、质量复核、导出、交付 | `report`、`agent/writer`、`agent/reviewer` |
+| `conversation-entry` | 对话入口、意图识别、表单草稿、动作翻译、解释型问答 | `conversation`、`controller/ConversationController`、`agent/conversation` |
+
+## 6. 模块职责边界
+
+### 6.1 shared-kernel
+
+`shared-kernel` 只允许进入以下内容：
+
+- 不可变值对象
+- 错误码
+- 通用异常
+- trace / correlation id
+- 通用分页对象
+- 跨模块 command / result 基类
+- 3 个以上模块稳定消费的极少量结果对象
+
+明确禁令如下：
+
+- JPA Entity 永远不能进入 `shared-kernel`
+- Request / Response DTO 默认不能进入 `shared-kernel`
+- 任意模块内部领域模型不能进入 `shared-kernel`
+- Repository、Adapter、Service、Facade 都不能进入 `shared-kernel`
+
+新增 shared 对象时必须补充一条说明：
+
+- 为什么它不能归属某个业务模块
+
+### 6.2 governance-platform
+
+`governance-platform` 只负责治理与约束，不持有 AI 平台实现细节。范围包括：
+
+- 配额与预算控制
+- AI 调用审计
+- 组织级策略
+- 运行时安全约束
+- URL 安全、权限、治理默认值
+
+该模块不负责：
+
+- 模型 provider 客户端
+- prompt 资源管理
+- embedding / rerank / routing 实现
+
+### 6.3 ai-platform
+
+`ai-platform` 负责 AI 平台能力，范围包括：
+
+- `ModelGateway`
+- provider 注册与调用
+- routing policy
+- prompt template
+- embedding client
+- rerank client
+- AI 调用相关运行配置
+
+该模块可以被业务模块依赖，但它不负责配额、组织策略与安全审批。
+
+### 6.4 agent-runtime
+
+`agent-runtime` 只承载 Agent 运行时抽象，不承载具体业务 Agent 逻辑。范围包括：
+
+- `Agent`
+- `AgentContext`
+- `AgentResult`
+- `BaseAgent`
+- `AgentCapability`
+- `AgentCapabilityRegistry`
+- `AgentExecutionRequest`
+- `AgentExecutionResponse`
+
+该模块是阶段 1 前置基线，必须先冻结边界，再允许任务域与采集域分别重构。
+
+### 6.5 task-orchestration
+
+负责：
+
+- 任务定义
+- 任务执行
+- DAG 编排
+- 节点控制
+- 恢复与回放
+- 事件流
+- 状态机推进
+
+不负责：
+
+- 搜索内部策略
+- 证据验证实现
+- 报告内部组装细节
+- 具体 Agent SPI 设计
+
+### 6.6 collection-intelligence
+
+负责：
+
+- 搜索计划与执行
+- 候选源发现、评分、选择、验证
+- 网页抓取与浏览器运行时
+- 采集结果结构化
+- 证据沉淀与 evidence facade
+- `CollectorAgent`
+
+当前阶段明确约束：
+
+- 证据归 `collection-intelligence`
+- `report-delivery` 不允许直接查 `EvidenceSourceRepository`
+- 其他模块通过 evidence facade 或 query result 读取证据视图
+
+### 6.7 knowledge-intelligence
+
+负责：
+
+- 知识接入
+- RAG 检索链路
+- 记忆写回与复用
+- 任务上下文装配
+- 结构化抽取
+- 竞品分析
+- `SchemaExtractorAgent`
+- `CompetitorAnalysisAgent`
+
+当前阶段允许抽取与分析共处一个模块，但必须设定拆分触发条件：
+
+- 分析规则开始独立演进
+- `CompetitorAnalysisAgent` 复杂度持续上升
+- schema 抽取与知识检索频繁相互影响
+
+触发条件成立后，再考虑独立出 `analysis-intelligence`。
+
+### 6.8 report-delivery
+
+负责：
+
+- 报告组装
+- 质量复核
+- 导出
+- 正式交付记录
+- `ReportWriterAgent`
+- `QualityReviewAgent`
+
+该模块只读取：
+
+- 任务视图
+- knowledge 视图
+- evidence facade 返回的证据视图
+
+该模块不允许：
+
+- 直接访问采集仓储
+- 直接依赖 `search/source` 内部实现
+
+### 6.9 conversation-entry
+
+负责：
+
+- 会话入口
+- 意图识别
+- 任务表单草稿
+- 动作翻译
+- 解释型问答
+- `ConversationAgent`
+
+该模块只调用其他模块暴露的应用接口，不直接操作运行时内部对象。
+
+## 7. 模块内部统一分层
+
+每个模块内部采用：
+
+- `api`
+- `application`
+- `domain`
+- `infrastructure`
+
+### 7.1 api
+
+只负责：
+
+- controller
+- request / response adapter
+- 协议与序列化边界
+
+### 7.2 application
+
+负责：
+
+- command / query / use case
+- 模块 facade 接口与实现
+- 事务边界
+- 跨模块调用编排
+
+约束如下：
+
+- 跨模块调用只允许依赖对方 `application facade`
+- 不允许绕过 facade 直接依赖对方 `domain`
+
+### 7.3 domain
+
+负责：
+
+- 本模块规则
+- 领域模型
+- 领域服务
+- 本模块内部 port
+
+约束如下：
+
+- `domain port` 由本模块定义，供外部 adapter 实现
+- 其他模块不应直接 import 本模块 `domain`
+- 禁止将 `domain` 当作另一种共享模型
+
+### 7.4 infrastructure
+
+负责：
+
+- repository 适配
+- 外部客户端
+- 缓存、消息、浏览器、AI 客户端实现
+- 持久化转换
+
+## 8. 模块依赖规则
+
+### 8.1 顶层依赖规则
+
+- `shared-kernel` 不依赖业务模块
+- `governance-platform` 只依赖 `shared-kernel`
+- `ai-platform` 可依赖 `shared-kernel`，但不依赖业务域
+- `agent-runtime` 可依赖 `shared-kernel` 与必要平台接口
+- 业务模块之间只依赖对方 `application facade`
+
+### 8.2 强制禁令
+
+- 不允许跨模块直接访问别人的 `repository`
+- 不允许跨模块复用内部 `entity`
+- 不允许跨模块直接 import 对方 `domain`
+- 不允许跨模块依赖对方 `infrastructure`
+- `controller` 不允许直接依赖 `workflow` 等运行时内部实现
+
+### 8.3 Evidence 依赖规则
+
+- evidence 当前归 `collection-intelligence`
+- 其他模块读取证据只能通过 evidence facade
+- `report-delivery` 不允许直接依赖 `EvidenceSourceRepository`
+
+## 9. 包级落地策略
+
+当前阶段先做“职责拆分”，再做“包搬迁”。优先级如下：
+
+1. 删除冗余代码
+2. 抽 `facade / port`
+3. 增加 ArchUnit
+4. 固化跨模块 DTO
+5. 再搬 package
+
+第一轮不要追求大规模改包名，因为这会显著提高 merge 冲突概率。
+
+## 10. 当前扁平 model / repository 的过渡策略
+
+当前项目的 `model`、`repository` 是全局扁平结构，因此不能用“理想规则”直接硬切。必须采用过渡策略：
+
+### 阶段 A：先标记违规，允许白名单
+
+- ArchUnit 先识别跨模块 `repository / entity` 访问
+- 对现有历史依赖设置显式白名单
+- 白名单必须写明原因和目标删除阶段
+
+### 阶段 B：先建模块级 facade / query result
+
+- 用模块 facade 和 query result 替代直接读取 `TaskNode`、`AnalysisTask`、`Report`、`EvidenceSource`、`KnowledgeDocument` 等实体
+
+### 阶段 C：repository 逐步内聚到模块 infrastructure
+
+- 历史 `repository` 按归属逐步迁回业务域
+- 迁移时同步收紧调用入口
+
+### 阶段 D：删除白名单
+
+- 历史跨模块直连被替换完毕后，删除对应白名单
+
+## 11. 关键代码映射建议
+
+### 11.1 agent-runtime 前置基线
+
+必须先抽出以下类并冻结接口：
+
+- `Agent`
+- `AgentContext`
+- `AgentResult`
+- `BaseAgent`
+- `AgentCapability`
+- `AgentCapabilityRegistry`
+- `SpringAgentCapabilityRegistry`
+- `AgentExecutionRequest`
+- `AgentExecutionResponse`
+
+冻结完成后：
+
+- `task-orchestration` 只依赖 `agent-runtime`
+- 各业务 Agent 再回归各自模块
+
+### 11.2 task-orchestration
+
+优先整理：
 
 - `AnalysisTaskService`
 - `TaskDefinitionAppService`
@@ -333,16 +391,9 @@ cn.bugstack.competitoragent.task.infrastructure
 - `RecoveryEngine`
 - `TaskEventReplayService`
 
-拆分方向如下：
+### 11.3 collection-intelligence
 
-- `api`：`TaskController`、`TaskReplayController`、`TaskEventStreamController`
-- `application`：任务命令、查询、回放、恢复 facade
-- `domain`：任务状态机、恢复策略、计划版本规则、编排规则
-- `infrastructure`：任务持久化、事件持久化、快照缓存、消息适配
-
-### 10.3 collection-intelligence 映射建议
-
-建议优先整理如下类：
+优先整理：
 
 - `SearchExecutionCoordinator`
 - `CollectionTargetSelector`
@@ -352,38 +403,11 @@ cn.bugstack.competitoragent.task.infrastructure
 - `PlaywrightPageCollector`
 - `BrowserSearchRuntimeService`
 - `CollectorAgent`
+- 证据 facade 与 query result
 
-拆分方向如下：
+### 11.4 knowledge-intelligence
 
-- `api`：采集调试、采集洞察类接口
-- `application`：搜索执行用例、采集编排用例、采集质量汇总
-- `domain`：候选源评分、验证策略、选择规则、搜索计划模型
-- `infrastructure`：搜索提供方、浏览器运行时、抓取器实现
-
-### 10.4 agent-runtime 映射建议
-
-建议从现有 `agent` 中抽取：
-
-- `Agent`
-- `AgentContext`
-- `AgentResult`
-- `BaseAgent`
-- `AgentCapability`
-- `AgentCapabilityRegistry`
-- `SpringAgentCapabilityRegistry`
-- `AgentExecutionRequest`
-- `AgentExecutionResponse`
-
-抽取后保留在各业务域中的具体 Agent 如下：
-
-- `collection-intelligence`：`CollectorAgent`
-- `knowledge-intelligence`：`SchemaExtractorAgent`、`CompetitorAnalysisAgent`
-- `report-delivery`：`ReportWriterAgent`、`QualityReviewAgent`
-- `conversation-entry`：`ConversationAgent`
-
-### 10.5 knowledge-intelligence 映射建议
-
-建议整理如下类：
+优先整理：
 
 - `KnowledgeIngestionService`
 - `KnowledgeDomainService`
@@ -398,9 +422,9 @@ cn.bugstack.competitoragent.task.infrastructure
 - `SchemaExtractorAgent`
 - `CompetitorAnalysisAgent`
 
-### 10.6 report-delivery 映射建议
+### 11.5 report-delivery
 
-建议整理如下类：
+优先整理：
 
 - `ReportService`
 - `EvidenceQueryService`
@@ -410,9 +434,9 @@ cn.bugstack.competitoragent.task.infrastructure
 - `ReportWriterAgent`
 - `QualityReviewAgent`
 
-### 10.7 conversation-entry 映射建议
+### 11.6 conversation-entry
 
-建议整理如下类：
+优先整理：
 
 - `ConversationService`
 - `IntentRecognitionService`
@@ -422,118 +446,126 @@ cn.bugstack.competitoragent.task.infrastructure
 - `FormDraftBuilder`
 - `ConversationAgent`
 
-## 11. 双人并行开发建议
+## 12. 双人并行开发策略
 
-### 11.1 第一阶段并行拆分
+### 12.1 前置基线
 
-双人并行的第一阶段建议只选两条主线：
+第一步不是直接拆 task 和 collection，而是先冻结 `agent-runtime` 边界。
+
+原因如下：
+
+- `DagExecutor` 已依赖 `AgentCapabilityRegistry`
+- `CollectorAgent`、`ReportWriterAgent`、`QualityReviewAgent` 等都绕不开 Agent SPI
+- 如果不先冻结 Agent 运行时接口，两个人重构时仍会同时改 Agent 相关抽象
+
+### 12.2 第一条并行主线
+
+在 `agent-runtime` 基线稳定后，双人第一轮并行建议如下：
 
 - 开发者 A：`task-orchestration`
 - 开发者 B：`collection-intelligence`
 
-原因如下：
+### 12.3 第二条并行主线
 
-- 这两条线最容易互相独立优化。
-- 这两条线当前都有明显的大类和职责堆积问题。
-- 它们的改造收益最直接，可尽快建立模块化重构信心。
+第一轮稳定后再推进：
 
-### 11.2 共同遵守的协作边界
+- `knowledge-intelligence`
+- `report-delivery`
+- `conversation-entry`
 
-两人并行时共同遵守以下原则：
+## 13. 迁移计划
 
-- 先确定模块接口，再分别进入模块内部重构。
-- 任何跨模块调用先抽 `application facade` 或 `port`。
-- 任何新的持久化访问只能写在本模块 `infrastructure`。
-- 任何共享对象必须经过 `shared-kernel` 准入判断。
+### 阶段 0：确认模块边界
 
-### 11.3 第二阶段协作
+- 固化模块划分
+- 固化 evidence 归属
+- 固化 `shared-kernel` 准入标准
 
-第一阶段稳定后再进行：
+### 阶段 1：agent-runtime 前置基线
 
-- 抽取 `agent-runtime`
-- 整理 `knowledge-intelligence`
-- 整理 `report-delivery`
-- 整理 `conversation-entry`
+- 抽出 Agent SPI 与能力注册
+- 冻结 `Agent / AgentContext / AgentResult / Registry` 边界
+- 让业务 Agent 不再承担运行时抽象职责
 
-这样可以避免一开始多线改造导致边界频繁变动。
+### 阶段 2：ArchUnit 建立硬约束
 
-## 12. 迁移计划
+至少覆盖以下 4 类禁令：
 
-### 12.1 阶段 0：确定边界
+- `repository`
+- `entity`
+- `infrastructure`
+- `controller`
 
-- 固化本文档中的模块映射与依赖规则
-- 明确 `shared-kernel` 准入清单
-- 明确具体 Agent 归属
+当前阶段允许显式白名单。
 
-### 12.2 阶段 1：用 ArchUnit 落边界
+### 阶段 3：双线并行拆分 task 与 collection
 
-- 为模块边界增加 ArchUnit 测试
-- 先禁止跨模块 `repository` 访问
-- 再禁止跨模块 `entity` 访问
-- 再限制 `controller -> workflow` 等不合理依赖
+- `task-orchestration`：拆命令、查询、状态机、回放、恢复
+- `collection-intelligence`：拆验证、选择、补源、证据 facade
 
-### 12.3 阶段 2：先拆 task 与 collection
+### 阶段 4：收口 knowledge / report / conversation
 
-- `task-orchestration` 整理查询、命令、运行时应用服务
-- `collection-intelligence` 整理搜索、验证、抓取、采集闭环
-- 两条线只通过接口协作
+- 统一 facade
+- 替换跨模块实体读取
+- 收敛 query result
 
-### 12.4 阶段 3：抽出 agent-runtime
+### 阶段 5：评估是否拆 Maven 多模块
 
-- 提取 Agent SPI 与能力注册
-- 将业务 Agent 回归各模块
-- 让 `task-orchestration` 面向运行时抽象编排
+只有在模块边界稳定后再考虑。
 
-### 12.5 阶段 4：整理 knowledge、report、conversation
+## 14. 可执行验收标准
 
-- 建立各自的 `api / application / domain / infrastructure`
-- 清理跨模块持久化穿透
-- 收敛 DTO 和应用接口
+### 14.1 结构验收
 
-### 12.6 阶段 5：评估是否拆 Maven 多模块
+- ArchUnit 至少覆盖 `repository / entity / infrastructure / controller` 四类禁令
+- 历史跨模块访问有显式白名单，并记录计划删除阶段
+- `report-delivery` 不再直接访问证据仓储
 
-满足以下条件后再考虑 Maven 多模块：
+### 14.2 类级验收
 
-- ArchUnit 边界长期稳定
-- 跨模块 DTO 数量收敛
-- 主要业务模块 owner 明确
-- 模块间依赖图可解释且无大规模循环
+- `AnalysisTaskService` 行数下降到 200 行以内，只保留 facade / 治理入口
+- `DagExecutor` 不再包含搜索事件 payload 构造、动态计划追加细节
+- `SearchExecutionCoordinator` 拆出候选验证、目标选择、补源策略
+- `ReportService` 拆出报告组装、覆盖率诊断、导出逻辑
 
-## 13. 验收标准
+### 14.3 协作验收
 
-当以下条件满足时，说明本次重构方向成立：
+- 双线分支连续合并 3 次无同文件冲突
+- 新增跨模块调用默认落在 facade，而不是直接读取实体
 
-- 关键业务域都具备明确 owner 和模块边界。
-- 双人可以分别在 `task-orchestration` 与 `collection-intelligence` 中连续开发而不频繁冲突。
-- 新增业务能力默认有明确模块归属，而不是继续塞回大 `service`。
-- ArchUnit 可以阻止跨模块 `repository/entity` 穿透。
-- `shared-kernel` 没有膨胀为新的大杂烩包。
-- 对是否拆为 Maven 多模块的讨论建立在稳定边界基础上，而不是建立在“目录太多太乱”的直觉之上。
+## 15. 风险与控制
 
-## 14. 风险与控制
+### 15.1 主要风险
 
-### 14.1 风险
+- `shared-kernel` 膨胀为大杂烩
+- `governance-platform` 与 `ai-platform` 边界重新混回去
+- `knowledge-intelligence` 长期不拆，变成第二个大模块
+- 迁移初期为了追求“目录漂亮”而大规模改包名
 
-- `shared-kernel` 失控膨胀。
-- 重构初期因为追求目录完整而引发大规模搬迁。
-- 在模块接口尚未稳定前，过早拆 Maven 多模块。
-- `agent-runtime` 抽取时边界过大，反而重新吸收业务逻辑。
+### 15.2 控制策略
 
-### 14.2 控制策略
+- shared 对象新增必须说明归属理由
+- `agent-runtime` 必须前置冻结
+- evidence 必须先定归属再拆报告
+- 第一轮优先拆职责，不优先搬文件
+- 为 `knowledge-intelligence` 记录未来拆分触发条件
 
-- 共享对象引入必须经过 review。
-- 优先拆职责，不优先搬文件。
-- 用 ArchUnit 做“失败即暴露”的结构约束。
-- 保持 `agent-runtime` 只承载运行时抽象，不承载具体业务规则。
+## 16. 最终结论
 
-## 15. 最终结论
+当前最稳妥的方案是：
 
-本项目适合采用“按业务域组织的模块化单体”作为当前阶段重构方案。
+- 采用模块化单体
+- 先冻结 `agent-runtime`
+- 先用 ArchUnit + 白名单建立过渡边界
+- 先让 `task-orchestration` 与 `collection-intelligence` 双线并行
+- 证据归 `collection-intelligence`
+- 将治理与 AI 平台拆边界
 
 最终模块收敛为：
 
 - `shared-kernel`
 - `governance-platform`
+- `ai-platform`
 - `agent-runtime`
 - `task-orchestration`
 - `collection-intelligence`
@@ -541,10 +573,9 @@ cn.bugstack.competitoragent.task.infrastructure
 - `report-delivery`
 - `conversation-entry`
 
-当前阶段最重要的不是马上拆物理模块，而是先建立真实的工程边界。只要严格执行以下三条，后续多人并行和局部优化就能真正成立：
+只要严格执行以下规则，双人并行和模块独立优化才能真正成立：
 
-- 不允许跨模块直接访问别人的 `repository`
+- 跨模块调用只依赖 `application facade`
+- 不允许跨模块直接访问 `repository`
 - 不允许跨模块复用内部 `entity`
-- 跨模块只传稳定的 `DTO / Command / Query / Result`
-
-在此基础上，优先并行改造 `task-orchestration` 与 `collection-intelligence`，再逐步抽取 `agent-runtime`，最后视边界稳定度决定是否演进为 Maven 多模块。
+- 不允许跨模块直接 import 对方 `domain`
