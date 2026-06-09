@@ -17,6 +17,8 @@ public interface KnowledgeDocumentRepository extends JpaRepository<KnowledgeDocu
 
     List<KnowledgeDocument> findByTaskIdOrderByIdAsc(Long taskId);
 
+    void deleteByTaskId(Long taskId);
+
     List<KnowledgeDocument> findByKnowledgeDomainKeyOrderByIdAsc(String knowledgeDomainKey);
 
     /**

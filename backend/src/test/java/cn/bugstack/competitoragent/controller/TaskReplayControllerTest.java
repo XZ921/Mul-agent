@@ -22,6 +22,7 @@ import cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository;
 import cn.bugstack.competitoragent.task.AnalysisTaskRunner;
 import cn.bugstack.competitoragent.task.RecoveryCheckpointService;
 import cn.bugstack.competitoragent.task.TaskRecoveryService;
+import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskReplayProjectionService;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
 import cn.bugstack.competitoragent.workflow.DynamicTaskGraphService;
@@ -29,6 +30,7 @@ import cn.bugstack.competitoragent.workflow.NodeFailureCategory;
 import cn.bugstack.competitoragent.workflow.RecoveryEngine;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventType;
+import cn.bugstack.competitoragent.governance.OrganizationQuotaPolicy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
@@ -215,7 +217,8 @@ class TaskReplayControllerTest {
                 taskPlanRepository,
                 taskNodeExecutionAttemptRepository,
                 taskWorkflowEventRepository,
-                recoveryCheckpointService);
+                recoveryCheckpointService,
+                new TaskQuotaCoordinator(mock(OrganizationQuotaPolicy.class), new ObjectMapper()));
 
         TaskReplayProjectionService projectionService = new TaskReplayProjectionService(
                 taskPlanRepository,

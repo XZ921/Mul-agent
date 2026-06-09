@@ -27,6 +27,8 @@ import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
+import cn.bugstack.competitoragent.task.TaskArtifactCleanupService;
+import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.assembler.TaskNodeViewAssembler;
 import cn.bugstack.competitoragent.task.command.TaskDefinitionAppService;
 import cn.bugstack.competitoragent.task.command.TaskRuntimeCommandAppService;
@@ -58,6 +60,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -126,6 +129,9 @@ class AnalysisTaskServiceTest {
     @Mock
     private OrganizationQuotaPolicy organizationQuotaPolicy;
 
+    @Mock
+    private TaskArtifactCleanupService taskArtifactCleanupService;
+
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -147,6 +153,7 @@ class AnalysisTaskServiceTest {
                 taskPlanRepository,
                 taskRecoveryService,
                 objectMapper);
+        TaskQuotaCoordinator taskQuotaCoordinator = new TaskQuotaCoordinator(organizationQuotaPolicy, objectMapper);
         TaskQueryAppService taskQueryAppService = new TaskQueryAppService(
                 taskRepository,
                 nodeRepository,
@@ -164,6 +171,8 @@ class AnalysisTaskServiceTest {
                 workflowEventOutboxService,
                 realDynamicTaskGraphService,
                 taskRecoveryService,
+                taskArtifactCleanupService,
+                taskQuotaCoordinator,
                 objectMapper);
         TaskDefinitionAppService taskDefinitionAppService = new TaskDefinitionAppService(
                 taskRepository,
@@ -178,26 +187,10 @@ class AnalysisTaskServiceTest {
                 workflowEventPublisher,
                 assembler,
                 objectMapper,
-                organizationQuotaPolicy);
-        taskService = new AnalysisTaskService(
-                taskRepository,
-                nodeRepository,
-                evidenceRepository,
-                knowledgeRepository,
-                reportRepository,
-                logRepository,
-                aiCallAuditRecordRepository,
-                workflowFactory,
-                taskRunner,
-                taskRecoveryService,
-                taskSnapshotCacheService,
-                taskEventPublisher,
-                workflowEventPublisher,
-                workflowEventOutboxService,
-                dynamicTaskGraphService,
-                taskPlanRepository,
-                objectMapper,
                 organizationQuotaPolicy,
+                taskArtifactCleanupService,
+                taskQuotaCoordinator);
+        taskService = new AnalysisTaskService(
                 taskQueryAppService,
                 taskRuntimeCommandAppService,
                 taskDefinitionAppService);
@@ -303,6 +296,63 @@ class AnalysisTaskServiceTest {
         assertEquals("当前组织任务并发已达上限，请等待已有任务释放占位后再重试",
                 readAccessor(decision, "summary"));
         verify(taskRepository, never()).save(any(AnalysisTask.class));
+    }
+
+    @Test
+    void shouldReserveTaskQuotaOnlyOnceWhenCreatingTaskThroughFacade() {
+        CreateTaskRequest request = new CreateTaskRequest();
+        request.setTaskName("单次配额预留测试");
+        request.setSubjectProduct("企业知识平台");
+        request.setCompetitorNames(List.of("Notion AI"));
+        request.setCompetitorUrls(List.of("https://www.notion.so"));
+        request.setAnalysisDimensions(List.of("产品能力"));
+        request.setSourceScope(List.of("官网"));
+
+        TaskNode createdNode = pendingNode(501L, "collect_sources_01_01", AgentType.COLLECTOR, "[]", 0);
+        when(organizationQuotaPolicy.checkAndReserve(any(), any(), any(), any(Integer.class), any()))
+                .thenReturn(QuotaDecision.allow(
+                        "ALLOWED_RESERVED",
+                        "quota ok",
+                        "default-organization",
+                        "TASK",
+                        "TASK_CONCURRENCY",
+                        1,
+                        1,
+                        "lease-1",
+                        List.of("https://www.notion.so")
+                ));
+        when(taskRepository.save(any(AnalysisTask.class))).thenAnswer(invocation -> {
+            AnalysisTask task = invocation.getArgument(0);
+            if (task.getId() == null) {
+                task.setId(501L);
+            }
+            return task;
+        });
+        when(workflowFactory.createWorkflow(any(AnalysisTask.class))).thenAnswer(invocation -> {
+            AnalysisTask task = invocation.getArgument(0);
+            task.setCurrentPlanVersionId(21L);
+            task.setCurrentPlanVersion(1);
+            return List.of(createdNode);
+        });
+        when(taskRepository.findById(501L)).thenReturn(Optional.of(AnalysisTask.builder()
+                .id(501L)
+                .taskName("单次配额预留测试")
+                .subjectProduct("企业知识平台")
+                .competitorNames("[\"Notion AI\"]")
+                .competitorUrls("[\"https://www.notion.so\"]")
+                .analysisDimensions("[\"产品能力\"]")
+                .sourceScope("[\"官网\"]")
+                .status(AnalysisTaskStatus.PENDING)
+                .currentPlanVersionId(21L)
+                .currentPlanVersion(1)
+                .build()));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(501L)).thenReturn(List.of(createdNode));
+
+        TaskResponse response = taskService.createTask(request);
+
+        assertEquals(501L, response.getId());
+        verify(organizationQuotaPolicy, times(1))
+                .checkAndReserve(any(), any(), any(), any(Integer.class), any());
     }
 
     @Test
@@ -553,6 +603,7 @@ class AnalysisTaskServiceTest {
         AnalysisTask task = AnalysisTask.builder()
                 .id(taskId)
                 .status(AnalysisTaskStatus.RUNNING)
+                .taskQuotaReserved(true)
                 .build();
         TaskNode node = pendingNode(taskId, "collect_sources_web", AgentType.COLLECTOR, "[]", 0);
 
@@ -657,6 +708,7 @@ class AnalysisTaskServiceTest {
         AnalysisTask task = AnalysisTask.builder()
                 .id(taskId)
                 .status(AnalysisTaskStatus.RUNNING)
+                .taskQuotaReserved(true)
                 .build();
         TaskNode runningNode = pendingNode(taskId, "analyze_competitors", AgentType.ANALYZER, "[]", 0);
         runningNode.setStatus(TaskNodeStatus.RUNNING);
@@ -715,6 +767,7 @@ class AnalysisTaskServiceTest {
         AnalysisTask task = AnalysisTask.builder()
                 .id(taskId)
                 .status(AnalysisTaskStatus.RUNNING)
+                .taskQuotaReserved(true)
                 .build();
         TaskNode node = pendingNode(taskId, "extract_schema", AgentType.EXTRACTOR, "[]", 0);
         node.setStatus(TaskNodeStatus.RUNNING);
@@ -1075,6 +1128,7 @@ class AnalysisTaskServiceTest {
         AnalysisTask task = AnalysisTask.builder()
                 .id(taskId)
                 .status(AnalysisTaskStatus.RUNNING)
+                .taskQuotaReserved(true)
                 .build();
         TaskNode pendingNode = pendingNode(taskId, "collect_sources_web", AgentType.COLLECTOR, "[]", 0);
         TaskNode pausedNode = pendingNode(taskId, "extract_schema", AgentType.EXTRACTOR, "[\"collect_sources_web\"]", 1);
@@ -1146,6 +1200,7 @@ class AnalysisTaskServiceTest {
         AnalysisTask task = AnalysisTask.builder()
                 .id(taskId)
                 .status(AnalysisTaskStatus.RUNNING)
+                .taskQuotaReserved(true)
                 .build();
 
         when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
@@ -1155,7 +1210,9 @@ class AnalysisTaskServiceTest {
         assertEquals(AnalysisTaskStatus.STOPPED, task.getStatus());
         assertEquals("任务已由用户主动停止", task.getErrorMessage());
         assertTrue(task.getCompletedAt() != null);
+        assertFalse(task.isTaskQuotaReserved());
         verify(taskRepository).save(task);
+        verify(organizationQuotaPolicy).releaseReservation(any(), any(), any(), any(Integer.class), any());
         verify(taskRecoveryService).markStoppedNodes(taskId);
         verifyNoInteractions(taskRunner);
     }

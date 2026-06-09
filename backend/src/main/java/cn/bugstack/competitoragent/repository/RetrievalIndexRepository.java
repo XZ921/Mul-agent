@@ -11,6 +11,8 @@ public interface RetrievalIndexRepository extends JpaRepository<RetrievalIndex, 
 
     void deleteByKnowledgeDocumentId(Long knowledgeDocumentId);
 
+    void deleteByTaskId(Long taskId);
+
     /**
      * 任务级检索仍保留 taskId 查询入口，
      * 供当前 Task RAG MVP 在升级三层召回前继续稳定工作。

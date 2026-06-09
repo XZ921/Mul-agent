@@ -96,6 +96,15 @@ public class AnalysisTask {
     @Schema(description = "任务失败时的错误信息")
     private String errorMessage;
 
+    /**
+     * 标记当前任务是否仍然持有任务并发配额占位。
+     * 显式落库后，终态释放和后续重新执行时的重新 reserve
+     * 才能形成可校验、可恢复的闭环。
+     */
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean taskQuotaReserved = false;
+
     @Schema(description = "当前激活计划版本 ID", example = "2")
     private Long currentPlanVersionId;
 

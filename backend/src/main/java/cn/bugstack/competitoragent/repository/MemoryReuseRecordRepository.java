@@ -16,4 +16,6 @@ import java.util.List;
 public interface MemoryReuseRecordRepository extends JpaRepository<MemoryReuseRecord, Long> {
 
     List<MemoryReuseRecord> findByTaskIdOrderByIdAsc(Long taskId);
+
+    void deleteByTaskId(Long taskId);
 }

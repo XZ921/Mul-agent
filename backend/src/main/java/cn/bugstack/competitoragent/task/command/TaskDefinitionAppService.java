@@ -20,6 +20,8 @@ import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
+import cn.bugstack.competitoragent.task.TaskArtifactCleanupService;
+import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
 import cn.bugstack.competitoragent.task.assembler.TaskNodeViewAssembler;
 import cn.bugstack.competitoragent.workflow.NodeExecutionRecoveryPolicy;
@@ -59,6 +61,8 @@ public class TaskDefinitionAppService {
     private final TaskNodeViewAssembler assembler;
     private final ObjectMapper objectMapper;
     private final OrganizationQuotaPolicy organizationQuotaPolicy;
+    private final TaskArtifactCleanupService taskArtifactCleanupService;
+    private final TaskQuotaCoordinator taskQuotaCoordinator;
 
     @Transactional
     public TaskResponse createTask(CreateTaskRequest request) {
@@ -80,6 +84,7 @@ public class TaskDefinitionAppService {
                 .schemaId(request.getSchemaId())
                 .status(AnalysisTaskStatus.PENDING)
                 .build();
+        taskQuotaCoordinator.markTaskQuotaReserved(task);
 
         task = taskRepository.save(task);
         workflowFactory.createWorkflow(task);
@@ -117,7 +122,8 @@ public class TaskDefinitionAppService {
             throw new BusinessException(ResultCode.TASK_DELETE_FAILED, "Running task cannot be deleted");
         }
 
-        deleteGeneratedData(taskId);
+        taskQuotaCoordinator.releaseTaskQuotaIfHeld(task);
+        taskArtifactCleanupService.cleanupTaskArtifacts(taskId);
         nodeRepository.deleteAll(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId));
         taskRepository.delete(task);
         taskSnapshotCacheService.evictTaskRuntime(taskId);
@@ -164,13 +170,6 @@ public class TaskDefinitionAppService {
     private AnalysisTask getTaskOrThrow(Long taskId) {
         return taskRepository.findById(taskId)
                 .orElseThrow(() -> new BusinessException(ResultCode.TASK_NOT_FOUND, "taskId=" + taskId));
-    }
-
-    private void deleteGeneratedData(Long taskId) {
-        reportRepository.deleteByTaskId(taskId);
-        knowledgeRepository.deleteByTaskId(taskId);
-        evidenceRepository.deleteByTaskId(taskId);
-        logRepository.deleteByTaskId(taskId);
     }
 
     private String toJson(Object value) {

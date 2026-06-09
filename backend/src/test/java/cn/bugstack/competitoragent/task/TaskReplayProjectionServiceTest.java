@@ -20,6 +20,7 @@ import cn.bugstack.competitoragent.repository.TaskNodeExecutionAttemptRepository
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository;
+import cn.bugstack.competitoragent.governance.OrganizationQuotaPolicy;
 import cn.bugstack.competitoragent.workflow.DynamicTaskGraphService;
 import cn.bugstack.competitoragent.workflow.NodeFailureCategory;
 import cn.bugstack.competitoragent.workflow.RecoveryEngine;
@@ -209,7 +210,8 @@ class TaskReplayProjectionServiceTest {
                 taskPlanRepository,
                 taskNodeExecutionAttemptRepository,
                 taskWorkflowEventRepository,
-                recoveryCheckpointService);
+                recoveryCheckpointService,
+                new TaskQuotaCoordinator(mock(OrganizationQuotaPolicy.class), new ObjectMapper()));
 
         ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
         TaskReplayProjectionService projectionService = new TaskReplayProjectionService(

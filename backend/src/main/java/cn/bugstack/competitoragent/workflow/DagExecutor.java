@@ -7,6 +7,7 @@ import cn.bugstack.competitoragent.agent.capability.AgentCapabilityRegistry;
 import cn.bugstack.competitoragent.agent.capability.AgentExecutionRequest;
 import cn.bugstack.competitoragent.event.TaskEventPublisher;
 import cn.bugstack.competitoragent.log.AgentLogService;
+import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNodeExecutionAttempt;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.entity.WorkflowDeadLetterRecord;
@@ -19,6 +20,7 @@ import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeExecutionAttemptRepository;
 import cn.bugstack.competitoragent.repository.WorkflowDeadLetterRecordRepository;
 import cn.bugstack.competitoragent.task.TaskExecutionLockService;
+import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
@@ -68,6 +70,7 @@ public class DagExecutor {
     private final RuntimeStateRefresher runtimeStateRefresher;
     private final RuntimeEventEmitter runtimeEventEmitter;
     private final DynamicPlanAppender dynamicPlanAppender;
+    private final TaskQuotaCoordinator taskQuotaCoordinator;
 
     public DagExecutor(TaskNodeRepository nodeRepository,
                        AnalysisTaskRepository taskRepository,
@@ -82,7 +85,8 @@ public class DagExecutor {
                        WorkflowDeadLetterRecordRepository workflowDeadLetterRecordRepository,
                        RuntimeStateRefresher runtimeStateRefresher,
                        RuntimeEventEmitter runtimeEventEmitter,
-                       DynamicPlanAppender dynamicPlanAppender) {
+                       DynamicPlanAppender dynamicPlanAppender,
+                       TaskQuotaCoordinator taskQuotaCoordinator) {
         this.nodeRepository = nodeRepository;
         this.taskRepository = taskRepository;
         this.agentCapabilityRegistry = agentCapabilityRegistry;
@@ -97,6 +101,7 @@ public class DagExecutor {
         this.runtimeStateRefresher = runtimeStateRefresher;
         this.runtimeEventEmitter = runtimeEventEmitter;
         this.dynamicPlanAppender = dynamicPlanAppender;
+        this.taskQuotaCoordinator = taskQuotaCoordinator;
     }
 
     public void execute(Long taskId, AgentContext context) {
@@ -688,6 +693,7 @@ public class DagExecutor {
             task.setStatus(resolution.getStatus());
             task.setErrorMessage(resolution.getErrorMessage());
             task.setCompletedAt(resolution.resolveCompletedAtForPersistence(task.getCompletedAt()));
+            releaseQuotaIfTaskReachedTerminalStatus(task, resolution.getStatus());
             taskRepository.save(task);
             TaskProgressSnapshot snapshot = TaskProgressSnapshot.fromTask(
                     task,
@@ -704,6 +710,7 @@ public class DagExecutor {
             task.setStatus(AnalysisTaskStatus.FAILED);
             task.setErrorMessage(errorMessage);
             task.setCompletedAt(LocalDateTime.now());
+            taskQuotaCoordinator.releaseTaskQuotaIfHeld(task);
             taskRepository.save(task);
             TaskProgressSnapshot snapshot = TaskProgressSnapshot.fromTask(
                     task,
@@ -753,6 +760,7 @@ public class DagExecutor {
             task.setStatus(AnalysisTaskStatus.STOPPED);
             task.setErrorMessage("任务已由用户主动停止");
             task.setCompletedAt(LocalDateTime.now());
+            taskQuotaCoordinator.releaseTaskQuotaIfHeld(task);
             taskRepository.save(task);
             TaskProgressSnapshot snapshot = TaskProgressSnapshot.fromTask(
                     task,
@@ -1015,6 +1023,21 @@ public class DagExecutor {
                 .replace("\r", "\\r");
     }
 
+    /**
+     * 编排器收口阶段可能把任务归约为 SUCCESS / FAILED / STOPPED。
+     * 一旦确定进入终态，就同步释放任务级并发占位，避免后续创建或重试被历史占位卡住。
+     */
+    private void releaseQuotaIfTaskReachedTerminalStatus(AnalysisTask task, AnalysisTaskStatus resolvedStatus) {
+        if (task == null || resolvedStatus == null) {
+            return;
+        }
+        if (resolvedStatus == AnalysisTaskStatus.SUCCESS
+                || resolvedStatus == AnalysisTaskStatus.FAILED
+                || resolvedStatus == AnalysisTaskStatus.STOPPED) {
+            taskQuotaCoordinator.releaseTaskQuotaIfHeld(task);
+        }
+    }
+
     private void refreshNodeStates(Long taskId, List<TaskNode> nodes) {
         Map<Long, TaskNode> latestMap = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)
                 .stream()
@@ -1076,43 +1099,6 @@ public class DagExecutor {
      * 某些测试桩会直接 mock/spying Agent.execute，绕过 BaseAgent 的统一日志落库。
      * 为了不让 SSE 最小留痕依赖“日志一定先写库成功”这条前提，这里补一条节点级兜底输出事件。
      */
-    private Map<String, Object> buildSearchProgressEventPayload(TaskNode node) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("nodeName", node.getNodeName());
-        JsonNode output = readJson(node.getOutputData());
-        if (output != null) {
-            JsonNode searchProgress = output.get("searchProgress");
-            JsonNode executionTrace = output.get("searchExecutionTrace");
-            JsonNode progressSnapshots = output.get("searchProgressSnapshots");
-            if (searchProgress != null && !searchProgress.isNull()) {
-                payload.put("searchProgress", objectMapper.convertValue(searchProgress, new TypeReference<Map<String, Object>>() {
-                }));
-            }
-            if (executionTrace != null && !executionTrace.isNull()) {
-                payload.put("searchExecutionTrace", objectMapper.convertValue(executionTrace, new TypeReference<Map<String, Object>>() {
-                }));
-            }
-            if (progressSnapshots != null && progressSnapshots.isArray()) {
-                payload.put("searchProgressSnapshots", objectMapper.convertValue(progressSnapshots, new TypeReference<List<Map<String, Object>>>() {
-                }));
-            }
-        }
-
-        if (payload.size() > 1) {
-            return payload;
-        }
-
-        // 即使结构化搜索输出缺失，也补一条最小进度事件，保证前端断线恢复时至少能看到该采集节点已完成/失败。
-        payload.put("searchProgress", Map.of(
-                "status", node.getStatus() == TaskNodeStatus.SUCCESS ? "SUCCESS" : "FAILED",
-                "currentStep", node.getStatus() == TaskNodeStatus.SUCCESS ? "完成补源" : "补源失败",
-                "message", defaultIfBlank(node.getErrorMessage(),
-                        node.getStatus() == TaskNodeStatus.SUCCESS ? "采集节点已完成，使用最小事件留痕兜底。" : "采集节点执行失败，请查看节点详情。"),
-                "updatedAt", node.getCompletedAt() == null ? LocalDateTime.now() : node.getCompletedAt()
-        ));
-        return payload;
-    }
-
     private String defaultIfBlank(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value;
     }

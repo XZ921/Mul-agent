@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.task;
 
 import cn.bugstack.competitoragent.event.TaskEventPublisher;
+import cn.bugstack.competitoragent.governance.OrganizationQuotaPolicy;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.entity.TaskPlan;
@@ -13,9 +14,11 @@ import cn.bugstack.competitoragent.workflow.DynamicTaskGraphService;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.BeforeEach;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -56,8 +59,19 @@ class TaskRecoveryServiceTest {
     @Mock
     private TaskPlanRepository taskPlanRepository;
 
+    @Mock
+    private OrganizationQuotaPolicy organizationQuotaPolicy;
+
     @InjectMocks
     private TaskRecoveryService recoveryService;
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(
+                recoveryService,
+                "taskQuotaCoordinator",
+                new TaskQuotaCoordinator(organizationQuotaPolicy, new com.fasterxml.jackson.databind.ObjectMapper()));
+    }
 
     @Test
     void shouldResetInterruptedNodesButKeepSuccessfulCheckpoints() {

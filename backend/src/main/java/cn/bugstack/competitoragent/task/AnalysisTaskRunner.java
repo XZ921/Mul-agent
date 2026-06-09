@@ -30,6 +30,7 @@ public class AnalysisTaskRunner {
     private final TaskExecutionLockService taskExecutionLockService;
     private final TaskEventPublisher taskEventPublisher;
     private final WorkflowEventPublisher workflowEventPublisher;
+    private final TaskQuotaCoordinator taskQuotaCoordinator;
 
     /**
      * Phase 4 开始，Runner 不再直接承担“拿到任务后马上同步推进完整 DAG”这条主链路。
@@ -145,6 +146,7 @@ public class AnalysisTaskRunner {
         task.setStatus(AnalysisTaskStatus.FAILED);
         task.setCompletedAt(LocalDateTime.now());
         task.setErrorMessage(errorMessage);
+        taskQuotaCoordinator.releaseTaskQuotaIfHeld(task);
         taskRepository.save(task);
         publishTaskStatusSafely(task.getId(), AnalysisTaskStatus.FAILED, "异步编排发起失败", errorMessage);
     }

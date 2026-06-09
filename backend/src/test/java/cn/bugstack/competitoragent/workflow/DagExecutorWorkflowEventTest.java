@@ -17,6 +17,7 @@ import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeExecutionAttemptRepository;
 import cn.bugstack.competitoragent.repository.WorkflowDeadLetterRecordRepository;
 import cn.bugstack.competitoragent.task.TaskExecutionLockService;
+import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
 import cn.bugstack.competitoragent.workflow.runtime.DynamicPlanAppender;
 import cn.bugstack.competitoragent.workflow.runtime.RuntimeEventEmitter;
@@ -32,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
 
 class DagExecutorWorkflowEventTest {
 
@@ -89,7 +91,8 @@ class DagExecutorWorkflowEventTest {
                         nodeRepository,
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
-                        new ObjectMapper())
+                        new ObjectMapper()),
+                mock(TaskQuotaCoordinator.class)
         );
 
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("workflow-event-test").build());

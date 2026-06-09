@@ -4,6 +4,7 @@ import cn.bugstack.competitoragent.model.entity.IntentDecision;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -13,4 +14,8 @@ import java.util.List;
 public interface IntentDecisionRepository extends JpaRepository<IntentDecision, Long> {
 
     List<IntentDecision> findByConversationSessionIdOrderByIdAsc(Long conversationSessionId);
+
+    void deleteByTaskId(Long taskId);
+
+    void deleteByConversationSessionIdIn(Collection<Long> conversationSessionIds);
 }

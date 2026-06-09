@@ -18,7 +18,9 @@ import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
+import cn.bugstack.competitoragent.task.TaskArtifactCleanupService;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
+import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskRecoveryService;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
 import cn.bugstack.competitoragent.task.assembler.TaskNodeViewAssembler;
@@ -95,14 +97,19 @@ class TaskDefinitionAppServiceTest {
     @Mock
     private OrganizationQuotaPolicy organizationQuotaPolicy;
 
+    @Mock
+    private TaskArtifactCleanupService taskArtifactCleanupService;
+
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
     private TaskDefinitionAppService taskDefinitionAppService;
+    private TaskQuotaCoordinator taskQuotaCoordinator;
 
     @BeforeEach
     void setUp() {
         lenient().when(taskRecoveryService.getTaskSnapshotOrRebuild(any())).thenReturn(Optional.empty());
+        taskQuotaCoordinator = new TaskQuotaCoordinator(organizationQuotaPolicy, objectMapper);
         TaskNodeViewAssembler assembler = new TaskNodeViewAssembler(
                 aiCallAuditRecordRepository,
                 taskPlanRepository,
@@ -121,7 +128,9 @@ class TaskDefinitionAppServiceTest {
                 workflowEventPublisher,
                 assembler,
                 objectMapper,
-                organizationQuotaPolicy);
+                organizationQuotaPolicy,
+                taskArtifactCleanupService,
+                taskQuotaCoordinator);
     }
 
     @Test
@@ -172,6 +181,8 @@ class TaskDefinitionAppServiceTest {
         assertEquals("AI 知识库竞品分析", response.getTaskName());
         assertEquals(AnalysisTaskStatus.PENDING, response.getStatus());
         assertEquals(21L, response.getCurrentPlanVersionId());
+        verify(organizationQuotaPolicy, times(1))
+                .checkAndReserve(any(), any(), any(), any(Integer.class), any());
         verify(workflowFactory).createWorkflow(any(AnalysisTask.class));
         verify(taskSnapshotCacheService).saveTaskSnapshot(any(TaskProgressSnapshot.class));
         verify(taskEventPublisher).publishTaskSnapshot(any(TaskProgressSnapshot.class));
@@ -232,6 +243,7 @@ class TaskDefinitionAppServiceTest {
         AnalysisTask task = AnalysisTask.builder()
                 .id(taskId)
                 .status(AnalysisTaskStatus.FAILED)
+                .taskQuotaReserved(true)
                 .build();
         List<TaskNode> nodes = List.of(pendingNode(taskId, "collect_sources_01_01"));
 
@@ -240,10 +252,9 @@ class TaskDefinitionAppServiceTest {
 
         taskDefinitionAppService.deleteTask(taskId);
 
-        verify(reportRepository).deleteByTaskId(taskId);
-        verify(knowledgeRepository).deleteByTaskId(taskId);
-        verify(evidenceRepository).deleteByTaskId(taskId);
-        verify(logRepository).deleteByTaskId(taskId);
+        assertFalse(task.isTaskQuotaReserved());
+        verify(taskArtifactCleanupService).cleanupTaskArtifacts(taskId);
+        verify(organizationQuotaPolicy).releaseReservation(any(), any(), any(), any(Integer.class), any());
         verify(nodeRepository).deleteAll(nodes);
         verify(taskRepository).delete(task);
         verify(taskSnapshotCacheService).evictTaskRuntime(taskId);

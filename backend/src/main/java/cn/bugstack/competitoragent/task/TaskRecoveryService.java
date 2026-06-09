@@ -61,6 +61,7 @@ public class TaskRecoveryService {
     private final TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository;
     private final TaskWorkflowEventRepository taskWorkflowEventRepository;
     private final RecoveryCheckpointService recoveryCheckpointService;
+    private final TaskQuotaCoordinator taskQuotaCoordinator;
     private final NodeExecutionRecoveryPolicy recoveryPolicy = new NodeExecutionRecoveryPolicy();
 
     @Component
@@ -91,6 +92,7 @@ public class TaskRecoveryService {
                 task.setStatus(AnalysisTaskStatus.FAILED);
                 task.setCompletedAt(LocalDateTime.now());
                 task.setErrorMessage("Task interrupted and cannot be resumed because no workflow nodes were found");
+                taskQuotaCoordinator.releaseTaskQuotaIfHeld(task);
                 taskRepository.save(task);
                 taskSnapshotCacheService.saveTaskSnapshot(TaskProgressSnapshot.fromTask(
                         task,
@@ -109,6 +111,7 @@ public class TaskRecoveryService {
             task.setErrorMessage(resolution.getStatus() == AnalysisTaskStatus.PENDING
                     ? "Recovered after service restart, resuming from node checkpoints"
                     : resolution.getErrorMessage());
+            releaseQuotaIfTaskReachedTerminalStatus(task, resolution.getStatus());
             taskRepository.save(task);
             taskSnapshotCacheService.saveTaskSnapshot(TaskProgressSnapshot.fromTask(
                     task,
@@ -491,6 +494,21 @@ public class TaskRecoveryService {
                 .map(String::trim)
                 .filter(value -> !value.isBlank())
                 .toList();
+    }
+
+    /**
+     * 恢复链路会把 RUNNING 任务重新归约到 PENDING / SUCCESS / FAILED / STOPPED。
+     * 一旦恢复结论已经是终态，就必须同步释放历史占位，避免服务重启后 reservedValue 长期滞留。
+     */
+    private void releaseQuotaIfTaskReachedTerminalStatus(AnalysisTask task, AnalysisTaskStatus resolvedStatus) {
+        if (task == null || resolvedStatus == null) {
+            return;
+        }
+        if (resolvedStatus == AnalysisTaskStatus.SUCCESS
+                || resolvedStatus == AnalysisTaskStatus.FAILED
+                || resolvedStatus == AnalysisTaskStatus.STOPPED) {
+            taskQuotaCoordinator.releaseTaskQuotaIfHeld(task);
+        }
     }
 
     private int compareNullableTime(LocalDateTime left, LocalDateTime right) {

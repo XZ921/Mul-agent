@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.task.command;
 import cn.bugstack.competitoragent.common.BusinessException;
 import cn.bugstack.competitoragent.common.ResultCode;
 import cn.bugstack.competitoragent.event.TaskEventPublisher;
+import cn.bugstack.competitoragent.governance.OrganizationQuotaPolicy;
 import cn.bugstack.competitoragent.model.dto.UpdateNodeConfigRequest;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
@@ -17,7 +18,9 @@ import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.task.AnalysisTaskRunner;
+import cn.bugstack.competitoragent.task.TaskArtifactCleanupService;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
+import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskRecoveryService;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
 import cn.bugstack.competitoragent.workflow.CompensationGraphAssembler;
@@ -38,6 +41,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -86,6 +90,12 @@ class TaskRuntimeCommandAppServiceTest {
     @Mock
     private TaskRecoveryService taskRecoveryService;
 
+    @Mock
+    private TaskArtifactCleanupService taskArtifactCleanupService;
+
+    @Mock
+    private OrganizationQuotaPolicy organizationQuotaPolicy;
+
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -99,6 +109,7 @@ class TaskRuntimeCommandAppServiceTest {
                 org.mockito.Mockito.mock(cn.bugstack.competitoragent.repository.TaskPlanRepository.class),
                 new TaskPlanVersioner(objectMapper),
                 new CompensationGraphAssembler(objectMapper));
+        TaskQuotaCoordinator taskQuotaCoordinator = new TaskQuotaCoordinator(organizationQuotaPolicy, objectMapper);
         taskRuntimeCommandAppService = new TaskRuntimeCommandAppService(
                 taskRepository,
                 nodeRepository,
@@ -112,6 +123,8 @@ class TaskRuntimeCommandAppServiceTest {
                 workflowEventOutboxService,
                 dynamicTaskGraphService,
                 taskRecoveryService,
+                taskArtifactCleanupService,
+                taskQuotaCoordinator,
                 objectMapper);
     }
 
@@ -302,10 +315,7 @@ class TaskRuntimeCommandAppServiceTest {
         assertEquals(AnalysisTaskStatus.PENDING, task.getStatus());
         assertNull(task.getErrorMessage());
         assertNull(task.getCompletedAt());
-        verify(evidenceRepository).deleteByTaskId(taskId);
-        verify(knowledgeRepository).deleteByTaskId(taskId);
-        verify(reportRepository).deleteByTaskId(taskId);
-        verify(logRepository).deleteByTaskId(taskId);
+        verify(taskArtifactCleanupService).cleanupTaskArtifacts(taskId);
         verify(taskSnapshotCacheService).evictTaskRuntime(taskId);
         verify(nodeRepository).saveAll(List.of(collectNode, extractNode));
         verify(taskRepository).save(task);
@@ -335,10 +345,7 @@ class TaskRuntimeCommandAppServiceTest {
         assertEquals(AnalysisTaskStatus.PENDING, task.getStatus());
         assertNull(task.getErrorMessage());
         assertNull(task.getCompletedAt());
-        verify(evidenceRepository).deleteByTaskId(taskId);
-        verify(knowledgeRepository).deleteByTaskId(taskId);
-        verify(reportRepository).deleteByTaskId(taskId);
-        verify(logRepository).deleteByTaskId(taskId);
+        verify(taskArtifactCleanupService).cleanupTaskArtifacts(taskId);
         verify(taskSnapshotCacheService).evictTaskRuntime(taskId);
         verify(nodeRepository).saveAll(List.of(collectNode, extractNode));
         verify(taskRepository).save(task);

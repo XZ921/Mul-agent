@@ -13,4 +13,6 @@ import java.util.List;
 public interface RecoveryCheckpointRepository extends JpaRepository<RecoveryCheckpoint, Long> {
 
     List<RecoveryCheckpoint> findByTaskIdOrderByCreatedAtDesc(Long taskId);
+
+    void deleteByTaskId(Long taskId);
 }

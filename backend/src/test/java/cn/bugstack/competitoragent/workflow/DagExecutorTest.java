@@ -20,6 +20,7 @@ import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeExecutionAttemptRepository;
 import cn.bugstack.competitoragent.repository.WorkflowDeadLetterRecordRepository;
 import cn.bugstack.competitoragent.task.TaskExecutionLockService;
+import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
 import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
 import cn.bugstack.competitoragent.workflow.runtime.DynamicPlanAppender;
@@ -532,7 +533,8 @@ class DagExecutorTest {
                         nodeRepository,
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
-                        new ObjectMapper())
+                        new ObjectMapper()),
+                mock(TaskQuotaCoordinator.class)
         );
 
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("event-fallback-test").build());
@@ -613,7 +615,8 @@ class DagExecutorTest {
                         nodeRepository,
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
-                        new ObjectMapper())
+                        new ObjectMapper()),
+                mock(TaskQuotaCoordinator.class)
         );
 
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("retry-dlq-test").build());
@@ -769,7 +772,8 @@ class DagExecutorTest {
                         nodeRepository,
                         dynamicTaskGraphService,
                         taskPlanRepository,
-                        mapper)
+                        mapper),
+                mock(TaskQuotaCoordinator.class)
         );
 
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("dynamic-graph-test").build());
@@ -817,7 +821,8 @@ class DagExecutorTest {
                         nodeRepository,
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
-                        objectMapper)
+                        objectMapper),
+                mock(TaskQuotaCoordinator.class)
         );
     }
 

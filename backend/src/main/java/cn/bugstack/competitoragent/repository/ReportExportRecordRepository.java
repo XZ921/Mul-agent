@@ -19,4 +19,6 @@ public interface ReportExportRecordRepository extends JpaRepository<ReportExport
     List<ReportExportRecord> findByTaskIdOrderByCreatedAtDesc(Long taskId);
 
     Optional<ReportExportRecord> findTopByTaskIdOrderByExportVersionDesc(Long taskId);
+
+    void deleteByTaskId(Long taskId);
 }

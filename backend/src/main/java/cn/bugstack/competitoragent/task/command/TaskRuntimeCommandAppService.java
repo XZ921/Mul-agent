@@ -19,6 +19,8 @@ import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
 import cn.bugstack.competitoragent.task.AnalysisTaskRunner;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
+import cn.bugstack.competitoragent.task.TaskArtifactCleanupService;
+import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskRecoveryService;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
 import cn.bugstack.competitoragent.workflow.DynamicTaskGraphService;
@@ -63,6 +65,8 @@ public class TaskRuntimeCommandAppService {
     private final WorkflowEventOutboxService workflowEventOutboxService;
     private final DynamicTaskGraphService dynamicTaskGraphService;
     private final TaskRecoveryService taskRecoveryService;
+    private final TaskArtifactCleanupService taskArtifactCleanupService;
+    private final TaskQuotaCoordinator taskQuotaCoordinator;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -71,6 +75,7 @@ public class TaskRuntimeCommandAppService {
         if (task.getStatus() == AnalysisTaskStatus.RUNNING) {
             throw new BusinessException(ResultCode.TASK_ALREADY_RUNNING, "taskId=" + taskId);
         }
+        taskQuotaCoordinator.ensureTaskQuotaReserved(task);
 
         /*
          * 对失败或成功任务重新执行时，需要先清空已生成的派生数据与节点执行痕迹，
@@ -96,6 +101,7 @@ public class TaskRuntimeCommandAppService {
             throw new BusinessException(ResultCode.TASK_STATUS_INVALID,
                     "Only failed tasks can be fully reset. Current status: " + task.getStatus());
         }
+        taskQuotaCoordinator.ensureTaskQuotaReserved(task);
 
         resetTaskForExecution(task);
         task.setStatus(AnalysisTaskStatus.PENDING);
@@ -113,6 +119,7 @@ public class TaskRuntimeCommandAppService {
         if (task.getStatus() == AnalysisTaskStatus.RUNNING) {
             throw new BusinessException(ResultCode.TASK_ALREADY_RUNNING, "taskId=" + taskId);
         }
+        taskQuotaCoordinator.ensureTaskQuotaReserved(task);
 
         List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
         if (nodes.isEmpty()) {
@@ -163,6 +170,7 @@ public class TaskRuntimeCommandAppService {
             throw new BusinessException(ResultCode.TASK_STATUS_INVALID,
                     "Successful task does not need resume. Use execute or retry instead.");
         }
+        taskQuotaCoordinator.ensureTaskQuotaReserved(task);
 
         prepareTaskForResume(task);
         task.setStatus(AnalysisTaskStatus.PENDING);
@@ -318,6 +326,7 @@ public class TaskRuntimeCommandAppService {
         task.setStatus(AnalysisTaskStatus.STOPPED);
         task.setErrorMessage("任务已由用户主动停止");
         task.setCompletedAt(LocalDateTime.now());
+        taskQuotaCoordinator.releaseTaskQuotaIfHeld(task);
         taskRepository.save(task);
         taskRecoveryService.markStoppedNodes(taskId);
         refreshTaskSnapshot(taskId);
@@ -340,10 +349,19 @@ public class TaskRuntimeCommandAppService {
         NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
                 recoveryPolicy().resolveTaskExecution(task, nodes);
         if (!recoveryPolicy().canAutoContinue(nodes)) {
+            /*
+             * 这里不仅要比较任务公开状态是否变化，
+             * 还要比较“是否仍持有配额占位”这个持久化事实是否变化。
+             * 否则任务已经进入终态、内存里也已释放占位，但因为 status 没变而不 save，
+             * 下次读库时仍会把 taskQuotaReserved 误判为 true。
+             */
+            boolean quotaReservedBeforeRelease = task.isTaskQuotaReserved();
+            releaseQuotaIfTaskReachedTerminalStatus(task, resolution.getStatus());
             LocalDateTime resolvedCompletedAt = resolution.resolveCompletedAt(task.getCompletedAt());
             if (task.getStatus() != resolution.getStatus()
                     || !Objects.equals(task.getErrorMessage(), resolution.getErrorMessage())
-                    || !Objects.equals(task.getCompletedAt(), resolvedCompletedAt)) {
+                    || !Objects.equals(task.getCompletedAt(), resolvedCompletedAt)
+                    || quotaReservedBeforeRelease != task.isTaskQuotaReserved()) {
                 task.setStatus(resolution.getStatus());
                 task.setErrorMessage(resolution.getErrorMessage());
                 task.setCompletedAt(resolvedCompletedAt);
@@ -368,7 +386,7 @@ public class TaskRuntimeCommandAppService {
      */
     private void resetTaskForExecution(AnalysisTask task) {
         Long taskId = task.getId();
-        deleteGeneratedData(taskId);
+        taskArtifactCleanupService.cleanupTaskArtifacts(taskId);
         taskSnapshotCacheService.evictTaskRuntime(taskId);
 
         List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
@@ -483,12 +501,6 @@ public class TaskRuntimeCommandAppService {
         return String.format("T%04d-%s-", safeTaskId % 10000, safeNodeName);
     }
 
-    private void deleteGeneratedData(Long taskId) {
-        reportRepository.deleteByTaskId(taskId);
-        knowledgeRepository.deleteByTaskId(taskId);
-        evidenceRepository.deleteByTaskId(taskId);
-        logRepository.deleteByTaskId(taskId);
-    }
 
     /**
      * Collector 节点重跑前，尽量把上一次搜索审计快照回写到 nodeConfig，
@@ -544,6 +556,21 @@ public class TaskRuntimeCommandAppService {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    /**
+     * 当节点级人工操作把任务重新收敛到终态时，也需要同步释放任务并发占位。
+     * 这里只在真正进入 SUCCESS / FAILED / STOPPED 时释放，避免 PENDING 状态被误释放。
+     */
+    private void releaseQuotaIfTaskReachedTerminalStatus(AnalysisTask task, AnalysisTaskStatus resolvedStatus) {
+        if (task == null || resolvedStatus == null) {
+            return;
+        }
+        if (resolvedStatus == AnalysisTaskStatus.SUCCESS
+                || resolvedStatus == AnalysisTaskStatus.FAILED
+                || resolvedStatus == AnalysisTaskStatus.STOPPED) {
+            taskQuotaCoordinator.releaseTaskQuotaIfHeld(task);
+        }
     }
 
     /**

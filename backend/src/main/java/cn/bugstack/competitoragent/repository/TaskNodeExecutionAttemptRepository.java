@@ -15,4 +15,6 @@ public interface TaskNodeExecutionAttemptRepository extends JpaRepository<TaskNo
     List<TaskNodeExecutionAttempt> findByTaskIdAndNodeIdOrderByAttemptNoAsc(Long taskId, Long nodeId);
 
     Optional<TaskNodeExecutionAttempt> findTopByTaskIdAndNodeIdOrderByAttemptNoDesc(Long taskId, Long nodeId);
+
+    void deleteByTaskId(Long taskId);
 }

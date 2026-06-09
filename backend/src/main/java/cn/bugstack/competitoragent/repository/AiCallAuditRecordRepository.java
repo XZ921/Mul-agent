@@ -17,4 +17,6 @@ public interface AiCallAuditRecordRepository extends JpaRepository<AiCallAuditRe
     List<AiCallAuditRecord> findByTaskIdOrderByCreatedAtDesc(Long taskId);
 
     Optional<AiCallAuditRecord> findTopByTaskIdAndNodeNameOrderByCreatedAtDesc(Long taskId, String nodeName);
+
+    void deleteByTaskId(Long taskId);
 }

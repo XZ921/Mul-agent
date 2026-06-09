@@ -10,4 +10,6 @@ import java.util.List;
 public interface WorkflowDeadLetterRecordRepository extends JpaRepository<WorkflowDeadLetterRecord, Long> {
 
     List<WorkflowDeadLetterRecord> findByTaskIdOrderByCreatedAtDesc(Long taskId);
+
+    void deleteByTaskId(Long taskId);
 }

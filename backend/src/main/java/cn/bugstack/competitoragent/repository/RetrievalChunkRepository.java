@@ -11,6 +11,8 @@ public interface RetrievalChunkRepository extends JpaRepository<RetrievalChunk, 
 
     void deleteByKnowledgeDocumentId(Long knowledgeDocumentId);
 
+    void deleteByTaskId(Long taskId);
+
     /**
      * 任务级查询入口继续保留，保证当前 Task RAG 主链不被本次字段扩展打断。
      */
