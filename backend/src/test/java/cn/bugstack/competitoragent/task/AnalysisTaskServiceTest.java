@@ -27,6 +27,10 @@ import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
+import cn.bugstack.competitoragent.task.assembler.TaskNodeViewAssembler;
+import cn.bugstack.competitoragent.task.command.TaskDefinitionAppService;
+import cn.bugstack.competitoragent.task.command.TaskRuntimeCommandAppService;
+import cn.bugstack.competitoragent.task.query.TaskQueryAppService;
 import cn.bugstack.competitoragent.workflow.CompensationGraphAssembler;
 import cn.bugstack.competitoragent.workflow.DynamicTaskGraphService;
 import cn.bugstack.competitoragent.workflow.NodeFailureCategory;
@@ -41,7 +45,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -126,7 +129,6 @@ class AnalysisTaskServiceTest {
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
-    @InjectMocks
     private AnalysisTaskService taskService;
 
     @BeforeEach
@@ -140,6 +142,65 @@ class AnalysisTaskServiceTest {
                 .thenAnswer(invocation -> realDynamicTaskGraphService.calculateAffectedNodes(
                         invocation.getArgument(0),
                         invocation.getArgument(1)));
+        TaskNodeViewAssembler assembler = new TaskNodeViewAssembler(
+                aiCallAuditRecordRepository,
+                taskPlanRepository,
+                taskRecoveryService,
+                objectMapper);
+        TaskQueryAppService taskQueryAppService = new TaskQueryAppService(
+                taskRepository,
+                nodeRepository,
+                assembler);
+        TaskRuntimeCommandAppService taskRuntimeCommandAppService = new TaskRuntimeCommandAppService(
+                taskRepository,
+                nodeRepository,
+                evidenceRepository,
+                knowledgeRepository,
+                reportRepository,
+                logRepository,
+                taskSnapshotCacheService,
+                taskEventPublisher,
+                taskRunner,
+                workflowEventOutboxService,
+                realDynamicTaskGraphService,
+                taskRecoveryService,
+                objectMapper);
+        TaskDefinitionAppService taskDefinitionAppService = new TaskDefinitionAppService(
+                taskRepository,
+                nodeRepository,
+                evidenceRepository,
+                knowledgeRepository,
+                reportRepository,
+                logRepository,
+                workflowFactory,
+                taskSnapshotCacheService,
+                taskEventPublisher,
+                workflowEventPublisher,
+                assembler,
+                objectMapper,
+                organizationQuotaPolicy);
+        taskService = new AnalysisTaskService(
+                taskRepository,
+                nodeRepository,
+                evidenceRepository,
+                knowledgeRepository,
+                reportRepository,
+                logRepository,
+                aiCallAuditRecordRepository,
+                workflowFactory,
+                taskRunner,
+                taskRecoveryService,
+                taskSnapshotCacheService,
+                taskEventPublisher,
+                workflowEventPublisher,
+                workflowEventOutboxService,
+                dynamicTaskGraphService,
+                taskPlanRepository,
+                objectMapper,
+                organizationQuotaPolicy,
+                taskQueryAppService,
+                taskRuntimeCommandAppService,
+                taskDefinitionAppService);
     }
 
     @Test

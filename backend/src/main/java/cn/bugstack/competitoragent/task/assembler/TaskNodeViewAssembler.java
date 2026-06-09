@@ -1,544 +1,67 @@
-package cn.bugstack.competitoragent.task;
+package cn.bugstack.competitoragent.task.assembler;
 
-import cn.bugstack.competitoragent.common.BusinessException;
-import cn.bugstack.competitoragent.common.ResultCode;
-import cn.bugstack.competitoragent.event.TaskEventPublisher;
-import cn.bugstack.competitoragent.governance.GovernanceBlockException;
-import cn.bugstack.competitoragent.governance.GovernanceDefaults;
-import cn.bugstack.competitoragent.governance.OrganizationQuotaPolicy;
-import cn.bugstack.competitoragent.governance.QuotaDecision;
 import cn.bugstack.competitoragent.model.dto.CollectorNodeInsightResponse;
 import cn.bugstack.competitoragent.model.dto.CollectorSelectedTargetSummary;
-import cn.bugstack.competitoragent.model.dto.CreateTaskRequest;
 import cn.bugstack.competitoragent.model.dto.TaskNodeConfigSummary;
-import cn.bugstack.competitoragent.model.dto.TaskListPageResponse;
-import cn.bugstack.competitoragent.model.dto.TaskListSummaryResponse;
 import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
 import cn.bugstack.competitoragent.model.dto.TaskResponse;
-import cn.bugstack.competitoragent.model.dto.UpdateNodeConfigRequest;
-import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.AiCallAuditRecord;
+import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
+import cn.bugstack.competitoragent.model.entity.TaskPlan;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
-import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.AiCallAuditRecordRepository;
-import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
-import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
-import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
-import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
-import cn.bugstack.competitoragent.repository.TaskNodeRepository;
-import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
 import cn.bugstack.competitoragent.search.SearchExecutionPlan;
 import cn.bugstack.competitoragent.search.SearchExecutionTrace;
 import cn.bugstack.competitoragent.search.SearchProgressSnapshot;
 import cn.bugstack.competitoragent.source.SourceCandidate;
-import cn.bugstack.competitoragent.task.command.TaskDefinitionAppService;
-import cn.bugstack.competitoragent.task.command.TaskRuntimeCommandAppService;
-import cn.bugstack.competitoragent.task.query.TaskQueryAppService;
-import cn.bugstack.competitoragent.workflow.DynamicTaskGraphService;
+import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
+import cn.bugstack.competitoragent.task.TaskRecoveryService;
 import cn.bugstack.competitoragent.workflow.NodeExecutionRecoveryPolicy;
-import cn.bugstack.competitoragent.workflow.WorkflowFactory;
 import cn.bugstack.competitoragent.workflow.WorkflowPlan;
-import cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService;
-import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.Set;
 
 /**
- * 浠诲姟搴旂敤鏈嶅姟锛岃礋璐ｅ垱寤恒€佹墽琛屻€侀噸璇曘€佺画璺戝拰鍒犻櫎浠诲姟锛屽苟缁存姢浠诲姟鍏宠仈浜х墿鐢熷懡鍛ㄦ湡銆? */
+ * 任务与节点只读视图组装器。
+ * <p>
+ * Phase 1 先把查询路径里的响应拼装职责集中到这里，
+ * 后续查询服务和命令服务都只依赖这一层，避免展示逻辑继续散落在门面服务中。
+ */
 @Slf4j
-@Service
+@Component
 @RequiredArgsConstructor
-public class AnalysisTaskService {
+public class TaskNodeViewAssembler {
 
-    private static final int DEFAULT_TASK_LIST_PAGE_SIZE = 10;
-    private static final int MAX_TASK_LIST_PAGE_SIZE = 50;
-    private static final int TASK_LIST_ATTENTION_LIMIT = 4;
-
-    private final AnalysisTaskRepository taskRepository;
-    private final TaskNodeRepository nodeRepository;
-    private final EvidenceSourceRepository evidenceRepository;
-    private final CompetitorKnowledgeRepository knowledgeRepository;
-    private final ReportRepository reportRepository;
-    private final AgentExecutionLogRepository logRepository;
     private final AiCallAuditRecordRepository aiCallAuditRecordRepository;
-    private final WorkflowFactory workflowFactory;
-    private final AnalysisTaskRunner taskRunner;
-    private final TaskRecoveryService taskRecoveryService;
-    private final TaskSnapshotCacheService taskSnapshotCacheService;
-    private final TaskEventPublisher taskEventPublisher;
-    private final WorkflowEventPublisher workflowEventPublisher;
-    private final WorkflowEventOutboxService workflowEventOutboxService;
-    private final DynamicTaskGraphService dynamicTaskGraphService;
     private final TaskPlanRepository taskPlanRepository;
+    private final TaskRecoveryService taskRecoveryService;
     private final ObjectMapper objectMapper;
-    private final OrganizationQuotaPolicy organizationQuotaPolicy;
-    private final TaskQueryAppService taskQueryAppService;
-    private final TaskRuntimeCommandAppService taskRuntimeCommandAppService;
-    private final TaskDefinitionAppService taskDefinitionAppService;
-
-    @Transactional
-    public TaskResponse createTask(CreateTaskRequest request) {
-        /* 组织级并发治理必须在任务落库前完成，避免把治理阻断误记成普通任务失败。 */
-        ensureTaskCreationAllowed(request);
-        /* 任务创建阶段只固化入参与工作流，不在这里直接执行业务节点。 */
-        return taskDefinitionAppService.createTask(request);
-    }
 
     /**
-     * 浠诲姟鍒涘缓鍓嶅厛璧扮粺涓€缁勭粐绾ч厤棰濆垽鏂€?     * 鍙湁鏄惧紡鎷垮埌鍏佽缁撴灉鍚庯紝鎵嶇户缁繘鍏ヤ换鍔℃寔涔呭寲涓庡伐浣滄祦鍒涘缓閾捐矾銆?     */
-    private void ensureTaskCreationAllowed(CreateTaskRequest request) {
-        QuotaDecision decision = organizationQuotaPolicy.checkAndReserve(
-                GovernanceDefaults.DEFAULT_ORGANIZATION_KEY,
-                GovernanceDefaults.TASK_SCOPE,
-                GovernanceDefaults.TASK_CONCURRENCY_KEY,
-                1,
-                request == null ? List.of() : request.getCompetitorUrls()
-        );
-        if (decision != null && !decision.isAllowed()) {
-            throw new GovernanceBlockException(decision);
-        }
-    }
-
-    /**
-     * 浠诲姟鍒楄〃姝ｅ紡鍒嗛〉鍝嶅簲銆?     * 杩欓噷鍚屾椂杩斿洖锛?     * 1. 褰撳墠椤?items锛氱粰琛ㄦ牸鐩存帴娑堣垂锛?     * 2. attentionItems锛氱粰鍏ュ彛椤碘€滈渶瑕佸叧娉ㄢ€濆尯缁熶竴娑堣垂锛?     * 3. summary锛氱粰椤堕儴鎬昏鍜岃交閲忓埛鏂扮瓥鐣ユ彁渚涚ǔ瀹氬垽鏂緷鎹€?     *
-     * 杩欐牱鍓嶇灏变笉闇€瑕佸啀鐢ㄢ€滃厛鎷夊叏閲忋€佸啀鎴柇銆佸啀鍚勮嚜鎺掑簭鈥濈殑鏂瑰紡鎷艰涓嶅悓鍖哄煙璇箟銆?     */
-    public TaskListPageResponse listTasks(String status, int pageNum, int pageSize) {
-        return taskQueryAppService.listTasks(status, pageNum, pageSize);
-    }
-
-    public TaskResponse getTask(Long taskId) {
-        return taskQueryAppService.getTask(taskId);
-    }
-
-    private AnalysisTaskStatus parseTaskStatus(String status) {
-        if (status == null || status.isBlank()) {
-            return null;
-        }
-        try {
-            return AnalysisTaskStatus.valueOf(status.toUpperCase(java.util.Locale.ROOT));
-        } catch (IllegalArgumentException e) {
-            throw new BusinessException(ResultCode.PARAM_VALUE_INVALID, "Unsupported task status: " + status);
-        }
-    }
-
-    private List<AnalysisTask> listMatchedTasks(AnalysisTaskStatus status) {
-        return status == null
-                ? taskRepository.findAllByOrderByCreatedAtDesc()
-                : taskRepository.findByStatusOrderByCreatedAtDesc(status);
-    }
-
-    private Page<AnalysisTask> listMatchedTaskPage(AnalysisTaskStatus status, PageRequest pageRequest) {
-        return status == null
-                ? taskRepository.findAllByOrderByCreatedAtDesc(pageRequest)
-                : taskRepository.findByStatusOrderByCreatedAtDesc(status, pageRequest);
-    }
-
-    private int normalizeTaskListPageNum(int pageNum, int totalPages) {
-        int normalizedPageNum = Math.max(1, pageNum);
-        return Math.min(normalizedPageNum, Math.max(1, totalPages));
-    }
-
-    private int normalizeTaskListPageSize(int pageSize) {
-        if (pageSize <= 0) {
-            return DEFAULT_TASK_LIST_PAGE_SIZE;
-        }
-        return Math.min(pageSize, MAX_TASK_LIST_PAGE_SIZE);
-    }
-
-    private int calculateTaskListTotalPages(int total, int pageSize) {
-        if (total <= 0) {
-            return 1;
-        }
-        return (int) Math.ceil((double) total / pageSize);
-    }
-
-    /**
-     * attentionItems 浠ｈ〃榛樿鍏ュ彛椤垫渶鍊煎緱绔嬪嵆鍏虫敞鐨勫璞★細
-     * 澶辫触 > 宸插仠姝?> 杩愯涓紝骞跺湪鍚屼紭鍏堢骇鍐呮寜鏈€杩戞洿鏂版椂闂村€掑簭鎺掑垪銆?     * 杩欐牱鍒楄〃椤典笌鍚庣画椤甸潰閮藉洿缁曞悓涓€浠藉叧娉ㄨ涔夋秷璐癸紝涓嶅啀鍚勮嚜瀹炵幇涓€濂楁帓搴忚鍒欍€?     */
-    private List<TaskResponse> buildAttentionTaskResponses(List<TaskResponse> taskResponses) {
-        return taskResponses.stream()
-                .filter(task -> task.getStatus() == AnalysisTaskStatus.FAILED
-                        || task.getStatus() == AnalysisTaskStatus.STOPPED
-                        || task.getStatus() == AnalysisTaskStatus.RUNNING)
-                .sorted(Comparator
-                        .comparingInt(this::taskAttentionPriority)
-                        .reversed()
-                        .thenComparing(TaskResponse::getUpdatedAt,
-                                Comparator.nullsLast(Comparator.reverseOrder()))
-                        .thenComparing(TaskResponse::getCreatedAt,
-                                Comparator.nullsLast(Comparator.reverseOrder())))
-                .limit(TASK_LIST_ATTENTION_LIMIT)
-                .toList();
-    }
-
-    private int taskAttentionPriority(TaskResponse task) {
-        if (task.getStatus() == AnalysisTaskStatus.FAILED) {
-            return 3;
-        }
-        if (task.getStatus() == AnalysisTaskStatus.STOPPED) {
-            return 2;
-        }
-        if (task.getStatus() == AnalysisTaskStatus.RUNNING) {
-            return 1;
-        }
-        return 0;
-    }
-
-    private TaskListSummaryResponse buildTaskListSummary(List<TaskResponse> taskResponses) {
-        int total = taskResponses.size();
-        int running = 0;
-        int success = 0;
-        int failed = 0;
-        int stopped = 0;
-        int progressSum = 0;
-
-        for (TaskResponse taskResponse : taskResponses) {
-            if (taskResponse.getStatus() == AnalysisTaskStatus.RUNNING) {
-                running++;
-            } else if (taskResponse.getStatus() == AnalysisTaskStatus.SUCCESS) {
-                success++;
-            } else if (taskResponse.getStatus() == AnalysisTaskStatus.FAILED) {
-                failed++;
-            } else if (taskResponse.getStatus() == AnalysisTaskStatus.STOPPED) {
-                stopped++;
-            }
-
-            if (taskResponse.getTotalNodes() > 0) {
-                progressSum += Math.round((taskResponse.getCompletedNodes() * 100.0f) / taskResponse.getTotalNodes());
-            }
-        }
-
-        return TaskListSummaryResponse.builder()
-                .total(total)
-                .running(running)
-                .success(success)
-                .failed(failed)
-                .stopped(stopped)
-                .avgProgress(total == 0 ? 0 : Math.round(progressSum / (float) total))
-                .build();
-    }
-
-    public List<TaskNodeResponse> getTaskNodes(Long taskId) {
-        return taskQueryAppService.getTaskNodes(taskId);
-    }
-
-    public List<TaskNodeResponse> previewWorkflow(CreateTaskRequest request) {
-        return taskDefinitionAppService.previewWorkflow(request);
-    }
-
-    @Transactional
-    public void executeTask(Long taskId) {
-        taskRuntimeCommandAppService.executeTask(taskId);
-    }
-
-    @Transactional
-    public void retryTask(Long taskId) {
-        taskRuntimeCommandAppService.retryTask(taskId);
-    }
-
-    @Transactional
-    public void rerunFromNode(Long taskId, String nodeName) {
-        taskRuntimeCommandAppService.rerunFromNode(taskId, nodeName);
-    }
-
-    @Transactional
-    public void resumeTask(Long taskId) {
-        taskRuntimeCommandAppService.resumeTask(taskId);
-    }
-
-    @Transactional
-    public void updateNodeConfigAndRerun(Long taskId, String nodeName, UpdateNodeConfigRequest request) {
-        taskRuntimeCommandAppService.updateNodeConfigAndRerun(taskId, nodeName, request);
-    }
-
-    @Transactional
-    public void pauseNode(Long taskId, String nodeName) {
-        taskRuntimeCommandAppService.pauseNode(taskId, nodeName);
-    }
-
-    @Transactional
-    public void resumeNode(Long taskId, String nodeName) {
-        taskRuntimeCommandAppService.resumeNode(taskId, nodeName);
-    }
-
-    @Transactional
-    public void skipNode(Long taskId, String nodeName) {
-        taskRuntimeCommandAppService.skipNode(taskId, nodeName);
-    }
-
-    @Transactional
-    public void terminateNode(Long taskId, String nodeName) {
-        taskRuntimeCommandAppService.terminateNode(taskId, nodeName);
-    }
-
-    @Transactional
-    public void stopTask(Long taskId) {
-        taskRuntimeCommandAppService.stopTask(taskId);
-    }
-
-    @Transactional
-    public void deleteTask(Long taskId) {
-        taskDefinitionAppService.deleteTask(taskId);
-    }
-
-    private void resetTaskForExecution(AnalysisTask task) {
-        Long taskId = task.getId();
-        deleteGeneratedData(taskId);
-        taskSnapshotCacheService.evictTaskRuntime(taskId);
-
-        List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
-        for (TaskNode node : nodes) {
-            recoveryPolicy().resetNodeForRerun(node, true);
-        }
-        nodeRepository.saveAll(nodes);
-    }
-
-    /**
-     * 缁窇鍙噸缃湭瀹屾垚鑺傜偣锛屼繚鐣欐垚鍔熻妭鐐圭殑杈撳叆杈撳嚭鍜屼笅娓稿彲澶嶇敤浜х墿銆?     */
-    private void prepareTaskForResume(AnalysisTask task) {
-        List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(task.getId());
-        if (nodes.isEmpty()) {
-            throw new BusinessException(ResultCode.TASK_STATUS_INVALID, "Task has no workflow nodes to resume");
-        }
-
-        boolean hasRunningNode = nodes.stream().anyMatch(node -> node.getStatus() == TaskNodeStatus.RUNNING);
-        if (hasRunningNode) {
-            taskRecoveryService.resetInterruptedNodes(task.getId());
-            nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(task.getId());
-        }
-
-        boolean hasSuccessfulCheckpoint = false;
-        boolean hasWorkToResume = false;
-
-        for (TaskNode node : nodes) {
-            if (node.getStatus() == TaskNodeStatus.SUCCESS) {
-                // 宸叉垚鍔熻妭鐐逛繚鐣欑幇鍦猴紝渚涙墽琛屽櫒缁窇鏃堕噸鏂版敞鍏ュ叡浜笂涓嬫枃銆?                hasSuccessfulCheckpoint = true;
-                continue;
-            }
-
-            if (taskRecoveryService.applyCompensationIfRequired(node)) {
-                continue;
-            }
-
-            hasWorkToResume = true;
-            reuseSearchCheckpointIfPresent(node);
-            markManualResumeApprovalIfNecessary(node);
-        }
-
-        recoveryPolicy().resetNodesForResume(nodes, true);
-
-        if (!hasWorkToResume && hasSuccessfulCheckpoint) {
-            throw new BusinessException(ResultCode.TASK_STATUS_INVALID, "Task already completed successfully");
-        }
-
-        nodeRepository.saveAll(nodes);
-    }
-
-    private void resetNodeExecutionState(TaskNode node, boolean clearOutput) {
-        recoveryPolicy().resetNodeForRerun(node, clearOutput);
-    }
-
-    private void resetNodeForManualContinue(TaskNode node) {
-        recoveryPolicy().resetNodeForManualContinue(node);
-    }
-
-    private void markNodeSkippedByUser(TaskNode node, String reason) {
-        node.setStatus(TaskNodeStatus.SKIPPED);
-        node.setControlState(TaskNodeControlState.NONE);
-        node.setInputData(null);
-        node.setOutputData(null);
-        node.setErrorMessage(reason);
-        node.setInterventionReason(reason);
-        node.setStartedAt(node.getStartedAt() == null ? LocalDateTime.now() : node.getStartedAt());
-        node.setCompletedAt(LocalDateTime.now());
-    }
-
-    private void continueTaskIfNecessary(AnalysisTask task) {
-        List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(task.getId());
-        NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
-                recoveryPolicy().resolveTaskExecution(task, nodes);
-        if (!recoveryPolicy().canAutoContinue(nodes)) {
-            LocalDateTime resolvedCompletedAt = resolution.resolveCompletedAt(task.getCompletedAt());
-            if (task.getStatus() != resolution.getStatus()
-                    || !java.util.Objects.equals(task.getErrorMessage(), resolution.getErrorMessage())
-                    || !java.util.Objects.equals(task.getCompletedAt(), resolvedCompletedAt)) {
-                task.setStatus(resolution.getStatus());
-                task.setErrorMessage(resolution.getErrorMessage());
-                task.setCompletedAt(resolvedCompletedAt);
-                taskRepository.save(task);
-            }
-            return;
-        }
-        if (task.getStatus() == AnalysisTaskStatus.RUNNING || task.getStatus() == AnalysisTaskStatus.SUCCESS) {
-            return;
-        }
-        task.setStatus(AnalysisTaskStatus.PENDING);
-        task.setErrorMessage(null);
-        task.setCompletedAt(null);
-        taskRepository.save(task);
-        refreshTaskSnapshot(task.getId());
-        runAfterCommit(task.getId());
-    }
-
-    /**
-     * 鍒犻櫎鏁翠换鍔￠噸璺戞墍闇€娓呯┖鐨勬淳鐢熶骇鐗╋紝淇濊瘉浠诲姟瑙嗚涓嬫暟鎹竴鑷淬€?     */
-    private List<TaskNode> collectAffectedNodes(List<TaskNode> nodes, String startNodeName) {
-        TaskNode startNode = nodes.stream()
-                .filter(node -> node.getNodeName().equals(startNodeName))
-                .findFirst()
-                .orElse(null);
-        return dynamicTaskGraphService.calculateAffectedNodes(nodes, startNode);
-    }
-
-    private void invalidateDerivedDataForNodeRerun(Long taskId, TaskNode targetNode, List<TaskNode> affectedNodes) {
-        Set<String> affectedNodeNames = new HashSet<>();
-        for (TaskNode affectedNode : affectedNodes) {
-            affectedNodeNames.add(affectedNode.getNodeName());
-        }
-
-        if (targetNode.getNodeName().startsWith("collect_sources")) {
-            evidenceRepository.deleteByTaskIdAndEvidenceIdStartingWith(
-                    taskId, buildEvidencePrefix(taskId, targetNode.getNodeName()));
-        }
-
-        if (affectedNodeNames.contains("extract_schema")) {
-            knowledgeRepository.deleteByTaskId(taskId);
-            reportRepository.deleteByTaskId(taskId);
-            return;
-        }
-
-        if (affectedNodeNames.contains("analyze_competitors") || "write_report".equals(targetNode.getNodeName())) {
-            reportRepository.deleteByTaskId(taskId);
-        }
-    }
-
-    private String buildEvidencePrefix(Long taskId, String nodeName) {
-        long safeTaskId = taskId == null ? 0L : taskId;
-        String safeNodeName = nodeName == null || nodeName.isBlank()
-                ? "NODE"
-                : nodeName.toUpperCase().replaceAll("[^A-Z0-9]+", "_");
-        return String.format("T%04d-%s-", safeTaskId % 10000, safeNodeName);
-    }
-
-    private List<String> parseDependencyNames(String dependsOn) {
-        if (dependsOn == null || dependsOn.isBlank() || "[]".equals(dependsOn)) {
-            return List.of();
-        }
-        try {
-            return objectMapper.readValue(
-                    dependsOn,
-                    objectMapper.getTypeFactory().constructCollectionType(List.class, String.class)
-            );
-        } catch (Exception e) {
-            log.warn("parse dependencies failed: {}", dependsOn, e);
-            return List.of();
-        }
-    }
-
-    private void deleteGeneratedData(Long taskId) {
-        reportRepository.deleteByTaskId(taskId);
-        knowledgeRepository.deleteByTaskId(taskId);
-        evidenceRepository.deleteByTaskId(taskId);
-        logRepository.deleteByTaskId(taskId);
-    }
-
-    /**
-     * 閲囬泦鑺傜偣閲嶈窇鎴栫画璺戞椂锛屾妸涓婃鎼滅储瀹¤蹇収閲嶆柊鍐欏洖鑺傜偣閰嶇疆锛?     * 璁?CollectorAgent 鑳戒紭鍏堝鐢ㄥ€欓€変笌閫夋簮鐜板満锛岃€屼笉鏄瘡娆￠兘閲嶆柊鍋氬畬鏁存悳绱€?     */
-    private void reuseSearchCheckpointIfPresent(TaskNode node) {
-        if (node == null || node.getAgentType() != AgentType.COLLECTOR || !hasText(node.getOutputData()) || !hasText(node.getNodeConfig())) {
-            return;
-        }
-        try {
-            JsonNode output = objectMapper.readTree(node.getOutputData());
-            JsonNode auditNode = output.get("searchAudit");
-            if (auditNode == null || auditNode.isNull() || auditNode.isMissingNode()) {
-                return;
-            }
-            SearchAuditSnapshot checkpoint = objectMapper.treeToValue(auditNode, SearchAuditSnapshot.class);
-            if (checkpoint == null) {
-                return;
-            }
-            JsonNode configNode = objectMapper.readTree(node.getNodeConfig());
-            if (!configNode.isObject()) {
-                return;
-            }
-            ((com.fasterxml.jackson.databind.node.ObjectNode) configNode).set("searchAuditCheckpoint", objectMapper.valueToTree(checkpoint));
-            node.setNodeConfig(objectMapper.writeValueAsString(configNode));
-        } catch (Exception e) {
-            log.warn("reuse search checkpoint failed, nodeName={}", node.getNodeName(), e);
-        }
-    }
-
-    /**
-     * 褰撳垵瀹¤姹備汉宸ヤ粙鍏ュ悗锛岀敤鎴疯Е鍙?resume 浠ｈ〃宸茬粡纭鍙互缁х画闂幆銆?     * 杩欓噷鎶婄‘璁や俊鍙峰啓鍥炲緟鎵ц鑺傜偣閰嶇疆锛屼緵 DAG 鏉′欢鍒ゆ柇鏀捐 rewrite_report銆?     */
-    private void markManualResumeApprovalIfNecessary(TaskNode node) {
-        if (node == null || !hasText(node.getNodeConfig()) || !"rewrite_report".equals(node.getNodeName())) {
-            return;
-        }
-        try {
-            JsonNode configNode = objectMapper.readTree(node.getNodeConfig());
-            if (!configNode.isObject()) {
-                return;
-            }
-            ((com.fasterxml.jackson.databind.node.ObjectNode) configNode).put("manualResumeApproved", true);
-            node.setNodeConfig(objectMapper.writeValueAsString(configNode));
-        } catch (Exception e) {
-            log.warn("mark manual resume approval failed, nodeName={}", node.getNodeName(), e);
-        }
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
-    }
-
-    private void runAfterCommit(Long taskId) {
-        workflowEventOutboxService.assertWorkflowIngressReady();
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    taskRunner.runTask(taskId);
-                }
-            });
-        } else {
-            taskRunner.runTask(taskId);
-        }
-    }
-
-    private AnalysisTask getTaskOrThrow(Long taskId) {
-        return taskRepository.findById(taskId)
-                .orElseThrow(() -> new BusinessException(ResultCode.TASK_NOT_FOUND, "taskId=" + taskId));
-    }
-
-    private TaskResponse toTaskResponse(AnalysisTask task) {
-        List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(task.getId());
+     * 任务详情视图需要把任务主表状态、节点执行状态和运行时快照统一折叠成一个只读响应。
+     * 这里集中维护状态解释规则，确保列表、详情和节点页看到的是同一套任务语义。
+     */
+    public TaskResponse toTaskResponse(AnalysisTask task, List<TaskNode> nodes) {
         NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
                 recoveryPolicy().resolveTaskExecution(task, nodes);
         AnalysisTaskStatus resolvedStatus = resolution.getStatus();
@@ -583,20 +106,135 @@ public class AnalysisTaskService {
     }
 
     /**
-     * 鎶婃暟鎹簱浠诲姟浜嬪疄鍘嬬缉鎴愪竴浠?Redis 蹇収銆?     * 璇ユ柟娉曞湪浠诲姟鍒涘缓銆佹帶鍒跺姩浣滃拰閲嶈窇閲嶇疆鍚庨兘浼氳皟鐢紝淇濊瘉 Redis 涓庢暟鎹簱涓荤姸鎬佸熀鏈悓姝ャ€?     */
-    private void refreshTaskSnapshot(Long taskId) {
-        taskRepository.findById(taskId).ifPresent(task -> {
-            List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
-            NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
-                    recoveryPolicy().resolveTaskExecution(task, nodes);
-            TaskProgressSnapshot snapshot = TaskProgressSnapshot.fromTask(
-                    task,
-                    resolution.getStatus(),
-                    resolution.getErrorMessage(),
-                    nodes);
-            taskSnapshotCacheService.saveTaskSnapshot(snapshot);
-            taskEventPublisher.publishTaskSnapshot(snapshot);
-        });
+     * 节点详情视图除了静态配置，还要补齐：
+     * 1. 当前任务状态下允许的干预动作；
+     * 2. 该节点重跑会波及的下游范围；
+     * 3. 面向用户可读的摘要说明。
+     */
+    public TaskNodeResponse toNodeResponse(AnalysisTask task, TaskNode node, List<TaskNode> allNodes) {
+        AnalysisTaskStatus taskStatus = recoveryPolicy().resolveTaskExecution(task, allNodes).getStatus();
+        List<TaskNode> affectedNodes = collectAffectedNodes(allNodes, node.getNodeName());
+        List<String> affectedNodeNames = affectedNodes.stream()
+                .map(TaskNode::getNodeName)
+                .toList();
+        Map<Long, Integer> planVersionMap = buildPlanVersionMap(task == null ? null : task.getId());
+        TaskNodeConfigSummary configSummaryData = buildNodeConfigSummaryData(node);
+        boolean canRerun = canRerunNode(taskStatus);
+        boolean canUpdateConfigAndRerun = canUpdateConfigAndRerun(node, taskStatus);
+        boolean canReuseCheckpoint = hasReusableCheckpoint(node);
+        boolean canPause = canPauseNode(node);
+        boolean canResumeNode = canResumeNode(node);
+        boolean canSkip = canSkipNode(node);
+        boolean canTerminate = canTerminateNode(node);
+        CollectorNodeInsightResponse collectorInsight = buildCollectorNodeInsight(node);
+
+        return TaskNodeResponse.builder()
+                .id(node.getId())
+                .nodeName(node.getNodeName())
+                .displayName(node.getDisplayName())
+                .nodeConfig(node.getNodeConfig())
+                .configSummary(configSummaryData == null ? null : configSummaryData.getSummaryText())
+                .configSummaryData(configSummaryData)
+                .collectorInsight(collectorInsight)
+                .nodeNotes(node.getNodeNotes())
+                .agentType(node.getAgentType())
+                .dependsOn(node.getDependsOn())
+                .required(node.isRequired())
+                .retryable(node.isRetryable())
+                .maxRetries(node.getMaxRetries())
+                .retryCount(node.getRetryCount())
+                .failureCategory(node.getFailureCategory())
+                .status(node.getStatus())
+                .controlState(node.getControlState())
+                .errorMessage(node.getErrorMessage())
+                .interventionReason(node.getInterventionReason())
+                .executionOrder(node.getExecutionOrder())
+                .planVersionId(node.getPlanVersionId())
+                .planVersion(resolvePlanVersion(planVersionMap, node.getPlanVersionId()))
+                .branchKey(node.getBranchKey())
+                .dynamicNode(node.isDynamicNode())
+                .originNodeName(node.getOriginNodeName())
+                .inputSummary(truncate(node.getInputData(), 240))
+                .outputSummary(buildOutputSummary(node))
+                .aiGovernanceSummary(buildAiGovernanceSummary(node))
+                .statusSummary(buildNodeStatusSummary(node))
+                .inputData(node.getInputData())
+                .outputData(node.getOutputData())
+                .allowFailedDependency(node.isAllowFailedDependency())
+                .startedAt(node.getStartedAt())
+                .completedAt(node.getCompletedAt())
+                .lastAttemptAt(node.getLastAttemptAt())
+                .nextRetryAt(node.getNextRetryAt())
+                .canRerun(canRerun)
+                .canUpdateConfigAndRerun(canUpdateConfigAndRerun)
+                .affectedNodeCount(affectedNodeNames.size())
+                .affectedNodeNames(affectedNodeNames)
+                .canReuseCheckpoint(canReuseCheckpoint)
+                .canPause(canPause)
+                .canResumeNode(canResumeNode)
+                .canSkip(canSkip)
+                .canTerminate(canTerminate)
+                .eventKey(node.getNodeName())
+                .interventionSummary(buildNodeInterventionSummary(
+                        node,
+                        taskStatus,
+                        affectedNodeNames,
+                        canReuseCheckpoint,
+                        canPause,
+                        canResumeNode,
+                        canSkip,
+                        canTerminate))
+                .rerunActionSummary(buildNodeRerunActionSummary(node, canRerun))
+                .configRerunActionSummary(buildNodeConfigRerunActionSummary(node, canUpdateConfigAndRerun))
+                .impactSummary(buildNodeImpactSummary(node, affectedNodeNames))
+                .checkpointSummary(buildNodeCheckpointSummary(node, canReuseCheckpoint))
+                .replayEntrySummary(buildNodeReplayEntrySummary(node))
+                .build();
+    }
+
+    /**
+     * 预览阶段只需要返回“计划中的节点长什么样”，
+     * 不涉及真实运行态、重跑能力和快照恢复，因此这里统一输出静态预览视图。
+     */
+    public TaskNodeResponse toPreviewNodeResponse(WorkflowPlan.WorkflowPlanNode node) {
+        TaskNodeConfigSummary configSummaryData = buildPreviewNodeConfigSummaryData(node);
+        CollectorNodeInsightResponse collectorInsight = buildPreviewCollectorNodeInsight(node);
+        return TaskNodeResponse.builder()
+                .nodeName(node.getNodeName())
+                .displayName(node.getDisplayName())
+                .nodeConfig(node.getNodeConfig())
+                .configSummary(configSummaryData == null ? null : configSummaryData.getSummaryText())
+                .configSummaryData(configSummaryData)
+                .collectorInsight(collectorInsight)
+                .agentType(AgentType.valueOf(node.getAgentType()))
+                .dependsOn(toJson(node.getDependsOn()))
+                .required(node.isRequired())
+                .retryable(node.isRetryable())
+                .maxRetries(node.getMaxRetries())
+                .retryCount(0)
+                .executionOrder(node.getExecutionOrder())
+                .planVersionId(null)
+                .planVersion(null)
+                .branchKey(node.getBranchKey())
+                .dynamicNode(node.isDynamicNode())
+                .originNodeName(node.getOriginNodeName())
+                .inputSummary(node.getNodeConfig())
+                .aiGovernanceSummary(null)
+                .status(TaskNodeStatus.PENDING)
+                .nodeNotes(node.getNotes())
+                .allowFailedDependency(node.isAllowFailedDependency())
+                .canRerun(false)
+                .canUpdateConfigAndRerun(false)
+                .affectedNodeCount(0)
+                .affectedNodeNames(List.of())
+                .canReuseCheckpoint(false)
+                .canPause(false)
+                .canResumeNode(false)
+                .canSkip(false)
+                .canTerminate(false)
+                .eventKey(node.getNodeName())
+                .interventionSummary("预览阶段仅展示规划结果。")
+                .build();
     }
 
     private String buildDefaultCurrentStage(List<TaskNode> nodes, AnalysisTaskStatus status) {
@@ -620,13 +258,6 @@ public class AnalysisTaskService {
             }
         }
         return activeNodeNames;
-    }
-
-    private boolean isTerminalStatus(TaskNodeStatus status) {
-        return status == TaskNodeStatus.SUCCESS
-                || status == TaskNodeStatus.FAILED
-                || status == TaskNodeStatus.SKIPPED
-                || status == TaskNodeStatus.COMPENSATED;
     }
 
     private Integer countNodesByStatus(List<TaskNode> nodes, TaskNodeStatus targetStatus) {
@@ -690,142 +321,8 @@ public class AnalysisTaskService {
         };
     }
 
-    private TaskNodeResponse toNodeResponse(TaskNode node,
-                                            AnalysisTaskStatus taskStatus,
-                                            List<TaskNode> affectedNodes,
-                                            Map<Long, Integer> planVersionMap) {
-        List<String> affectedNodeNames = affectedNodes.stream()
-                .map(TaskNode::getNodeName)
-                .toList();
-        TaskNodeConfigSummary configSummaryData = buildNodeConfigSummaryData(node);
-        boolean canRerun = canRerunNode(taskStatus);
-        boolean canUpdateConfigAndRerun = canUpdateConfigAndRerun(node, taskStatus);
-        boolean canReuseCheckpoint = hasReusableCheckpoint(node);
-        boolean canPause = canPauseNode(node);
-        boolean canResumeNode = canResumeNode(node);
-        boolean canSkip = canSkipNode(node);
-        boolean canTerminate = canTerminateNode(node);
-        CollectorNodeInsightResponse collectorInsight = buildCollectorNodeInsight(node);
-        return TaskNodeResponse.builder()
-                .id(node.getId())
-                .nodeName(node.getNodeName())
-                .displayName(node.getDisplayName())
-                .nodeConfig(node.getNodeConfig())
-                .configSummary(configSummaryData == null ? null : configSummaryData.getSummaryText())
-                .configSummaryData(configSummaryData)
-                .collectorInsight(collectorInsight)
-                .nodeNotes(node.getNodeNotes())
-                .agentType(node.getAgentType())
-                .dependsOn(node.getDependsOn())
-                .required(node.isRequired())
-                .retryable(node.isRetryable())
-                .maxRetries(node.getMaxRetries())
-                .retryCount(node.getRetryCount())
-                .failureCategory(node.getFailureCategory())
-                .status(node.getStatus())
-                .controlState(node.getControlState())
-                .errorMessage(node.getErrorMessage())
-                .interventionReason(node.getInterventionReason())
-                .executionOrder(node.getExecutionOrder())
-                .planVersionId(node.getPlanVersionId())
-                .planVersion(resolvePlanVersion(planVersionMap, node.getPlanVersionId()))
-                .branchKey(node.getBranchKey())
-                .dynamicNode(node.isDynamicNode())
-                .originNodeName(node.getOriginNodeName())
-                .inputSummary(truncate(node.getInputData(), 240))
-                .outputSummary(buildOutputSummary(node))
-                .aiGovernanceSummary(buildAiGovernanceSummary(node))
-                .statusSummary(buildNodeStatusSummary(node))
-                .inputData(node.getInputData())
-                .outputData(node.getOutputData())
-                .allowFailedDependency(node.isAllowFailedDependency())
-                .startedAt(node.getStartedAt())
-                .completedAt(node.getCompletedAt())
-                .lastAttemptAt(node.getLastAttemptAt())
-                .nextRetryAt(node.getNextRetryAt())
-                .canRerun(canRerun)
-                .canUpdateConfigAndRerun(canUpdateConfigAndRerun)
-                .affectedNodeCount(affectedNodeNames.size())
-                .affectedNodeNames(affectedNodeNames)
-                .canReuseCheckpoint(canReuseCheckpoint)
-                .canPause(canPause)
-                .canResumeNode(canResumeNode)
-                .canSkip(canSkip)
-                .canTerminate(canTerminate)
-                .eventKey(node.getNodeName())
-                /* 节点干预摘要需要基于当前状态、受影响范围和可执行动作统一生成。 */
-                .interventionSummary(buildNodeInterventionSummary(
-                        node,
-                        taskStatus,
-                        affectedNodeNames,
-                        canReuseCheckpoint,
-                        canPause,
-                        canResumeNode,
-                        canSkip,
-                        canTerminate))
-                .rerunActionSummary(buildNodeRerunActionSummary(node, canRerun))
-                .configRerunActionSummary(buildNodeConfigRerunActionSummary(node, canUpdateConfigAndRerun))
-                .impactSummary(buildNodeImpactSummary(node, affectedNodeNames))
-                .checkpointSummary(buildNodeCheckpointSummary(node, canReuseCheckpoint))
-                .replayEntrySummary(buildNodeReplayEntrySummary(node))
-                .build();
-    }
-
-    /**
-     * 棰勮鑺傜偣娌℃湁鐪熷疄鎵ц杈撳叆杈撳嚭锛岃繖閲屽彧鎶婅鍒掔粨鏋滆浆鎹㈡垚鍓嶇鍙睍绀虹粨鏋勩€?     */
-    private TaskNodeResponse toPreviewNodeResponse(WorkflowPlan.WorkflowPlanNode node) {
-        TaskNodeConfigSummary configSummaryData = buildPreviewNodeConfigSummaryData(node);
-        CollectorNodeInsightResponse collectorInsight = buildPreviewCollectorNodeInsight(node);
-        return TaskNodeResponse.builder()
-                .nodeName(node.getNodeName())
-                .displayName(node.getDisplayName())
-                .nodeConfig(node.getNodeConfig())
-                .configSummary(configSummaryData == null ? null : configSummaryData.getSummaryText())
-                .configSummaryData(configSummaryData)
-                .collectorInsight(collectorInsight)
-                .agentType(cn.bugstack.competitoragent.model.enums.AgentType.valueOf(node.getAgentType()))
-                .dependsOn(toJson(node.getDependsOn()))
-                .required(node.isRequired())
-                .retryable(node.isRetryable())
-                .maxRetries(node.getMaxRetries())
-                .retryCount(0)
-                .executionOrder(node.getExecutionOrder())
-                .planVersionId(null)
-                .planVersion(null)
-                .branchKey(node.getBranchKey())
-                .dynamicNode(node.isDynamicNode())
-                .originNodeName(node.getOriginNodeName())
-                .inputSummary(node.getNodeConfig())
-                .aiGovernanceSummary(null)
-                .status(TaskNodeStatus.PENDING)
-                .nodeNotes(node.getNotes())
-                .allowFailedDependency(node.isAllowFailedDependency())
-                .canRerun(false)
-                .canUpdateConfigAndRerun(false)
-                .affectedNodeCount(0)
-                .affectedNodeNames(List.of())
-                .canReuseCheckpoint(false)
-                .canPause(false)
-                .canResumeNode(false)
-                .canSkip(false)
-                .canTerminate(false)
-                .eventKey(node.getNodeName())
-                .interventionSummary("预览阶段仅展示规划结果。")
-                .build();
-    }
-
-    /**
-     * 浠诲姟璇︽儏鎺ュ彛鐩存帴缁欏嚭 SSE 璁㈤槄鍦板潃锛屽墠绔棤闇€鍐嶈嚜琛屾嫾瑁呬富瑙傚療閫氶亾銆?     */
     private String buildEventStreamPath(Long taskId) {
         return taskId == null ? null : "/api/task/" + taskId + "/events";
-    }
-
-    private Map<String, List<TaskNode>> buildRerunImpactMap(List<TaskNode> nodes) {
-        Map<String, List<TaskNode>> rerunImpactMap = new HashMap<>();
-        for (TaskNode node : nodes) {
-            rerunImpactMap.put(node.getNodeName(), collectAffectedNodes(nodes, node.getNodeName()));
-        }
-        return rerunImpactMap;
     }
 
     private Map<Long, Integer> buildPlanVersionMap(Long taskId) {
@@ -833,12 +330,11 @@ public class AnalysisTaskService {
             return Map.of();
         }
         Map<Long, Integer> planVersionMap = new HashMap<>();
-        List<cn.bugstack.competitoragent.model.entity.TaskPlan> plans =
-                taskPlanRepository.findByTaskIdOrderByPlanVersionAsc(taskId);
+        List<TaskPlan> plans = taskPlanRepository.findByTaskIdOrderByPlanVersionAsc(taskId);
         if (plans == null || plans.isEmpty()) {
             return planVersionMap;
         }
-        for (cn.bugstack.competitoragent.model.entity.TaskPlan plan : plans) {
+        for (TaskPlan plan : plans) {
             if (plan.getId() != null && plan.getPlanVersion() != null) {
                 planVersionMap.put(plan.getId(), plan.getPlanVersion());
             }
@@ -885,8 +381,6 @@ public class AnalysisTaskService {
         return "任务尚未开始，可直接启动执行；节点级支持暂停待执行节点、手动跳过待执行节点，以及从指定节点重跑。";
     }
 
-    /**
-     * 浠诲姟绾ф仮澶嶅缓璁粯璁ら潰鍚戔€滀繚鐣欏凡鏈夋垚鏋滅户缁蛋鈥濈殑鍦烘櫙銆?     * 杩欓噷鍗曠嫭杈撳嚭涓氬姟璇存槑锛岄伩鍏嶅墠绔妸鈥滄仮澶嶆墽琛屸€濈户缁睍绀烘垚绾妧鏈寜閽€?     */
     private String buildTaskResumeAdvice(AnalysisTaskStatus status) {
         if (status == AnalysisTaskStatus.FAILED) {
             return "恢复执行会尽量保留已完成节点的成果，只重跑尚未完成或失败的链路。";
@@ -897,8 +391,6 @@ public class AnalysisTaskService {
         return null;
     }
 
-    /**
-     * 鏁翠换鍔￠噸缃彧鍦ㄥけ璐ユ€佸紑鏀撅紝鐢ㄤ簬鐢ㄦ埛鏄庣‘甯屾湜浠庡ご閲嶈蛋鍏ㄩ摼璺殑鍦烘櫙銆?     */
     private String buildTaskRetryAdvice(AnalysisTaskStatus status) {
         if (status != AnalysisTaskStatus.FAILED) {
             return null;
@@ -906,9 +398,6 @@ public class AnalysisTaskService {
         return "整任务重置会清空当前任务的派生产物，并从头重走整条执行链路。";
     }
 
-    /**
-     * 杩借釜涓庡洖鏀惧叆鍙ｈ鏄庣粺涓€鐢卞悗绔粰鍑猴紝鍓嶇鍙礋璐ｆ寜涓昏矾寰勫睍绀猴紝
-     * 閬垮厤涓嶅悓椤甸潰鍚勮嚜鍙戞槑涓€濂椻€滃幓鍝噷鐪嬪師濮嬭褰曗€濈殑鎻愮ず鏂囨銆?     */
     private String buildTaskReplayEntrySummary(AnalysisTaskStatus status) {
         if (status != AnalysisTaskStatus.FAILED && status != AnalysisTaskStatus.STOPPED && status != AnalysisTaskStatus.RUNNING) {
             return null;
@@ -999,13 +488,8 @@ public class AnalysisTaskService {
         return summary.toString();
     }
 
-    /**
-     * 鑺傜偣閲嶈窇璇存槑寮鸿皟鈥滀粈涔堟椂鍊欑敤鈥濓紝甯姪鐢ㄦ埛鍖哄垎灞€閮ㄩ噸璺戜笌鏁翠换鍔℃仮澶嶃€?     */
     private String buildNodeRerunActionSummary(TaskNode node, boolean canRerun) {
-        if (node == null || !canRerun) {
-            return null;
-        }
-        if (node.getStatus() == TaskNodeStatus.PAUSED) {
+        if (node == null || !canRerun || node.getStatus() == TaskNodeStatus.PAUSED) {
             return null;
         }
         if (node.getAgentType() == AgentType.COLLECTOR) {
@@ -1014,8 +498,6 @@ public class AnalysisTaskService {
         return "适合在当前节点结果需要修正、但上游成果仍可复用时发起局部重跑。";
     }
 
-    /**
-     * 鏀归厤缃悗閲嶈窇鏄洿楂樻垚鏈殑灞€閮ㄩ噸璺戯紝闇€瑕佹槑纭憡璇夌敤鎴峰畠閫傚悎鈥滃厛璋冩暣绛栫暐鍐嶇户缁€濈殑鍦烘櫙銆?     */
     private String buildNodeConfigRerunActionSummary(TaskNode node, boolean canUpdateConfigAndRerun) {
         if (node == null || !canUpdateConfigAndRerun) {
             return null;
@@ -1026,9 +508,6 @@ public class AnalysisTaskService {
         return "适合在需要调整当前节点配置后再继续执行时使用。";
     }
 
-    /**
-     * 褰卞搷鑼冨洿璇存槑鐩存帴缁欎笟鍔＄敤鎴疯В閲娾€滆繖涓€鍒€浼氬垏鍒板摢閲屸€濓紝
-     * 閬垮厤璁╃敤鎴疯嚜宸辨牴鎹?DAG 渚濊禆鍥炬帹绠楀摢浜涜妭鐐逛細澶辨晥銆?     */
     private String buildNodeImpactSummary(TaskNode node, List<String> affectedNodeNames) {
         if (node == null) {
             return null;
@@ -1039,12 +518,9 @@ public class AnalysisTaskService {
         if (affectedNodeNames == null || affectedNodeNames.isEmpty()) {
             return "当前操作仅影响当前节点本身。";
         }
-        /* 影响摘要只返回面向用户的下游影响说明，不暴露内部 DAG 细节。 */
         return "本次操作将影响 " + affectedNodeNames.size() + " 个节点：" + String.join("、", affectedNodeNames) + "。";
     }
 
-    /**
-     * 妫€鏌ョ偣璇存槑缁熶竴杈撳嚭鎴愪笟鍔¤瑷€锛屽墠绔棤闇€鍐嶅幓鐚?canReuseCheckpoint 瀵圭敤鎴锋剰鍛崇潃浠€涔堛€?     */
     private String buildNodeCheckpointSummary(TaskNode node, boolean canReuseCheckpoint) {
         if (node == null) {
             return null;
@@ -1060,8 +536,6 @@ public class AnalysisTaskService {
         return "当前节点没有额外的检查点复用说明。";
     }
 
-    /**
-     * 鍥炴斁鍏ュ彛涓嶆槸鏂扮殑鎵ц鍔ㄤ綔锛岃€屾槸鈥滃幓鍝噷鐪嬭瘉鎹€濈殑璇存槑銆?     * 杩欓噷缁熶竴鏀跺彛涓鸿妭鐐硅拷韪?-> 楂樼骇璇婃柇锛岄伩鍏嶇敤鎴风洿鎺ユ帀杩涘師濮?JSON銆?     */
     private String buildNodeReplayEntrySummary(TaskNode node) {
         if (node == null) {
             return null;
@@ -1072,22 +546,65 @@ public class AnalysisTaskService {
         return "可通过节点追踪与高级诊断查看该节点的原始输入、输出、日志与事件。";
     }
 
-    private TaskNode getNodeOrThrow(Long taskId, String nodeName) {
-        return nodeRepository.findByTaskIdAndNodeName(taskId, nodeName)
-                .orElseThrow(() -> new BusinessException(ResultCode.TASK_STATUS_INVALID,
-                        "Node not found in task: " + nodeName));
+    /**
+     * 节点影响范围需要严格遵守依赖关系与 branchKey 边界。
+     * 这里在查询侧复用同样的 BFS 规则，确保用户看到的“重跑影响范围”与实际运行时一致。
+     */
+    private List<TaskNode> collectAffectedNodes(List<TaskNode> nodes, String startNodeName) {
+        if (nodes == null || nodes.isEmpty() || !hasText(startNodeName)) {
+            return List.of();
+        }
+        TaskNode startNode = nodes.stream()
+                .filter(node -> startNodeName.equals(node.getNodeName()))
+                .findFirst()
+                .orElse(null);
+        if (startNode == null) {
+            return List.of();
+        }
+
+        Map<String, List<TaskNode>> dependentsMap = new HashMap<>();
+        for (TaskNode node : nodes) {
+            dependentsMap.putIfAbsent(node.getNodeName(), new ArrayList<>());
+        }
+        for (TaskNode node : nodes) {
+            for (String dependencyName : node.parseDependencyNames()) {
+                dependentsMap.computeIfAbsent(dependencyName, key -> new ArrayList<>()).add(node);
+            }
+        }
+
+        Set<String> affectedNodeNames = new HashSet<>();
+        ArrayDeque<TaskNode> queue = new ArrayDeque<>();
+        queue.add(startNode);
+        affectedNodeNames.add(startNode.getNodeName());
+
+        while (!queue.isEmpty()) {
+            TaskNode current = queue.removeFirst();
+            for (TaskNode dependent : dependentsMap.getOrDefault(current.getNodeName(), List.of())) {
+                if (!isWithinAffectedBranch(startNode, dependent)) {
+                    continue;
+                }
+                if (affectedNodeNames.add(dependent.getNodeName())) {
+                    queue.addLast(dependent);
+                }
+            }
+        }
+
+        return nodes.stream()
+                .filter(candidate -> affectedNodeNames.contains(candidate.getNodeName()))
+                .toList();
     }
 
-    private String toJson(Object obj) {
-        if (obj == null) {
-            return null;
+    private boolean isWithinAffectedBranch(TaskNode startNode, TaskNode candidate) {
+        String startBranch = normalizeBranchKey(startNode.getBranchKey());
+        String candidateBranch = normalizeBranchKey(candidate.getBranchKey());
+        if (startBranch.equals(candidateBranch)) {
+            return true;
         }
-        try {
-            return objectMapper.writeValueAsString(obj);
-        } catch (JsonProcessingException e) {
-            log.warn("serialize json failed", e);
-            return null;
-        }
+        return candidateBranch.startsWith(startBranch + "/");
+    }
+
+    private String normalizeBranchKey(String branchKey) {
+        return branchKey == null || branchKey.isBlank() ? "root" : branchKey;
     }
 
     private String truncate(String value, int maxLength) {
@@ -1120,8 +637,7 @@ public class AnalysisTaskService {
                     .summaryText(truncate(node.getNodeConfig(), 180))
                     .build();
         }
-        AgentType agentType = AgentType.valueOf(node.getAgentType());
-        return buildConfigSummaryData(agentType, config);
+        return buildConfigSummaryData(AgentType.valueOf(node.getAgentType()), config);
     }
 
     private CollectorNodeInsightResponse buildCollectorNodeInsight(TaskNode node) {
@@ -1225,27 +741,27 @@ public class AnalysisTaskService {
             int minVerifiedCandidates = config.path("minVerifiedCandidates").asInt(0);
             StringBuilder summary = new StringBuilder();
             summary.append(competitor)
-                    .append(" · ")
+                    .append(" 路 ")
                     .append(sourceTypeLabel)
                     .append("采集")
-                    .append(" · 搜索模式：")
+                    .append(" 路 搜索模式：")
                     .append(searchModeLabel)
-                    .append(" · 候选 ")
+                    .append(" 路 候选 ")
                     .append(candidateCount)
                     .append(" 条");
             if (queryCount > 0) {
-                summary.append(" · Query ")
+                summary.append(" 路 Query ")
                         .append(queryCount)
                         .append(" 条");
             }
             if (stepCount > 0) {
-                summary.append(" · 计划 ")
+                summary.append(" 路 计划 ")
                         .append(stepCount)
                         .append(" 步");
             }
-            summary.append(" · 浏览器补源：")
+            summary.append(" 路 浏览器补源：")
                     .append(browserEnabled ? "开启" : "关闭")
-                    .append(" · 结果页验证：")
+                    .append(" 路 结果页验证：")
                     .append(verificationEnabled ? "开启" : "关闭");
             return TaskNodeConfigSummary.builder()
                     .summaryText(summary.toString())
@@ -1377,7 +893,7 @@ public class AnalysisTaskService {
         return switch (searchMode.trim().toUpperCase(java.util.Locale.ROOT)) {
             case "BROWSER_ONLY" -> "仅浏览器";
             case "HTTP_ONLY" -> "仅 HTTP";
-            case "HEURISTIC_ONLY" -> "仅规划候选";
+            case "HEURISTIC_ONLY" -> "仅规则候选";
             case "HYBRID" -> "混合";
             default -> searchMode;
         };
@@ -1404,14 +920,11 @@ public class AnalysisTaskService {
             return null;
         }
         if (node.size() > items.size()) {
-            /* 数组摘要超过展示上限时，用“等 N 项”提示仍有剩余内容。 */
-            items.add("等" + node.size() + "项");
+            items.add("等 " + node.size() + " 项");
         }
         return String.join("、", items);
     }
 
-    /**
-     * 鑺傜偣鍒楄〃浼樺厛杩斿洖鍙鎽樿锛岄伩鍏嶅墠绔彧鑳界湅鍒拌鎴柇鐨?JSON銆?     */
     private String buildOutputSummary(TaskNode node) {
         if (node.getOutputData() == null || node.getOutputData().isBlank()) {
             return null;
@@ -1430,8 +943,6 @@ public class AnalysisTaskService {
         return truncate(node.getOutputData(), 240);
     }
 
-    /**
-     * 鑺傜偣璇︽儏涓昏矾寰勫彧杩斿洖鐢ㄦ埛鍙娌荤悊鎽樿锛?     * 涓嶆妸搴曞眰 SDK 鍙傛暟銆佽矾鐢遍敭鎴栧師濮嬪紓甯告爤鐩存帴鏆撮湶缁欏墠绔€?     */
     private String buildAiGovernanceSummary(TaskNode node) {
         if (node == null || node.getTaskId() == null || !StringUtils.hasText(node.getNodeName())) {
             return null;
@@ -1477,6 +988,10 @@ public class AnalysisTaskService {
         }
         summary.append("选中 ").append(selectedCount)
                 .append(" 条，采集成功 ").append(successCollected).append("/").append(totalCollected).append(" 条");
+        /*
+         * 这里保持与 AnalysisTaskService 迁移前完全一致的文案格式，
+         * 避免前端展示和既有回归测试因为分隔符变化而产生兼容性回归。
+         */
         if (supplementMethod != null) {
             summary.append("，补源方式=").append(supplementMethod);
         }
@@ -1496,11 +1011,11 @@ public class AnalysisTaskService {
         String summary = textOrNull(output, "summary");
 
         StringBuilder readable = new StringBuilder();
-        readable.append(passed ? "璇勫閫氳繃" : "璇勫鏈€氳繃");
+        readable.append(passed ? "质量评审通过" : "质量评审未通过");
         if (score >= 0) {
-            readable.append("锛岃瘎鍒?").append(score);
+            readable.append("，评分 ").append(score);
         }
-        readable.append("锛岄棶棰樻暟 ").append(issueCount);
+        readable.append("，问题 ").append(issueCount).append(" 项");
         if (summary != null) {
             readable.append("，").append(summary);
         }
@@ -1530,8 +1045,23 @@ public class AnalysisTaskService {
         return value == null || value.isBlank() ? defaultValue : value;
     }
 
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private String toJson(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            log.warn("serialize preview json failed", e);
+            return null;
+        }
+    }
+
     private NodeExecutionRecoveryPolicy recoveryPolicy() {
         return new NodeExecutionRecoveryPolicy(objectMapper);
     }
 }
-

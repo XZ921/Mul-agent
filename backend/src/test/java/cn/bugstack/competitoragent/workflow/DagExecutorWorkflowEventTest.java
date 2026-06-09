@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.workflow;
 import cn.bugstack.competitoragent.agent.Agent;
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
+import cn.bugstack.competitoragent.agent.capability.SpringAgentCapabilityRegistry;
 import cn.bugstack.competitoragent.event.TaskEventPublisher;
 import cn.bugstack.competitoragent.log.AgentLogService;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
@@ -17,6 +18,9 @@ import cn.bugstack.competitoragent.repository.TaskNodeExecutionAttemptRepository
 import cn.bugstack.competitoragent.repository.WorkflowDeadLetterRecordRepository;
 import cn.bugstack.competitoragent.task.TaskExecutionLockService;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
+import cn.bugstack.competitoragent.workflow.runtime.DynamicPlanAppender;
+import cn.bugstack.competitoragent.workflow.runtime.RuntimeEventEmitter;
+import cn.bugstack.competitoragent.workflow.runtime.RuntimeStateRefresher;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -69,7 +73,7 @@ class DagExecutorWorkflowEventTest {
         DagExecutor executor = new DagExecutor(
                 nodeRepository,
                 taskRepository,
-                List.of(new SuccessfulCollectorAgent()),
+                new SpringAgentCapabilityRegistry(List.of(new SuccessfulCollectorAgent())),
                 new ObjectMapper(),
                 snapshotCacheService,
                 lockService,
@@ -78,8 +82,14 @@ class DagExecutorWorkflowEventTest {
                 workflowEventPublisher,
                 mock(TaskNodeExecutionAttemptRepository.class),
                 mock(WorkflowDeadLetterRecordRepository.class),
-                mock(DynamicTaskGraphService.class),
-                mock(TaskPlanRepository.class)
+                new RuntimeStateRefresher(taskRepository, nodeRepository, snapshotCacheService, taskEventPublisher),
+                new RuntimeEventEmitter(taskEventPublisher, agentLogService, new ObjectMapper()),
+                new DynamicPlanAppender(
+                        taskRepository,
+                        nodeRepository,
+                        mock(DynamicTaskGraphService.class),
+                        mock(TaskPlanRepository.class),
+                        new ObjectMapper())
         );
 
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("workflow-event-test").build());

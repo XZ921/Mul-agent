@@ -9,6 +9,7 @@ import cn.bugstack.competitoragent.agent.extractor.SchemaExtractorAgent;
 import cn.bugstack.competitoragent.agent.reviewer.QualityReviewAgent;
 import cn.bugstack.competitoragent.agent.writer.ReportWriterAgent;
 import cn.bugstack.competitoragent.common.ApiResponse;
+import cn.bugstack.competitoragent.config.RocketMqProperties;
 import cn.bugstack.competitoragent.config.PlaywrightBrowserManager;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.model.dto.CreateTaskRequest;
@@ -17,6 +18,7 @@ import cn.bugstack.competitoragent.model.entity.CompetitorKnowledge;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.model.entity.Report;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
+import cn.bugstack.competitoragent.model.entity.TaskWorkflowEvent;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
@@ -25,11 +27,17 @@ import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
+import cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceDiscoveryService;
 import cn.bugstack.competitoragent.source.SourcePlan;
+import cn.bugstack.competitoragent.task.AnalysisTaskRunner;
 import cn.bugstack.competitoragent.task.TaskExecutionLockService;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
+import cn.bugstack.competitoragent.workflow.event.WorkflowEvent;
+import cn.bugstack.competitoragent.workflow.event.WorkflowEventConsumer;
+import cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService;
+import cn.bugstack.competitoragent.workflow.event.WorkflowEventType;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.playwright.Playwright;
@@ -64,8 +72,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.when;
 
 /**
  * Phase 1 主链路集成回归测试。
@@ -74,7 +83,15 @@ import static org.mockito.Mockito.doAnswer;
  */
 @SpringBootTest(
         classes = CompetitorAgentApplication.class,
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {
+                /**
+                 * Phase 1 回归当前只验证“任务提交 -> 事件入箱 -> 编排接管 -> 暂停/恢复 -> 报告产出”最小闭环，
+                 * 并不要求在测试环境里真的初始化 RocketMQ Producer。
+                 * 显式关闭 Starter 自动装配，可以避免 name-server 为空时在容器启动阶段提前失败。
+                 */
+                "spring.autoconfigure.exclude=org.apache.rocketmq.spring.autoconfigure.RocketMQAutoConfiguration"
+        }
 )
 @ActiveProfiles("test")
 @Import(Phase1WorkflowIntegrationTest.SyncAsyncTestConfig.class)
@@ -103,6 +120,18 @@ class Phase1WorkflowIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private AnalysisTaskRunner analysisTaskRunner;
+
+    @Autowired
+    private TaskWorkflowEventRepository taskWorkflowEventRepository;
+
+    @Autowired
+    private WorkflowEventOutboxService workflowEventOutboxService;
+
+    @SpyBean
+    private RocketMqProperties rocketMqProperties;
 
     @MockBean
     private SourceDiscoveryService sourceDiscoveryService;
@@ -144,6 +173,11 @@ class Phase1WorkflowIntegrationTest {
     void setUp() {
         writerExecutionCount = 0;
         reviewerExecutionCount = 0;
+        /**
+         * Phase 1 使用 test profile 跑集成链路时，不会真的启用 RocketMQ 基础设施。
+         * 这里显式放行执行入口校验，保证测试覆盖的是工作流编排语义，而不是外部中间件装配结果。
+         */
+        doNothing().when(rocketMqProperties).validateForExecution();
         seedSourceDiscovery();
         configureCollectorAgent();
         configureExtractorAgent();
@@ -174,6 +208,7 @@ class Phase1WorkflowIntegrationTest {
         Long taskId = taskIdRaw.longValue();
 
         restTemplate.postForEntity(taskUrl("/" + taskId + "/execute"), null, ApiResponse.class);
+        consumeLatestTaskExecutionRequested(taskId);
 
         Map<?, ?> stoppedTaskBody = waitForTaskDetailStatus(taskId, AnalysisTaskStatus.STOPPED);
         assertTrue(String.valueOf(stoppedTaskBody.get("errorMessage")).contains("人工"));
@@ -187,6 +222,7 @@ class Phase1WorkflowIntegrationTest {
         assertEquals(Boolean.TRUE, stoppedTaskBody.get("canResume"));
 
         restTemplate.postForEntity(taskUrl("/" + taskId + "/resume"), null, ApiResponse.class);
+        consumeLatestTaskExecutionRequested(taskId);
 
         Map<?, ?> successTaskBody = waitForTaskDetailStatus(taskId, AnalysisTaskStatus.SUCCESS);
         TaskNode rewriteNode = nodeRepository.findByTaskIdAndNodeName(taskId, "rewrite_report").orElseThrow();
@@ -221,6 +257,69 @@ class Phase1WorkflowIntegrationTest {
 
         assertEquals("SUCCESS", successTaskBody.get("status"));
         assertEquals(Boolean.TRUE, successTaskBody.get("canViewReport"));
+    }
+
+    /**
+     * Phase 1 测试环境不会真的拉起 MQ listener，
+     * 因此这里要把最新的 TASK_EXECUTION_REQUESTED 事件手动喂给正式消费者，确保测试仍覆盖真实的事件接管链路。
+     */
+    private void consumeLatestTaskExecutionRequested(Long taskId) throws Exception {
+        TaskWorkflowEvent event = waitForWorkflowEvent(taskId, WorkflowEventType.TASK_EXECUTION_REQUESTED);
+
+        WorkflowEvent workflowEvent = WorkflowEvent.builder()
+                .eventId(event.getEventId())
+                .taskId(event.getTaskId())
+                .nodeName(event.getNodeName())
+                .planVersionId(event.getPlanVersionId())
+                .branchKey(event.getBranchKey())
+                .eventType(event.getEventType())
+                .payload(readMap(event.getPayload()))
+                .sourceUrls(readStringList(event.getSourceUrls()))
+                .occurredAt(event.getCreatedAt())
+                .build();
+        String message = objectMapper.writeValueAsString(workflowEvent);
+
+        new WorkflowEventConsumer(objectMapper, workflowEventOutboxService, analysisTaskRunner).onMessage(message);
+    }
+
+    /**
+     * HTTP 返回与 outbox 真正落库之间存在短暂的事务提交窗口，
+     * 这里轮询等待最新工作流事件，避免把正常的异步时序误判成链路失败。
+     */
+    private TaskWorkflowEvent waitForWorkflowEvent(Long taskId, WorkflowEventType eventType) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + Duration.ofSeconds(5).toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            Optional<TaskWorkflowEvent> eventOptional = taskWorkflowEventRepository.findAll().stream()
+                    .filter(item -> taskId.equals(item.getTaskId()))
+                    .filter(item -> item.getEventType() == eventType)
+                    .filter(item -> !TaskWorkflowEvent.STATUS_CONSUMED.equals(item.getDeliveryStatus()))
+                    .max(java.util.Comparator.comparing(TaskWorkflowEvent::getId));
+            if (eventOptional.isPresent()) {
+                return eventOptional.get();
+            }
+            Thread.sleep(100);
+        }
+        List<String> currentEvents = taskWorkflowEventRepository.findAll().stream()
+                .filter(item -> taskId.equals(item.getTaskId()))
+                .map(item -> item.getEventType() + ":" + item.getDeliveryStatus())
+                .toList();
+        throw new AssertionError("链路中未等到工作流事件 " + eventType + "，taskId=" + taskId + "，当前事件=" + currentEvents);
+    }
+
+    private Map<String, Object> readMap(String rawJson) throws Exception {
+        if (rawJson == null || rawJson.isBlank()) {
+            return Map.of();
+        }
+        return objectMapper.readValue(rawJson, new TypeReference<Map<String, Object>>() {
+        });
+    }
+
+    private List<String> readStringList(String rawJson) throws Exception {
+        if (rawJson == null || rawJson.isBlank()) {
+            return List.of();
+        }
+        return objectMapper.readValue(rawJson, new TypeReference<List<String>>() {
+        });
     }
 
     private void seedSourceDiscovery() {
@@ -433,6 +532,7 @@ class Phase1WorkflowIntegrationTest {
      */
     private void configureRuntimeInfrastructure() {
         when(taskSnapshotCacheService.getTaskSnapshot(anyLong())).thenReturn(Optional.empty());
+        when(taskSnapshotCacheService.getCachedNodeOutputs(anyLong())).thenReturn(Map.of());
         when(taskExecutionLockService.tryAcquireTaskExecutionLock(anyLong(), anyString(), any()))
                 .thenReturn(true);
         when(taskExecutionLockService.releaseTaskExecutionLock(anyLong(), anyString()))

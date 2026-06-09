@@ -3,6 +3,8 @@ package cn.bugstack.competitoragent.workflow;
 import cn.bugstack.competitoragent.agent.Agent;
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
+import cn.bugstack.competitoragent.agent.capability.AgentCapabilityRegistry;
+import cn.bugstack.competitoragent.agent.capability.SpringAgentCapabilityRegistry;
 import cn.bugstack.competitoragent.event.TaskEventPublisher;
 import cn.bugstack.competitoragent.log.AgentLogService;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
@@ -20,6 +22,9 @@ import cn.bugstack.competitoragent.repository.WorkflowDeadLetterRecordRepository
 import cn.bugstack.competitoragent.task.TaskExecutionLockService;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
 import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
+import cn.bugstack.competitoragent.workflow.runtime.DynamicPlanAppender;
+import cn.bugstack.competitoragent.workflow.runtime.RuntimeEventEmitter;
+import cn.bugstack.competitoragent.workflow.runtime.RuntimeStateRefresher;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -511,7 +516,7 @@ class DagExecutorTest {
         DagExecutor executor = new DagExecutor(
                 nodeRepository,
                 taskRepository,
-                List.of(new ResumeCollectorAgent()),
+                registryOf(List.of(new ResumeCollectorAgent())),
                 new ObjectMapper(),
                 snapshotCacheService,
                 lockService,
@@ -520,8 +525,14 @@ class DagExecutorTest {
                 mock(WorkflowEventPublisher.class),
                 mock(TaskNodeExecutionAttemptRepository.class),
                 mock(WorkflowDeadLetterRecordRepository.class),
-                mock(DynamicTaskGraphService.class),
-                mock(TaskPlanRepository.class)
+                new RuntimeStateRefresher(taskRepository, nodeRepository, snapshotCacheService, taskEventPublisher),
+                new RuntimeEventEmitter(taskEventPublisher, agentLogService, new ObjectMapper()),
+                new DynamicPlanAppender(
+                        taskRepository,
+                        nodeRepository,
+                        mock(DynamicTaskGraphService.class),
+                        mock(TaskPlanRepository.class),
+                        new ObjectMapper())
         );
 
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("event-fallback-test").build());
@@ -586,7 +597,7 @@ class DagExecutorTest {
         DagExecutor executor = new DagExecutor(
                 nodeRepository,
                 taskRepository,
-                List.of(new AlwaysTimeoutCollectorAgent()),
+                registryOf(List.of(new AlwaysTimeoutCollectorAgent())),
                 new ObjectMapper(),
                 snapshotCacheService,
                 lockService,
@@ -595,8 +606,14 @@ class DagExecutorTest {
                 mock(WorkflowEventPublisher.class),
                 attemptRepository,
                 deadLetterRepository,
-                mock(DynamicTaskGraphService.class),
-                mock(TaskPlanRepository.class)
+                new RuntimeStateRefresher(taskRepository, nodeRepository, snapshotCacheService, mock(TaskEventPublisher.class)),
+                new RuntimeEventEmitter(mock(TaskEventPublisher.class), mock(AgentLogService.class), new ObjectMapper()),
+                new DynamicPlanAppender(
+                        taskRepository,
+                        nodeRepository,
+                        mock(DynamicTaskGraphService.class),
+                        mock(TaskPlanRepository.class),
+                        new ObjectMapper())
         );
 
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("retry-dlq-test").build());
@@ -731,12 +748,12 @@ class DagExecutorTest {
         DagExecutor executor = new DagExecutor(
                 nodeRepository,
                 taskRepository,
-                List.of(
+                registryOf(List.of(
                         new FinalReviewFailureAgent(),
                         new AlwaysSuccessCollectorAgent(),
                         new AlwaysSuccessExtractorAgent(),
                         new AlwaysSuccessAnalyzerAgent(),
-                        new DynamicRewriteAgent()),
+                        new DynamicRewriteAgent())),
                 mapper,
                 snapshotCacheService,
                 lockService,
@@ -745,8 +762,14 @@ class DagExecutorTest {
                 mock(WorkflowEventPublisher.class),
                 mock(TaskNodeExecutionAttemptRepository.class),
                 mock(WorkflowDeadLetterRecordRepository.class),
-                dynamicTaskGraphService,
-                taskPlanRepository
+                new RuntimeStateRefresher(taskRepository, nodeRepository, snapshotCacheService, mock(TaskEventPublisher.class)),
+                new RuntimeEventEmitter(mock(TaskEventPublisher.class), mock(AgentLogService.class), mapper),
+                new DynamicPlanAppender(
+                        taskRepository,
+                        nodeRepository,
+                        dynamicTaskGraphService,
+                        taskPlanRepository,
+                        mapper)
         );
 
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("dynamic-graph-test").build());
@@ -772,21 +795,38 @@ class DagExecutorTest {
                                               List<Agent> agents,
                                               TaskSnapshotCacheService snapshotCacheService,
                                               TaskExecutionLockService lockService) {
+        TaskEventPublisher taskEventPublisher = mock(TaskEventPublisher.class);
+        AgentLogService agentLogService = mock(AgentLogService.class);
+        ObjectMapper objectMapper = new ObjectMapper();
         return new DagExecutor(
                 nodeRepository,
                 taskRepository,
-                agents,
-                new ObjectMapper(),
+                registryOf(agents),
+                objectMapper,
                 snapshotCacheService,
                 lockService,
-                mock(TaskEventPublisher.class),
-                mock(AgentLogService.class),
+                taskEventPublisher,
+                agentLogService,
                 mock(WorkflowEventPublisher.class),
                 mock(TaskNodeExecutionAttemptRepository.class),
                 mock(WorkflowDeadLetterRecordRepository.class),
-                mock(DynamicTaskGraphService.class),
-                mock(TaskPlanRepository.class)
+                new RuntimeStateRefresher(taskRepository, nodeRepository, snapshotCacheService, taskEventPublisher),
+                new RuntimeEventEmitter(taskEventPublisher, agentLogService, objectMapper),
+                new DynamicPlanAppender(
+                        taskRepository,
+                        nodeRepository,
+                        mock(DynamicTaskGraphService.class),
+                        mock(TaskPlanRepository.class),
+                        objectMapper)
         );
+    }
+
+    /**
+     * 测试仍然沿用轻量 Agent 假实现，但 DagExecutor 的构造依赖已经切换为能力注册表。
+     * 这里统一封装测试注册方式，避免每个测试手工拼装 registry，保持断言关注点只落在编排行为本身。
+     */
+    private static AgentCapabilityRegistry registryOf(List<Agent> agents) {
+        return new SpringAgentCapabilityRegistry(agents);
     }
 
     private static final class TestCollectorAgent implements Agent {
