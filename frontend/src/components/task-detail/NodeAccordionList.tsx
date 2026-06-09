@@ -3,7 +3,15 @@ import type { TaskNodeInfo } from '../../types'
 import { getAgentTypeText, getNodeDisplayName, getNodeNameLabel } from '../../utils/display'
 import { getCollectorNodeInsight, getDependencyNames } from '../../utils/taskNodeInsights'
 import SearchActivityPanel from './SearchActivityPanel'
-import { getNodeDurationText, getNodeHeadline, getNodeNoticeType, statusTag } from './shared'
+import {
+  getNodeActionSummary,
+  getNodeDurationText,
+  getNodeHandlingReason,
+  getNodeHeadline,
+  getNodeNoticeType,
+  getNodeSituationSummary,
+  statusTag,
+} from './shared'
 
 const { Text } = Typography
 
@@ -11,6 +19,9 @@ type NodeAccordionListProps = {
   nodes: TaskNodeInfo[]
   defaultExpandedNodeKeys: string[]
   actionLoading: boolean
+  streamStatus: 'idle' | 'connecting' | 'open' | 'fallback' | 'closed'
+  fallbackPollingActive: boolean
+  lastEventAt?: string | null
   onSelectNode: (nodeId: number) => void
   onResumeNode: (nodeName: string) => void
   onTerminateNode: (nodeName: string) => void
@@ -21,6 +32,9 @@ export default function NodeAccordionList({
   nodes,
   defaultExpandedNodeKeys,
   actionLoading,
+  streamStatus,
+  fallbackPollingActive,
+  lastEventAt,
   onSelectNode,
   onResumeNode,
   onTerminateNode,
@@ -35,6 +49,9 @@ export default function NodeAccordionList({
           const collectorInsight = node.agentType === 'COLLECTOR' ? getCollectorNodeInsight(node) : null
           const dependencyNames = getDependencyNames(node.dependsOn)
           const configSummary = node.configSummaryData?.summaryText || node.configSummary || '暂无配置摘要'
+          const situationSummary = getNodeSituationSummary(node)
+          const handlingReason = getNodeHandlingReason(node)
+          const actionSummary = getNodeActionSummary(node)
 
           return {
             key: String(node.id),
@@ -88,19 +105,15 @@ export default function NodeAccordionList({
                 )}
 
                 <Descriptions column={1} size="small" bordered className="readable-descriptions">
-                  <Descriptions.Item label="节点">{getNodeNameLabel(node.nodeName)}</Descriptions.Item>
-                  <Descriptions.Item label="智能体">{getAgentTypeText(node.agentType)}</Descriptions.Item>
-                  <Descriptions.Item label="依赖">
-                    {dependencyNames.length > 0 ? dependencyNames.join('、') : '无上游依赖'}
+                  <Descriptions.Item label="现在怎么了">{situationSummary}</Descriptions.Item>
+                  <Descriptions.Item label="为什么需要处理">{handlingReason}</Descriptions.Item>
+                  <Descriptions.Item label="可执行动作">{actionSummary}</Descriptions.Item>
+                  <Descriptions.Item label="这一步的目标">{configSummary}</Descriptions.Item>
+                  <Descriptions.Item label="节点定位">
+                    {`${getNodeNameLabel(node.nodeName)} / ${getAgentTypeText(node.agentType)}`}
                   </Descriptions.Item>
-                  <Descriptions.Item label="执行摘要">{getNodeHeadline(node)}</Descriptions.Item>
-                  <Descriptions.Item label="配置摘要">{configSummary}</Descriptions.Item>
-                  <Descriptions.Item label="技术属性">
-                    <span className="node-tech-meta">
-                      {node.required ? '必需节点' : '可选节点'}
-                      {node.allowFailedDependency ? ' · 允许失败依赖' : ''}
-                      {node.retryable ? ` · 可重试 ${node.retryCount ?? 0}/${node.maxRetries ?? 0}` : ' · 不自动重试'}
-                    </span>
+                  <Descriptions.Item label="依赖背景">
+                    {dependencyNames.length > 0 ? dependencyNames.join('、') : '无上游依赖'}
                   </Descriptions.Item>
                 </Descriptions>
 
@@ -114,7 +127,12 @@ export default function NodeAccordionList({
                         <span>{`采集成功 ${collectorInsight.successCollected}/${collectorInsight.totalCollected}`}</span>
                         {collectorInsight.browserSearchEnabled && <span>浏览器补源已开启</span>}
                       </div>
-                      <SearchActivityPanel insight={collectorInsight} />
+                      <SearchActivityPanel
+                        insight={collectorInsight}
+                        streamStatus={streamStatus}
+                        fallbackPollingActive={fallbackPollingActive}
+                        lastEventAt={lastEventAt}
+                      />
                     </Space>
                   </Card>
                 )}

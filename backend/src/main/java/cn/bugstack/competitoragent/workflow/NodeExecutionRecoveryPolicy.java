@@ -15,13 +15,11 @@ import java.util.List;
 
 /**
  * 节点执行恢复策略。
- * 统一收口三类高风险状态机判断：
- * 1. 当前节点集合应被解释成什么任务状态；
- * 2. 任务恢复 / 续跑时，哪些节点可以保留检查点，哪些节点必须回滚到待执行；
- * 3. 人工干预与评审阻断信号出现后，任务是否应该继续自动执行。
- *
- * 这样可以避免 DagExecutor、任务服务、恢复服务各自维护一套分叉逻辑，
- * 导致“数据库里是一个状态，详情接口展示又是另一个状态”。
+ * <p>
+ * 统一收口三类问题：
+ * 1. 当前节点集合应被聚合成什么任务公开状态；
+ * 2. 任务恢复 / 续跑时，哪些节点可以保留检查点；
+ * 3. 出现人工阻断或重试等待时，任务是否还能继续自动推进。
  */
 public class NodeExecutionRecoveryPolicy {
 
@@ -36,13 +34,11 @@ public class NodeExecutionRecoveryPolicy {
     }
 
     /**
-     * 基于节点快照推导任务的真实运行状态。
-     * 优先级说明：
-     * 1. 只要还有节点在 RUNNING，任务就仍然处于运行中；
-     * 2. 如果没有运行中节点，但存在 PAUSED 或质检阻断信号，则任务应视为 STOPPED；
-     * 3. 所有必需节点成功且质检通过，才可视为 SUCCESS；
-     * 4. 其余存在失败 / 跳过 / 闭环未通过的情况统一视为 FAILED；
-     * 5. 如果只是等待后续执行，则保持 PENDING。
+     * 基于节点权威状态推导任务公开状态。
+     * <p>
+     * 任务级状态继续保持五态：
+     * `PENDING / RUNNING / SUCCESS / FAILED / STOPPED`。
+     * 更细粒度的恢复语义通过节点状态和快照摘要表达。
      */
     public TaskExecutionResolution resolveTaskExecution(AnalysisTask task, List<TaskNode> nodes) {
         if (nodes == null || nodes.isEmpty()) {
@@ -55,7 +51,9 @@ public class NodeExecutionRecoveryPolicy {
         }
 
         int totalNodes = nodes.size();
-        int completedNodes = (int) nodes.stream().filter(node -> isTerminalStatus(node.getStatus())).count();
+        int completedNodes = (int) nodes.stream()
+                .filter(node -> isTerminalStatus(node.getStatus()))
+                .count();
 
         if (isManuallyStoppedTask(task)) {
             return TaskExecutionResolution.builder()
@@ -67,21 +65,18 @@ public class NodeExecutionRecoveryPolicy {
                     .build();
         }
 
-        boolean hasRunningNode = nodes.stream().anyMatch(node -> node.getStatus() == TaskNodeStatus.RUNNING);
-        if (hasRunningNode) {
-            return TaskExecutionResolution.builder()
-                    .status(AnalysisTaskStatus.RUNNING)
-                    .errorMessage(null)
-                    .completedNodes(completedNodes)
-                    .totalNodes(totalNodes)
-                    .build();
-        }
-
+        boolean hasWaitingInterventionNode = nodes.stream().anyMatch(this::isWaitingInterventionStatus);
         boolean hasPausedNode = nodes.stream().anyMatch(node -> node.getStatus() == TaskNodeStatus.PAUSED);
         boolean initialReviewRequiresHumanIntervention = nodes.stream()
                 .filter(node -> "quality_check".equals(node.getNodeName()))
                 .anyMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && requiresHumanIntervention(node.getOutputData()));
-        if (hasPausedNode) {
+        boolean hasRunningLikeNode = nodes.stream().anyMatch(this::isRunningLikeStatus);
+        boolean hasActiveExecutionNode = nodes.stream().anyMatch(node ->
+                node.getStatus() == TaskNodeStatus.READY
+                        || node.getStatus() == TaskNodeStatus.DISPATCHED
+                        || node.getStatus() == TaskNodeStatus.RUNNING);
+
+        if (hasPausedNode && !hasRunningLikeNode) {
             return TaskExecutionResolution.builder()
                     .status(AnalysisTaskStatus.STOPPED)
                     .errorMessage("存在已暂停节点，等待人工恢复")
@@ -90,11 +85,31 @@ public class NodeExecutionRecoveryPolicy {
                     .totalNodes(totalNodes)
                     .build();
         }
+
+        if (hasWaitingInterventionNode && !hasActiveExecutionNode) {
+            return TaskExecutionResolution.builder()
+                    .status(AnalysisTaskStatus.STOPPED)
+                    .errorMessage("存在等待人工处理的节点，请确认后继续")
+                    .waitingManualIntervention(true)
+                    .completedNodes(completedNodes)
+                    .totalNodes(totalNodes)
+                    .build();
+        }
+
         if (initialReviewRequiresHumanIntervention && !hasRevisionFlowSucceeded(nodes)) {
             return TaskExecutionResolution.builder()
                     .status(AnalysisTaskStatus.STOPPED)
-                    .errorMessage("初审未通过且证据缺口较大，系统已停止自动改写，请先人工补证据或调整采集策略。")
+                    .errorMessage("初审未通过且需要人工介入，请补充证据或调整策略后继续")
                     .waitingManualIntervention(true)
+                    .completedNodes(completedNodes)
+                    .totalNodes(totalNodes)
+                    .build();
+        }
+
+        if (hasRunningLikeNode) {
+            return TaskExecutionResolution.builder()
+                    .status(AnalysisTaskStatus.RUNNING)
+                    .errorMessage(null)
                     .completedNodes(completedNodes)
                     .totalNodes(totalNodes)
                     .build();
@@ -103,9 +118,9 @@ public class NodeExecutionRecoveryPolicy {
         boolean hasFailedOrSkippedRequiredNode = nodes.stream()
                 .filter(TaskNode::isRequired)
                 .anyMatch(node -> node.getStatus() == TaskNodeStatus.FAILED || node.getStatus() == TaskNodeStatus.SKIPPED);
-        boolean allRequiredSuccess = nodes.stream()
+        boolean allRequiredSucceeded = nodes.stream()
                 .filter(TaskNode::isRequired)
-                .allMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS);
+                .allMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS || node.getStatus() == TaskNodeStatus.COMPENSATED);
         boolean initialReviewPresent = nodes.stream().anyMatch(node -> "quality_check".equals(node.getNodeName()));
         boolean initialReviewPassed = nodes.stream()
                 .filter(node -> "quality_check".equals(node.getNodeName()))
@@ -113,8 +128,13 @@ public class NodeExecutionRecoveryPolicy {
         boolean finalReviewPassed = nodes.stream()
                 .filter(node -> "quality_check_final".equals(node.getNodeName()))
                 .anyMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && isPassedReview(node.getOutputData()));
+        // Phase 4 的动态补图闭环会派生 quality_check_revision_patch_v* 节点。
+        // 这些节点本质上承担“终审补图复核”职责，若它们已经通过，就应该和固定终审节点一样把任务判定为 SUCCESS。
+        boolean dynamicPatchReviewPassed = nodes.stream()
+                .filter(node -> node.getNodeName() != null && node.getNodeName().startsWith("quality_check_revision_patch_v"))
+                .anyMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && isPassedReview(node.getOutputData()));
 
-        if (finalReviewPassed || (!initialReviewPresent && allRequiredSuccess) || initialReviewPassed) {
+        if (finalReviewPassed || dynamicPatchReviewPassed || (!initialReviewPresent && allRequiredSucceeded) || initialReviewPassed) {
             return TaskExecutionResolution.builder()
                     .status(AnalysisTaskStatus.SUCCESS)
                     .errorMessage(null)
@@ -123,7 +143,8 @@ public class NodeExecutionRecoveryPolicy {
                     .build();
         }
 
-        boolean hasPendingNode = nodes.stream().anyMatch(node -> node.getStatus() == TaskNodeStatus.PENDING);
+        boolean hasPendingNode = nodes.stream().anyMatch(node ->
+                node.getStatus() == TaskNodeStatus.PENDING || node.getStatus() == TaskNodeStatus.READY);
         if (hasPendingNode) {
             return TaskExecutionResolution.builder()
                     .status(AnalysisTaskStatus.PENDING)
@@ -136,7 +157,7 @@ public class NodeExecutionRecoveryPolicy {
         if (hasFailedOrSkippedRequiredNode) {
             return TaskExecutionResolution.builder()
                     .status(AnalysisTaskStatus.FAILED)
-                    .errorMessage("任务执行失败，请检查节点日志。")
+                    .errorMessage("任务存在未恢复的失败节点，请检查节点详情")
                     .completedNodes(completedNodes)
                     .totalNodes(totalNodes)
                     .build();
@@ -145,7 +166,7 @@ public class NodeExecutionRecoveryPolicy {
         if (initialReviewPresent || hasRevisionFlowSucceeded(nodes)) {
             return TaskExecutionResolution.builder()
                     .status(AnalysisTaskStatus.FAILED)
-                    .errorMessage("质量闭环未达到通过状态，请检查评审反馈。")
+                    .errorMessage("质量闭环未达到通过条件，请检查评审结果")
                     .completedNodes(completedNodes)
                     .totalNodes(totalNodes)
                     .build();
@@ -160,17 +181,15 @@ public class NodeExecutionRecoveryPolicy {
     }
 
     /**
-     * 整任务恢复 / 续跑时的复位策略：
-     * 1. SUCCESS 节点保留输入输出，作为断点恢复的共享上下文；
-     * 2. 其余节点统一回滚为 PENDING；
-     * 3. 是否连 PAUSED 节点一起恢复，由调用方决定。
+     * 任务恢复 / 续跑时的节点复位策略。
+     * SUCCESS / COMPENSATED 节点保留检查点，其余节点回到待编排状态。
      */
     public boolean resetNodesForResume(List<TaskNode> nodes, boolean includePausedNodes) {
         if (nodes == null || nodes.isEmpty()) {
             return false;
         }
         for (TaskNode node : nodes) {
-            if (node.getStatus() == TaskNodeStatus.SUCCESS) {
+            if (node.getStatus() == TaskNodeStatus.SUCCESS || node.getStatus() == TaskNodeStatus.COMPENSATED) {
                 continue;
             }
             if (!includePausedNodes && node.getStatus() == TaskNodeStatus.PAUSED) {
@@ -182,8 +201,9 @@ public class NodeExecutionRecoveryPolicy {
     }
 
     /**
-     * 服务重启恢复时只回滚“可能被中断的节点”。
-     * 这里保留 SUCCESS 检查点和 PAUSED 人工阻塞态，避免启动恢复时把人工决策冲掉。
+     * 服务重启恢复时，只回滚可能被中断的活跃节点。
+     * READY / DISPATCHED / RUNNING 会回到待编排状态，
+     * WAITING_INTERVENTION 和 SUCCESS / COMPENSATED 会被保留。
      */
     public boolean resetInterruptedNodes(List<TaskNode> nodes) {
         if (nodes == null || nodes.isEmpty()) {
@@ -191,17 +211,20 @@ public class NodeExecutionRecoveryPolicy {
         }
         boolean changed = false;
         for (TaskNode node : nodes) {
-            if (node.getStatus() == TaskNodeStatus.RUNNING) {
+            if (node.getStatus() == TaskNodeStatus.RUNNING || node.getStatus() == TaskNodeStatus.DISPATCHED) {
                 resetNodeForInterruptedRestart(node);
                 changed = true;
                 continue;
             }
-            if (node.getStatus() == TaskNodeStatus.PENDING) {
+            if (node.getStatus() == TaskNodeStatus.PENDING || node.getStatus() == TaskNodeStatus.READY) {
                 node.setControlState(TaskNodeControlState.NONE);
                 node.setInputData(null);
                 node.setStartedAt(null);
                 node.setCompletedAt(null);
                 node.setRetryCount(0);
+                node.setFailureCategory(null);
+                node.setLastAttemptAt(null);
+                node.setNextRetryAt(null);
                 changed = true;
             }
         }
@@ -209,7 +232,7 @@ public class NodeExecutionRecoveryPolicy {
     }
 
     /**
-     * 节点级重跑会清空当前节点的执行现场，让其与下游一起按新上下文重新计算。
+     * 节点重跑会清空当前节点执行现场，让它与下游一起重新计算。
      */
     public void resetNodeForRerun(TaskNode node, boolean clearOutput) {
         if (node == null) {
@@ -223,14 +246,17 @@ public class NodeExecutionRecoveryPolicy {
         }
         node.setErrorMessage(null);
         node.setInterventionReason(null);
+        node.setFailureCategory(null);
         node.setStartedAt(null);
         node.setCompletedAt(null);
+        node.setLastAttemptAt(null);
+        node.setNextRetryAt(null);
+        node.setLastEventId(null);
         node.setRetryCount(0);
     }
 
     /**
-     * 人工恢复暂停节点时，只撤掉阻断态，不主动清空配置和历史输入。
-     * 这样用户在暂停前调整过的节点配置仍会被后续执行使用。
+     * 人工继续时，只撤掉阻断态，不主动清空配置和历史输入。
      */
     public void resetNodeForManualContinue(TaskNode node) {
         if (node == null) {
@@ -240,24 +266,43 @@ public class NodeExecutionRecoveryPolicy {
         node.setControlState(TaskNodeControlState.NONE);
         node.setErrorMessage(null);
         node.setInterventionReason(null);
+        node.setFailureCategory(null);
+        node.setNextRetryAt(null);
         node.setCompletedAt(null);
     }
 
     /**
-     * 判断任务在当前节点快照下是否适合继续自动执行。
-     * 只要还存在 PAUSED 或初审阻断信号，就不能自动继续。
+     * 只要还存在等待人工处理的节点，就不允许继续自动推进。
      */
     public boolean canAutoContinue(List<TaskNode> nodes) {
         if (nodes == null || nodes.isEmpty()) {
             return false;
         }
-        boolean hasPausedNode = nodes.stream().anyMatch(node -> node.getStatus() == TaskNodeStatus.PAUSED);
-        if (hasPausedNode) {
+        boolean hasManualBlock = nodes.stream().anyMatch(this::isWaitingInterventionStatus);
+        if (hasManualBlock) {
             return false;
         }
         return nodes.stream()
                 .filter(node -> "quality_check".equals(node.getNodeName()))
                 .noneMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && requiresHumanIntervention(node.getOutputData()));
+    }
+
+    private boolean isRunningLikeStatus(TaskNode node) {
+        if (node == null) {
+            return false;
+        }
+        return node.getStatus() == TaskNodeStatus.READY
+                || node.getStatus() == TaskNodeStatus.DISPATCHED
+                || node.getStatus() == TaskNodeStatus.RUNNING
+                || node.getStatus() == TaskNodeStatus.WAITING_RETRY;
+    }
+
+    private boolean isWaitingInterventionStatus(TaskNode node) {
+        if (node == null) {
+            return false;
+        }
+        return node.getStatus() == TaskNodeStatus.WAITING_INTERVENTION
+                || node.getStatus() == TaskNodeStatus.PAUSED;
     }
 
     private void resetNodeForInterruptedRestart(TaskNode node) {
@@ -267,14 +312,19 @@ public class NodeExecutionRecoveryPolicy {
         node.setOutputData(null);
         node.setErrorMessage("Node interrupted by service restart");
         node.setInterventionReason(null);
+        node.setFailureCategory(null);
         node.setStartedAt(null);
         node.setCompletedAt(null);
+        node.setLastAttemptAt(null);
+        node.setNextRetryAt(null);
         node.setRetryCount(0);
     }
 
     private boolean hasRevisionFlowSucceeded(List<TaskNode> nodes) {
         return nodes.stream()
-                .anyMatch(node -> "rewrite_report".equals(node.getNodeName()) && node.getStatus() == TaskNodeStatus.SUCCESS);
+                .anyMatch(node -> ("rewrite_report".equals(node.getNodeName())
+                        || (node.getNodeName() != null && node.getNodeName().startsWith("rewrite_revision_patch_v")))
+                        && node.getStatus() == TaskNodeStatus.SUCCESS);
     }
 
     private AnalysisTaskStatus defaultTaskStatus(AnalysisTaskStatus persistedStatus) {
@@ -282,8 +332,8 @@ public class NodeExecutionRecoveryPolicy {
     }
 
     /**
-     * 用户主动停止任务后，节点层面的运行态可能还没来得及完全收敛。
-     * 详情接口此时必须优先保留 STOPPED，避免前端把任务重新渲染成“执行中”，从而把恢复/重置按钮隐藏掉。
+     * 用户主动停止任务后，详情接口必须优先保留 STOPPED，
+     * 避免前端被残留的节点活跃态重新渲染成“执行中”。
      */
     private boolean isManuallyStoppedTask(AnalysisTask task) {
         if (task == null || task.getStatus() != AnalysisTaskStatus.STOPPED) {
@@ -295,7 +345,8 @@ public class NodeExecutionRecoveryPolicy {
     private boolean isTerminalStatus(TaskNodeStatus status) {
         return status == TaskNodeStatus.SUCCESS
                 || status == TaskNodeStatus.FAILED
-                || status == TaskNodeStatus.SKIPPED;
+                || status == TaskNodeStatus.SKIPPED
+                || status == TaskNodeStatus.COMPENSATED;
     }
 
     private boolean isPassedReview(String outputData) {

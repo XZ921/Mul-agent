@@ -1,8 +1,20 @@
-import type { AgentType, NodeStatus, TaskNodeInfo, TaskStatus } from '../types'
+import type {
+  AgentType,
+  NodeStatus,
+  TaskEventConnectionStatus,
+  TaskNodeInfo,
+  TaskStatus,
+} from '../types'
+import { getRealtimeConnectionLabel } from './taskPresentation'
 
 const nodeStatusTextMap: Record<NodeStatus, string> = {
   PENDING: '待执行',
+  READY: '待调度',
+  DISPATCHED: '已派发',
   RUNNING: '执行中',
+  WAITING_RETRY: '等待重试',
+  WAITING_INTERVENTION: '等待人工处理',
+  COMPENSATED: '已补偿',
   PAUSED: '已暂停',
   SUCCESS: '已完成',
   FAILED: '失败',
@@ -232,4 +244,14 @@ export function getNodeNameLabel(nodeName: string) {
     return '信息采集节点'
   }
   return nodeName
+}
+
+/**
+ * 统一输出任务详情页的实时通道文案，避免各组件各自判断连接态。
+ */
+export function getTaskEventStreamStatusText(
+  status: TaskEventConnectionStatus,
+  fallbackPollingActive = false,
+) {
+  return getRealtimeConnectionLabel(status, fallbackPollingActive)
 }

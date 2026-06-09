@@ -8,7 +8,18 @@ export interface ApiResponse<T> {
 
 export type TaskStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'STOPPED'
 
-export type NodeStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUCCESS' | 'FAILED' | 'SKIPPED'
+export type NodeStatus =
+  | 'PENDING'
+  | 'READY'
+  | 'DISPATCHED'
+  | 'RUNNING'
+  | 'WAITING_RETRY'
+  | 'WAITING_INTERVENTION'
+  | 'COMPENSATED'
+  | 'PAUSED'
+  | 'SUCCESS'
+  | 'FAILED'
+  | 'SKIPPED'
 
 export type AgentType = 'COLLECTOR' | 'EXTRACTOR' | 'ANALYZER' | 'WRITER' | 'REVIEWER'
 
@@ -22,8 +33,12 @@ export interface TaskInfo {
   sourceScope: string | null
   status: TaskStatus
   errorMessage: string | null
+  statusSummary?: string | null
   totalNodes: number
   completedNodes: number
+  waitingRetryNodeCount?: number | null
+  waitingInterventionNodeCount?: number | null
+  compensatedNodeCount?: number | null
   createdAt: string
   updatedAt: string
   completedAt: string | null
@@ -33,6 +48,34 @@ export interface TaskInfo {
   canStop?: boolean
   canViewReport?: boolean
   interventionSummary?: string | null
+  resumeAdvice?: string | null
+  retryAdvice?: string | null
+  replayEntrySummary?: string | null
+  currentStage?: string | null
+  activeNodeNames?: string[] | null
+  snapshotUpdatedAt?: string | null
+  eventStreamPath?: string | null
+  currentPlanVersionId?: number | null
+  currentPlanVersion?: number | null
+}
+
+export interface TaskListSummary {
+  total: number
+  running: number
+  success: number
+  failed: number
+  stopped: number
+  avgProgress: number
+}
+
+export interface TaskListPageData {
+  items: TaskInfo[]
+  attentionItems: TaskInfo[]
+  summary: TaskListSummary
+  pageNum: number
+  pageSize: number
+  total: number
+  totalPages: number
 }
 
 export interface TaskNodeConfigSummary {
@@ -69,6 +112,13 @@ export interface CollectorSelectedTargetSummary {
   browserTraceId?: string
   selectionStage?: string
   selectionReason?: string
+  targetSelectionSummary?: string
+  selectionSummary?: string
+  trustTier?: string
+  trustTierLabel?: string
+  totalScore?: number
+  rankingReasons?: string[]
+  rankingSummary?: string
   hasPrefetchedPage?: boolean
 }
 
@@ -114,6 +164,7 @@ export interface TaskNodeInfo {
   retryable?: boolean
   maxRetries?: number
   retryCount?: number
+  failureCategory?: string | null
   status: NodeStatus
   controlState?: 'NONE' | 'TERMINATE_REQUESTED'
   errorMessage: string | null
@@ -121,10 +172,13 @@ export interface TaskNodeInfo {
   executionOrder: number
   inputSummary: string | null
   outputSummary: string | null
+  statusSummary?: string | null
   inputData?: string | null
   outputData?: string | null
   startedAt: string | null
   completedAt: string | null
+  lastAttemptAt?: string | null
+  nextRetryAt?: string | null
   canRerun?: boolean
   canUpdateConfigAndRerun?: boolean
   affectedNodeCount?: number
@@ -135,6 +189,324 @@ export interface TaskNodeInfo {
   canSkip?: boolean
   canTerminate?: boolean
   interventionSummary?: string | null
+  rerunActionSummary?: string | null
+  configRerunActionSummary?: string | null
+  impactSummary?: string | null
+  checkpointSummary?: string | null
+  replayEntrySummary?: string | null
+  eventKey?: string | null
+  planVersionId?: number | null
+  planVersion?: number | null
+  branchKey?: string | null
+  dynamicNode?: boolean | null
+  originNodeName?: string | null
+}
+
+export type TaskEventType =
+  | 'CONNECTED'
+  | 'TASK_SNAPSHOT'
+  | 'TASK_STATUS'
+  | 'NODE_STATUS'
+  | 'SEARCH_PROGRESS'
+  | 'AGENT_OUTPUT'
+  | 'DIAGNOSIS'
+
+export type TaskEventConnectionStatus = 'idle' | 'connecting' | 'open' | 'fallback' | 'closed'
+
+export interface TaskStreamEvent<TPayload = Record<string, unknown>> {
+  cursor?: string | null
+  taskId: number
+  eventType: TaskEventType
+  nodeName?: string | null
+  occurredAt?: string | null
+  payload: TPayload
+}
+
+export interface ReplayTimelineEvent {
+  eventId: string
+  taskId: number
+  planVersionId?: number | null
+  planVersion?: number | null
+  branchKey?: string | null
+  nodeName?: string | null
+  eventType: string
+  summary: string
+  occurredAt?: string | null
+  sourceUrls: string[]
+}
+
+export interface ReplayNodeSummary {
+  nodeId: number
+  nodeName: string
+  displayName: string
+  status: string
+  planVersionId?: number | null
+  branchKey?: string | null
+  latestAttemptNo?: number | null
+  failureCategory?: string | null
+  issueSummary?: string | null
+  recoveryHint?: string | null
+  checkpointSummary?: string | null
+  sourceUrls: string[]
+}
+
+export interface TaskRecoveryWindow {
+  windowScope: string
+  planVersionId?: number | null
+  branchKey?: string | null
+  boundaryNodeNames: string[]
+  replayableEventIds: string[]
+  windowStartAt?: string | null
+  windowEndAt?: string | null
+}
+
+export interface TaskRecoveryReleasePolicy {
+  releaseTaskExecutionLock: boolean
+  releaseNodeExecutionLocks: boolean
+  releaseReason?: string | null
+}
+
+export interface TaskRecoveryAuditTrail {
+  decisionSource?: string | null
+  planVersionId?: number | null
+  triggerEventId?: string | null
+  latestAttemptId?: number | null
+  latestAttemptNo?: number | null
+}
+
+export interface TaskRecoveryAdvice {
+  recommendedAction: string
+  summary: string
+  blockingNodeNames: string[]
+  recommendedCheckpointId?: number | null
+  recommendedCheckpointKey?: string | null
+  resumeSupported: boolean
+  recoveryWindow?: TaskRecoveryWindow | null
+  releasePolicy?: TaskRecoveryReleasePolicy | null
+  auditTrail?: TaskRecoveryAuditTrail | null
+  sourceUrls: string[]
+}
+
+export interface RecoveryCheckpointResponse {
+  id: number
+  taskId: number
+  planVersionId?: number | null
+  planVersion?: number | null
+  checkpointKey: string
+  checkpointType: string
+  nodeName: string
+  summary: string
+  payloadSnapshot?: string | null
+  createdAt?: string | null
+  sourceUrls: string[]
+}
+
+export interface ReplayPlanVersionSummary {
+  planVersionId: number
+  planVersion?: number | null
+  parentPlanId?: number | null
+  branchKey?: string | null
+  planType?: string | null
+  triggerNodeName?: string | null
+  active: boolean
+  createdAt?: string | null
+  sourceUrls: string[]
+}
+
+export interface ReplayIntegrationEntryPoint {
+  entryKey: string
+  readinessStatus: string
+  targetTaskKey?: string | null
+  summary: string
+  sourceUrls: string[]
+}
+
+export interface TaskReplayResponse {
+  taskId: number
+  currentPlanVersionId?: number | null
+  timeline: ReplayTimelineEvent[]
+  nodeSummaries: ReplayNodeSummary[]
+  recoveryAdvice?: TaskRecoveryAdvice | null
+  recoveryCheckpoints: RecoveryCheckpointResponse[]
+  planVersions: ReplayPlanVersionSummary[]
+  integrationEntryPoints?: ReplayIntegrationEntryPoint[]
+  sourceUrls: string[]
+}
+
+export interface TaskSnapshotEventPayload {
+  status?: TaskStatus | null
+  currentStage?: string | null
+  statusSummary?: string | null
+  completedNodes?: number | null
+  totalNodes?: number | null
+  waitingRetryNodeCount?: number | null
+  waitingInterventionNodeCount?: number | null
+  compensatedNodeCount?: number | null
+  activeNodeNames?: string[] | null
+  errorMessage?: string | null
+  updatedAt?: string | null
+}
+
+export interface TaskStatusEventPayload {
+  status?: TaskStatus | null
+  currentStage?: string | null
+  statusSummary?: string | null
+  errorMessage?: string | null
+}
+
+export interface NodeStatusEventPayload {
+  action?: string | null
+  nodeName?: string | null
+  displayName?: string | null
+  status?: NodeStatus | null
+  controlState?: 'NONE' | 'TERMINATE_REQUESTED' | string | null
+  errorMessage?: string | null
+  failureCategory?: string | null
+  retryCount?: number | null
+  executionOrder?: number | null
+  statusSummary?: string | null
+  startedAt?: string | null
+  completedAt?: string | null
+  lastAttemptAt?: string | null
+  nextRetryAt?: string | null
+}
+
+export type ConversationPageType = 'TASK_CREATE' | 'TASK_DETAIL' | 'REPORT'
+
+export interface ConversationActionConfirmationRequest {
+  actionType?: string | null
+  targetType?: string | null
+  targetId?: string | null
+  confirmationTitle?: string | null
+  confirmationMessage?: string | null
+  impactScope?: string | null
+  impactSummary?: string | null
+  riskLevel?: string | null
+}
+
+export interface ConversationMessageRequest {
+  sessionId?: number | null
+  taskId?: number | null
+  reportId?: number | null
+  pageType: ConversationPageType | string
+  message: string
+  executeConfirmedAction?: boolean | null
+  confirmationRequest?: ConversationActionConfirmationRequest | null
+}
+
+export interface ConversationIntentDecision {
+  decisionId?: number | null
+  mode?: string | null
+  intentType?: string | null
+  decisionReason?: string | null
+  highRiskAction?: boolean | null
+  requiresConfirmation?: boolean | null
+  riskLevel?: string | null
+  impactScope?: string | null
+  confirmationRequest?: ConversationActionConfirmationRequest | null
+}
+
+export interface ConversationFormDraft {
+  draftId?: number | null
+  taskName?: string | null
+  subjectProduct?: string | null
+  competitorNames?: string[]
+  analysisDimensions?: string[]
+  sourceScope?: string[]
+  changeSummary?: string | null
+  previewSummary?: string | null
+}
+
+export interface ConversationTaskActionPreview {
+  actionType?: string | null
+  taskId?: number | null
+  targetNodeName?: string | null
+  title?: string | null
+  actionSummary?: string | null
+  impactSummary?: string | null
+  riskLevel?: string | null
+  requiresConfirmation?: boolean | null
+  confirmationHint?: string | null
+  executable?: boolean | null
+  sourceUrls?: string[]
+}
+
+export interface ConversationRetrievalEvidence {
+  evidenceId?: string | null
+  title?: string | null
+  snippet?: string | null
+  sourceCategory?: string | null
+  sourceUrl?: string | null
+}
+
+export interface ConversationTaskActionExecutionResult {
+  actionType?: string | null
+  taskId?: number | null
+  targetNodeName?: string | null
+  executionStatus?: string | null
+  executionMessage?: string | null
+  previewDecisionId?: number | null
+  auditDecisionId?: number | null
+  auditStatus?: string | null
+}
+
+export interface ConversationClarificationOption {
+  slotName?: string | null
+  optionValue?: string | null
+  label?: string | null
+  description?: string | null
+}
+
+export interface ConversationClarificationSummary {
+  clarificationType?: string | null
+  question?: string | null
+  reason?: string | null
+  missingSlots?: string[]
+  options?: ConversationClarificationOption[]
+}
+
+export interface ConversationResponse {
+  sessionId?: number | null
+  mode?: string | null
+  answer: string
+  currentStage?: string | null
+  statusSummary?: string | null
+  taskRagContextSummary?: string | null
+  sourceUrls: string[]
+  intentDecision?: ConversationIntentDecision | null
+  formDraft?: ConversationFormDraft | null
+  taskActionPreview?: ConversationTaskActionPreview | null
+  taskActionExecution?: ConversationTaskActionExecutionResult | null
+  clarification?: ConversationClarificationSummary | null
+  retrievalEvidences: ConversationRetrievalEvidence[]
+}
+
+export interface SearchProgressEventPayload {
+  nodeName?: string | null
+  searchProgress?: SearchProgressInfo | null
+  searchExecutionTrace?: SearchExecutionTraceInfo | null
+  searchProgressSnapshots?: SearchProgressInfo[] | null
+}
+
+export interface AgentOutputEventPayload {
+  agentType?: AgentType | null
+  agentName?: string | null
+  status?: NodeStatus | null
+  reasoningSummary?: string | null
+  outputData?: string | null
+  errorMessage?: string | null
+  durationMs?: number | null
+  createdAt?: string | null
+}
+
+export interface DiagnosisEventPayload {
+  nodeName?: string | null
+  passed?: boolean | null
+  score?: number | null
+  summary?: string | null
+  requiresHumanIntervention?: boolean | null
+  diagnoses?: QualityDiagnosisInfo[] | null
+  issues?: QualityIssue[] | null
 }
 
 export interface SourceCandidateInfo {
@@ -156,8 +528,13 @@ export interface SourceCandidateInfo {
   verified?: boolean
   verificationReason?: string
   matchedSignals?: string[]
+  trustTier?: string
+  trustTierLabel?: string
+  rankingReasons?: string[]
+  rankingSummary?: string
   selectionStage?: string
   selectionReason?: string
+  selectionSummary?: string
 }
 
 export interface SearchExecutionStepInfo {
@@ -238,6 +615,12 @@ export interface SelectedTargetInfo {
   browserTraceId?: string
   selectionStage?: string
   selectionReason?: string
+  selectionSummary?: string
+  trustTier?: string
+  trustTierLabel?: string
+  totalScore?: number
+  rankingReasons?: string[]
+  rankingSummary?: string
   hasPrefetchedPage?: boolean
 }
 
@@ -245,6 +628,7 @@ export interface AgentLog {
   id: number
   taskId: number
   nodeId: number | null
+  nodeName?: string | null
   agentType: AgentType
   agentName: string
   status: NodeStatus
@@ -259,6 +643,7 @@ export interface AgentLog {
   traceId: string | null
   needsHumanIntervention: boolean
   createdAt: string
+  eventCursor?: string | null
 }
 
 export interface EvidenceInfo {
@@ -407,10 +792,25 @@ export interface RevisionItem {
   suggestion: string
 }
 
+export interface RevisionDirectiveInfo {
+  category?: string | null
+  actionType?: string | null
+  orchestrationAction?: string | null
+  priority?: string | null
+  targetNode?: string | null
+  targetSection?: string | null
+  summary?: string | null
+  searchFeedback?: string | null
+  searchQueries?: string[]
+  sourceUrls?: string[]
+  expectedOutcome?: string | null
+}
+
 export interface RevisionPlanInfo {
   rewriteRequired: boolean
   summary: string | null
   items: RevisionItem[]
+  directives?: RevisionDirectiveInfo[]
   rewriteGuidelines: string[]
 }
 
@@ -448,6 +848,35 @@ export interface EvidenceReferenceInfo {
   contentSnippet?: string | null
 }
 
+export interface FieldEvidenceDetailInfo {
+  fieldName?: string | null
+  fieldLabel?: string | null
+  coverageStatus?: string | null
+  gapComment?: string | null
+  evidenceId?: string | null
+  sourceUrl?: string | null
+  title?: string | null
+  snippet?: string | null
+  issueFlags?: string[]
+  evidence?: EvidenceReferenceInfo | null
+}
+
+export interface SectionEvidenceBundleInfo {
+  stage?: string | null
+  sectionType?: string | null
+  sectionKey?: string | null
+  sectionTitle?: string | null
+  summary?: string | null
+  gapSummary?: string | null
+  hasGap?: boolean | null
+  fieldNames?: string[]
+  missingFields?: string[]
+  sourceUrls?: string[]
+  issueFlags?: string[]
+  fields?: FieldEvidenceDetailInfo[]
+  evidenceReferences?: EvidenceReferenceInfo[]
+}
+
 export interface ContentEvidenceFragmentInfo {
   stage?: string | null
   competitorName?: string | null
@@ -482,6 +911,91 @@ export interface ReportDiagnosisInfo {
   contentEvidences?: ContentEvidenceFragmentInfo[]
   sections: DiagnosisSectionInfo[]
   nextActions?: ReviewNextAction[]
+  revisionDirectives?: RevisionDirectiveInfo[]
+}
+
+export interface DeliverySummaryInfo {
+  readyForDelivery?: boolean | null
+  deliveryStatus?: string | null
+  summary?: string | null
+  primaryIssue?: string | null
+  recommendedAction?: string | null
+  blockerCount?: number | null
+  evidenceGapCount?: number | null
+  sourceUrls?: string[]
+}
+
+export interface EvidenceEntryPointInfo {
+  summary?: string | null
+  sectionKey?: string | null
+  sectionTitle?: string | null
+  evidenceId?: string | null
+  title?: string | null
+  url?: string | null
+  sourceType?: string | null
+  sourceUrls?: string[]
+}
+
+export interface AuditSummaryInfo {
+  summary?: string | null
+  searchAuditSummary?: string | null
+  taskRagAuditSummary?: string | null
+  sourceUrls?: string[]
+}
+
+export interface ReportExportInfo {
+  id: number
+  taskId: number
+  exportVersion: number
+  exportFormat: string
+  exportStatus: string
+  exportSummary?: string | null
+  sourceUrls?: string[]
+  createdAt: string
+}
+
+export interface GovernanceDecisionInfo {
+  allowed: boolean
+  decisionCode?: string | null
+  summary?: string | null
+  recommendedAction?: string | null
+  organizationKey?: string | null
+  quotaScope?: string | null
+  quotaKey?: string | null
+  requestedUnits?: number | null
+  availableUnits?: number | null
+  leaseToken?: string | null
+  blockingOwner?: string | null
+  sourceUrls?: string[]
+}
+
+export interface GovernanceQuotaSummaryInfo {
+  displayName: string
+  status: string
+  summary: string
+  retryAdvice?: string | null
+  limitValue?: number | null
+  usedValue?: number | null
+  reservedValue?: number | null
+  availableValue?: number | null
+  sourceUrls?: string[]
+}
+
+export interface GovernanceConnectorSummaryInfo {
+  displayName: string
+  status: string
+  summary: string
+  retryAdvice?: string | null
+  leaseOwner?: string | null
+  expiresAt?: string | null
+  sourceUrls?: string[]
+}
+
+export interface GovernanceRuntimeSummaryInfo {
+  organizationKey: string
+  summary: string
+  quotaSummaries: GovernanceQuotaSummaryInfo[]
+  connectorSummaries: GovernanceConnectorSummaryInfo[]
 }
 
 export interface ReportInfo {
@@ -501,8 +1015,12 @@ export interface ReportInfo {
   evidences: EvidenceInfo[]
   searchAuditOverview?: SearchAuditOverviewInfo | null
   evidenceCoverageOverview?: EvidenceCoverageOverviewInfo | null
+  sectionEvidenceBundles?: SectionEvidenceBundleInfo[]
   competitorKnowledges: CompetitorKnowledgeInfo[]
   reportDiagnosis?: ReportDiagnosisInfo | null
+  deliverySummary?: DeliverySummaryInfo | null
+  evidenceEntryPoint?: EvidenceEntryPointInfo | null
+  auditSummary?: AuditSummaryInfo | null
   createdAt: string
   updatedAt: string
 }
@@ -526,4 +1044,96 @@ export interface CreateTaskRequest {
   reportLanguage?: string
   reportTemplate?: string
   schemaId?: number
+}
+
+export interface KnowledgeDomainInfo {
+  id: number
+  domainKey: string
+  domainName: string
+  description?: string | null
+  allowedSourceCategories: string[]
+  defaultLifecycle: string
+  defaultTrustLevel: string
+  status: string
+}
+
+export interface KnowledgeDocumentInfo {
+  id: number
+  taskId?: number | null
+  evidenceId?: string | null
+  documentKey: string
+  knowledgeScope: string
+  knowledgeDomainId?: number | null
+  knowledgeDomainKey?: string | null
+  competitorName?: string | null
+  sourceType: string
+  sourceCategory: string
+  discoveryMethod?: string | null
+  sourceDomain?: string | null
+  sourceLifecycle: string
+  trustLevel: string
+  connectorKey?: string | null
+  title: string
+  url: string
+  sourceUrls: string[]
+  issueFlags: string[]
+  consumedTaskIds: number[]
+  consumedEvidenceIds: string[]
+  traceSummary?: string | null
+}
+
+export interface KnowledgeIngestionPayload {
+  taskId?: number
+  competitorName?: string
+  domainKey: string
+  sourceCategory: string
+  sourceType?: string
+  title?: string
+  connectorKey?: string
+  url?: string
+  discoveryMethod?: string
+  sourceDomain?: string
+  requestedLifecycle?: string
+  requestedTrustLevel?: string
+  sourceUrls?: string[]
+  contentSnippet?: string
+  contentText?: string
+  summary?: string
+}
+
+export interface SourceStrategyLaneInfo {
+  competitorName: string
+  branchCount: number
+  sourceLabels: string[]
+  sourceScope: string[]
+  entryUrlCount: number
+  candidateCount: number
+  queryCount: number
+  browserSupplementEnabled: boolean
+  verificationEnabled: boolean
+  minVerifiedCandidates: number | null
+  preferredDomains: string[]
+  notes: string[]
+}
+
+export interface SourceStrategyOverviewInfo {
+  competitorCount: number
+  collectorCount: number
+  browserSupplementCount: number
+  verificationCount: number
+  lanes: SourceStrategyLaneInfo[]
+}
+
+export interface TaskPlanStageInfo {
+  key: string
+  title: string
+  summary: string
+  detail?: string
+}
+
+export interface TaskPlanPreviewInfo {
+  competitorCount: number
+  collectorCount: number
+  pipelineCount: number
+  stages: TaskPlanStageInfo[]
 }

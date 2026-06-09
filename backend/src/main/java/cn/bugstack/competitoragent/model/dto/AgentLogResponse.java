@@ -68,6 +68,9 @@ public class AgentLogResponse {
     @Schema(description = "Token 用量")
     private String tokenUsage;
 
+    @Schema(description = "AI 治理摘要")
+    private String aiGovernanceSummary;
+
     @Schema(description = "错误信息")
     private String errorMessage;
 

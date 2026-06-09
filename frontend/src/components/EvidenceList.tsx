@@ -2,6 +2,7 @@ import { Empty, List, Space, Tag, Typography } from 'antd'
 import { LinkOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { EvidenceInfo } from '../types'
+import { getSourceTypeText } from '../utils/display'
 
 const { Paragraph, Text } = Typography
 
@@ -23,6 +24,13 @@ function discoveryMethodMeta(method?: string) {
 
 function metadataText(value: unknown) {
   return value == null || value === '' ? null : String(value)
+}
+
+function selectionStageText(stage?: string | null) {
+  if (stage === 'SELECTED') return '已纳入报告'
+  if (stage === 'VERIFIED') return '已完成验证'
+  if (stage === 'PLANNED') return '候选来源'
+  return stage || null
 }
 
 interface Props {
@@ -51,9 +59,11 @@ export default function EvidenceList({ evidences }: Props) {
             const searchEngine = item.searchEngine ?? metadataText(metadata?.searchEngine)
             const resultRank = item.resultRank ?? (typeof metadata?.resultRank === 'number' ? metadata.resultRank : null)
             const sourceType = item.sourceType ?? metadataText(metadata?.sourceType)
+            const sourceTypeLabel = sourceType ? getSourceTypeText(sourceType) : null
             const discoveryReason = item.discoveryReason ?? metadataText(metadata?.reason)
             const publishedAt = item.publishedAt ?? metadataText(metadata?.publishedAt)
             const sourceScore = item.sourceScore ?? (typeof metadata?.totalScore === 'number' ? metadata.totalScore : null)
+            const selectionStageLabel = selectionStageText(selectionStage)
             return (
           <div className="evidence-item">
             <Space size={[4, 4]} wrap>
@@ -61,7 +71,7 @@ export default function EvidenceList({ evidences }: Props) {
                 {item.evidenceId}
               </Tag>
               <Tag>{item.competitorName}</Tag>
-              {Boolean(sourceType) && <Tag color="cyan">{sourceType}</Tag>}
+              {Boolean(sourceTypeLabel) && <Tag color="cyan">{sourceTypeLabel}</Tag>}
               {Boolean(discoveryMethod) && (
                 <Tag color={discoveryMethodDisplay.color}>
                   {discoveryMethodDisplay.label}
@@ -69,7 +79,7 @@ export default function EvidenceList({ evidences }: Props) {
               )}
               {verified === true && <Tag color="green">验证通过</Tag>}
               {verified === false && <Tag color="red">验证未通过</Tag>}
-              {Boolean(selectionStage) && <Tag>{selectionStage}</Tag>}
+              {Boolean(selectionStageLabel) && <Tag>{selectionStageLabel}</Tag>}
             </Space>
             <Paragraph ellipsis={{ rows: 1 }} className="evidence-title">
               {item.title}
@@ -102,10 +112,10 @@ export default function EvidenceList({ evidences }: Props) {
                   <Text type="secondary">{`优先级：${String(sourceScore)}`}</Text>
                 )}
                 {verificationReason && <Text type="secondary">{`验证结论：${verificationReason}`}</Text>}
-                {selectionReason && <Text type="secondary">{`选源理由：${selectionReason}`}</Text>}
-                {searchQuery && <Text type="secondary">{`Query：${searchQuery}`}</Text>}
-                {searchEngine && <Text type="secondary">{`搜索引擎：${searchEngine}`}</Text>}
-                {resultRank != null && <Text type="secondary">{`结果排名：${resultRank}`}</Text>}
+                {selectionReason && <Text type="secondary">{`入选原因：${selectionReason}`}</Text>}
+                {searchQuery && <Text type="secondary">{`检索线索：${searchQuery}`}</Text>}
+                {searchEngine && <Text type="secondary">{`检索渠道：${searchEngine}`}</Text>}
+                {resultRank != null && <Text type="secondary">{`检索排序：第 ${resultRank} 位`}</Text>}
               </Space>
             )}
             <Text type="secondary" className="small-text">

@@ -28,4 +28,7 @@ public class ExtractResult {
 
     /** 抽取阶段对下游公开的统一证据片段 */
     private List<EvidenceFragment> evidenceFragments;
+
+    /** 抽取阶段聚合出的章节证据束，承接字段覆盖与证据缺口语义 */
+    private List<SectionEvidenceBundle> sectionEvidenceBundles;
 }

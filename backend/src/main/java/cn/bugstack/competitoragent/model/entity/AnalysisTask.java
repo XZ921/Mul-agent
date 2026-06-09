@@ -96,6 +96,12 @@ public class AnalysisTask {
     @Schema(description = "任务失败时的错误信息")
     private String errorMessage;
 
+    @Schema(description = "当前激活计划版本 ID", example = "2")
+    private Long currentPlanVersionId;
+
+    @Schema(description = "当前激活计划版本号", example = "2")
+    private Integer currentPlanVersion;
+
     @Column(updatable = false)
     @Schema(description = "任务创建时间", example = "2026-05-26 10:30:00")
     private LocalDateTime createdAt;

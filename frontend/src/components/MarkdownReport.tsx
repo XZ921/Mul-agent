@@ -10,18 +10,28 @@ interface Props {
 
 export default function MarkdownReport({ content, evidences }: Props) {
   const evidenceMap = new Map<string, EvidenceInfo>()
+  const evidenceUrlMap = new Map<string, EvidenceInfo>()
   for (const evidence of evidences) {
     evidenceMap.set(evidence.evidenceId, evidence)
+    evidenceUrlMap.set(evidence.url, evidence)
   }
 
   const normalizedContent = normalizeReportContent(content)
 
+  /**
+   * 把正文中的“证据占位符”翻译成业务用户可读的来源依据文案，
+   * 避免首屏正文继续暴露只有实现者才熟悉的 evidenceId 标签。
+   */
   const processedContent = normalizedContent.replace(
     /\[证据[:：]\s*([^\]]+)\]/g,
     (_match: string, id: string) => {
       const evidenceId = id.trim()
       const evidence = evidenceMap.get(evidenceId)
-      return evidence ? `[证据：${evidenceId}](${evidence.url} "${evidence.title}")` : `[证据：${evidenceId}]`
+      if (!evidence) {
+        return `来源依据：${evidenceId}`
+      }
+      const evidenceLabel = evidence.title?.trim() ? evidence.title : evidenceId
+      return `[来源依据：${evidenceLabel}](${evidence.url} "${evidence.title}")`
     },
   )
 
@@ -30,7 +40,7 @@ export default function MarkdownReport({ content, evidences }: Props) {
       <ReactMarkdown
         components={{
           a: ({ href, children, ...props }) => {
-            const evidence = href ? [...evidenceMap.values()].find((item) => item.url === href) : undefined
+            const evidence = href ? evidenceUrlMap.get(href) : undefined
             if (evidence) {
               return (
                 <Tooltip

@@ -2,27 +2,42 @@ package cn.bugstack.competitoragent.task;
 
 import cn.bugstack.competitoragent.common.BusinessException;
 import cn.bugstack.competitoragent.common.ResultCode;
+import cn.bugstack.competitoragent.event.TaskEventPublisher;
+import cn.bugstack.competitoragent.governance.OrganizationQuotaPolicy;
+import cn.bugstack.competitoragent.governance.QuotaDecision;
 import cn.bugstack.competitoragent.model.dto.CreateTaskRequest;
+import cn.bugstack.competitoragent.model.dto.TaskListPageResponse;
 import cn.bugstack.competitoragent.model.dto.TaskResponse;
 import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
 import cn.bugstack.competitoragent.model.dto.UpdateNodeConfigRequest;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
+import cn.bugstack.competitoragent.model.entity.AiCallAuditRecord;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
+import cn.bugstack.competitoragent.model.entity.TaskPlan;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
+import cn.bugstack.competitoragent.repository.AiCallAuditRecordRepository;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
+import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
+import cn.bugstack.competitoragent.workflow.CompensationGraphAssembler;
+import cn.bugstack.competitoragent.workflow.DynamicTaskGraphService;
+import cn.bugstack.competitoragent.workflow.NodeFailureCategory;
+import cn.bugstack.competitoragent.workflow.TaskPlanVersioner;
+import cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService;
+import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
 import cn.bugstack.competitoragent.workflow.WorkflowFactory;
 import cn.bugstack.competitoragent.workflow.WorkflowPlan;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -30,16 +45,24 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.util.ReflectionUtils;
 
+import java.lang.reflect.Method;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -68,6 +91,9 @@ class AnalysisTaskServiceTest {
     private AgentExecutionLogRepository logRepository;
 
     @Mock
+    private AiCallAuditRecordRepository aiCallAuditRecordRepository;
+
+    @Mock
     private WorkflowFactory workflowFactory;
 
     @Mock
@@ -76,11 +102,83 @@ class AnalysisTaskServiceTest {
     @Mock
     private TaskRecoveryService taskRecoveryService;
 
+    @Mock
+    private TaskSnapshotCacheService taskSnapshotCacheService;
+
+    @Mock
+    private TaskEventPublisher taskEventPublisher;
+
+    @Mock
+    private WorkflowEventPublisher workflowEventPublisher;
+
+    @Mock
+    private WorkflowEventOutboxService workflowEventOutboxService;
+
+    @Mock
+    private DynamicTaskGraphService dynamicTaskGraphService;
+
+    @Mock
+    private TaskPlanRepository taskPlanRepository;
+
+    @Mock
+    private OrganizationQuotaPolicy organizationQuotaPolicy;
+
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks
     private AnalysisTaskService taskService;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(taskRecoveryService.getTaskSnapshotOrRebuild(any())).thenReturn(Optional.empty());
+        DynamicTaskGraphService realDynamicTaskGraphService = new DynamicTaskGraphService(
+                org.mockito.Mockito.mock(cn.bugstack.competitoragent.repository.TaskPlanRepository.class),
+                new TaskPlanVersioner(objectMapper),
+                new CompensationGraphAssembler(objectMapper));
+        lenient().when(dynamicTaskGraphService.calculateAffectedNodes(any(), any()))
+                .thenAnswer(invocation -> realDynamicTaskGraphService.calculateAffectedNodes(
+                        invocation.getArgument(0),
+                        invocation.getArgument(1)));
+    }
+
+    @Test
+    void shouldExposePlanVersionMetadataInTaskAndNodeResponses() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(301L)
+                .taskName("动态计划任务")
+                .status(AnalysisTaskStatus.PENDING)
+                .currentPlanVersionId(21L)
+                .currentPlanVersion(3)
+                .build();
+        TaskNode node = TaskNode.builder()
+                .id(401L)
+                .taskId(301L)
+                .nodeName("rewrite_revision_patch_v3")
+                .displayName("动态改写节点")
+                .agentType(AgentType.WRITER)
+                .status(TaskNodeStatus.PENDING)
+                .planVersionId(21L)
+                .branchKey("root/review-2/review-3")
+                .executionOrder(7)
+                .build();
+
+        when(taskRepository.findById(301L)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(301L)).thenReturn(List.of(node));
+        when(taskPlanRepository.findByTaskIdOrderByPlanVersionAsc(301L)).thenReturn(List.of(
+                TaskPlan.builder().id(11L).taskId(301L).planVersion(1).branchKey("root").build(),
+                TaskPlan.builder().id(21L).taskId(301L).planVersion(3).branchKey("root/review-2/review-3").build()
+        ));
+
+        TaskResponse response = taskService.getTask(301L);
+        List<TaskNodeResponse> nodeResponses = taskService.getTaskNodes(301L);
+
+        assertEquals(21L, response.getCurrentPlanVersionId());
+        assertEquals(3, response.getCurrentPlanVersion());
+        assertEquals(21L, nodeResponses.get(0).getPlanVersionId());
+        assertEquals(3, nodeResponses.get(0).getPlanVersion());
+        assertEquals("root/review-2/review-3", nodeResponses.get(0).getBranchKey());
+    }
 
     @Test
     void shouldUsePreviewPlanInsteadOfLiveWorkflowBuildWhenPreviewingTask() {
@@ -109,6 +207,92 @@ class AnalysisTaskServiceTest {
         assertEquals(1, responses.size());
         verify(workflowFactory, times(1)).buildPreviewPlan(any(AnalysisTask.class));
         verify(workflowFactory, never()).buildPlan(any(AnalysisTask.class));
+    }
+
+    @Test
+    void shouldBlockTaskCreationWithStructuredGovernanceDecisionWhenTaskQuotaExceeded() {
+        // Task 5.8.c 要求任务创建链路在组织级并发不足时直接返回治理阻断结果，
+        // 不能继续保存任务再把超并发误记成普通创建或执行失败。
+        CreateTaskRequest request = new CreateTaskRequest();
+        request.setTaskName("组织级治理阻断测试");
+        request.setSubjectProduct("企业知识平台");
+        request.setCompetitorNames(List.of("Notion AI"));
+        request.setCompetitorUrls(List.of("https://www.notion.so"));
+        request.setAnalysisDimensions(List.of("产品能力"));
+        request.setSourceScope(List.of("官网"));
+
+        when(organizationQuotaPolicy.checkAndReserve(any(), any(), any(), any(Integer.class), any()))
+                .thenReturn(QuotaDecision.deny(
+                        "BLOCKED_QUOTA_EXCEEDED",
+                        "当前组织任务并发已达上限，请等待已有任务释放占位后再重试",
+                        "default-organization",
+                        "TASK",
+                        "TASK_CONCURRENCY",
+                        1,
+                        0,
+                        null,
+                        List.of("https://ops.example.com/quota/task-concurrency")
+                ));
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> taskService.createTask(request));
+
+        assertEquals("GovernanceBlockException", exception.getClass().getSimpleName());
+        Object decision = readAccessor(exception, "decision");
+        assertEquals("BLOCKED_QUOTA_EXCEEDED", readAccessor(decision, "decisionCode"));
+        assertEquals("TASK_CONCURRENCY", readAccessor(decision, "quotaKey"));
+        assertEquals("当前组织任务并发已达上限，请等待已有任务释放占位后再重试",
+                readAccessor(decision, "summary"));
+        verify(taskRepository, never()).save(any(AnalysisTask.class));
+    }
+
+    @Test
+    void shouldReturnFormalTaskListPaginationSummaryAndAttentionItems() {
+        AnalysisTask failedTask = listTask(201L, "Failed task", AnalysisTaskStatus.FAILED,
+                LocalDateTime.of(2026, 6, 4, 10, 0),
+                LocalDateTime.of(2026, 6, 4, 10, 4));
+        AnalysisTask stoppedTask = listTask(202L, "Stopped task", AnalysisTaskStatus.STOPPED,
+                LocalDateTime.of(2026, 6, 4, 9, 50),
+                LocalDateTime.of(2026, 6, 4, 10, 3));
+        AnalysisTask runningTask = listTask(203L, "Running task", AnalysisTaskStatus.RUNNING,
+                LocalDateTime.of(2026, 6, 4, 9, 40),
+                LocalDateTime.of(2026, 6, 4, 10, 2));
+        AnalysisTask successTask = listTask(204L, "Success task", AnalysisTaskStatus.SUCCESS,
+                LocalDateTime.of(2026, 6, 4, 9, 30),
+                LocalDateTime.of(2026, 6, 4, 10, 1));
+
+        List<AnalysisTask> matchedTasks = List.of(failedTask, stoppedTask, runningTask, successTask);
+        when(taskRepository.findAllByOrderByCreatedAtDesc()).thenReturn(matchedTasks);
+        when(taskRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 2)))
+                .thenReturn(new PageImpl<>(List.of(failedTask, stoppedTask), PageRequest.of(0, 2), matchedTasks.size()));
+
+        TaskNode stoppedNode = pendingNode(202L, "extract_schema", AgentType.EXTRACTOR, "[]", 0);
+        stoppedNode.setStatus(TaskNodeStatus.PAUSED);
+        stoppedNode.setInterventionReason("节点已由用户暂停，等待恢复");
+        TaskNode runningNode = pendingNode(203L, "write_report", AgentType.WRITER, "[]", 0);
+        runningNode.setStatus(TaskNodeStatus.RUNNING);
+
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(201L))
+                .thenReturn(List.of(failedNode(201L, "collect_sources_web", AgentType.COLLECTOR, "[]", 0)));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(202L)).thenReturn(List.of(stoppedNode));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(203L)).thenReturn(List.of(runningNode));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(204L))
+                .thenReturn(List.of(successfulNode(204L, "write_report", AgentType.WRITER, "[]", 0)));
+
+        TaskListPageResponse response = taskService.listTasks(null, 1, 2);
+
+        assertEquals(1, response.getPageNum());
+        assertEquals(2, response.getPageSize());
+        assertEquals(4, response.getTotal());
+        assertEquals(2, response.getTotalPages());
+        assertEquals(List.of("Failed task", "Stopped task"),
+                response.getItems().stream().map(TaskResponse::getTaskName).toList());
+        assertEquals(List.of("Failed task", "Stopped task", "Running task"),
+                response.getAttentionItems().stream().map(TaskResponse::getTaskName).toList());
+        assertEquals(4, response.getSummary().getTotal());
+        assertEquals(1, response.getSummary().getRunning());
+        assertEquals(1, response.getSummary().getSuccess());
+        assertEquals(1, response.getSummary().getFailed());
+        assertEquals(1, response.getSummary().getStopped());
+        assertEquals(50, response.getSummary().getAvgProgress());
     }
 
     @Test
@@ -220,9 +404,44 @@ class AnalysisTaskServiceTest {
         assertNull(task.getErrorMessage());
         assertNull(task.getCompletedAt());
 
-        verifyNoInteractions(taskRecoveryService);
+        verify(taskRecoveryService, times(2)).applyCompensationIfRequired(any(TaskNode.class));
+        verify(taskRecoveryService, never()).resetInterruptedNodes(any());
         verify(nodeRepository).saveAll(List.of(collectNode, extractNode, analyzeNode));
         verify(taskRepository).save(task);
+        verify(taskRunner).runTask(taskId);
+    }
+
+    @Test
+    void shouldMarkCompensatableNodeAsCompensatedWhenResumingTask() {
+        Long taskId = 32L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.FAILED)
+                .errorMessage("old failure")
+                .build();
+
+        TaskNode collectNode = successfulNode(taskId, "collect_sources_web", AgentType.COLLECTOR, "[]", 0);
+        TaskNode reviewNode = failedNode(taskId, "quality_check", AgentType.REVIEWER, "[\"collect_sources_web\"]", 1);
+        reviewNode.setStatus(TaskNodeStatus.WAITING_INTERVENTION);
+        reviewNode.setFailureCategory(NodeFailureCategory.COMPENSATABLE);
+        TaskNode rewriteNode = pendingNode(taskId, "rewrite_report", AgentType.WRITER, "[\"quality_check\"]", 2);
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId))
+                .thenReturn(List.of(collectNode, reviewNode, rewriteNode));
+        doAnswer(invocation -> {
+            TaskNode targetNode = invocation.getArgument(0);
+            targetNode.setStatus(TaskNodeStatus.COMPENSATED);
+            targetNode.setErrorMessage("节点已通过补偿收口");
+            return true;
+        }).when(taskRecoveryService).applyCompensationIfRequired(reviewNode);
+
+        taskService.resumeTask(taskId);
+
+        assertEquals(TaskNodeStatus.COMPENSATED, reviewNode.getStatus());
+        assertEquals(TaskNodeStatus.PENDING, rewriteNode.getStatus());
+        assertEquals(AnalysisTaskStatus.PENDING, task.getStatus());
+        verify(nodeRepository).saveAll(List.of(collectNode, reviewNode, rewriteNode));
         verify(taskRunner).runTask(taskId);
     }
 
@@ -372,6 +591,39 @@ class AnalysisTaskServiceTest {
     }
 
     @Test
+    void shouldExposeRedisProgressSnapshotInTaskDetailResponse() {
+        Long taskId = 56_2L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.RUNNING)
+                .build();
+        TaskNode runningNode = pendingNode(taskId, "analyze_competitors", AgentType.ANALYZER, "[]", 0);
+        runningNode.setStatus(TaskNodeStatus.RUNNING);
+        TaskProgressSnapshot snapshot = TaskProgressSnapshot.builder()
+                .taskId(taskId)
+                .taskStatus("RUNNING")
+                .currentStage("数据分析")
+                .completedNodes(2)
+                .totalNodes(6)
+                .activeNodeNames(List.of("analyze_competitors"))
+                .updatedAt(java.time.LocalDateTime.of(2026, 6, 3, 12, 0, 0))
+                .build();
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(runningNode));
+        when(taskRecoveryService.getTaskSnapshotOrRebuild(taskId)).thenReturn(Optional.of(snapshot));
+
+        TaskResponse response = taskService.getTask(taskId);
+
+        assertEquals("数据分析", response.getCurrentStage());
+        assertEquals(List.of("analyze_competitors"), response.getActiveNodeNames());
+        assertEquals(2, response.getCompletedNodes());
+        assertEquals(6, response.getTotalNodes());
+        assertEquals("/api/task/562/events", response.getEventStreamPath());
+        assertNotNull(response.getSnapshotUpdatedAt());
+    }
+
+    @Test
     void shouldSkipPausedNodeAndContinueTask() {
         Long taskId = 37L;
         AnalysisTask task = AnalysisTask.builder()
@@ -490,6 +742,35 @@ class AnalysisTaskServiceTest {
         assertEquals(Boolean.FALSE, response.getCanStop());
         assertTrue(response.getInterventionSummary().contains("恢复执行"));
         assertTrue(response.getInterventionSummary().contains("恢复对应节点"));
+        assertNotNull(response.getResumeAdvice());
+        assertTrue(response.getResumeAdvice().contains("已完成节点"));
+        assertNull(response.getRetryAdvice());
+        assertNotNull(response.getReplayEntrySummary());
+        assertTrue(response.getReplayEntrySummary().contains("节点追踪"));
+    }
+
+    @Test
+    void shouldExposeFailedTaskRecoveryGuidance() {
+        Long taskId = 56_3L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.FAILED)
+                .errorMessage("报告生成阶段中断")
+                .build();
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of());
+
+        TaskResponse response = taskService.getTask(taskId);
+
+        assertEquals(Boolean.TRUE, response.getCanResume());
+        assertEquals(Boolean.TRUE, response.getCanRetry());
+        assertNotNull(response.getResumeAdvice());
+        assertTrue(response.getResumeAdvice().contains("保留已完成节点"));
+        assertNotNull(response.getRetryAdvice());
+        assertTrue(response.getRetryAdvice().contains("从头重走"));
+        assertNotNull(response.getReplayEntrySummary());
+        assertTrue(response.getReplayEntrySummary().contains("高级诊断"));
     }
 
     @Test
@@ -540,6 +821,88 @@ class AnalysisTaskServiceTest {
         assertTrue(responses.get(0).getOutputSummary().contains("补源方式=BROWSER"));
         assertTrue(responses.get(0).getOutputSummary().contains("进度状态=DEGRADED"));
         assertTrue(responses.get(0).getOutputSummary().contains("降级原因=SEARCH_TIMEOUT_AFTER_SUPPLEMENT"));
+    }
+
+    @Test
+    void shouldExposeGovernanceSemanticsInCollectorInsight() {
+        Long taskId = 62L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.SUCCESS)
+                .build();
+        TaskNode collectorNode = TaskNode.builder()
+                .id(2L)
+                .taskId(taskId)
+                .nodeName("collect_sources_01_01")
+                .displayName("Feishu - DOCS采集")
+                .agentType(AgentType.COLLECTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(true)
+                .maxRetries(3)
+                .retryCount(0)
+                .status(TaskNodeStatus.SUCCESS)
+                .executionOrder(0)
+                .nodeConfig("""
+                        {
+                          "competitorName": "Feishu",
+                          "sourceType": "DOCS"
+                        }
+                        """)
+                .outputData("""
+                        {
+                          "competitor": "Feishu",
+                          "sourceType": "DOCS",
+                          "taskRagContext": "检索查询：Feishu docs governance\\n缺口说明：企业权限细节公开资料仍不足",
+                          "sourceCandidates": [
+                            {
+                              "url": "https://docs.feishu.cn",
+                              "title": "Feishu Docs",
+                              "sourceType": "DOCS",
+                              "trustTier": "HIGH",
+                              "trustTierLabel": "高可信",
+                              "rankingReasons": ["来源可信度：高可信", "命中文档入口"],
+                              "rankingSummary": "来源可信度：高可信；命中文档入口",
+                              "selectionStage": "SELECTED",
+                              "selectionReason": "VERIFIED_TARGET",
+                              "selectionSummary": "已通过验证并进入正式采集"
+                            }
+                          ],
+                          "selectedTargets": [
+                            {
+                              "url": "https://docs.feishu.cn",
+                              "title": "Feishu Docs",
+                              "selectionStage": "SELECTED",
+                              "selectionReason": "VERIFIED_TARGET",
+                              "targetSelectionSummary": "已通过验证并进入正式采集",
+                              "selectionSummary": "已通过验证并进入正式采集",
+                              "trustTier": "HIGH",
+                              "trustTierLabel": "高可信",
+                              "rankingReasons": ["来源可信度：高可信", "命中文档入口"],
+                              "rankingSummary": "来源可信度：高可信；命中文档入口",
+                              "hasPrefetchedPage": true
+                            }
+                          ]
+                        }
+                        """)
+                .build();
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(collectorNode));
+
+        List<TaskNodeResponse> responses = taskService.getTaskNodes(taskId);
+
+        assertEquals(1, responses.size());
+        assertEquals("高可信", responses.get(0).getCollectorInsight().getSourceCandidates().get(0).getTrustTierLabel());
+        assertEquals("来源可信度：高可信；命中文档入口",
+                responses.get(0).getCollectorInsight().getSourceCandidates().get(0).getRankingSummary());
+        assertEquals("VERIFIED_TARGET",
+                responses.get(0).getCollectorInsight().getSelectedTargets().get(0).getSelectionReason());
+        assertEquals("已通过验证并进入正式采集",
+                responses.get(0).getCollectorInsight().getSelectedTargets().get(0).getSelectionSummary());
+        assertEquals(2,
+                responses.get(0).getCollectorInsight().getSelectedTargets().get(0).getRankingReasons().size());
+        assertTrue(responses.get(0).getCollectorInsight().getTaskRagContext().contains("企业权限细节公开资料仍不足"));
     }
 
     @Test
@@ -633,6 +996,16 @@ class AnalysisTaskServiceTest {
                 collectorResponse.getAffectedNodeNames());
         assertTrue(collectorResponse.getInterventionSummary().contains("2 个下游节点"));
         assertTrue(collectorResponse.getInterventionSummary().contains("搜索检查点"));
+        assertNotNull(collectorResponse.getRerunActionSummary());
+        assertTrue(collectorResponse.getRerunActionSummary().contains("上游输入仍然可复用"));
+        assertNotNull(collectorResponse.getConfigRerunActionSummary());
+        assertTrue(collectorResponse.getConfigRerunActionSummary().contains("扩大补源范围"));
+        assertNotNull(collectorResponse.getImpactSummary());
+        assertTrue(collectorResponse.getImpactSummary().contains("3 个节点"));
+        assertNotNull(collectorResponse.getCheckpointSummary());
+        assertTrue(collectorResponse.getCheckpointSummary().contains("可复用检查点"));
+        assertNotNull(collectorResponse.getReplayEntrySummary());
+        assertTrue(collectorResponse.getReplayEntrySummary().contains("高级诊断"));
     }
 
     @Test
@@ -664,6 +1037,10 @@ class AnalysisTaskServiceTest {
         assertEquals(Boolean.TRUE, responses.get(1).getCanSkip());
         assertEquals(Boolean.TRUE, responses.get(1).getCanTerminate());
         assertTrue(responses.get(1).getInterventionSummary().contains("已暂停"));
+        assertNotNull(responses.get(1).getImpactSummary());
+        assertTrue(responses.get(1).getImpactSummary().contains("恢复后会继续"));
+        assertNotNull(responses.get(1).getReplayEntrySummary());
+        assertTrue(responses.get(1).getReplayEntrySummary().contains("高级诊断"));
 
         assertEquals(Boolean.TRUE, responses.get(2).getCanTerminate());
         assertTrue(responses.get(2).getInterventionSummary().contains("协作式终止请求"));
@@ -723,6 +1100,22 @@ class AnalysisTaskServiceTest {
     }
 
     @Test
+    void shouldEvictRuntimeSnapshotWhenDeletingTask() {
+        Long taskId = 103L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.FAILED)
+                .build();
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of());
+
+        taskService.deleteTask(taskId);
+
+        verify(taskSnapshotCacheService).evictTaskRuntime(taskId);
+    }
+
+    @Test
     void shouldKeepManualStoppedTaskStatusEvenWhenRunningNodesRemainInSnapshot() {
         Long taskId = 102L;
         AnalysisTask task = AnalysisTask.builder()
@@ -744,6 +1137,103 @@ class AnalysisTaskServiceTest {
         assertEquals(Boolean.TRUE, response.getCanResume());
         assertEquals(Boolean.FALSE, response.getCanExecute());
         assertTrue(response.getInterventionSummary().contains("恢复"));
+    }
+
+    @Test
+    void shouldExposePhase4RuntimeSummaryInTaskAndNodeResponses() {
+        Long taskId = 104L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.FAILED)
+                .build();
+
+        TaskNode retryNode = pendingNode(taskId, "collect_sources_web", AgentType.COLLECTOR, "[]", 0);
+        retryNode.setStatus(TaskNodeStatus.WAITING_RETRY);
+        retryNode.setFailureCategory(NodeFailureCategory.TRANSIENT_INFRASTRUCTURE);
+        retryNode.setRetryCount(1);
+        retryNode.setLastAttemptAt(LocalDateTime.of(2026, 6, 5, 13, 40, 0));
+        retryNode.setNextRetryAt(LocalDateTime.of(2026, 6, 5, 13, 40, 30));
+        retryNode.setErrorMessage("HTTP timeout while collecting source page");
+
+        TaskNode interventionNode = failedNode(taskId, "extract_schema", AgentType.EXTRACTOR, "[\"collect_sources_web\"]", 1);
+        interventionNode.setStatus(TaskNodeStatus.WAITING_INTERVENTION);
+        interventionNode.setFailureCategory(NodeFailureCategory.MANUAL_INTERVENTION_REQUIRED);
+        interventionNode.setInterventionReason("需要人工确认抽取规则");
+
+        TaskNode compensatedNode = successfulNode(taskId, "write_report", AgentType.WRITER, "[\"extract_schema\"]", 2);
+        compensatedNode.setStatus(TaskNodeStatus.COMPENSATED);
+        compensatedNode.setFailureCategory(NodeFailureCategory.COMPENSATABLE);
+
+        TaskProgressSnapshot snapshot = TaskProgressSnapshot.builder()
+                .taskId(taskId)
+                .taskStatus("STOPPED")
+                .currentStage("extract_schema：等待人工处理")
+                .errorMessage("存在等待人工处理的节点，请确认后继续")
+                .statusSummary("存在等待人工处理的节点")
+                .totalNodes(3)
+                .completedNodes(1)
+                .waitingRetryNodeCount(1)
+                .waitingInterventionNodeCount(1)
+                .compensatedNodeCount(1)
+                .activeNodeNames(List.of("collect_sources_web", "extract_schema"))
+                .updatedAt(LocalDateTime.of(2026, 6, 5, 13, 41, 0))
+                .build();
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId))
+                .thenReturn(List.of(retryNode, interventionNode, compensatedNode));
+        when(taskRecoveryService.getTaskSnapshotOrRebuild(taskId)).thenReturn(Optional.of(snapshot));
+
+        TaskResponse response = taskService.getTask(taskId);
+        List<TaskNodeResponse> nodeResponses = taskService.getTaskNodes(taskId);
+
+        assertEquals(AnalysisTaskStatus.STOPPED, response.getStatus());
+        assertEquals("存在等待人工处理的节点", response.getStatusSummary());
+        assertEquals(1, response.getWaitingRetryNodeCount());
+        assertEquals(1, response.getWaitingInterventionNodeCount());
+        assertEquals(1, response.getCompensatedNodeCount());
+        assertEquals(List.of("collect_sources_web", "extract_schema"), response.getActiveNodeNames());
+
+        assertEquals(NodeFailureCategory.TRANSIENT_INFRASTRUCTURE, nodeResponses.get(0).getFailureCategory());
+        assertEquals(LocalDateTime.of(2026, 6, 5, 13, 40, 0), nodeResponses.get(0).getLastAttemptAt());
+        assertEquals(LocalDateTime.of(2026, 6, 5, 13, 40, 30), nodeResponses.get(0).getNextRetryAt());
+        assertTrue(nodeResponses.get(0).getStatusSummary().contains("等待系统自动重试"));
+
+        assertEquals(NodeFailureCategory.MANUAL_INTERVENTION_REQUIRED, nodeResponses.get(1).getFailureCategory());
+        assertTrue(nodeResponses.get(1).getStatusSummary().contains("等待人工处理"));
+
+        assertEquals(NodeFailureCategory.COMPENSATABLE, nodeResponses.get(2).getFailureCategory());
+        assertTrue(nodeResponses.get(2).getStatusSummary().contains("补偿"));
+    }
+
+    @Test
+    void shouldExposeReadableAiGovernanceSummaryInTaskNodeResponse() {
+        Long taskId = 105L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.SUCCESS)
+                .build();
+        TaskNode writerNode = successfulNode(taskId, "write_report", AgentType.WRITER, "[\"analyze_competitors\"]", 0);
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(writerNode));
+        when(aiCallAuditRecordRepository.findTopByTaskIdAndNodeNameOrderByCreatedAtDesc(taskId, "write_report"))
+                .thenReturn(Optional.of(AiCallAuditRecord.builder()
+                        .taskId(taskId)
+                        .nodeName("write_report")
+                        .providerKey("siliconflow")
+                        .capability("CHAT")
+                        .success(true)
+                        .fallbackUsed(true)
+                        .totalTokens(30)
+                        .summary("主 Provider 超时，已切换到备用 Provider")
+                        .build()));
+
+        List<TaskNodeResponse> responses = taskService.getTaskNodes(taskId);
+
+        assertEquals(1, responses.size());
+        assertTrue(responses.get(0).getAiGovernanceSummary().contains("备用 Provider"));
+        assertTrue(responses.get(0).getAiGovernanceSummary().contains("Token 总量=30"));
     }
 
     private static TaskNode successfulNode(Long taskId, String nodeName, AgentType agentType, String dependsOn, int order) {
@@ -791,6 +1281,22 @@ class AnalysisTaskServiceTest {
                 .build();
     }
 
+    private static AnalysisTask listTask(Long id,
+                                         String taskName,
+                                         AnalysisTaskStatus status,
+                                         LocalDateTime createdAt,
+                                         LocalDateTime updatedAt) {
+        return AnalysisTask.builder()
+                .id(id)
+                .taskName(taskName)
+                .subjectProduct("Workspace")
+                .competitorNames("[\"Notion AI\"]")
+                .status(status)
+                .createdAt(createdAt)
+                .updatedAt(updatedAt)
+                .build();
+    }
+
     private static void assertPendingCleared(TaskNode node) {
         assertEquals(TaskNodeStatus.PENDING, node.getStatus());
         assertNull(node.getInputData());
@@ -799,5 +1305,17 @@ class AnalysisTaskServiceTest {
         assertNull(node.getStartedAt());
         assertNull(node.getCompletedAt());
         assertEquals(0, node.getRetryCount());
+    }
+
+    /**
+     * 测试阶段通过反射读取治理结果，确保 Red 阶段先暴露“结构化阻断结果缺失”的真实缺口，
+     * 而不是因为直接依赖新异常类型导致测试无法编译。
+     */
+    private Object readAccessor(Object target, String accessorName) {
+        Method method = ReflectionUtils.findMethod(target.getClass(),
+                "get" + Character.toUpperCase(accessorName.charAt(0)) + accessorName.substring(1));
+        assertNotNull(method, () -> "缺少访问器：" + target.getClass().getSimpleName() + "." + accessorName);
+        ReflectionUtils.makeAccessible(method);
+        return ReflectionUtils.invokeMethod(method, target);
     }
 }

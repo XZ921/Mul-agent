@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   Alert,
@@ -12,12 +12,13 @@ import {
   Spin,
   Tabs,
   Typography,
-  message,
 } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
   executeTask,
+  getAgentLogs,
+  getTaskReplay,
   getTask,
   getReport,
   getTaskNodes,
@@ -39,6 +40,8 @@ import ReportDiagnosisPanel from '../components/task-detail/ReportDiagnosisPanel
 import SearchActivityPanel from '../components/task-detail/SearchActivityPanel'
 import TaskActionQueue from '../components/task-detail/TaskActionQueue'
 import TaskConfigPanel from '../components/task-detail/TaskConfigPanel'
+import TaskReplayTimeline from '../components/task-detail/TaskReplayTimeline'
+import TaskRecoveryPanel from '../components/task-detail/TaskRecoveryPanel'
 import TaskStatusHero from '../components/task-detail/TaskStatusHero'
 import {
   displayValue,
@@ -59,6 +62,8 @@ import type {
   SourceCandidateInfo,
   ReportInfo,
   TaskInfo,
+  TaskReplayResponse,
+  TaskStreamEvent,
   TaskNodeInfo,
 } from '../types'
 import {
@@ -66,7 +71,17 @@ import {
   getNodeNameLabel,
   getNodeStatusText,
   getSourceTypeText,
+  getTaskEventStreamStatusText,
 } from '../utils/display'
+import { appMessage } from '../utils/appMessage'
+import { useTaskEventStream } from '../hooks/useTaskEventStream'
+import {
+  createInitialTaskEventRuntimeState,
+  shouldRefreshTaskSnapshotAfterEvent,
+  taskEventReducer,
+} from '../utils/taskEventReducer'
+import { buildConversationEntryUrl } from '../utils/conversationPresentation'
+import { buildGovernanceActionFailureMessage } from '../utils/governancePresentation'
 import { getCollectorNodeInsight, getDependencyNames } from '../utils/taskNodeInsights'
 
 const { Text } = Typography
@@ -434,7 +449,8 @@ function buildReadableOutput(
   if (!output) return []
 
   if (node.agentType === 'COLLECTOR') {
-    const insight = node.collectorInsight
+    // 采集节点的运行态输出可能来自 SSE 增量事件，字段形态不一定稳定，这里统一走归一化洞察，避免详情区白屏。
+    const insight = getCollectorNodeInsight(node)
     const trace = insight?.searchExecutionTrace || null
     return [
       { label: '竞品名称', value: displayValue(insight?.competitorName ?? output.competitor) },
@@ -486,49 +502,111 @@ export default function TaskDetailPage() {
   const navigate = useNavigate()
   const taskId = Number(id)
 
-  const [task, setTask] = useState<TaskInfo | null>(null)
-  const [nodes, setNodes] = useState<TaskNodeInfo[]>([])
+  const [runtimeState, dispatch] = useReducer(taskEventReducer, undefined, createInitialTaskEventRuntimeState)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
-  const [report, setReport] = useState<ReportInfo | null>(null)
+  const [taskReplay, setTaskReplay] = useState<TaskReplayResponse | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
   const [configEditorOpen, setConfigEditorOpen] = useState(false)
   const [configEditorValue, setConfigEditorValue] = useState('')
   const [hasAppliedRouteContext, setHasAppliedRouteContext] = useState(false)
+  const refreshInFlightRef = useRef(false)
 
-  const fetchData = useCallback(async () => {
+  const task = runtimeState.task
+  const nodes = runtimeState.nodes
+  const report = runtimeState.report
+  const logs = runtimeState.logs
+
+  const fetchData = useCallback(async (options?: { silent?: boolean }) => {
+    // 任务详情页统一以“快照补齐”为兜底，避免 SSE 增量事件遗漏聚合字段。
+    if (refreshInFlightRef.current) return
+    refreshInFlightRef.current = true
     try {
-      const [taskRes, nodesRes] = await Promise.all([getTask(taskId), getTaskNodes(taskId)])
+      const [taskRes, nodesRes, logsRes, replayRes] = await Promise.all([
+        getTask(taskId),
+        getTaskNodes(taskId),
+        getAgentLogs(taskId),
+        // 正式回放视图属于增强入口，拉取失败时要降级为空，而不是拖垮整个任务详情页。
+        getTaskReplay(taskId).catch(() => null),
+      ])
       const nextTask = taskRes.data
       const nextNodes = nodesRes.data || []
-      setTask(nextTask)
-      setNodes(nextNodes)
+      let nextReport: ReportInfo | null = null
       if (shouldFetchTaskReport(nextTask, nextNodes)) {
         try {
           const reportRes = await getReport(taskId)
-          setReport(reportRes.data || null)
+          nextReport = reportRes.data || null
         } catch {
-          setReport(null)
+          nextReport = null
         }
-      } else {
-        setReport(null)
       }
+      dispatch({
+        type: 'hydrate',
+        task: nextTask,
+        nodes: nextNodes,
+        report: nextReport,
+        logs: logsRes.data || [],
+      })
+      setTaskReplay(replayRes?.data || null)
     } catch {
-      message.error('加载任务详情失败')
+      setTaskReplay(null)
+      if (!options?.silent) {
+        appMessage.error('加载任务详情失败')
+      }
     } finally {
+      refreshInFlightRef.current = false
       setLoading(false)
     }
   }, [taskId])
 
   useEffect(() => {
-    fetchData()
+    void fetchData()
   }, [fetchData])
 
+  const handleTaskStreamEvent = useCallback(
+    (event: TaskStreamEvent<Record<string, unknown>>) => {
+      // 所有实时事件先进入 reducer 做增量归并，再按需补拉一次完整快照。
+      dispatch({ type: 'apply-event', event })
+      if (shouldRefreshTaskSnapshotAfterEvent(event)) {
+        void fetchData({ silent: true })
+      }
+    },
+    [fetchData],
+  )
+
+  const streamRuntime = useTaskEventStream({
+    taskId,
+    eventStreamPath: task?.eventStreamPath,
+    enabled: Number.isFinite(taskId) && taskId > 0,
+    onEvent: handleTaskStreamEvent,
+    onRecoverSnapshot: () => fetchData({ silent: true }),
+  })
+
   useEffect(() => {
-    if (task?.status !== 'RUNNING') return
-    const timer = window.setInterval(fetchData, 3000)
+    dispatch({
+      type: 'stream-status',
+      streamStatus: streamRuntime.connectionStatus,
+      fallbackPollingActive: streamRuntime.fallbackPollingActive,
+      lastError: streamRuntime.lastError,
+      lastEventCursor: streamRuntime.lastEventCursor,
+      lastEventAt: streamRuntime.lastEventAt,
+    })
+  }, [
+    streamRuntime.connectionStatus,
+    streamRuntime.fallbackPollingActive,
+    streamRuntime.lastError,
+    streamRuntime.lastEventAt,
+    streamRuntime.lastEventCursor,
+  ])
+
+  useEffect(() => {
+    // 仅当 SSE 明确降级时才启动轮询，避免与实时事件流重复打点。
+    if (task?.status !== 'RUNNING' || !runtimeState.fallbackPollingActive) return
+    const timer = window.setInterval(() => {
+      void fetchData({ silent: true })
+    }, 3000)
     return () => window.clearInterval(timer)
-  }, [task?.status, fetchData])
+  }, [fetchData, runtimeState.fallbackPollingActive, task?.status])
 
   const completedNodeCount = useMemo(() => {
     if (nodes.length) {
@@ -541,6 +619,20 @@ export default function TaskDetailPage() {
     if (!task?.totalNodes) return 0
     return Math.round((completedNodeCount / task.totalNodes) * 100)
   }, [completedNodeCount, task])
+
+  /**
+   * 任务详情页进入统一对话时只传递任务级别的稳定上下文，
+   * 让对话页先解释当前任务状态，再决定是否需要展示后续动作预览。
+   */
+  const conversationEntryUrl = useMemo(
+    () =>
+      buildConversationEntryUrl({
+        pageType: 'TASK_DETAIL',
+        taskId,
+        taskName: task?.taskName,
+      }),
+    [task?.taskName, taskId],
+  )
 
   const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.nodeName, node])), [nodes])
 
@@ -596,29 +688,33 @@ export default function TaskDetailPage() {
   const selectedNodeConfig = useMemo(() => parseJson(selectedNode?.nodeConfig), [selectedNode?.nodeConfig])
   const selectedNodeInput = useMemo(() => parseJson(selectedNode?.inputData), [selectedNode?.inputData])
   const selectedNodeOutput = useMemo(() => parseJson(selectedNode?.outputData), [selectedNode?.outputData])
+  const selectedCollectorInsight = useMemo(
+    () => (selectedNode?.agentType === 'COLLECTOR' ? getCollectorNodeInsight(selectedNode) : null),
+    [selectedNode],
+  )
   const selectedSourceCandidates = useMemo(
-    () => selectedNode?.collectorInsight?.sourceCandidates || [],
-    [selectedNode?.collectorInsight?.sourceCandidates],
+    () => selectedCollectorInsight?.sourceCandidates || [],
+    [selectedCollectorInsight],
   )
   const selectedSearchExecutionPlan = useMemo(
-    () => selectedNode?.collectorInsight?.searchExecutionPlan || null,
-    [selectedNode?.collectorInsight?.searchExecutionPlan],
+    () => selectedCollectorInsight?.searchExecutionPlan || null,
+    [selectedCollectorInsight],
   )
   const selectedSearchExecutionTrace = useMemo(
-    () => selectedNode?.collectorInsight?.searchExecutionTrace || null,
-    [selectedNode?.collectorInsight?.searchExecutionTrace],
+    () => selectedCollectorInsight?.searchExecutionTrace || null,
+    [selectedCollectorInsight],
   )
   const selectedSearchProgress = useMemo(
-    () => selectedNode?.collectorInsight?.searchProgress || null,
-    [selectedNode?.collectorInsight?.searchProgress],
+    () => selectedCollectorInsight?.searchProgress || null,
+    [selectedCollectorInsight],
   )
   const selectedSearchProgressSnapshots = useMemo(
-    () => selectedNode?.collectorInsight?.searchProgressSnapshots || [],
-    [selectedNode?.collectorInsight?.searchProgressSnapshots],
+    () => selectedCollectorInsight?.searchProgressSnapshots || [],
+    [selectedCollectorInsight],
   )
   const selectedTargets = useMemo(
-    () => selectedNode?.collectorInsight?.selectedTargets || [],
-    [selectedNode?.collectorInsight?.selectedTargets],
+    () => selectedCollectorInsight?.selectedTargets || [],
+    [selectedCollectorInsight],
   )
   const sourceCandidateGroups = useMemo(() => {
     const groups = new Map<string, SourceCandidateInfo[]>()
@@ -715,6 +811,15 @@ export default function TaskDetailPage() {
 
   const taskStageLabel = useMemo(() => (task ? getTaskStageLabel(task, nodes) : '等待启动'), [nodes, task])
   const heroTone = useMemo(() => (task ? getTaskHeroTone(task, nodes) : 'default'), [nodes, task])
+  const streamStatusText = useMemo(
+    () => getTaskEventStreamStatusText(runtimeState.streamStatus, runtimeState.fallbackPollingActive),
+    [runtimeState.fallbackPollingActive, runtimeState.streamStatus],
+  )
+  const streamStatusTone = runtimeState.fallbackPollingActive
+    ? 'warning'
+    : runtimeState.streamStatus === 'open'
+      ? 'success'
+      : 'info'
   const pendingActionCount = failedNodes.length + pausedNodes.length + terminateRequestedNodes.length
   const actionQueueOverflowCount =
     Math.max(0, failedNodes.length - 3) +
@@ -754,7 +859,7 @@ export default function TaskDetailPage() {
       const matchedNode = action.targetNode ? nodes.find((node) => node.nodeName === action.targetNode) : null
       if (matchedNode) {
         setSelectedNodeId(matchedNode.id)
-        message.info(`已定位到 ${matchedNode.displayName || matchedNode.nodeName}，请结合节点追踪继续处理。`)
+        appMessage.info(`已定位到 ${matchedNode.displayName || matchedNode.nodeName}，请结合节点追踪继续处理。`)
       } else {
         navigate(`/task/${taskId}/report`)
       }
@@ -770,10 +875,10 @@ export default function TaskDetailPage() {
     setActionLoading(true)
     try {
       await rerunTaskNode(taskId, targetNode)
-      message.success(`已触发 ${targetNode} 重跑`)
+      appMessage.success(`已触发 ${targetNode} 重跑`)
       await fetchData()
-    } catch {
-      message.error('执行诊断建议失败')
+    } catch (error) {
+      appMessage.error(buildGovernanceActionFailureMessage(error, '执行诊断建议失败', '请稍后重试'))
     } finally {
       setActionLoading(false)
     }
@@ -783,10 +888,10 @@ export default function TaskDetailPage() {
     setActionLoading(true)
     try {
       await executeTask(taskId)
-      message.success('任务已启动')
+      appMessage.success('任务已启动')
       await fetchData()
-    } catch {
-      message.error('执行任务失败')
+    } catch (error) {
+      appMessage.error(buildGovernanceActionFailureMessage(error, '执行任务失败', '请稍后重试'))
     } finally {
       setActionLoading(false)
     }
@@ -796,10 +901,10 @@ export default function TaskDetailPage() {
     setActionLoading(true)
     try {
       await retryTask(taskId)
-      message.success('任务已重置')
+      appMessage.success('任务已重置')
       await fetchData()
-    } catch {
-      message.error('重试任务失败')
+    } catch (error) {
+      appMessage.error(buildGovernanceActionFailureMessage(error, '重试任务失败', '请稍后重试'))
     } finally {
       setActionLoading(false)
     }
@@ -809,10 +914,10 @@ export default function TaskDetailPage() {
     setActionLoading(true)
     try {
       await resumeTask(taskId)
-      message.success('已基于现有检查点恢复任务')
+      appMessage.success('已基于现有检查点恢复任务')
       await fetchData()
-    } catch {
-      message.error('恢复任务失败')
+    } catch (error) {
+      appMessage.error(buildGovernanceActionFailureMessage(error, '恢复任务失败', '请稍后重试'))
     } finally {
       setActionLoading(false)
     }
@@ -822,10 +927,10 @@ export default function TaskDetailPage() {
     setActionLoading(true)
     try {
       await stopTask(taskId)
-      message.success('任务已停止')
+      appMessage.success('任务已停止')
       await fetchData()
     } catch {
-      message.error('停止任务失败')
+      appMessage.error('停止任务失败')
     } finally {
       setActionLoading(false)
     }
@@ -835,10 +940,10 @@ export default function TaskDetailPage() {
     setActionLoading(true)
     try {
       await rerunTaskNode(taskId, nodeName)
-      message.success(`已从节点 ${nodeName} 重新发起执行`)
+      appMessage.success(`已从节点 ${nodeName} 重新发起执行`)
       await fetchData()
-    } catch {
-      message.error('从当前节点重跑失败')
+    } catch (error) {
+      appMessage.error(buildGovernanceActionFailureMessage(error, '从当前节点重跑失败', '请稍后重试'))
     } finally {
       setActionLoading(false)
     }
@@ -848,10 +953,10 @@ export default function TaskDetailPage() {
     setActionLoading(true)
     try {
       await pauseTaskNode(taskId, nodeName)
-      message.success(`节点 ${nodeName} 已暂停`)
+      appMessage.success(`节点 ${nodeName} 已暂停`)
       await fetchData()
     } catch {
-      message.error('暂停节点失败')
+      appMessage.error('暂停节点失败')
     } finally {
       setActionLoading(false)
     }
@@ -861,10 +966,10 @@ export default function TaskDetailPage() {
     setActionLoading(true)
     try {
       await resumeTaskNode(taskId, nodeName)
-      message.success(`节点 ${nodeName} 已恢复`)
+      appMessage.success(`节点 ${nodeName} 已恢复`)
       await fetchData()
     } catch {
-      message.error('恢复节点失败')
+      appMessage.error('恢复节点失败')
     } finally {
       setActionLoading(false)
     }
@@ -874,10 +979,10 @@ export default function TaskDetailPage() {
     setActionLoading(true)
     try {
       await skipTaskNode(taskId, nodeName)
-      message.success(`节点 ${nodeName} 已跳过`)
+      appMessage.success(`节点 ${nodeName} 已跳过`)
       await fetchData()
     } catch {
-      message.error('跳过节点失败')
+      appMessage.error('跳过节点失败')
     } finally {
       setActionLoading(false)
     }
@@ -887,10 +992,10 @@ export default function TaskDetailPage() {
     setActionLoading(true)
     try {
       await terminateTaskNode(taskId, nodeName)
-      message.success(`已向节点 ${nodeName} 发送终止请求`)
+      appMessage.success(`已向节点 ${nodeName} 发送终止请求`)
       await fetchData()
     } catch {
-      message.error('终止节点失败')
+      appMessage.error('终止节点失败')
     } finally {
       setActionLoading(false)
     }
@@ -906,12 +1011,17 @@ export default function TaskDetailPage() {
     if (!selectedNode) return
     setActionLoading(true)
     try {
-      await updateTaskNodeConfigAndRerun(taskId, selectedNode.nodeName, configEditorValue)
-      message.success(`已更新 ${selectedNode.nodeName} 配置并重新发起执行`)
+      await updateTaskNodeConfigAndRerun(
+        taskId,
+        selectedNode.nodeName,
+        configEditorValue,
+        `用户在任务详情页调整了 ${getNodeDisplayName(selectedNode)} 的节点配置后重新执行`,
+      )
+      appMessage.success(`已更新 ${selectedNode.nodeName} 配置并重新发起执行`)
       setConfigEditorOpen(false)
       await fetchData()
-    } catch {
-      message.error('更新节点配置并重跑失败')
+    } catch (error) {
+      appMessage.error(buildGovernanceActionFailureMessage(error, '更新节点配置并重跑失败', '请稍后重试'))
     } finally {
       setActionLoading(false)
     }
@@ -1000,6 +1110,12 @@ export default function TaskDetailPage() {
   )
 
   useEffect(() => {
+    if (selectedNodeId == null) return
+    if (nodes.some((node) => node.id === selectedNodeId)) return
+    setSelectedNodeId(null)
+  }, [nodes, selectedNodeId])
+
+  useEffect(() => {
     if (hasAppliedRouteContext || !taskRouteContext || nodes.length === 0) return
     const targetNodeName = taskRouteContext.targetNode
     if (targetNodeName) {
@@ -1009,7 +1125,7 @@ export default function TaskDetailPage() {
       }
     }
     if (taskRouteContext.actionType) {
-      message.info(
+      appMessage.info(
         taskRouteContext.targetNode
           ? `来自报告页：已定位到 ${taskRouteContext.targetNode}，可继续处理${taskRouteContext.actionTitle || '相关动作'}。`
           : `来自报告页：请继续处理${taskRouteContext.actionTitle || '相关动作'}。`,
@@ -1029,9 +1145,12 @@ export default function TaskDetailPage() {
   return (
     <div>
       <div className="page-toolbar">
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')}>
-          返回
-        </Button>
+        <Space wrap>
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')}>
+            返回
+          </Button>
+          <Button onClick={() => navigate(conversationEntryUrl)}>进入解释入口</Button>
+        </Space>
       </div>
 
       <div className="page-header">
@@ -1051,12 +1170,40 @@ export default function TaskDetailPage() {
         pendingActionCount={pendingActionCount}
         reviewRiskTotal={reviewRiskSummary.total}
         activeCollectorCount={activeCollectorViews.length}
+        streamStatus={runtimeState.streamStatus}
+        fallbackPollingActive={runtimeState.fallbackPollingActive}
+        streamLastError={runtimeState.lastError}
+        streamLastEventAt={runtimeState.lastEventAt}
         actionLoading={actionLoading}
         onExecute={() => void handleExecute()}
         onStop={() => void handleStop()}
         onResume={() => void handleResume()}
         onRetry={() => void handleRetry()}
         onViewReport={() => navigate(`/task/${taskId}/report`)}
+      />
+
+      {/**
+       * 执行控制台首屏先回答“哪里有问题、下一步做什么”，
+       * 再继续展示任务图和活动摘要，避免用户一进入页面就被结构图或配置信息打断。
+       */}
+      <TaskActionQueue
+        items={taskActionQueue}
+        actionLoading={actionLoading}
+        overflowCount={actionQueueOverflowCount}
+      />
+
+      {taskReplay ? <TaskReplayTimeline replay={taskReplay} /> : null}
+
+      <TaskRecoveryPanel
+        task={task}
+        nodes={nodes}
+        actionLoading={actionLoading}
+        onResumeTask={() => void handleResume()}
+        onRetryTask={() => void handleRetry()}
+        onResumeNode={(nodeName) => void handleResumeNode(nodeName)}
+        onRerunNode={(nodeName) => void handleRerunNode(nodeName)}
+        onOpenConfigEditor={openConfigEditor}
+        onOpenTrace={(nodeId) => setSelectedNodeId(nodeId)}
       />
 
       <Row gutter={[16, 16]}>
@@ -1066,17 +1213,13 @@ export default function TaskDetailPage() {
             pipelineNodes={pipelineNodes}
             getNodeHeadline={getNodeHeadline}
             onSelectNode={setSelectedNodeId}
+            streamStatus={runtimeState.streamStatus}
+            fallbackPollingActive={runtimeState.fallbackPollingActive}
           />
         </Col>
 
         <Col xs={24} lg={8}>
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
-            <TaskActionQueue
-              items={taskActionQueue}
-              actionLoading={actionLoading}
-              overflowCount={actionQueueOverflowCount}
-            />
-
             {report?.reportDiagnosis && (
               <Card title="报告诊断回流" className="work-card">
                 <ReportDiagnosisPanel
@@ -1084,6 +1227,8 @@ export default function TaskDetailPage() {
                   compact
                   actionLoading={actionLoading}
                   onAction={handleDiagnosisAction}
+                  streamStatusText={streamStatusText}
+                  streamStatusTone={streamStatusTone}
                 />
               </Card>
             )}
@@ -1108,7 +1253,12 @@ export default function TaskDetailPage() {
                         </Button>
                       }
                     >
-                      <SearchActivityPanel insight={insight} />
+                      <SearchActivityPanel
+                        insight={insight}
+                        streamStatus={runtimeState.streamStatus}
+                        fallbackPollingActive={runtimeState.fallbackPollingActive}
+                        lastEventAt={runtimeState.lastEventAt}
+                      />
                     </Card>
                   ))}
                 </div>
@@ -1142,6 +1292,9 @@ export default function TaskDetailPage() {
                 nodes={nodes}
                 defaultExpandedNodeKeys={defaultExpandedNodeKeys}
                 actionLoading={actionLoading}
+                streamStatus={runtimeState.streamStatus}
+                fallbackPollingActive={runtimeState.fallbackPollingActive}
+                lastEventAt={runtimeState.lastEventAt}
                 onSelectNode={setSelectedNodeId}
                 onResumeNode={(nodeName) => void handleResumeNode(nodeName)}
                 onTerminateNode={(nodeName) => void handleTerminateNode(nodeName)}
@@ -1152,7 +1305,16 @@ export default function TaskDetailPage() {
           {
             key: 'logs',
             label: '智能体日志',
-            children: <AgentLogPanel taskId={taskId} autoRefresh={task.status === 'RUNNING'} />,
+            children: (
+              <AgentLogPanel
+                taskId={taskId}
+                autoRefresh={task.status === 'RUNNING' && runtimeState.fallbackPollingActive}
+                logs={logs}
+                streamStatus={runtimeState.streamStatus}
+                fallbackPollingActive={runtimeState.fallbackPollingActive}
+                onRefresh={() => fetchData({ silent: true })}
+              />
+            ),
           },
         ]}
       />
@@ -1183,6 +1345,9 @@ export default function TaskDetailPage() {
         selectedReviewPayload={selectedReviewPayload}
         selectedNodeDependencies={selectedNodeDependencies}
         selectedNodeEvidenceIds={selectedNodeEvidenceIds}
+        streamStatus={runtimeState.streamStatus}
+        fallbackPollingActive={runtimeState.fallbackPollingActive}
+        lastEventAt={runtimeState.lastEventAt}
       />
 
       <Modal

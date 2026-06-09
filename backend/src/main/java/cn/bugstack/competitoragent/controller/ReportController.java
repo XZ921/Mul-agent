@@ -31,8 +31,12 @@ public class ReportController {
     private final ReportService reportService;
     private final EvidenceQueryService evidenceQueryService;
 
+    /**
+     * 报告详情接口直接返回交付中心所需的结构化载荷。
+     * 前端无需再二次拼接修订计划、问题诊断和证据追溯主链路。
+     */
     @GetMapping("/{taskId}")
-    @Operation(summary = "Get report detail with evidence and diagnosis closure")
+    @Operation(summary = "Get structured report delivery payload with diagnosis, revision plan, and evidence tracing")
     public ApiResponse<ReportResponse> getReport(
             @Parameter(description = "Task ID", example = "1")
             @PathVariable Long taskId) {

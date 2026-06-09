@@ -5,17 +5,6 @@ import lombok.Getter;
 
 /**
  * 统一业务状态码枚举
- * <p>
- * 编码分段规则：
- * <ul>
- *   <li>200：成功</li>
- *   <li>4xx：客户端错误（参数校验等）</li>
- *   <li>5xx：服务端错误</li>
- *   <li>1xxxx：任务相关业务错误</li>
- *   <li>2xxxx：Agent 执行相关错误</li>
- *   <li>3xxxx：数据采集相关错误</li>
- *   <li>4xxxx：LLM 调用相关错误</li>
- * </ul>
  */
 @Getter
 @Schema(description = "统一业务状态码")
@@ -42,6 +31,7 @@ public enum ResultCode {
     TASK_DELETE_FAILED(10005, "任务删除失败，运行中的任务不可删除"),
     TASK_STATUS_INVALID(10006, "当前任务状态不允许此操作"),
     TASK_STOP_FAILED(10007, "任务停止失败，只有执行中的任务才能停止"),
+    WORKFLOW_DISPATCH_UNAVAILABLE(10008, "工作流事件基础设施不可用，无法发起异步编排"),
 
     // ==================== Agent 执行 (2xxxx) ====================
     AGENT_EXECUTION_FAILED(20001, "Agent 执行失败"),
@@ -69,15 +59,15 @@ public enum ResultCode {
     REPORT_EXPORT_FAILED(50002, "报告导出失败"),
     REPORT_GENERATION_FAILED(50003, "报告生成失败"),
 
+    // ==================== 治理相关 (7xxxx) ====================
+    GOVERNANCE_BLOCKED(70001, "当前操作受到组织级治理限制，请稍后重试或调整执行策略"),
+
     // ==================== Schema 相关 (6xxxx) ====================
     SCHEMA_NOT_FOUND(60001, "分析模板不存在"),
     SCHEMA_NAME_DUPLICATE(60002, "分析模板名称重复"),
     SCHEMA_IN_USE(60003, "该模板正在被任务使用，暂不可删除");
 
-    /** 业务状态码 */
     private final int code;
-
-    /** 状态码描述（面向用户） */
     private final String message;
 
     ResultCode(int code, String message) {
@@ -85,9 +75,6 @@ public enum ResultCode {
         this.message = message;
     }
 
-    /**
-     * 根据状态码查找枚举，找不到返回 null
-     */
     public static ResultCode fromCode(int code) {
         for (ResultCode rc : values()) {
             if (rc.code == code) {

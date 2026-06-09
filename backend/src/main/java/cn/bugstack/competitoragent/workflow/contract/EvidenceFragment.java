@@ -2,6 +2,8 @@ package cn.bugstack.competitoragent.workflow.contract;
 
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -14,6 +16,8 @@ import java.util.List;
  */
 @Data
 @Builder(toBuilder = true)
+@NoArgsConstructor
+@AllArgsConstructor
 public class EvidenceFragment {
 
     private String stage;
@@ -22,6 +26,15 @@ public class EvidenceFragment {
 
     private String fieldName;
 
+    /** 字段展示名，供报告接口直接显示为中文语义标签 */
+    private String fieldLabel;
+
+    /** 字段所属章节稳定键，供章节级证据聚合时分组使用 */
+    private String sectionKey;
+
+    /** 字段所属章节标题 */
+    private String sectionTitle;
+
     private String evidenceId;
 
     private String sourceUrl;
@@ -29,6 +42,12 @@ public class EvidenceFragment {
     private String title;
 
     private String snippet;
+
+    /** 字段当前证据状态，例如 TRACEABLE / MISSING_EVIDENCE / EMPTY */
+    private String coverageStatus;
+
+    /** 当字段存在缺口时，给出稳定的解释说明 */
+    private String gapComment;
 
     @Builder.Default
     private List<String> issueFlags = List.of();
@@ -51,7 +70,12 @@ public class EvidenceFragment {
             normalizedFlags.add("MISSING_SOURCE_URL");
         }
         return this.toBuilder()
+                .fieldLabel(normalizeText(fieldLabel))
+                .sectionKey(normalizeText(sectionKey))
+                .sectionTitle(normalizeText(sectionTitle))
                 .sourceUrl(sourceUrl == null || sourceUrl.isBlank() ? null : sourceUrl.trim())
+                .coverageStatus(normalizeText(coverageStatus))
+                .gapComment(normalizeText(gapComment))
                 .issueFlags(new ArrayList<>(normalizedFlags))
                 .build();
     }
@@ -73,5 +97,13 @@ public class EvidenceFragment {
             }
         }
         return new ArrayList<>(urls);
+    }
+
+    private String normalizeText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isBlank() ? null : normalized;
     }
 }

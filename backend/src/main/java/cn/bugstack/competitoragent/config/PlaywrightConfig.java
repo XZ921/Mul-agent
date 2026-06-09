@@ -35,4 +35,12 @@ public class PlaywrightConfig {
         log.info("初始化 Playwright 实例...");
         return Playwright.create();
     }
+
+    @Bean
+    public PlaywrightRuntimeFactory playwrightRuntimeFactory() {
+        return () -> {
+            log.info("重建 Playwright 运行时实例...");
+            return Playwright.create();
+        };
+    }
 }

@@ -2,6 +2,8 @@ package cn.bugstack.competitoragent.agent.extractor;
 
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
+import cn.bugstack.competitoragent.context.AgentContextAssembler;
+import cn.bugstack.competitoragent.context.TaskRagContextBundle;
 import cn.bugstack.competitoragent.llm.LlmClient;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
@@ -10,6 +12,7 @@ import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.model.entity.CompetitorKnowledge;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -18,6 +21,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -31,14 +35,74 @@ class SchemaExtractorAgentTest {
     private final CompetitorKnowledgeRepository knowledgeRepository = mock(CompetitorKnowledgeRepository.class);
     private final LlmClient llmClient = mock(LlmClient.class);
     private final PromptTemplateService promptService = mock(PromptTemplateService.class);
+    private final AgentContextAssembler agentContextAssembler = mock(AgentContextAssembler.class);
     private final SchemaExtractorAgent extractorAgent = new SchemaExtractorAgent(
             logRepository,
             evidenceRepository,
             knowledgeRepository,
             llmClient,
             promptService,
+            agentContextAssembler,
             new ObjectMapper()
     );
+
+    @Test
+    void shouldPassUnifiedTaskRagContextIntoExtractorPrompt() throws Exception {
+        // 统一上下文由基类入口注入，提取阶段只验证 prompt 消费到同一份检索摘要。
+        when(agentContextAssembler.assemble(any(AgentContext.class))).thenAnswer(invocation -> {
+            AgentContext originalContext = invocation.getArgument(0);
+            return originalContext.toBuilder()
+                    .taskRagContextBundle(TaskRagContextBundle.builder()
+                            .query("Feishu pricing evidence")
+                            .retrievalSummary("命中飞书定价页与帮助中心摘要")
+                            .gapSummary("企业版公开折扣说明仍不足")
+                            .sourceUrls(List.of("https://example.com/docs"))
+                            .build())
+                    .build();
+        });
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Feishu")
+                        .evidenceId("T0001-COLLECT-001")
+                        .title("Docs")
+                        .url("https://example.com/docs")
+                        .fullContent("usable content")
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://example.com",
+                          "summary": "ok",
+                          "positioning": "team collaboration",
+                          "targetUsers": ["teams"],
+                          "coreFeatures": [],
+                          "pricing": {},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://example.com/docs"]
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+        JsonNode output = new ObjectMapper().readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(output.path("taskRagContext").asText().contains("Feishu pricing evidence"));
+        assertTrue(output.path("taskRagContext").asText().contains("https://example.com/docs"));
+        verify(promptService).render(eq("extractor"), argThat(variables ->
+                variables.get("taskRagContext") != null
+                        && variables.get("taskRagContext").contains("检索查询")
+                        && variables.get("taskRagContext").contains("企业版公开折扣说明仍不足")
+        ));
+    }
 
     @Test
     void shouldRetryWhenExtractorReturnsBrokenJson() {
@@ -206,5 +270,61 @@ class SchemaExtractorAgentTest {
         assertTrue(result.getOutputData().contains("MODEL_OUTPUT_RECOVERED"));
         assertTrue(result.getOutputData().contains("https://www.bilibili.com"));
         verify(knowledgeRepository, times(1)).save(any());
+    }
+
+    @Test
+    void shouldEmitSectionEvidenceBundlesAndGapMarkersForPartialCoverage() throws Exception {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E001")
+                        .title("Pricing Docs")
+                        .url("https://docs.notion.so/pricing")
+                        .fullContent("pricing content")
+                        .contentSnippet("pricing snippet")
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://www.notion.so",
+                          "summary": "ok",
+                          "positioning": "workspace ai",
+                          "targetUsers": ["teams"],
+                          "coreFeatures": [],
+                          "pricing": {
+                            "model": "custom quote"
+                          },
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://docs.notion.so/pricing"]
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+        JsonNode output = new ObjectMapper().readTree(result.getOutputData());
+        JsonNode pricingBundle = findBundle(output.path("drafts").get(0).path("sectionEvidenceBundles"), "pricing");
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertEquals("pricing", pricingBundle.path("sectionKey").asText());
+        assertTrue(pricingBundle.path("issueFlags").toString().contains("SECTION_EVIDENCE_GAP"));
+        assertTrue(pricingBundle.path("evidenceFragments").get(0).path("coverageStatus").asText().contains("MISSING_EVIDENCE"));
+        assertTrue(pricingBundle.path("gapSummary").asText().contains("pricing"));
+    }
+
+    private JsonNode findBundle(JsonNode bundles, String sectionKey) {
+        for (JsonNode bundle : bundles) {
+            if (sectionKey.equals(bundle.path("sectionKey").asText())) {
+                return bundle;
+            }
+        }
+        throw new AssertionError("bundle not found: " + sectionKey);
     }
 }

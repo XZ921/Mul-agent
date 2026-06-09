@@ -1,19 +1,24 @@
 package cn.bugstack.competitoragent.task;
 
+import cn.bugstack.competitoragent.event.TaskEventPublisher;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
+import cn.bugstack.competitoragent.model.entity.TaskPlan;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
+import cn.bugstack.competitoragent.repository.TaskPlanRepository;
+import cn.bugstack.competitoragent.workflow.DynamicTaskGraphService;
+import cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,6 +40,21 @@ class TaskRecoveryServiceTest {
 
     @Mock
     private AnalysisTaskRunner taskRunner;
+
+    @Mock
+    private TaskSnapshotCacheService taskSnapshotCacheService;
+
+    @Mock
+    private TaskEventPublisher taskEventPublisher;
+
+    @Mock
+    private WorkflowEventOutboxService workflowEventOutboxService;
+
+    @Mock
+    private DynamicTaskGraphService dynamicTaskGraphService;
+
+    @Mock
+    private TaskPlanRepository taskPlanRepository;
 
     @InjectMocks
     private TaskRecoveryService recoveryService;
@@ -89,6 +109,7 @@ class TaskRecoveryServiceTest {
         assertFalse(task.getErrorMessage() == null || task.getErrorMessage().isBlank());
         verify(taskRepository).save(task);
         verify(taskRunner).runTask(7L);
+        verify(taskSnapshotCacheService).saveTaskSnapshot(any(TaskProgressSnapshot.class));
     }
 
     @Test
@@ -117,7 +138,7 @@ class TaskRecoveryServiceTest {
         TaskNode pausedNode = TaskNode.builder()
                 .nodeName("extract")
                 .status(TaskNodeStatus.PAUSED)
-                .interventionReason("节点已由用户暂停，等待恢复")
+                .interventionReason("节点已被用户暂停，等待恢复")
                 .build();
         TaskNode pendingNode = TaskNode.builder()
                 .nodeName("analyze")
@@ -155,5 +176,92 @@ class TaskRecoveryServiceTest {
         assertEquals(AnalysisTaskStatus.SUCCESS, task.getStatus());
         verify(taskRunner, never()).runTask(10L);
         verify(taskRepository).save(task);
+        verify(taskSnapshotCacheService).saveTaskSnapshot(any(TaskProgressSnapshot.class));
+    }
+
+    @Test
+    void shouldRebuildRecoverySnapshotWhenRedisCacheMisses() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(12L)
+                .status(AnalysisTaskStatus.RUNNING)
+                .build();
+        TaskNode runningNode = TaskNode.builder()
+                .taskId(12L)
+                .nodeName("collect_sources_web")
+                .displayName("官网补源")
+                .status(TaskNodeStatus.RUNNING)
+                .build();
+        TaskNode successNode = TaskNode.builder()
+                .taskId(12L)
+                .nodeName("extract_schema")
+                .status(TaskNodeStatus.SUCCESS)
+                .build();
+
+        when(taskSnapshotCacheService.getTaskSnapshot(12L)).thenReturn(Optional.empty());
+        when(taskRepository.findById(12L)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(12L)).thenReturn(List.of(runningNode, successNode));
+
+        TaskProgressSnapshot snapshot = recoveryService.getTaskSnapshotOrRebuild(12L).orElseThrow();
+
+        assertEquals(12L, snapshot.getTaskId());
+        assertEquals("RUNNING", snapshot.getTaskStatus());
+        assertEquals("官网补源", snapshot.getCurrentStage());
+        assertEquals(1, snapshot.getCompletedNodes());
+        assertEquals(List.of("collect_sources_web"), snapshot.getActiveNodeNames());
+        verify(taskSnapshotCacheService).saveTaskSnapshot(any(TaskProgressSnapshot.class));
+    }
+
+    @Test
+    void shouldRecoverAgainstCurrentDynamicPlanScopeInsteadOfInactiveSiblingBranch() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(13L)
+                .status(AnalysisTaskStatus.RUNNING)
+                .currentPlanVersionId(2L)
+                .currentPlanVersion(2)
+                .build();
+        TaskNode triggerNode = TaskNode.builder()
+                .taskId(13L)
+                .nodeName("quality_check_final")
+                .status(TaskNodeStatus.SUCCESS)
+                .planVersionId(1L)
+                .branchKey("root")
+                .build();
+        TaskNode activeBranchNode = TaskNode.builder()
+                .taskId(13L)
+                .nodeName("collect_revision_evidence_v2_1")
+                .status(TaskNodeStatus.RUNNING)
+                .planVersionId(2L)
+                .branchKey("root/review-2")
+                .build();
+        TaskNode inactiveSiblingNode = TaskNode.builder()
+                .taskId(13L)
+                .nodeName("rewrite_revision_patch_v3")
+                .status(TaskNodeStatus.PAUSED)
+                .interventionReason("inactive branch pause")
+                .planVersionId(3L)
+                .branchKey("root/review-3")
+                .build();
+
+        when(taskRepository.findAllByStatus(AnalysisTaskStatus.RUNNING)).thenReturn(List.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(13L))
+                .thenReturn(List.of(triggerNode, activeBranchNode, inactiveSiblingNode));
+        when(taskPlanRepository.findById(2L)).thenReturn(Optional.of(TaskPlan.builder()
+                .id(2L)
+                .taskId(13L)
+                .planVersion(2)
+                .parentPlanId(1L)
+                .branchKey("root/review-2")
+                .triggerNodeName("quality_check_final")
+                .planType("DYNAMIC_BACKFLOW")
+                .active(true)
+                .planSnapshot("{}")
+                .build()));
+        when(dynamicTaskGraphService.calculateAffectedNodes(List.of(triggerNode, activeBranchNode, inactiveSiblingNode), triggerNode))
+                .thenReturn(List.of(triggerNode, activeBranchNode));
+
+        recoveryService.recoverInterruptedTasks();
+
+        assertEquals(AnalysisTaskStatus.PENDING, task.getStatus());
+        verify(taskRunner).runTask(13L);
     }
 }

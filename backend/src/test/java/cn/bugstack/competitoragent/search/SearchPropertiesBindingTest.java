@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.search;
 
+import cn.bugstack.competitoragent.source.SearchProviderProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -12,6 +13,12 @@ class SearchPropertiesBindingTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withUserConfiguration(TestConfiguration.class)
             .withPropertyValues(
+                    "source-discovery.search.provider-order[0]=serpapi",
+                    "source-discovery.search.provider-order[1]=qianfan",
+                    "source-discovery.search.providers.serpapi.enabled=true",
+                    "source-discovery.search.providers.serpapi.fail-open=true",
+                    "source-discovery.search.providers.qianfan.enabled=false",
+                    "source-discovery.search.providers.qianfan.fail-open=false",
                     "search.engines.bing.name=Bing",
                     "search.engines.bing.base-url=https://www.bing.com/search",
                     "search.engines.bing.query-param=q",
@@ -39,15 +46,22 @@ class SearchPropertiesBindingTest {
     @Test
     void shouldBindSearchEngineAndSerpApiProperties() {
         contextRunner.run(context -> {
+            SearchProviderProperties searchProviderProperties = context.getBean(SearchProviderProperties.class);
             SearchEngineProperties searchEngineProperties = context.getBean(SearchEngineProperties.class);
             SearchBrowserProperties searchBrowserProperties = context.getBean(SearchBrowserProperties.class);
             SerpApiProperties serpApiProperties = context.getBean(SerpApiProperties.class);
             QianfanSearchProperties qianfanSearchProperties = context.getBean(QianfanSearchProperties.class);
 
+            assertThat(searchProviderProperties.getProviderOrder()).containsExactly("serpapi", "qianfan");
+            assertThat(searchProviderProperties.getProviders().get("serpapi").getEnabled()).isTrue();
+            assertThat(searchProviderProperties.getProviders().get("serpapi").getFailOpen()).isTrue();
+            assertThat(searchProviderProperties.getProviders().get("qianfan").getEnabled()).isFalse();
+            assertThat(searchProviderProperties.getProviders().get("qianfan").getFailOpen()).isFalse();
             assertThat(searchEngineProperties.resolve("bing")).isNotNull();
             assertThat(searchEngineProperties.resolve("bing").getBaseUrl())
                     .isEqualTo("https://www.bing.com/search");
             assertThat(searchEngineProperties.resolve("baidu").getQueryParam()).isEqualTo("wd");
+            assertThat(searchEngineProperties.resolveAvailableEngineKey("msedge")).isEqualTo("bing");
             assertThat(searchBrowserProperties.getEngine()).isEqualTo("baidu");
             assertThat(searchBrowserProperties.getFallbackEngines()).containsExactly("bing");
             assertThat(searchBrowserProperties.getResultPageTimeoutMillis()).isEqualTo(9000);
@@ -60,6 +74,7 @@ class SearchPropertiesBindingTest {
             assertThat(serpApiProperties.getDefaultEngine()).isEqualTo("google");
             assertThat(qianfanSearchProperties.getApiKey()).isEqualTo("test-qianfan-key");
             assertThat(qianfanSearchProperties.getDefaultEngine()).isEqualTo("baidu");
+            assertThat(qianfanSearchProperties.resolveDefaultEngineKey(searchEngineProperties)).isEqualTo("baidu");
         });
     }
 
@@ -83,6 +98,7 @@ class SearchPropertiesBindingTest {
 
     @Configuration(proxyBeanMethods = false)
     @EnableConfigurationProperties({
+            SearchProviderProperties.class,
             SearchEngineProperties.class,
             SearchBrowserProperties.class,
             SerpApiProperties.class,

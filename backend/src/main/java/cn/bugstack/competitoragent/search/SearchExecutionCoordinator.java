@@ -46,12 +46,14 @@ public class SearchExecutionCoordinator {
         Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
         SearchAuditSnapshot checkpoint = config.getSearchAuditCheckpoint();
         boolean resumedFromCheckpoint = checkpoint != null && checkpoint.getExecutionTrace() != null;
+        // 如果有检查点，从检查点加载；否则解析初始配置
         String checkpointSource = resumedFromCheckpoint ? "NODE_CONFIG_CHECKPOINT" : null;
         List<SourceCandidate> allCandidates = normalizeCandidates(
                 resumedFromCheckpoint ? resolveCandidatesFromCheckpoint(checkpoint) : resolveInitialCandidates(config),
                 "PLANNED",
                 config
         );
+        // ====================== 块1 结束 纯前置准备，不执行业务逻辑======================
         if (resumedFromCheckpoint) {
             attemptedTargets.putAll(resolveAttemptedTargetsFromCheckpoint(checkpoint));
         }
@@ -216,6 +218,7 @@ public class SearchExecutionCoordinator {
                 targetCount
         );
         allCandidates = collectionTargetSelector.markSelectedCandidates(allCandidates, selectedTargets);
+        selectedTargets = collectionTargetSelector.refreshSelectedTargets(selectedTargets, allCandidates);
         markStepSuccess(executionPlan, "SELECT_TARGETS",
                 "已选出 " + selectedTargets.size() + " 条正式采集目标");
         appendSnapshotAndPublish(progressSnapshots, executionPlan, "SELECT_TARGETS",

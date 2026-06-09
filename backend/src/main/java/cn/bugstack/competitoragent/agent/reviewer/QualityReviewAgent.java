@@ -3,8 +3,10 @@ package cn.bugstack.competitoragent.agent.reviewer;
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.agent.BaseAgent;
+import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.llm.LlmClient;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
+import cn.bugstack.competitoragent.memory.MemoryWritebackService;
 import cn.bugstack.competitoragent.model.dto.RevisionPlan;
 import cn.bugstack.competitoragent.model.entity.CompetitorKnowledge;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
@@ -17,6 +19,7 @@ import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.workflow.contract.QualityDiagnosis;
 import cn.bugstack.competitoragent.workflow.contract.QualityDimension;
 import cn.bugstack.competitoragent.workflow.contract.QualityIssue;
+import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -60,6 +63,7 @@ public class QualityReviewAgent extends BaseAgent {
     private final CompetitorKnowledgeRepository knowledgeRepository;
     private final LlmClient llmClient;
     private final PromptTemplateService promptService;
+    private final MemoryWritebackService memoryWritebackService;
     private final ObjectMapper objectMapper;
 
     public QualityReviewAgent(AgentExecutionLogRepository logRepository,
@@ -68,13 +72,16 @@ public class QualityReviewAgent extends BaseAgent {
                               CompetitorKnowledgeRepository knowledgeRepository,
                               LlmClient llmClient,
                               PromptTemplateService promptService,
+                              AgentContextAssembler agentContextAssembler,
+                              MemoryWritebackService memoryWritebackService,
                               ObjectMapper objectMapper) {
-        super(logRepository);
+        super(logRepository, agentContextAssembler);
         this.reportRepository = reportRepository;
         this.evidenceRepository = evidenceRepository;
         this.knowledgeRepository = knowledgeRepository;
         this.llmClient = llmClient;
         this.promptService = promptService;
+        this.memoryWritebackService = memoryWritebackService;
         this.objectMapper = objectMapper;
     }
 
@@ -109,6 +116,8 @@ public class QualityReviewAgent extends BaseAgent {
                 "evidenceList", evidenceList,
                 "evidenceCoverageSummary", evidenceCoverageSummary,
                 "claimAuditChecklist", claimAuditChecklist,
+                // Reviewer 需要知道统一检索边界，才能把“未命中的公开证据”识别为真实风险而非遗漏提示。
+                "taskRagContext", context.getTaskRagPromptContext(),
                 "reviewMode", finalPass ? "final" : "initial"
         ));
 
@@ -138,6 +147,7 @@ public class QualityReviewAgent extends BaseAgent {
             }
             items = mergeRuleBasedIssues(items, report.getContent(), evidenceCoverageSummary);
             List<QualityDiagnosis> diagnoses = buildDiagnoses(items, evidences, coverageSnapshot);
+            List<RevisionDirective> revisionDirectives = buildRevisionDirectives(diagnoses, evidences);
             List<QualityDimension> dimensions = buildDimensions(llmScore, items, diagnoses, coverageSnapshot);
             int score = calculateDiagnosisDrivenScore(llmScore, dimensions);
             boolean passed = isDiagnosisPassed(llmPassed, dimensions, diagnoses);
@@ -149,6 +159,7 @@ public class QualityReviewAgent extends BaseAgent {
                     .rewriteRequired(!passed)
                     .summary(summary)
                     .items(items)
+                    .directives(revisionDirectives)
                     .rewriteGuidelines(passed ? List.of() : buildGuidelines(items))
                     .build();
 
@@ -170,8 +181,11 @@ public class QualityReviewAgent extends BaseAgent {
             output.put("diagnoses", objectMapper.valueToTree(diagnoses));
             output.put("issues", objectMapper.valueToTree(toQualityIssuePayload(diagnoses)));
             output.put("summary", summary);
+            // 评审节点把实际参考过的 Task RAG 摘要写回输出，便于解释当前结论为何判为证据不足。
+            output.put("taskRagContext", context.getTaskRagPromptContext());
             output.put("revisionPlan", objectMapper.readTree(revisionPlanJson));
-            output.put("nextActions", resolveNextActions(reviewJson, finalPass, passed, items));
+            output.put("revisionDirectives", objectMapper.valueToTree(revisionDirectives));
+            output.put("nextActions", resolveNextActions(reviewJson, finalPass, passed, items, revisionDirectives));
 
             String outputJson = objectMapper.writeValueAsString(output);
             String outputSummary = passed
@@ -180,6 +194,9 @@ public class QualityReviewAgent extends BaseAgent {
                     ? "质量评审未通过，证据缺口较大，已建议人工介入"
                     : "质量评审未通过，已生成修订计划";
 
+            // 只有终审通过后的结论才允许提升为领域记忆，避免把待修订结果污染跨任务复用层。
+            // 写回失败只记录日志，不影响 reviewer 主流程返回。
+            writeVerifiedDomainKnowledgeBack(context, report, knowledges, evidences, summary, diagnoses, dimensions, outputJson, finalPass, passed);
             return AgentResult.success(outputJson, outputSummary,
                     System.currentTimeMillis(),
                     llmClient.getModelName(),
@@ -212,7 +229,8 @@ public class QualityReviewAgent extends BaseAgent {
     private Object resolveNextActions(JsonNode reviewJson,
                                       boolean finalPass,
                                       boolean passed,
-                                      List<RevisionPlan.RevisionItem> items) {
+                                      List<RevisionPlan.RevisionItem> items,
+                                      List<RevisionDirective> revisionDirectives) {
         if (reviewJson.has("nextActions") && reviewJson.get("nextActions").isArray()) {
             return reviewJson.get("nextActions");
         }
@@ -220,41 +238,27 @@ public class QualityReviewAgent extends BaseAgent {
             return objectMapper.createArrayNode();
         }
 
-        List<Map<String, String>> actions = new ArrayList<>();
+        List<Map<String, String>> actions = buildNextActionsFromDirectives(revisionDirectives);
         boolean hasEvidenceIssue = items.stream()
-                .anyMatch(item -> item.getType() != null && item.getType().contains("证据"));
-
-        if (hasEvidenceIssue) {
+                .anyMatch(item -> requiresEvidenceCitation(item) || isSearchQualityItem(item));
+        if (actions.stream().noneMatch(action -> "MANUAL_REVIEW".equals(action.get("actionType")))) {
             actions.add(Map.of(
-                    "title", "补充外部可验证证据",
-                    "description", "优先为 ERROR 章节补充官网文档、定价页、客户案例、技术白皮书或公开报道，并确认报告正文引用新的 evidenceId。",
-                    "actionType", "SUPPLEMENT_EVIDENCE",
-                    "targetNode", "collect_sources",
-                    "priority", "HIGH"
-            ));
-            actions.add(Map.of(
-                    "title", "补源后重跑抽取与分析链路",
-                    "description", "新增证据入库后，从 extract_schema 节点重跑，让结构化知识、分析结果和报告正文都消费新证据。",
-                    "actionType", "RERUN_NODE",
-                    "targetNode", "extract_schema",
-                    "priority", "HIGH"
+                    "title", "复核终审问题清单",
+                    "description", "逐条检查终审问题清单，确认每个 ERROR 都已有证据、降级说明或删除处理，再重新触发终审。",
+                    "actionType", "MANUAL_REVIEW",
+                    "targetNode", "quality_check_final",
+                    "priority", "MEDIUM"
             ));
         }
-
-        actions.add(Map.of(
-                "title", "删除或降级无法验证的结论",
-                "description", "如果公开资料仍无法支撑相关判断，请把绝对化结论改成“当前公开资料未能验证”，或从报告中删除该结论。",
-                "actionType", "REWRITE_CLAIM",
-                "targetNode", "rewrite_report",
-                "priority", hasEvidenceIssue ? "MEDIUM" : "HIGH"
-        ));
-        actions.add(Map.of(
-                "title", "复核终审问题清单",
-                "description", "逐条检查终审问题清单，确认每个 ERROR 都已有证据、降级说明或删除处理，再重新触发终审。",
-                "actionType", "MANUAL_REVIEW",
-                "targetNode", "quality_check_final",
-                "priority", "MEDIUM"
-        ));
+        if (actions.stream().noneMatch(action -> "REWRITE_SECTION".equals(action.get("actionType")) || "REWRITE_CLAIM".equals(action.get("actionType")))) {
+            actions.add(Map.of(
+                    "title", "删除或降级无法验证的结论",
+                    "description", "如果公开资料仍无法支撑相关判断，请把绝对化结论改成“当前公开资料未能验证”，或从报告中删除该结论。",
+                    "actionType", "REWRITE_CLAIM",
+                    "targetNode", "rewrite_report",
+                    "priority", hasEvidenceIssue ? "MEDIUM" : "HIGH"
+            ));
+        }
         return actions;
     }
 
@@ -479,6 +483,42 @@ public class QualityReviewAgent extends BaseAgent {
     }
 
     /**
+     * 修订指令是质检闭环的真正执行入口。
+     * 这里把诊断结果转换成“补源 / 重跑 / 改写 / 复核”的显式动作，
+     * 避免下游只能看到分数和问题列表，却不知道下一步该触发哪个节点。
+     */
+    private List<RevisionDirective> buildRevisionDirectives(List<QualityDiagnosis> diagnoses,
+                                                            List<EvidenceSource> evidences) {
+        LinkedHashMap<String, RevisionDirective> directives = new LinkedHashMap<>();
+        for (QualityDiagnosis diagnosis : diagnoses) {
+            if (diagnosis == null) {
+                continue;
+            }
+            QualityDiagnosis normalized = diagnosis.normalized();
+            String category = resolveDirectiveCategory(normalized);
+            RevisionDirective directive = RevisionDirective.builder()
+                    .category(category)
+                    .targetSection(safeValue(normalized.getSection(), "通用"))
+                    .summary(normalized.getRepairSuggestion())
+                    .searchFeedback("SEARCH_QUALITY".equals(category) ? normalized.getDetail() : null)
+                    .searchQueries(buildSearchQueries(normalized, evidences))
+                    .sourceUrls(normalized.getSourceUrls())
+                    .expectedOutcome(buildExpectedOutcome(normalized, category))
+                    .build()
+                    .normalized();
+            String key = directive.getCategory()
+                    + "|"
+                    + safeValue(directive.getTargetSection(), "")
+                    + "|"
+                    + safeValue(directive.getTargetNode(), "")
+                    + "|"
+                    + safeValue(directive.getActionType(), "");
+            directives.putIfAbsent(key, directive);
+        }
+        return new ArrayList<>(directives.values());
+    }
+
+    /**
      * 维度评分用固定规则映射为解释性结果：
      * - 证据可追溯性：看缺证据问题和 coverage 缺口；
      * - 结论支撑度：看 unsupported claim / blocker 诊断；
@@ -496,16 +536,19 @@ public class QualityReviewAgent extends BaseAgent {
         long claimIssueCount = diagnoses.stream()
                 .filter(diagnosis -> "CLAIM_SUPPORT".equalsIgnoreCase(safeValue(diagnosis.getDimensionCode(), "")))
                 .count();
+        long searchIssueCount = diagnoses.stream()
+                .filter(diagnosis -> "SEARCH_QUALITY".equalsIgnoreCase(safeValue(diagnosis.getDimensionCode(), "")))
+                .count();
         long blockerCount = diagnoses.stream()
                 .filter(diagnosis -> "BLOCKER".equalsIgnoreCase(safeValue(diagnosis.getLevel(), "")))
                 .count();
         int missingCoverageCount = coverageSnapshot.missingSections().size();
         int emptyCoverageCount = coverageSnapshot.emptySections().size();
 
-        int evidenceScore = normalizeScore(100 - (int) evidenceIssueCount * 22 - missingCoverageCount * 12 - emptyCoverageCount * 6);
+        int evidenceScore = normalizeScore(100 - (int) evidenceIssueCount * 22 - missingCoverageCount * 12 - emptyCoverageCount * 6 - (int) searchIssueCount * 10);
         int claimScore = normalizeScore(100 - (int) claimIssueCount * 20 - (int) blockerCount * 12);
         int structureScore = normalizeScore(100 - missingCoverageCount * 14 - emptyCoverageCount * 16);
-        int actionabilityScore = normalizeScore(100 - Math.max(0, items.size() - 1) * 10 - (blockerCount > 0 ? 25 : 0));
+        int actionabilityScore = normalizeScore(100 - Math.max(0, items.size() - 1) * 10 - (blockerCount > 0 ? 25 : 0) - (int) searchIssueCount * 8);
 
         return List.of(
                 QualityDimension.builder()
@@ -581,6 +624,9 @@ public class QualityReviewAgent extends BaseAgent {
 
     private String resolveDimensionCode(RevisionPlan.RevisionItem item) {
         String type = safeValue(item.getType(), "").toLowerCase(Locale.ROOT);
+        if (type.contains("search")) {
+            return "SEARCH_QUALITY";
+        }
         if (type.contains("claim")) {
             return "CLAIM_SUPPORT";
         }
@@ -598,11 +644,15 @@ public class QualityReviewAgent extends BaseAgent {
             case "EVIDENCE_TRACEABILITY" -> "证据可追溯性";
             case "CLAIM_SUPPORT" -> "结论支撑度";
             case "STRUCTURE_COMPLETENESS" -> "结构完整性";
+            case "SEARCH_QUALITY" -> "搜索质量";
             default -> "修订可执行性";
         };
     }
 
     private String resolveDiagnosisTitle(RevisionPlan.RevisionItem item, String dimensionCode) {
+        if ("SEARCH_QUALITY".equals(dimensionCode)) {
+            return "搜索结果无法支撑当前章节判断";
+        }
         if ("CLAIM_SUPPORT".equals(dimensionCode)) {
             return "关键结论缺少充分支撑";
         }
@@ -617,6 +667,9 @@ public class QualityReviewAgent extends BaseAgent {
 
     private String buildDiagnosisEvidenceBasis(RevisionPlan.RevisionItem item, CoverageSnapshot coverageSnapshot) {
         String section = safeValue(item.getSection(), "通用");
+        if (isSearchQualityItem(item)) {
+            return section + "当前命中的搜索结果缺少稳定官网或高可信来源，无法支撑该章节结论。";
+        }
         if (coverageSnapshot.missingSections().contains(section)) {
             return section + "在结构化 evidenceCoverage 中已被标记为缺证据，同时正文审计也命中了修订问题。";
         }
@@ -645,6 +698,107 @@ public class QualityReviewAgent extends BaseAgent {
     private boolean requiresEvidenceCitation(RevisionPlan.RevisionItem item) {
         String type = safeValue(item.getType(), "").toLowerCase(Locale.ROOT);
         return type.contains("evidence") || type.contains("claim") || type.contains("证据") || type.contains("支撑");
+    }
+
+    private boolean isSearchQualityItem(RevisionPlan.RevisionItem item) {
+        String type = safeValue(item.getType(), "").toLowerCase(Locale.ROOT);
+        return type.contains("search");
+    }
+
+    private String resolveDirectiveCategory(QualityDiagnosis diagnosis) {
+        String type = safeValue(diagnosis.getType(), "").toLowerCase(Locale.ROOT);
+        String dimensionCode = safeValue(diagnosis.getDimensionCode(), "");
+        if ("SEARCH_QUALITY".equalsIgnoreCase(dimensionCode) || type.contains("search")) {
+            return "SEARCH_QUALITY";
+        }
+        if ("STRUCTURE_COMPLETENESS".equalsIgnoreCase(dimensionCode) || type.contains("coverage") || type.contains("section") || type.contains("structure")) {
+            return "STRUCTURE_ISSUE";
+        }
+        if (type.contains("expression") || type.contains("style") || type.contains("tone") || type.contains("absolute") || type.contains("措辞")) {
+            return "EXPRESSION_ISSUE";
+        }
+        return "EVIDENCE_GAP";
+    }
+
+    private List<String> buildSearchQueries(QualityDiagnosis diagnosis, List<EvidenceSource> evidences) {
+        LinkedHashSet<String> queries = new LinkedHashSet<>();
+        String section = safeValue(diagnosis.getSection(), "");
+        for (EvidenceSource evidence : evidences == null ? List.<EvidenceSource>of() : evidences) {
+            String competitorName = safeValue(evidence.getCompetitorName(), "");
+            if (!competitorName.isBlank() && !section.isBlank()) {
+                queries.add((competitorName + " " + section).trim());
+            } else if (!competitorName.isBlank()) {
+                queries.add(competitorName);
+            }
+        }
+        if (queries.isEmpty() && !section.isBlank()) {
+            queries.add(section);
+        }
+        return new ArrayList<>(queries);
+    }
+
+    private String buildExpectedOutcome(QualityDiagnosis diagnosis, String category) {
+        String section = safeValue(diagnosis.getSection(), "相关章节");
+        return switch (category) {
+            case "SEARCH_QUALITY" -> section + "需要补齐更高可信度的搜索来源，并让该章节重新具备可验证支撑。";
+            case "STRUCTURE_ISSUE" -> section + "需要恢复结构化字段完整性，并让报告章节与字段输出重新对齐。";
+            case "EXPRESSION_ISSUE" -> section + "需要改写为克制、可验证的表达，不保留绝对化结论。";
+            default -> section + "需要补齐来源引用或下调无法验证的判断，确保结论可回溯。";
+        };
+    }
+
+    private List<Map<String, String>> buildNextActionsFromDirectives(List<RevisionDirective> revisionDirectives) {
+        LinkedHashMap<String, Map<String, String>> actions = new LinkedHashMap<>();
+        for (RevisionDirective directive : revisionDirectives == null ? List.<RevisionDirective>of() : revisionDirectives) {
+            if (directive == null) {
+                continue;
+            }
+            RevisionDirective normalized = directive.normalized();
+            String key = normalized.getActionType() + "|" + normalized.getTargetNode();
+            actions.putIfAbsent(key, Map.of(
+                    "title", resolveActionTitle(normalized),
+                    "description", resolveActionDescription(normalized),
+                    "actionType", normalized.getActionType(),
+                    "targetNode", normalized.getTargetNode(),
+                    "priority", normalized.getPriority()
+            ));
+            if ("SUPPLEMENT_EVIDENCE".equals(normalized.getActionType())) {
+                actions.putIfAbsent("RERUN_NODE|extract_schema", Map.of(
+                        "title", "补源后重跑抽取与分析链路",
+                        "description", "新增证据入库后，从 extract_schema 节点重跑，让结构化知识、分析结果和报告正文都消费新证据。",
+                        "actionType", "RERUN_NODE",
+                        "targetNode", "extract_schema",
+                        "priority", "HIGH"
+                ));
+            }
+        }
+        return new ArrayList<>(actions.values());
+    }
+
+    private String resolveActionTitle(RevisionDirective directive) {
+        if (directive.getSummary() != null && !directive.getSummary().isBlank()) {
+            return directive.getSummary();
+        }
+        return switch (safeValue(directive.getActionType(), "")) {
+            case "SUPPLEMENT_EVIDENCE" -> "补充外部可验证证据";
+            case "RERUN_NODE" -> "重跑上游结构化节点";
+            case "REWRITE_SECTION" -> "改写问题章节";
+            default -> "复核修订结果";
+        };
+    }
+
+    private String resolveActionDescription(RevisionDirective directive) {
+        if ("SEARCH_QUALITY".equalsIgnoreCase(safeValue(directive.getCategory(), ""))) {
+            return safeValue(directive.getSearchFeedback(),
+                    "请调整搜索查询，优先补采官网、定价页、白皮书或客户案例等高可信来源。");
+        }
+        if ("STRUCTURE_ISSUE".equalsIgnoreCase(safeValue(directive.getCategory(), ""))) {
+            return "请补齐缺失字段后重跑 extract_schema，确保结构化结果与报告章节重新对齐。";
+        }
+        if ("EXPRESSION_ISSUE".equalsIgnoreCase(safeValue(directive.getCategory(), ""))) {
+            return "请收紧表达，避免绝对化结论，并在必要时显式标记“当前公开资料未能验证”。";
+        }
+        return "请优先补充官网文档、定价页、客户案例、技术白皮书或公开报道，并确认报告正文引用新的 evidenceId。";
     }
 
     private void addIssueIfAbsent(List<RevisionPlan.RevisionItem> items, RevisionPlan.RevisionItem candidate) {
@@ -960,5 +1114,211 @@ public class QualityReviewAgent extends BaseAgent {
     }
 
     private record ReportSection(String title, String content) {
+    }
+    /**
+     * 终审通过后，把已经过质检的领域结论写回 DOMAIN 记忆。
+     * 这里显式携带 sourceUrls、evidenceCoverage 和终审诊断上下文，确保后续跨任务复用时仍可解释来源与边界。
+     */
+    private void writeVerifiedDomainKnowledgeBack(AgentContext context,
+                                                  Report report,
+                                                  List<CompetitorKnowledge> knowledges,
+                                                  List<EvidenceSource> evidences,
+                                                  String reviewSummary,
+                                                  List<QualityDiagnosis> diagnoses,
+                                                  List<QualityDimension> dimensions,
+                                                  String outputJson,
+                                                  boolean finalPass,
+                                                  boolean passed) {
+        if (!finalPass || !passed) {
+            return;
+        }
+        try {
+            List<String> sourceUrls = collectDomainSourceUrls(knowledges, evidences);
+            MemoryWritebackService.WritebackRequest request = MemoryWritebackService.WritebackRequest.builder()
+                    .taskId(context.getTaskId())
+                    .planVersionId(context.getPlanVersionId())
+                    .branchKey(context.getBranchKey())
+                    .nodeName(firstNonBlank(context.getCurrentNodeName(), "quality_check_final"))
+                    .competitorName(resolveDomainCompetitorName(knowledges, evidences))
+                    .officialUrl(resolveDomainOfficialUrl(knowledges))
+                    .snapshotType("DOMAIN_REVIEW")
+                    .queryText(resolveReviewerWritebackQuery(context))
+                    .summary(resolveDomainSummary(report, knowledges, reviewSummary))
+                    .gapSummary(buildDomainGapSummary(diagnoses))
+                    .sourceUrls(sourceUrls)
+                    .issueFlags(buildDomainIssueFlags(diagnoses))
+                    .contextPayload(buildReviewerWritebackContext(report, diagnoses, dimensions, outputJson))
+                    .writebackCategory("VERIFIED_DOMAIN_KNOWLEDGE")
+                    .qualitySignal("VERIFIED")
+                    .reuseReason("终审通过的领域结论已绑定 sourceUrls，可作为跨任务领域知识复用；当证据变化时失效")
+                    .positioning(resolveKnowledgeField(knowledges, CompetitorKnowledge::getPositioning))
+                    .targetUsers(resolveKnowledgeField(knowledges, CompetitorKnowledge::getTargetUsers))
+                    .coreFeatures(resolveKnowledgeField(knowledges, CompetitorKnowledge::getCoreFeatures))
+                    .pricing(resolveKnowledgeField(knowledges, CompetitorKnowledge::getPricing))
+                    .strengths(resolveKnowledgeField(knowledges, CompetitorKnowledge::getStrengths))
+                    .weaknesses(resolveKnowledgeField(knowledges, CompetitorKnowledge::getWeaknesses))
+                    .sources(resolveDomainSources(knowledges, evidences))
+                    .evidenceCoverage(resolveKnowledgeField(knowledges, CompetitorKnowledge::getEvidenceCoverage))
+                    .build();
+            memoryWritebackService.writeback(request);
+        } catch (Exception e) {
+            log.warn("quality review writeback skipped, taskId={}, nodeName={}, reason={}",
+                    context.getTaskId(), context.getCurrentNodeName(), e.getMessage(), e);
+        }
+    }
+
+    private String resolveDomainCompetitorName(List<CompetitorKnowledge> knowledges, List<EvidenceSource> evidences) {
+        String fromKnowledge = resolveKnowledgeField(knowledges, CompetitorKnowledge::getCompetitorName);
+        if (fromKnowledge != null && !fromKnowledge.isBlank()) {
+            return fromKnowledge;
+        }
+        for (EvidenceSource evidence : evidences == null ? List.<EvidenceSource>of() : evidences) {
+            if (evidence != null && evidence.getCompetitorName() != null && !evidence.getCompetitorName().isBlank()) {
+                return evidence.getCompetitorName();
+            }
+        }
+        return null;
+    }
+
+    private String resolveDomainOfficialUrl(List<CompetitorKnowledge> knowledges) {
+        return resolveKnowledgeField(knowledges, CompetitorKnowledge::getOfficialUrl);
+    }
+
+    private String resolveDomainSummary(Report report,
+                                        List<CompetitorKnowledge> knowledges,
+                                        String reviewSummary) {
+        return firstNonBlank(
+                report == null ? null : report.getSummary(),
+                resolveKnowledgeField(knowledges, CompetitorKnowledge::getSummary),
+                reviewSummary,
+                report == null ? null : report.getContent()
+        );
+    }
+
+    private String buildDomainGapSummary(List<QualityDiagnosis> diagnoses) {
+        if (diagnoses == null || diagnoses.isEmpty()) {
+            return "终审通过，当前领域结论已完成可追溯校验";
+        }
+        return "终审通过，但仍保留以下非阻断诊断供后续复核：" + String.join(", ", buildDomainIssueFlags(diagnoses));
+    }
+
+    private List<String> collectDomainSourceUrls(List<CompetitorKnowledge> knowledges, List<EvidenceSource> evidences) {
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        for (CompetitorKnowledge knowledge : knowledges == null ? List.<CompetitorKnowledge>of() : knowledges) {
+            sourceUrls.addAll(readJsonStringList(knowledge == null ? null : knowledge.getSourceUrls()));
+        }
+        for (EvidenceSource evidence : evidences == null ? List.<EvidenceSource>of() : evidences) {
+            if (evidence != null && evidence.getUrl() != null && !evidence.getUrl().isBlank()) {
+                sourceUrls.add(evidence.getUrl());
+            }
+        }
+        return new ArrayList<>(sourceUrls);
+    }
+
+    private List<String> buildDomainIssueFlags(List<QualityDiagnosis> diagnoses) {
+        LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
+        for (QualityDiagnosis diagnosis : diagnoses == null ? List.<QualityDiagnosis>of() : diagnoses) {
+            if (diagnosis == null) {
+                continue;
+            }
+            String type = safeValue(diagnosis.getType(), "");
+            if (!type.isBlank()) {
+                issueFlags.add(type);
+            }
+        }
+        return new ArrayList<>(issueFlags);
+    }
+
+    private String resolveDomainSources(List<CompetitorKnowledge> knowledges,
+                                        List<EvidenceSource> evidences) throws Exception {
+        String existingSources = resolveKnowledgeField(knowledges, CompetitorKnowledge::getSources);
+        if (existingSources != null && !existingSources.isBlank()) {
+            return existingSources;
+        }
+        List<Map<String, String>> sourcePayload = new ArrayList<>();
+        for (EvidenceSource evidence : evidences == null ? List.<EvidenceSource>of() : evidences) {
+            if (evidence == null) {
+                continue;
+            }
+            sourcePayload.add(Map.of(
+                    "evidenceId", safeValue(evidence.getEvidenceId(), ""),
+                    "title", safeValue(evidence.getTitle(), ""),
+                    "url", safeValue(evidence.getUrl(), "")
+            ));
+        }
+        return objectMapper.writeValueAsString(sourcePayload);
+    }
+
+    private String buildReviewerWritebackContext(Report report,
+                                                 List<QualityDiagnosis> diagnoses,
+                                                 List<QualityDimension> dimensions,
+                                                 String outputJson) throws Exception {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("reportTitle", report == null ? null : report.getTitle());
+        payload.put("reportSummary", report == null ? null : report.getSummary());
+        payload.put("qualityDiagnoses", diagnoses);
+        payload.put("qualityDimensions", dimensions);
+        payload.put("reviewOutput", objectMapper.readTree(outputJson));
+        return objectMapper.writeValueAsString(payload);
+    }
+
+    private String resolveReviewerWritebackQuery(AgentContext context) {
+        if (context.getTaskRagContextBundle() != null
+                && context.getTaskRagContextBundle().getQuery() != null
+                && !context.getTaskRagContextBundle().getQuery().isBlank()) {
+            return context.getTaskRagContextBundle().getQuery();
+        }
+        return firstNonBlank(context.getTaskName(), context.getSubjectProduct());
+    }
+
+    private List<String> readJsonStringList(String rawJson) {
+        if (rawJson == null || rawJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            JsonNode node = objectMapper.readTree(rawJson);
+            if (!node.isArray()) {
+                return List.of();
+            }
+            List<String> values = new ArrayList<>();
+            for (JsonNode item : node) {
+                String value = item.asText();
+                if (value != null && !value.isBlank()) {
+                    values.add(value);
+                }
+            }
+            return values;
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private String resolveKnowledgeField(List<CompetitorKnowledge> knowledges,
+                                         java.util.function.Function<CompetitorKnowledge, String> extractor) {
+        if (knowledges == null) {
+            return null;
+        }
+        for (CompetitorKnowledge knowledge : knowledges) {
+            if (knowledge == null) {
+                continue;
+            }
+            String value = extractor.apply(knowledge);
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 }

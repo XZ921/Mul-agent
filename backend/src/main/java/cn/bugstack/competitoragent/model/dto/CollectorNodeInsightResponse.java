@@ -82,9 +82,26 @@ public class CollectorNodeInsightResponse {
     @Schema(description = "Search progress snapshots")
     private List<SearchProgressSnapshot> searchProgressSnapshots;
 
+    /**
+     * Collector 实际消费到的 Task RAG 摘要。
+     * 前端据此可以直接解释当前采集节点是在什么检索前提下继续补源与回指的。
+     */
+    @Schema(description = "Task RAG context used by the collector node")
+    private String taskRagContext;
+
+    /**
+     * 候选来源明细。
+     * 这里直接透出 SourceCandidate 的治理语义，
+     * 包括可信度、排序原因、排序摘要和筛选阶段，便于详情页做可解释展示。
+     */
     @Schema(description = "Source candidates")
     private List<SourceCandidate> sourceCandidates;
 
+    /**
+     * 最终选中目标摘要。
+     * 与 sourceCandidates 不同，这里只保留正式进入采集阶段所需的高频治理信息，
+     * 例如选中原因、可信度、排序摘要和是否已预抓取页面。
+     */
     @Schema(description = "Selected targets")
     private List<CollectorSelectedTargetSummary> selectedTargets;
 }

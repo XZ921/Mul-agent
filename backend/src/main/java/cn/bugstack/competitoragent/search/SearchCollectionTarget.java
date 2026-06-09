@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
  * 如果验证阶段已经提前拿到页面内容，会直接复用 collectedPage，避免重复打开同一页面。
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 public class SearchCollectionTarget {

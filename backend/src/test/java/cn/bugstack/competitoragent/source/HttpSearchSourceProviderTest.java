@@ -144,6 +144,19 @@ class HttpSearchSourceProviderTest {
         assertEquals(1, calls.get());
     }
 
+    @Test
+    void shouldExposeStableDescriptorMetadata() {
+        HttpSearchSourceProvider provider = new HttpSearchSourceProvider(baseProperties(), new ObjectMapper());
+
+        SearchSourceProviderDescriptor descriptor = provider.descriptor();
+
+        assertEquals("http", descriptor.getProviderKey());
+        assertEquals("HTTP Search", descriptor.getDisplayName());
+        assertTrue(descriptor.getCapabilities().contains("GENERIC_JSON_API"));
+        assertTrue(descriptor.isEnabled(new SearchProviderProperties()));
+        assertTrue(descriptor.isFailOpen(new SearchProviderProperties()));
+    }
+
     private void startServer(int statusCode, String responseBody) throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/search", exchange -> {

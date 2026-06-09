@@ -6,6 +6,7 @@ import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.model.entity.AnalysisSchema;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
+import cn.bugstack.competitoragent.model.entity.TaskPlan;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.search.SearchBrowserProperties;
@@ -54,6 +55,7 @@ public class WorkflowFactory {
     private final SearchBrowserProperties searchBrowserProperties;
     private final SearchProperties searchProperties;
     private final CollectorProperties collectorProperties;
+    private final DynamicTaskGraphService dynamicTaskGraphService;
 
     /**
      * 根据规划结果创建并落库存量节点，供执行器后续顺序消费。
@@ -62,8 +64,13 @@ public class WorkflowFactory {
         // 创建任务阶段仅固化轻量工作流结构，真实补源延迟到执行期 Collector 再触发。
         WorkflowPlan plan = buildPreviewPlan(task);
         workflowPlanValidator.validate(plan);
+        TaskPlan initialPlan = dynamicTaskGraphService.ensureInitialPlan(task.getId(), plan);
+        WorkflowPlan versionedPlan = enrichWorkflowPlan(plan, initialPlan);
+        task.setCurrentPlanVersionId(initialPlan.getId());
+        task.setCurrentPlanVersion(initialPlan.getPlanVersion());
+
         List<TaskNode> nodes = new ArrayList<>();
-        for (WorkflowPlan.WorkflowPlanNode planNode : plan.getNodes()) {
+        for (WorkflowPlan.WorkflowPlanNode planNode : versionedPlan.getNodes()) {
             nodes.add(TaskNode.builder()
                     .taskId(task.getId())
                     .nodeName(planNode.getNodeName())
@@ -79,6 +86,10 @@ public class WorkflowFactory {
                     .retryCount(0)
                     .status(TaskNodeStatus.PENDING)
                     .executionOrder(planNode.getExecutionOrder())
+                    .planVersionId(initialPlan.getId())
+                    .branchKey(planNode.getBranchKey())
+                    .dynamicNode(planNode.isDynamicNode())
+                    .originNodeName(planNode.getOriginNodeName())
                     .build());
         }
 
@@ -92,6 +103,25 @@ public class WorkflowFactory {
      * V2 的工作流规划入口。
      * 这里会先根据竞品和来源范围展开多个采集节点，再接上抽取、分析、撰写、质检与重写闭环。
      */
+    private WorkflowPlan enrichWorkflowPlan(WorkflowPlan plan, TaskPlan taskPlan) {
+        String branchKey = taskPlan == null || !StringUtils.hasText(taskPlan.getBranchKey())
+                ? "root"
+                : taskPlan.getBranchKey();
+        List<WorkflowPlan.WorkflowPlanNode> versionedNodes = plan.getNodes().stream()
+                .map(node -> node.toBuilder()
+                        .branchKey(StringUtils.hasText(node.getBranchKey()) ? node.getBranchKey() : branchKey)
+                        .build())
+                .toList();
+        return plan.toBuilder()
+                .planVersionId(taskPlan == null ? null : taskPlan.getId())
+                .planVersion(taskPlan == null || taskPlan.getPlanVersion() == null ? 1 : taskPlan.getPlanVersion())
+                .parentPlanVersionId(taskPlan == null ? null : taskPlan.getParentPlanId())
+                .branchKey(branchKey)
+                .dynamicPlan(taskPlan != null && !"INITIAL".equalsIgnoreCase(taskPlan.getPlanType()))
+                .nodes(versionedNodes)
+                .build();
+    }
+
     public WorkflowPlan buildPlan(AnalysisTask task) {
         return buildPlanInternal(task, false);
     }

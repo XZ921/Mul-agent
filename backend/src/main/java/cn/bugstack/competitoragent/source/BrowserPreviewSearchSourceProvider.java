@@ -33,8 +33,24 @@ public class BrowserPreviewSearchSourceProvider implements SearchSourceProvider 
     private final CollectorProperties collectorProperties;
 
     @Override
+    public SearchSourceProviderDescriptor descriptor() {
+        return SearchSourceProviderDescriptor.builder()
+                .providerKey("browserpreview")
+                .displayName("浏览器预览补源")
+                .capabilities(List.of("BROWSER_PREVIEW", "WEB_SEARCH"))
+                .defaultEnabled(true)
+                .defaultFailOpen(true)
+                .build();
+    }
+
+    @Override
+    public boolean isAvailable() {
+        return properties.isBrowserPreviewEnabled();
+    }
+
+    @Override
     public List<SourceCandidate> search(String competitorName, List<String> requestedScopes) {
-        if (!properties.isBrowserPreviewEnabled() || !StringUtils.hasText(competitorName)) {
+        if (!isAvailable() || !StringUtils.hasText(competitorName)) {
             return List.of();
         }
 

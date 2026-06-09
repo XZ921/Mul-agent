@@ -8,9 +8,10 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
- * 任务列表 / 详情响应
+ * 任务列表 / 详情响应。
  */
 @Data
 @Builder
@@ -46,11 +47,29 @@ public class TaskResponse {
     @Schema(description = "失败原因")
     private String errorMessage;
 
+    @Schema(description = "任务级可读状态摘要")
+    private String statusSummary;
+
+    @Schema(description = "当前激活计划版本 ID", example = "12")
+    private Long currentPlanVersionId;
+
+    @Schema(description = "当前激活计划版本号", example = "3")
+    private Integer currentPlanVersion;
+
     @Schema(description = "节点总数", example = "6")
     private int totalNodes;
 
     @Schema(description = "已完成节点数", example = "3")
     private int completedNodes;
+
+    @Schema(description = "等待重试的节点数")
+    private Integer waitingRetryNodeCount;
+
+    @Schema(description = "等待人工处理的节点数")
+    private Integer waitingInterventionNodeCount;
+
+    @Schema(description = "已补偿节点数")
+    private Integer compensatedNodeCount;
 
     @Schema(description = "任务创建时间")
     private LocalDateTime createdAt;
@@ -78,4 +97,25 @@ public class TaskResponse {
 
     @Schema(description = "人工干预规则摘要")
     private String interventionSummary;
+
+    @Schema(description = "适合使用恢复执行的业务说明")
+    private String resumeAdvice;
+
+    @Schema(description = "适合使用整任务重置的业务说明")
+    private String retryAdvice;
+
+    @Schema(description = "查看任务追踪与事件回放的入口说明")
+    private String replayEntrySummary;
+
+    @Schema(description = "任务当前阶段")
+    private String currentStage;
+
+    @Schema(description = "当前活跃节点")
+    private List<String> activeNodeNames;
+
+    @Schema(description = "快照更新时间")
+    private LocalDateTime snapshotUpdatedAt;
+
+    @Schema(description = "任务 SSE 事件流订阅地址")
+    private String eventStreamPath;
 }

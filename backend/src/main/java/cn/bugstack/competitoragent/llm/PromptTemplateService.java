@@ -1,5 +1,8 @@
 package cn.bugstack.competitoragent.llm;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,25 +11,33 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.AbstractMap;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 
 @Slf4j
 @Service
 public class PromptTemplateService {
 
-    private final Map<String, String> templates = new ConcurrentHashMap<>();
-    private final ObjectMapper objectMapper;
-    private final YAMLMapper yamlMapper = new YAMLMapper();
-    private final Map<String, String> englishSearchTemplates = new ConcurrentHashMap<>();
-
+    private static final List<String> TASK_RAG_TEMPLATE_NAMES = List.of("analyzer", "extractor", "writer", "reviewer");
+    private static final List<String> CONVERSATION_TEMPLATE_NAMES = List.of(
+            "conversation-agent",
+            "intent-router",
+            "task-action-translator"
+    );
+    /**
+     * Task 4.6 要求统一对话入口相关 Prompt 必须共享同一套运行时状态汇报格式，
+     * 避免解释、意图路由和动作翻译出现多套口径。
+     */
+    private static final String RUNTIME_STATUS_CONTRACT = """
+            当前阶段：请结合当前真实上下文填写
+            [x] 信息采集：已完成
+            [ ] 数据分析：执行中
+            [ ] 报告撰写：待执行
+            """;
     private static final Map<String, String> DEFAULT_TEMPLATES = Map.ofEntries(
             new AbstractMap.SimpleEntry<>("writer", """
                     你是一名专业的竞品分析报告撰写专家。
@@ -54,14 +65,6 @@ public class PromptTemplateService {
 
                     # 证据列表
                     {evidenceList}
-
-                    请输出一份完整的 Markdown 竞品分析报告。
-                    要求：
-                    1. 全文使用 {reportLanguage}，不要中英混写。
-                    2. 标题、章节名、总结、对比结论全部使用中文表达。
-                    3. 必须基于证据列表撰写，涉及事实判断时优先引用证据编号。
-                    4. 如果 revisionMode 为 true，需要在当前草稿基础上按修订计划优先修正问题。
-                    5. 如果 revisionMode 为 true，所有被指出“证据不足”或“结论缺少支撑”的章节，都必须补上 [证据：EID] 形式引用；如果做不到，就把语气改为保守表述。
                     """),
             new AbstractMap.SimpleEntry<>("reviewer", """
                     你是一名严格的中文质量评审专家。
@@ -80,46 +83,10 @@ public class PromptTemplateService {
 
                     # 关键结论审查清单
                     {claimAuditChecklist}
-
-                    请只返回 JSON，结构如下：
-                    {
-                      "score": 85,
-                      "passed": true,
-                      "issues": [
-                        {
-                          "type": "证据不足",
-                          "section": "某个章节",
-                          "severity": "ERROR",
-                          "suggestion": "请补充对应证据并重写结论"
-                        }
-                      ],
-                      "nextActions": [
-                        {
-                          "title": "补充外部证据",
-                          "description": "为问题章节补充公开文档、定价页、客户案例或技术白皮书等可验证来源",
-                          "actionType": "SUPPLEMENT_EVIDENCE",
-                          "targetNode": "collect_sources",
-                          "priority": "HIGH"
-                        }
-                      ],
-                      "summary": "简短中文总结"
-                    }
-
-                    要求：
-                    1. summary、issues[].type、issues[].section、issues[].suggestion 全部使用中文。
-                    2. severity 只能使用 ERROR、WARNING、INFO。
-                    3. 如果报告需要修订，passed=false，并给出可执行的中文修改建议。
-                    4. 如果评审模式是 final 且 passed=false，必须填写 nextActions，明确告诉用户下一步该补什么证据、应从哪个节点重跑，或哪些结论需要删除/降级。
-                    5. nextActions[].actionType 只能使用 SUPPLEMENT_EVIDENCE、RERUN_NODE、REWRITE_CLAIM、MANUAL_REVIEW。
-                    6. nextActions[].priority 只能使用 HIGH、MEDIUM、LOW。
-                    7. 如果结构化证据覆盖摘要显示某个章节为“缺证据章节”，且报告正文对该章节给出了明确判断，应优先标记为 ERROR 或 WARNING，而不是直接通过。
-                    8. 必须逐条检查“关键结论审查清单”中的每一条结论，判断该条结论是否有证据编号可回指；如果没有，就至少输出一条 issues，type 使用“结论缺少支撑”或“证据不足”。
-                    9. 如果同一章节存在多个缺证据结论，不要只给章节级泛泛意见，至少在 suggestion 中指出是哪一类判断缺少证据。
                     """),
             new AbstractMap.SimpleEntry<>("extractor", """
                     你是一名竞品信息结构化抽取专家。
                     你必须只返回 JSON。
-
                     # 竞品名称
                     {competitorName}
 
@@ -128,60 +95,9 @@ public class PromptTemplateService {
 
                     # 已采集内容
                     {collectedContent}
-
-                    请按如下结构抽取竞品画像：
-                    {
-                      "officialUrl": "https://...",
-                      "summary": "简短总结",
-                      "positioning": "市场定位",
-                      "targetUsers": ["用户群体 A"],
-                      "coreFeatures": [
-                        {
-                          "name": "功能名称",
-                          "description": "功能说明",
-                          "evidenceIds": ["T0001-COLLECT-001"],
-                          "sourceUrls": ["https://..."]
-                        }
-                      ],
-                      "pricing": {
-                        "model": "定价模式",
-                        "plans": ["免费版", "专业版"],
-                        "evidenceIds": ["T0001-COLLECT-002"],
-                        "sourceUrls": ["https://..."]
-                      },
-                      "strengths": [
-                        {
-                          "point": "优势点",
-                          "evidenceIds": ["T0001-COLLECT-003"],
-                          "sourceUrls": ["https://..."]
-                        }
-                      ],
-                      "weaknesses": [
-                        {
-                          "point": "不足点",
-                          "evidenceIds": ["T0001-COLLECT-004"],
-                          "sourceUrls": ["https://..."]
-                        }
-                      ],
-                      "sources": [
-                        {
-                          "evidenceId": "T0001-COLLECT-001",
-                          "title": "来源标题",
-                          "url": "https://..."
-                        }
-                      ],
-                      "sourceUrls": ["https://..."]
-                    }
-
-                    规则：
-                    1. sourceUrls 为必填，且只能使用证据目录中真实出现过的 URL。
-                    2. 任何可以支撑的结构化字段，都要尽量补上 evidenceIds 和 sourceUrls。
-                    3. 不要编造价格、功能、目标用户等信息。
-                    4. 不确定的字段宁可留空，也不要猜测。
                     """),
             new AbstractMap.SimpleEntry<>("analyzer", """
                     你是一名资深竞品分析专家，请只返回 JSON。
-
                     # 本方产品
                     {subjectProduct}
 
@@ -190,25 +106,6 @@ public class PromptTemplateService {
 
                     # 竞品数据
                     {competitorData}
-
-                    请输出 JSON，至少包含以下字段：
-                    {
-                      "overview": "整体概述",
-                      "featureComparison": "功能对比",
-                      "positioningComparison": "定位对比",
-                      "pricingComparison": "定价对比",
-                      "targetUserComparison": "目标用户对比",
-                      "strengthsSummary": "主要优势总结",
-                      "weaknessesSummary": "主要不足总结",
-                      "opportunities": ["机会点1"],
-                      "risks": ["风险点1"],
-                      "recommendations": ["建议1"]
-                    }
-
-                    要求：
-                    1. 全部内容使用中文。
-                    2. 不要输出 markdown，只输出 JSON。
-                    3. 结论尽量基于输入竞品数据，不要凭空扩展。
                     """),
             new AbstractMap.SimpleEntry<>("search-official", "{competitorName} official website"),
             new AbstractMap.SimpleEntry<>("search-official-domain", "site:{domainHint} {competitorName}"),
@@ -223,6 +120,11 @@ public class PromptTemplateService {
             new AbstractMap.SimpleEntry<>("search-review-zhihu", "site:zhihu.com {competitorName} 评测 对比")
     );
 
+    private final Map<String, String> templates = new ConcurrentHashMap<>();
+    private final Map<String, String> englishSearchTemplates = new ConcurrentHashMap<>();
+    private final ObjectMapper objectMapper;
+    private final YAMLMapper yamlMapper = new YAMLMapper();
+
     @Autowired
     public PromptTemplateService(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
@@ -230,19 +132,9 @@ public class PromptTemplateService {
 
     @PostConstruct
     public void init() {
-        for (String name : DEFAULT_TEMPLATES.keySet()) {
-            try {
-                ClassPathResource resource = new ClassPathResource("prompts/" + name + ".txt");
-                if (resource.exists()) {
-                    templates.put(name, resource.getContentAsString(StandardCharsets.UTF_8));
-                } else {
-                    templates.put(name, DEFAULT_TEMPLATES.get(name));
-                }
-            } catch (IOException e) {
-                templates.put(name, DEFAULT_TEMPLATES.get(name));
-                log.warn("load prompt template {} failed, fallback to default", name, e);
-            }
-        }
+        DEFAULT_TEMPLATES.forEach(this::registerTemplate);
+        loadConversationPromptTemplates();
+        loadTaskRagContextTemplate();
         loadEnglishSearchTemplates();
         loadSearchQueryTemplates();
     }
@@ -259,12 +151,114 @@ public class PromptTemplateService {
     }
 
     public String render(String templateName, Map<String, String> variables) {
-        String template = getTemplate(templateName);
-        String result = template;
-        for (Map.Entry<String, String> entry : variables.entrySet()) {
-            result = result.replace("{" + entry.getKey() + "}", entry.getValue());
+        Map<String, String> safeVariables = variables == null ? Map.of() : variables;
+        String result = getTemplate(templateName);
+        for (Map.Entry<String, String> entry : safeVariables.entrySet()) {
+            result = result.replace("{" + entry.getKey() + "}", safe(entry.getValue()));
+        }
+        result = appendRuntimeStatusContract(templateName, result);
+        if (shouldAppendTaskRagContext(templateName, safeVariables, result)) {
+            result = result + "\n\n" + render("task-rag-context", Map.of(
+                    "taskRagContext", safe(safeVariables.get("taskRagContext"))
+            ));
         }
         return result;
+    }
+
+    /**
+     * Task 4.6 中统一对话入口相关模板优先从 resources/prompts 目录加载。
+     * 若仓库里尚未覆盖文件，也必须保底注册内联模板，避免运行时出现 Unknown template。
+     */
+    private void loadConversationPromptTemplates() {
+        registerTemplate("conversation-agent", """
+                你是 AI 竞品分析 Agent 协作系统的统一对话入口助手。
+                你的职责是先解释当前上下文，再给出安全、可审计、可回指来源的回答。
+
+                # 当前上下文摘要
+                {contextSummary}
+
+                # 用户消息
+                {userMessage}
+                """);
+        registerTemplate("intent-router", """
+                你是统一对话入口的意图识别器。
+                你需要先理解上下文，再判断这条消息更适合解释、填表、动作预览还是研究补证。
+
+                # 当前上下文摘要
+                {contextSummary}
+
+                # 用户消息
+                {userMessage}
+                """);
+        registerTemplate("task-action-translator", """
+                你是任务动作翻译器。
+                你的职责是把自然语言动作翻译成安全的动作预览，而不是直接执行高风险命令。
+
+                # 动作上下文
+                {actionContext}
+
+                # 用户消息
+                {userMessage}
+                """);
+    }
+
+    /**
+     * Task 4.5 为任务级检索上下文提供独立模板入口，
+     * 即使仓库里暂时没有覆盖文件，也要保证运行时有稳定默认模板可用。
+     */
+    private void loadTaskRagContextTemplate() {
+        registerTemplate("task-rag-context", """
+                任务级检索上下文
+                {taskRagContext}
+                """);
+    }
+
+    private void registerTemplate(String templateName, String fallbackTemplate) {
+        if (templates.containsKey(templateName)) {
+            return;
+        }
+        try {
+            ClassPathResource resource = new ClassPathResource("prompts/" + templateName + ".txt");
+            if (resource.exists()) {
+                templates.put(templateName, resource.getContentAsString(StandardCharsets.UTF_8));
+                return;
+            }
+        } catch (IOException e) {
+            log.warn("load prompt template {} failed, fallback to inline default", templateName, e);
+        }
+        templates.put(templateName, fallbackTemplate);
+    }
+
+    private boolean shouldAppendTaskRagContext(String templateName,
+                                               Map<String, String> variables,
+                                               String renderedTemplate) {
+        if (templateName == null || "task-rag-context".equals(templateName) || variables == null) {
+            return false;
+        }
+        String taskRagContext = variables.get("taskRagContext");
+        if (taskRagContext == null || taskRagContext.isBlank()) {
+            return false;
+        }
+        if (!TASK_RAG_TEMPLATE_NAMES.contains(templateName)) {
+            return false;
+        }
+        return renderedTemplate == null || !renderedTemplate.contains(taskRagContext);
+    }
+
+    /**
+     * 只对统一对话入口相关模板补齐状态汇报契约，避免污染既有分析 / 撰写 Prompt。
+     */
+    private String appendRuntimeStatusContract(String templateName, String renderedTemplate) {
+        if (templateName == null || renderedTemplate == null) {
+            return renderedTemplate;
+        }
+        if (!CONVERSATION_TEMPLATE_NAMES.contains(templateName)) {
+            return renderedTemplate;
+        }
+        if (renderedTemplate.contains("当前阶段：")) {
+            return renderedTemplate;
+        }
+        return renderedTemplate + "\n\n" + RUNTIME_STATUS_CONTRACT;
     }
 
     /**
@@ -374,13 +368,19 @@ public class PromptTemplateService {
             }
             Map<String, String> queryTemplates = yamlMapper.readValue(
                     resource.getInputStream(),
-                    new TypeReference<Map<String, String>>() {}
+                    new TypeReference<Map<String, String>>() {
+                    }
             );
             if (queryTemplates == null || queryTemplates.isEmpty()) {
                 log.warn("search query template file prompts/search-queries.yml is empty, keep default templates");
                 return;
             }
             templates.putAll(queryTemplates);
+            queryTemplates.forEach((key, value) -> {
+                if (key.startsWith("search-")) {
+                    englishSearchTemplates.put(key, value);
+                }
+            });
         } catch (IOException e) {
             log.warn("load search query templates failed, keep default templates", e);
         }
@@ -417,7 +417,7 @@ public class PromptTemplateService {
         }
         String result = template;
         for (Map.Entry<String, String> entry : variables.entrySet()) {
-            result = result.replace("{" + entry.getKey() + "}", entry.getValue());
+            result = result.replace("{" + entry.getKey() + "}", safe(entry.getValue()));
         }
         return result.replaceAll("\\s+", " ").trim();
     }

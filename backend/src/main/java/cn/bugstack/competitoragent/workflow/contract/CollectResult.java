@@ -1,5 +1,8 @@
 package cn.bugstack.competitoragent.workflow.contract;
 
+import cn.bugstack.competitoragent.model.entity.KnowledgeDocument;
+import cn.bugstack.competitoragent.model.entity.RetrievalChunk;
+import cn.bugstack.competitoragent.model.entity.RetrievalIndex;
 import lombok.Builder;
 import lombok.Data;
 
@@ -31,4 +34,16 @@ public class CollectResult {
 
     /** 采集阶段对下游公开的统一证据片段 */
     private List<EvidenceFragment> evidenceFragments;
+
+    /** 采集阶段聚合出的章节证据束，供后续抽取/分析直接复用 */
+    private List<SectionEvidenceBundle> sectionEvidenceBundles;
+
+    /** 任务级知识文档集合 */
+    private List<KnowledgeDocument> knowledgeDocuments;
+
+    /** 任务级检索切片集合 */
+    private List<RetrievalChunk> retrievalChunks;
+
+    /** 任务级索引元数据集合 */
+    private List<RetrievalIndex> retrievalIndexes;
 }

@@ -37,8 +37,19 @@ public class HttpSearchSourceProvider implements SearchSourceProvider {
             .build();
 
     @Override
+    public SearchSourceProviderDescriptor descriptor() {
+        return SearchSourceProviderDescriptor.builder()
+                .providerKey("http")
+                .displayName("HTTP Search")
+                .capabilities(List.of("WEB_SEARCH", "GENERIC_JSON_API"))
+                .defaultEnabled(true)
+                .defaultFailOpen(true)
+                .build();
+    }
+
+    @Override
     public List<SourceCandidate> search(String competitorName, List<String> requestedScopes) {
-        if (!isEnabled()) {
+        if (!isAvailable()) {
             log.warn("real search provider disabled because endpoint or apiKey is blank");
             return List.of();
         }
@@ -56,7 +67,8 @@ public class HttpSearchSourceProvider implements SearchSourceProvider {
         return candidates;
     }
 
-    private boolean isEnabled() {
+    @Override
+    public boolean isAvailable() {
         return StringUtils.hasText(properties.getEndpoint()) && StringUtils.hasText(properties.getApiKey());
     }
 

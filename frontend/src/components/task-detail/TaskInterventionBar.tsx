@@ -1,6 +1,11 @@
-import { Alert, Button, Card, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Descriptions, Space, Tag, Typography } from 'antd'
 
 const { Text } = Typography
+
+type TaskInterventionSummaryItem = {
+  label: string
+  value: string
+}
 
 export interface TaskInterventionAction {
   key: string
@@ -17,6 +22,8 @@ interface TaskInterventionBarProps {
   description?: string | null
   tone?: 'info' | 'warning' | 'error' | 'success'
   badgeText?: string | null
+  statusHint?: string | null
+  summaryItems?: TaskInterventionSummaryItem[]
   actions: TaskInterventionAction[]
 }
 
@@ -29,9 +36,13 @@ export default function TaskInterventionBar({
   description,
   tone = 'info',
   badgeText,
+  statusHint,
+  summaryItems = [],
   actions,
 }: TaskInterventionBarProps) {
-  if (!actions.length && !description) {
+  const readableSummaryItems = summaryItems.filter((item) => item.label && item.value)
+
+  if (!actions.length && !description && !statusHint && readableSummaryItems.length === 0) {
     return null
   }
 
@@ -44,6 +55,16 @@ export default function TaskInterventionBar({
         </Space>
 
         {description && <Alert type={tone} showIcon message={description} />}
+        {statusHint && <Alert type="info" showIcon message={statusHint} />}
+        {readableSummaryItems.length > 0 && (
+          <Descriptions column={1} bordered size="small" className="readable-descriptions">
+            {readableSummaryItems.map((item) => (
+              <Descriptions.Item key={`${title}-${item.label}`} label={item.label}>
+                {item.value}
+              </Descriptions.Item>
+            ))}
+          </Descriptions>
+        )}
 
         {actions.length > 0 && (
           <Space wrap>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Alert,
@@ -16,7 +16,6 @@ import {
   Tag,
   Tooltip,
   Typography,
-  message,
 } from 'antd'
 import {
   DeleteOutlined,
@@ -27,10 +26,18 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { deleteTask, listTasks } from '../api/client'
-import type { TaskInfo, TaskStatus } from '../types'
+import type { TaskInfo, TaskListSummary, TaskStatus } from '../types'
+import { appMessage } from '../utils/appMessage'
 import { getTaskStatusText } from '../utils/display'
+import {
+  buildTaskListOverview,
+  getTaskDetailEntryGuidance,
+  getTaskProgressPercent,
+  safeParseStringArray,
+} from '../utils/taskPresentation'
 
 const { Text } = Typography
+const TASK_LIST_PAGE_SIZE = 10
 
 const statusColorMap: Record<TaskStatus, string> = {
   PENDING: 'gold',
@@ -40,86 +47,87 @@ const statusColorMap: Record<TaskStatus, string> = {
   FAILED: 'red',
 }
 
-function parseJsonArray(value: string | null) {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function taskProgressPercent(task: TaskInfo) {
-  return task.totalNodes ? Math.round((task.completedNodes / task.totalNodes) * 100) : 0
-}
-
 export default function TaskListPage() {
   const navigate = useNavigate()
   const [tasks, setTasks] = useState<TaskInfo[]>([])
+  const [attentionItems, setAttentionItems] = useState<TaskInfo[]>([])
+  const [summary, setSummary] = useState<TaskListSummary>({
+    total: 0,
+    running: 0,
+    success: 0,
+    failed: 0,
+    stopped: 0,
+    avgProgress: 0,
+  })
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string | undefined>()
+  const [currentPage, setCurrentPage] = useState(1)
+  const statusFilterRef = useRef<string | undefined>(undefined)
+  const currentPageRef = useRef(1)
+  const taskDetailGuidance = getTaskDetailEntryGuidance('list')
 
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async (page = currentPageRef.current) => {
     setLoading(true)
     try {
-      const res = await listTasks(statusFilter)
-      setTasks((res.data || []).slice(0, 10))
+      const res = await listTasks(statusFilterRef.current, page, TASK_LIST_PAGE_SIZE)
+      const nextPage = res.data?.pageNum ?? page
+      currentPageRef.current = nextPage
+      setCurrentPage(nextPage)
+      setTasks(res.data?.items || [])
+      setAttentionItems(res.data?.attentionItems || [])
+      setSummary(res.data?.summary || {
+        total: 0,
+        running: 0,
+        success: 0,
+        failed: 0,
+        stopped: 0,
+        avgProgress: 0,
+      })
+      setTotal(res.data?.total || 0)
     } catch {
-      message.error('获取任务列表失败')
+      appMessage.error('获取任务列表失败')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    void fetchTasks()
-  }, [statusFilter])
+    statusFilterRef.current = statusFilter
+    currentPageRef.current = 1
+    setCurrentPage(1)
+    void fetchTasks(1)
+  }, [fetchTasks, statusFilter])
 
-  useEffect(() => {
-    const hasRunning = tasks.some((task) => task.status === 'RUNNING')
-    if (!hasRunning) return
-    const timer = window.setInterval(fetchTasks, 3000)
-    return () => window.clearInterval(timer)
-  }, [tasks, statusFilter])
-
-  const summary = useMemo(() => {
-    const total = tasks.length
-    const running = tasks.filter((task) => task.status === 'RUNNING').length
-    const success = tasks.filter((task) => task.status === 'SUCCESS').length
-    const failed = tasks.filter((task) => task.status === 'FAILED').length
-    const stopped = tasks.filter((task) => task.status === 'STOPPED').length
-    const avgProgress = total
-      ? Math.round(tasks.reduce((sum, task) => sum + taskProgressPercent(task), 0) / total)
-      : 0
-    return { total, running, success, failed, stopped, avgProgress }
-  }, [tasks])
-
-  const focusTasks = useMemo(
-    () => tasks.filter((task) => task.status === 'FAILED' || task.status === 'RUNNING' || task.status === 'STOPPED').slice(0, 4),
-    [tasks],
+  const hasRunningTasks = useMemo(
+    () => summary.running > 0,
+    [summary.running],
   )
 
-  const heroText = useMemo(() => {
-    if (summary.failed > 0) {
-      return `当前有 ${summary.failed} 个失败任务，建议优先进入详情页处理节点异常或证据风险。`
-    }
-    if (summary.running > 0) {
-      return `当前有 ${summary.running} 个任务正在运行，系统会自动轮询最新进度。`
-    }
-    if (summary.success > 0) {
-      return `最近已有 ${summary.success} 个任务成功完成，可以直接查看报告或复用结论。`
-    }
-    return '从这里创建新任务、追踪执行进度，并在报告页处理质检与修订闭环。'
-  }, [summary.failed, summary.running, summary.success])
+  useEffect(() => {
+    // 列表页只保留一条轻量刷新定时器。
+    // 只要当前仍存在运行中任务，就继续按统一节奏刷新；
+    // 不能因为每次返回了新的 tasks 数组就反复销毁/重建定时器。
+    if (!hasRunningTasks) return
+    const timer = window.setInterval(() => {
+      void fetchTasks()
+    }, 3000)
+    return () => window.clearInterval(timer)
+  }, [fetchTasks, hasRunningTasks])
+
+  const overview = useMemo(() => buildTaskListOverview(summary), [summary])
+  const visibleAttentionItems = useMemo(
+    () => attentionItems.filter((task) => task.status === 'FAILED' || task.status === 'STOPPED' || task.status === 'RUNNING'),
+    [attentionItems],
+  )
 
   const handleDelete = async (id: number) => {
     try {
       await deleteTask(id)
-      message.success('任务已删除')
-      await fetchTasks()
+      appMessage.success('任务已删除')
+      await fetchTasks(currentPageRef.current)
     } catch {
-      message.error('删除失败，运行中的任务不可删除')
+      appMessage.error('删除失败，运行中的任务不可删除')
     }
   }
 
@@ -128,7 +136,7 @@ export default function TaskListPage() {
       title: '任务',
       dataIndex: 'taskName',
       render: (text: string, record: TaskInfo) => {
-        const competitors = parseJsonArray(record.competitorNames).map(String)
+        const competitors = safeParseStringArray(record.competitorNames)
         return (
           <Space direction="vertical" size={4}>
             <a onClick={() => navigate(`/task/${record.id}`)}>{text}</a>
@@ -153,7 +161,7 @@ export default function TaskListPage() {
       key: 'progress',
       width: 220,
       render: (_: unknown, record: TaskInfo) => {
-        const percent = taskProgressPercent(record)
+        const percent = getTaskProgressPercent(record)
         return (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Progress percent={percent} size="small" status={record.status === 'FAILED' ? 'exception' : undefined} />
@@ -215,21 +223,27 @@ export default function TaskListPage() {
 
       <Card
         className={`work-card hero-card ${
-          summary.failed > 0 ? 'hero-tone-danger' : summary.running > 0 ? 'hero-tone-active' : 'hero-tone-success'
+          overview.tone === 'danger'
+            ? 'hero-tone-danger'
+            : overview.tone === 'active'
+              ? 'hero-tone-active'
+              : overview.tone === 'success'
+                ? 'hero-tone-success'
+                : 'hero-tone-default'
         }`}
       >
         <Space direction="vertical" size={20} style={{ width: '100%' }}>
           <div className="hero-shell">
             <div className="hero-copy">
               <Space wrap>
-                <Tag color={summary.failed > 0 ? 'red' : summary.running > 0 ? 'blue' : 'green'}>
-                  {summary.failed > 0 ? '存在阻塞任务' : summary.running > 0 ? '执行中任务活跃' : '当前任务态稳定'}
+                <Tag color={overview.tone === 'danger' ? 'red' : overview.tone === 'active' ? 'blue' : overview.tone === 'success' ? 'green' : 'default'}>
+                  {overview.badgeText}
                 </Tag>
-                <Text type="secondary">最近只保留并展示 10 条任务</Text>
+                <Text type="secondary">{overview.entryHint}</Text>
               </Space>
               <div className="hero-title">任务入口与执行总览</div>
               <Text type="secondary" className="hero-description">
-                {heroText}
+                {overview.heroDescription}
               </Text>
             </div>
             <Space wrap className="hero-actions">
@@ -273,7 +287,9 @@ export default function TaskListPage() {
                 placeholder="按状态筛选"
                 style={{ width: 140 }}
                 value={statusFilter}
-                onChange={(value) => setStatusFilter(value)}
+                onChange={(value) => {
+                  setStatusFilter(value)
+                }}
                 options={[
                   { label: '待执行', value: 'PENDING' },
                   { label: '执行中', value: 'RUNNING' },
@@ -289,7 +305,17 @@ export default function TaskListPage() {
               columns={columns}
               dataSource={tasks}
               loading={loading}
-              pagination={false}
+              pagination={{
+                current: currentPage,
+                pageSize: TASK_LIST_PAGE_SIZE,
+                total,
+                showSizeChanger: false,
+                onChange: (page) => {
+                  currentPageRef.current = page
+                  setCurrentPage(page)
+                  void fetchTasks(page)
+                },
+              }}
               locale={{
                 emptyText: <Empty description="暂无分析任务" />,
               }}
@@ -299,9 +325,16 @@ export default function TaskListPage() {
 
         <Col xs={24} lg={8}>
           <Card title="需要关注" className="work-card">
-            {focusTasks.length > 0 ? (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={taskDetailGuidance.message}
+              description={taskDetailGuidance.description}
+            />
+            {visibleAttentionItems.length > 0 ? (
               <List
-                dataSource={focusTasks}
+                dataSource={visibleAttentionItems}
                 renderItem={(task) => (
                   <List.Item>
                     <Space direction="vertical" size={8} style={{ width: '100%' }}>
@@ -311,7 +344,7 @@ export default function TaskListPage() {
                       </Space>
                       <Text type="secondary">{task.subjectProduct}</Text>
                       <Progress
-                        percent={taskProgressPercent(task)}
+                        percent={getTaskProgressPercent(task)}
                         size="small"
                         status={task.status === 'FAILED' ? 'exception' : undefined}
                       />

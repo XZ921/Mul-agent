@@ -28,6 +28,10 @@ public class SourceCandidate {
     private double freshnessScore;
     private double qualityScore;
     private double totalScore;
+    private SourceTrustTier trustTier;
+    private String trustTierLabel;
+    private List<String> rankingReasons;
+    private String rankingSummary;
 
     // 以下字段为后续浏览器搜索与运行期筛选预留。
     private String searchQuery;
@@ -39,4 +43,5 @@ public class SourceCandidate {
     private List<String> matchedSignals;
     private String selectionStage;
     private String selectionReason;
+    private String selectionSummary;
 }

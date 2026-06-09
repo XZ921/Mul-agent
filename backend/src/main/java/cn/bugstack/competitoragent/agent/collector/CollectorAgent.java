@@ -3,9 +3,15 @@ package cn.bugstack.competitoragent.agent.collector;
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.agent.BaseAgent;
+import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
+import cn.bugstack.competitoragent.model.entity.KnowledgeDocument;
+import cn.bugstack.competitoragent.model.entity.RetrievalChunk;
+import cn.bugstack.competitoragent.model.entity.RetrievalIndex;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.rag.TaskRetrievalIndexService;
+import cn.bugstack.competitoragent.rag.TaskRetrievalIndexingResult;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
@@ -22,6 +28,7 @@ import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.workflow.contract.CollectResult;
 import cn.bugstack.competitoragent.workflow.contract.CollectedDocument;
 import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
+import cn.bugstack.competitoragent.workflow.contract.SectionEvidenceBundle;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -49,19 +56,23 @@ public class CollectorAgent extends BaseAgent {
     private final EvidenceSourceRepository evidenceRepository;
     private final TaskNodeRepository nodeRepository;
     private final SearchExecutionCoordinator searchExecutionCoordinator;
+    private final TaskRetrievalIndexService taskRetrievalIndexService;
     private final ObjectMapper objectMapper;
 
     public CollectorAgent(AgentExecutionLogRepository logRepository,
                           SourceCollector sourceCollector,
                           EvidenceSourceRepository evidenceRepository,
                           TaskNodeRepository nodeRepository,
+                          AgentContextAssembler agentContextAssembler,
                           SearchExecutionCoordinator searchExecutionCoordinator,
+                          TaskRetrievalIndexService taskRetrievalIndexService,
                           ObjectMapper objectMapper) {
-        super(logRepository);
+        super(logRepository, agentContextAssembler);
         this.sourceCollector = sourceCollector;
         this.evidenceRepository = evidenceRepository;
         this.nodeRepository = nodeRepository;
         this.searchExecutionCoordinator = searchExecutionCoordinator;
+        this.taskRetrievalIndexService = taskRetrievalIndexService;
         this.objectMapper = objectMapper;
     }
 
@@ -106,6 +117,7 @@ public class CollectorAgent extends BaseAgent {
             try {
                 outputJson = buildCollectorOutput(config,
                         !StringUtils.hasText(config.getSourceType()) ? "OFFICIAL" : config.getSourceType(),
+                        context.getTaskRagPromptContext(),
                         searchExecutionResult,
                         progressSnapshots,
                         List.of(),
@@ -150,6 +162,8 @@ public class CollectorAgent extends BaseAgent {
             String evidenceId = generateEvidenceId(context.getTaskId(), context.getCurrentNodeName(), evidenceCounter);
             String pageMetadata = mergePageMetadata(page, matchedCandidate);
 
+            TaskRetrievalIndexingResult retrievalIndexingResult = null;
+            String knowledgeFailureReason = null;
             if (isUsableCollectedPage(page)) {
                 EvidenceSource evidence = EvidenceSource.builder()
                         .taskId(context.getTaskId())
@@ -162,6 +176,7 @@ public class CollectorAgent extends BaseAgent {
                         .pageMetadata(pageMetadata)
                         .sourceType(sourceType)
                         .discoveryMethod(matchedCandidate == null ? null : matchedCandidate.getDiscoveryMethod())
+                        .sourceCategory(resolveSourceCategory(matchedCandidate))
                         .sourceDomain(matchedCandidate == null ? null : matchedCandidate.getDomain())
                         .discoveryReason(matchedCandidate == null ? config.getDiscoveryNotes() : matchedCandidate.getReason())
                         .publishedAt(matchedCandidate == null ? null : matchedCandidate.getPublishedAt())
@@ -170,11 +185,28 @@ public class CollectorAgent extends BaseAgent {
                         .build();
                 evidenceRepository.save(evidence);
                 successCounterRef[0]++;
+
+                // 采集成功后立即沉淀任务级知识文档与切片，保证后续 Task RAG 不必回头重读原始日志或报告正文。
+                try {
+                    retrievalIndexingResult = taskRetrievalIndexService.indexEvidence(evidence);
+                } catch (Exception e) {
+                    knowledgeFailureReason = e.getMessage();
+                    log.warn("index collected evidence failed, taskId={}, evidenceId={}",
+                            context.getTaskId(), evidenceId, e);
+                }
             }
 
             Map<String, Object> resultEntry = new LinkedHashMap<>();
+            List<String> collectionIssueFlags = new ArrayList<>(buildCollectionIssueFlags(page));
+            if (retrievalIndexingResult != null && retrievalIndexingResult.issueFlags() != null) {
+                collectionIssueFlags = mergeIssueFlags(collectionIssueFlags, retrievalIndexingResult.issueFlags());
+            }
+            if (knowledgeFailureReason != null && !knowledgeFailureReason.isBlank()) {
+                collectionIssueFlags = mergeIssueFlags(collectionIssueFlags, List.of("KNOWLEDGE_INDEX_FAILED"));
+            }
             resultEntry.put("competitor", config.getCompetitorName());
             resultEntry.put("sourceType", sourceType);
+            resultEntry.put("sourceCategory", resolveSourceCategory(matchedCandidate));
             resultEntry.put("url", url);
             resultEntry.put("evidenceId", evidenceId);
             resultEntry.put("success", page.isSuccess());
@@ -187,12 +219,27 @@ public class CollectorAgent extends BaseAgent {
             resultEntry.put("reason", matchedCandidate == null ? config.getDiscoveryNotes() : matchedCandidate.getReason());
             resultEntry.put("domain", matchedCandidate == null ? null : matchedCandidate.getDomain());
             resultEntry.put("score", matchedCandidate == null ? null : matchedCandidate.getTotalScore());
+            resultEntry.put("trustTier", matchedCandidate == null || matchedCandidate.getTrustTier() == null
+                    ? null
+                    : matchedCandidate.getTrustTier().name());
+            resultEntry.put("trustTierLabel", matchedCandidate == null ? null : matchedCandidate.getTrustTierLabel());
+            resultEntry.put("rankingReasons", matchedCandidate == null ? null : matchedCandidate.getRankingReasons());
+            resultEntry.put("rankingSummary", matchedCandidate == null ? null : matchedCandidate.getRankingSummary());
             resultEntry.put("browserTraceId", matchedCandidate == null ? null : matchedCandidate.getBrowserTraceId());
             resultEntry.put("selectionStage", matchedCandidate == null ? null : matchedCandidate.getSelectionStage());
             resultEntry.put("selectionReason", matchedCandidate == null ? null : matchedCandidate.getSelectionReason());
+            resultEntry.put("selectionSummary", matchedCandidate == null ? null : matchedCandidate.getSelectionSummary());
             resultEntry.put("sourceUrls", List.of(url));
-            resultEntry.put("issueFlags", buildCollectionIssueFlags(page));
+            resultEntry.put("issueFlags", collectionIssueFlags);
             resultEntry.put("evidenceFragments", buildCollectedEvidenceFragments(config, sourceType, page, matchedCandidate, evidenceId, url));
+            if (retrievalIndexingResult != null) {
+                resultEntry.put("knowledgeDocument", toKnowledgeDocumentPayload(retrievalIndexingResult.knowledgeDocument()));
+                resultEntry.put("retrievalChunks", toRetrievalChunkPayloads(retrievalIndexingResult.retrievalChunks()));
+                resultEntry.put("retrievalIndex", toRetrievalIndexPayload(retrievalIndexingResult.retrievalIndex()));
+                resultEntry.put("knowledgeFailureReason", retrievalIndexingResult.failureReason());
+            } else if (knowledgeFailureReason != null && !knowledgeFailureReason.isBlank()) {
+                resultEntry.put("knowledgeFailureReason", knowledgeFailureReason);
+            }
             results.add(resultEntry);
 
             progressSnapshots.add(buildProgressSnapshot(executionPlan,
@@ -215,7 +262,7 @@ public class CollectorAgent extends BaseAgent {
                         Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
                         readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
                 String outputJson = buildCollectorOutput(
-                        config, sourceType, searchExecutionResult, progressSnapshots, results, successCounterRef[0], targets);
+                        config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, progressSnapshots, results, successCounterRef[0], targets);
                 String actionableError = buildNoContentFailureMessage(
                         config, sourceType, searchExecutionResult.getExecutionTrace(), results);
                 return AgentResult.builder()
@@ -234,7 +281,7 @@ public class CollectorAgent extends BaseAgent {
                     Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
                     readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
             String outputJson = buildCollectorOutput(
-                    config, sourceType, searchExecutionResult, progressSnapshots, results, successCounterRef[0], targets);
+                    config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, progressSnapshots, results, successCounterRef[0], targets);
             return AgentResult.builder()
                     .status(TaskNodeStatus.SUCCESS)
                     .outputData(outputJson)
@@ -283,6 +330,7 @@ public class CollectorAgent extends BaseAgent {
             String outputJson = buildCollectorOutput(
                     config,
                     sourceType,
+                    context.getTaskRagPromptContext(),
                     SearchExecutionResult.builder()
                             .executionPlan(executionPlan)
                             .progressSnapshot(progressSnapshots == null || progressSnapshots.isEmpty()
@@ -314,6 +362,7 @@ public class CollectorAgent extends BaseAgent {
 
     private String buildCollectorOutput(CollectorNodeConfig config,
                                         String sourceType,
+                                        String taskRagContext,
                                         SearchExecutionResult searchExecutionResult,
                                         List<SearchProgressSnapshot> progressSnapshots,
                                         List<Map<String, Object>> results,
@@ -322,6 +371,8 @@ public class CollectorAgent extends BaseAgent {
         Map<String, Object> output = new LinkedHashMap<>();
         output.put("competitor", config.getCompetitorName());
         output.put("sourceType", sourceType);
+        // Collector 没有 Prompt，统一任务上下文需要直接出现在输出契约里，供事件流与前端解释层消费。
+        output.put("taskRagContext", taskRagContext);
         output.put("discoveryNotes", config.getDiscoveryNotes());
         output.put("sourceCandidates", searchExecutionResult.getSourceCandidates() == null ? List.of() : searchExecutionResult.getSourceCandidates());
         output.put("searchMode", config.getSearchMode());
@@ -342,6 +393,10 @@ public class CollectorAgent extends BaseAgent {
         output.put("sourceUrls", collectResult.getSourceUrls());
         output.put("issueFlags", collectResult.getIssueFlags());
         output.put("evidenceFragments", collectResult.getEvidenceFragments());
+        output.put("sectionEvidenceBundles", collectResult.getSectionEvidenceBundles());
+        output.put("knowledgeDocuments", collectResult.getKnowledgeDocuments());
+        output.put("retrievalChunks", collectResult.getRetrievalChunks());
+        output.put("retrievalIndexes", collectResult.getRetrievalIndexes());
         return objectMapper.writeValueAsString(output);
     }
 
@@ -354,6 +409,10 @@ public class CollectorAgent extends BaseAgent {
                                              int successCounter) {
         List<CollectedDocument> documents = new ArrayList<>();
         List<EvidenceFragment> fragments = new ArrayList<>();
+        List<SectionEvidenceBundle> sectionEvidenceBundles = new ArrayList<>();
+        List<KnowledgeDocument> knowledgeDocuments = new ArrayList<>();
+        List<RetrievalChunk> retrievalChunks = new ArrayList<>();
+        List<RetrievalIndex> retrievalIndexes = new ArrayList<>();
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
         LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
 
@@ -361,10 +420,26 @@ public class CollectorAgent extends BaseAgent {
             List<String> documentSourceUrls = readStringList(result.get("sourceUrls"));
             List<String> documentIssueFlags = readStringList(result.get("issueFlags"));
             List<EvidenceFragment> documentFragments = readEvidenceFragments(result.get("evidenceFragments"));
+            KnowledgeDocument knowledgeDocument = readKnowledgeDocument(result.get("knowledgeDocument"));
+            List<RetrievalChunk> documentRetrievalChunks = readRetrievalChunks(result.get("retrievalChunks"));
+            RetrievalIndex retrievalIndex = readRetrievalIndex(result.get("retrievalIndex"));
 
             sourceUrls.addAll(documentSourceUrls);
             issueFlags.addAll(documentIssueFlags);
             fragments.addAll(documentFragments);
+            SectionEvidenceBundle documentBundle = buildDocumentSectionEvidenceBundle(result, documentSourceUrls, documentIssueFlags, documentFragments);
+            sectionEvidenceBundles.add(documentBundle);
+            if (knowledgeDocument != null) {
+                knowledgeDocuments.add(knowledgeDocument);
+                sourceUrls.addAll(knowledgeDocument.getSourceUrls() == null ? List.of() : knowledgeDocument.getSourceUrls());
+                issueFlags.addAll(knowledgeDocument.getIssueFlags() == null ? List.of() : knowledgeDocument.getIssueFlags());
+            }
+            if (retrievalIndex != null) {
+                retrievalIndexes.add(retrievalIndex);
+                sourceUrls.addAll(retrievalIndex.getSourceUrls() == null ? List.of() : retrievalIndex.getSourceUrls());
+                issueFlags.addAll(retrievalIndex.getIssueFlags() == null ? List.of() : retrievalIndex.getIssueFlags());
+            }
+            retrievalChunks.addAll(documentRetrievalChunks);
 
             documents.add(CollectedDocument.builder()
                     .competitor(toText(result.get("competitor")))
@@ -375,10 +450,15 @@ public class CollectorAgent extends BaseAgent {
                     .cleanedText(null)
                     .snippet(null)
                     .contentLength(parseInt(result.get("contentLength")))
+                    .sourceCategory(toText(result.get("sourceCategory")))
                     .errorMessage(toText(result.get("errorMessage")))
                     .sourceUrls(documentSourceUrls)
                     .issueFlags(documentIssueFlags)
                     .evidenceFragments(documentFragments)
+                    .sectionEvidenceBundles(List.of(documentBundle))
+                    .knowledgeDocument(knowledgeDocument)
+                    .retrievalChunks(documentRetrievalChunks)
+                    .retrievalIndex(retrievalIndex)
                     .collectedAt(LocalDateTime.now())
                     .build());
         }
@@ -401,6 +481,10 @@ public class CollectorAgent extends BaseAgent {
                 .sourceUrls(new ArrayList<>(sourceUrls))
                 .issueFlags(new ArrayList<>(issueFlags))
                 .evidenceFragments(normalizeEvidenceFragments(fragments))
+                .sectionEvidenceBundles(normalizeSectionEvidenceBundles(sectionEvidenceBundles))
+                .knowledgeDocuments(knowledgeDocuments)
+                .retrievalChunks(retrievalChunks)
+                .retrievalIndexes(retrievalIndexes)
                 .build();
     }
 
@@ -446,6 +530,62 @@ public class CollectorAgent extends BaseAgent {
         return List.of(fragment);
     }
 
+    /**
+     * 采集阶段虽然还没有结构化字段，但至少要把“哪篇页面支撑了哪个来源章节”这层关系固定下来，
+     * 这样下游即使回退到采集契约，也能知道当前文档对应的证据段落与缺口状态。
+     */
+    private SectionEvidenceBundle buildDocumentSectionEvidenceBundle(Map<String, Object> result,
+                                                                    List<String> documentSourceUrls,
+                                                                    List<String> documentIssueFlags,
+                                                                    List<EvidenceFragment> documentFragments) {
+        String sourceType = firstNonBlank(toText(result.get("sourceType")), "COLLECT");
+        LinkedHashSet<String> missingFields = new LinkedHashSet<>();
+        if (documentIssueFlags.contains("COLLECT_FAILED") || documentIssueFlags.contains("CONTENT_GAP")) {
+            missingFields.add(sourceType);
+        }
+        return SectionEvidenceBundle.builder()
+                .stage("COLLECT")
+                .sectionType("SECTION")
+                .sectionKey(sourceType.toLowerCase())
+                .sectionTitle(sourceType)
+                .summary(firstNonBlank(toText(result.get("title")), toText(result.get("url"))))
+                .fieldNames(List.of(sourceType))
+                .missingFields(new ArrayList<>(missingFields))
+                .sourceUrls(documentSourceUrls)
+                .issueFlags(documentIssueFlags)
+                .evidenceFragments(documentFragments)
+                .build()
+                .normalized();
+    }
+
+    private KnowledgeDocument readKnowledgeDocument(Object value) {
+        if (value == null) {
+            return null;
+        }
+        return objectMapper.convertValue(value, KnowledgeDocument.class);
+    }
+
+    private List<RetrievalChunk> readRetrievalChunks(Object value) {
+        if (!(value instanceof List<?> items)) {
+            return List.of();
+        }
+        List<RetrievalChunk> chunks = new ArrayList<>();
+        for (Object item : items) {
+            RetrievalChunk chunk = objectMapper.convertValue(item, RetrievalChunk.class);
+            if (chunk != null) {
+                chunks.add(chunk);
+            }
+        }
+        return chunks;
+    }
+
+    private RetrievalIndex readRetrievalIndex(Object value) {
+        if (value == null) {
+            return null;
+        }
+        return objectMapper.convertValue(value, RetrievalIndex.class);
+    }
+
     private List<String> readStringList(Object value) {
         if (value instanceof List<?> items) {
             List<String> values = new ArrayList<>();
@@ -482,6 +622,79 @@ public class CollectorAgent extends BaseAgent {
             }
         }
         return normalized;
+    }
+
+    private List<SectionEvidenceBundle> normalizeSectionEvidenceBundles(List<SectionEvidenceBundle> bundles) {
+        List<SectionEvidenceBundle> normalized = new ArrayList<>();
+        for (SectionEvidenceBundle bundle : bundles) {
+            if (bundle != null) {
+                normalized.add(bundle.normalized());
+            }
+        }
+        return normalized;
+    }
+
+    private List<String> mergeIssueFlags(List<String> currentFlags, List<String> extraFlags) {
+        LinkedHashSet<String> merged = new LinkedHashSet<>();
+        if (currentFlags != null) {
+            merged.addAll(currentFlags);
+        }
+        if (extraFlags != null) {
+            merged.addAll(extraFlags);
+        }
+        return new ArrayList<>(merged);
+    }
+
+    /**
+     * 来源分类要在采集阶段就固定下来，否则后续任务级 RAG 很难区分“用户指定的证据”与“系统补源发现的证据”。
+     */
+    private String resolveSourceCategory(SourceCandidate matchedCandidate) {
+        String discoveryMethod = matchedCandidate == null ? null : matchedCandidate.getDiscoveryMethod();
+        if (!StringUtils.hasText(discoveryMethod)) {
+            return "USER_PROVIDED";
+        }
+        String normalizedMethod = discoveryMethod.trim().toUpperCase(java.util.Locale.ROOT);
+        if (normalizedMethod.contains("UPLOAD")) {
+            return "UPLOADED_DOCUMENTS";
+        }
+        if (normalizedMethod.contains("AUTH")
+                || normalizedMethod.contains("API")
+                || normalizedMethod.contains("CONNECTOR")) {
+            return "AUTHENTICATED_SOURCES";
+        }
+        if (normalizedMethod.contains("CONFIG")
+                || normalizedMethod.contains("MANUAL")
+                || normalizedMethod.contains("USER")) {
+            return "USER_PROVIDED";
+        }
+        return "AI_DISCOVERED";
+    }
+
+    private Map<String, Object> toKnowledgeDocumentPayload(KnowledgeDocument document) {
+        if (document == null) {
+            return null;
+        }
+        return objectMapper.convertValue(document, Map.class);
+    }
+
+    private List<Map<String, Object>> toRetrievalChunkPayloads(List<RetrievalChunk> chunks) {
+        if (chunks == null || chunks.isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> payloads = new ArrayList<>();
+        for (RetrievalChunk chunk : chunks) {
+            if (chunk != null) {
+                payloads.add(objectMapper.convertValue(chunk, Map.class));
+            }
+        }
+        return payloads;
+    }
+
+    private Map<String, Object> toRetrievalIndexPayload(RetrievalIndex retrievalIndex) {
+        if (retrievalIndex == null) {
+            return null;
+        }
+        return objectMapper.convertValue(retrievalIndex, Map.class);
     }
 
     private int parseInt(Object value) {
@@ -552,6 +765,10 @@ public class CollectorAgent extends BaseAgent {
             metadata.put("freshnessScore", matchedCandidate.getFreshnessScore());
             metadata.put("qualityScore", matchedCandidate.getQualityScore());
             metadata.put("totalScore", matchedCandidate.getTotalScore());
+            metadata.put("trustTier", matchedCandidate.getTrustTier() == null ? null : matchedCandidate.getTrustTier().name());
+            metadata.put("trustTierLabel", matchedCandidate.getTrustTierLabel());
+            metadata.put("rankingReasons", matchedCandidate.getRankingReasons());
+            metadata.put("rankingSummary", matchedCandidate.getRankingSummary());
             metadata.put("searchQuery", matchedCandidate.getSearchQuery());
             metadata.put("searchEngine", matchedCandidate.getSearchEngine());
             metadata.put("resultRank", matchedCandidate.getResultRank());
@@ -561,6 +778,7 @@ public class CollectorAgent extends BaseAgent {
             metadata.put("matchedSignals", matchedCandidate.getMatchedSignals());
             metadata.put("selectionStage", matchedCandidate.getSelectionStage());
             metadata.put("selectionReason", matchedCandidate.getSelectionReason());
+            metadata.put("selectionSummary", matchedCandidate.getSelectionSummary());
         }
         try {
             return objectMapper.writeValueAsString(metadata);
@@ -688,6 +906,15 @@ public class CollectorAgent extends BaseAgent {
             item.put("browserTraceId", target.getCandidate().getBrowserTraceId());
             item.put("selectionStage", target.getCandidate().getSelectionStage());
             item.put("selectionReason", target.getCandidate().getSelectionReason());
+            item.put("targetSelectionSummary", target.getCandidate().getSelectionSummary());
+            item.put("selectionSummary", target.getCandidate().getSelectionSummary());
+            item.put("trustTier", target.getCandidate().getTrustTier() == null
+                    ? null
+                    : target.getCandidate().getTrustTier().name());
+            item.put("trustTierLabel", target.getCandidate().getTrustTierLabel());
+            item.put("totalScore", target.getCandidate().getTotalScore());
+            item.put("rankingReasons", target.getCandidate().getRankingReasons());
+            item.put("rankingSummary", target.getCandidate().getRankingSummary());
             item.put("hasPrefetchedPage", target.getCollectedPage() != null);
             summaries.add(item);
         }

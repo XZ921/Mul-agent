@@ -1,5 +1,8 @@
 package cn.bugstack.competitoragent.workflow.contract;
 
+import cn.bugstack.competitoragent.model.entity.KnowledgeDocument;
+import cn.bugstack.competitoragent.model.entity.RetrievalChunk;
+import cn.bugstack.competitoragent.model.entity.RetrievalIndex;
 import lombok.Builder;
 import lombok.Data;
 
@@ -33,6 +36,9 @@ public class CollectedDocument {
     /** 内容长度 */
     private int contentLength;
 
+    /** 当前采集文档的来源分类 */
+    private String sourceCategory;
+
     /** 失败原因，仅 success=false 时有值 */
     private String errorMessage;
 
@@ -44,6 +50,18 @@ public class CollectedDocument {
 
     /** 统一证据片段，供抽取/分析/写作直接沿用 */
     private List<EvidenceFragment> evidenceFragments;
+
+    /** 文档维度聚合后的章节证据束，显式说明该文档对哪个章节提供了什么支撑 */
+    private List<SectionEvidenceBundle> sectionEvidenceBundles;
+
+    /** 当前采集文档沉淀出的任务级知识文档 */
+    private KnowledgeDocument knowledgeDocument;
+
+    /** 当前采集文档拆分出的检索切片 */
+    private List<RetrievalChunk> retrievalChunks;
+
+    /** 当前采集文档对应的任务级索引元数据 */
+    private RetrievalIndex retrievalIndex;
 
     /** 采集时间 */
     private LocalDateTime collectedAt;

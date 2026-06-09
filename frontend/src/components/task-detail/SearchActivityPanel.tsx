@@ -1,15 +1,35 @@
-import { Progress, Space, Tag, Typography } from 'antd'
+import { Alert, Progress, Space, Tag, Typography } from 'antd'
 import type { CollectorNodeInsight } from '../../utils/taskNodeInsights'
+import { getTaskEventStreamStatusText } from '../../utils/display'
 import { progressStatusTag, stepStatusTag } from './shared'
 
 const { Text } = Typography
 
-export default function SearchActivityPanel({ insight }: { insight: CollectorNodeInsight }) {
+export default function SearchActivityPanel({
+  insight,
+  streamStatus,
+  fallbackPollingActive = false,
+  lastEventAt,
+}: {
+  insight: CollectorNodeInsight
+  streamStatus?: 'idle' | 'connecting' | 'open' | 'fallback' | 'closed'
+  fallbackPollingActive?: boolean
+  lastEventAt?: string | null
+}) {
   const progress = insight.searchProgress
   const plan = insight.searchExecutionPlan
 
   return (
     <Space direction="vertical" size={8} style={{ width: '100%' }}>
+      {streamStatus && (
+        <Alert
+          type={fallbackPollingActive ? 'warning' : streamStatus === 'open' ? 'success' : 'info'}
+          showIcon
+          message={getTaskEventStreamStatusText(streamStatus, fallbackPollingActive)}
+          description={lastEventAt ? `最近一次实时事件：${lastEventAt}` : '当前面板会随着任务事件流持续刷新。'}
+        />
+      )}
+
       {progress && (
         <>
           <Progress

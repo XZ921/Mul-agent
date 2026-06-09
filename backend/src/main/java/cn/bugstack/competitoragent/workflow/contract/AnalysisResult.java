@@ -49,9 +49,15 @@ public class AnalysisResult {
     /** 分析结果可回指的来源链接 */
     private List<String> sourceUrls;
 
+    /** 分析节点实际消费的 Task RAG 文本摘要，供运行态审计与报告聚合回查 */
+    private String taskRagContext;
+
     /** 分析阶段的问题标记，例如字段漂移已矫正、仍存在证据缺口 */
     private List<String> issueFlags;
 
     /** 提供给 Writer 的统一证据片段 */
     private List<EvidenceFragment> evidenceFragments;
+
+    /** 分析阶段输出的章节/结论证据束，供 Writer 与报告接口直接沿用 */
+    private List<SectionEvidenceBundle> sectionEvidenceBundles;
 }

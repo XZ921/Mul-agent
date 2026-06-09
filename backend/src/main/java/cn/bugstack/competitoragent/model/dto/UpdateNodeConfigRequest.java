@@ -21,4 +21,7 @@ public class UpdateNodeConfigRequest {
     @NotBlank
     @Schema(description = "Updated node config JSON object")
     private String nodeConfig;
+
+    @Schema(description = "本次修改配置后重跑的业务说明，便于前后端统一记录用户意图")
+    private String changeSummary;
 }

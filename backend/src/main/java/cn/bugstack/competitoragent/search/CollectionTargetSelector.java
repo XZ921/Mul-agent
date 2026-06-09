@@ -10,6 +10,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.LinkedHashMap;
 
 /**
  * 最终采集目标选择器。
@@ -77,8 +78,38 @@ public class CollectionTargetSelector {
                         .selectionReason(Boolean.TRUE.equals(candidate.getVerified())
                                 ? "运行期验证通过后被选为正式采集目标"
                                 : "作为兜底候选被选为正式采集目标")
+                        .selectionSummary(Boolean.TRUE.equals(candidate.getVerified())
+                                ? "运行期验证通过后被选为正式采集目标"
+                                : "在验证不足时作为兜底候选被选为正式采集目标")
                         .build()
                         : candidate)
+                .toList();
+    }
+
+    /**
+     * selectedTargets 在选中时持有的是当时的 candidate 快照，
+     * 如果后续又给 candidate 回填了目标选择摘要、可信度等解释语义，
+     * 这里需要同步刷新 selectedTargets，避免详情页看到两套不一致的选源说明。
+     */
+    public List<SearchCollectionTarget> refreshSelectedTargets(List<SearchCollectionTarget> selectedTargets,
+                                                               List<SourceCandidate> selectedCandidates) {
+        Map<String, SourceCandidate> candidatesByUrl = new LinkedHashMap<>();
+        for (SourceCandidate candidate : selectedCandidates) {
+            if (candidate == null || !StringUtils.hasText(candidate.getUrl())) {
+                continue;
+            }
+            candidatesByUrl.put(candidate.getUrl(), candidate);
+        }
+        return selectedTargets.stream()
+                .map(target -> {
+                    if (target == null || target.getCandidate() == null) {
+                        return target;
+                    }
+                    SourceCandidate refreshed = candidatesByUrl.getOrDefault(
+                            target.getCandidate().getUrl(),
+                            target.getCandidate());
+                    return target.toBuilder().candidate(refreshed).build();
+                })
                 .toList();
     }
 }

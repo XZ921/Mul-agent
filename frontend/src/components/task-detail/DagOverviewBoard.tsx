@@ -1,6 +1,6 @@
-import { Card, Space, Typography } from 'antd'
+import { Alert, Card, Space, Typography } from 'antd'
 import type { TaskNodeInfo } from '../../types'
-import { getNodeDisplayName, getSourceTypeText } from '../../utils/display'
+import { getNodeDisplayName, getSourceTypeText, getTaskEventStreamStatusText } from '../../utils/display'
 import type { CollectorLaneGroup } from './types'
 
 const { Text } = Typography
@@ -10,6 +10,8 @@ type DagOverviewBoardProps = {
   pipelineNodes: TaskNodeInfo[]
   getNodeHeadline: (node: TaskNodeInfo) => string
   onSelectNode: (nodeId: number) => void
+  streamStatus: 'idle' | 'connecting' | 'open' | 'fallback' | 'closed'
+  fallbackPollingActive: boolean
 }
 
 export default function DagOverviewBoard({
@@ -17,13 +19,20 @@ export default function DagOverviewBoard({
   pipelineNodes,
   getNodeHeadline,
   onSelectNode,
+  streamStatus,
+  fallbackPollingActive,
 }: DagOverviewBoardProps) {
   return (
-    <Card title="DAG 总览" className="work-card">
+    <Card title="任务图进展" className="work-card">
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <Text type="secondary">
-          先看并行采集分支，再看汇聚后的抽取、分析、写作与质检主链路。点击节点可直接进入追踪与人工干预。
+          先看并行采集分支，再看后续的抽取、分析、写作与质检主链路。点击节点可继续查看节点上下文。
         </Text>
+        <Alert
+          type={fallbackPollingActive ? 'warning' : streamStatus === 'open' ? 'success' : 'info'}
+          showIcon
+          message={getTaskEventStreamStatusText(streamStatus, fallbackPollingActive)}
+        />
 
         <div className="dag-lane-board">
           {collectorLaneGroups.map(([competitor, group]) => (

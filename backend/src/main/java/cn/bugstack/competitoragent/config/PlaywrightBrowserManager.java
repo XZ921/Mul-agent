@@ -5,7 +5,6 @@ import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Playwright;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -21,16 +20,26 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class PlaywrightBrowserManager {
 
-    private final Playwright playwright;
+    private final Playwright initialPlaywright;
+    private final PlaywrightRuntimeFactory runtimeFactory;
     private final PlaywrightConfig.PlaywrightProperties props;
+    private final AtomicReference<Playwright> playwrightRef = new AtomicReference<>();
     private final AtomicReference<Browser> browserRef = new AtomicReference<>();
     private final Object monitor = new Object();
 
+    public PlaywrightBrowserManager(Playwright initialPlaywright,
+                                    PlaywrightRuntimeFactory runtimeFactory,
+                                    PlaywrightConfig.PlaywrightProperties props) {
+        this.initialPlaywright = initialPlaywright;
+        this.runtimeFactory = runtimeFactory;
+        this.props = props;
+    }
+
     @PostConstruct
     public void initialize() {
+        currentPlaywright();
         Browser browser = ensureBrowser("startup");
         if (browser == null) {
             log.warn("Playwright 浏览器未能在启动期完成初始化，后续会在运行期按需重试");
@@ -45,6 +54,33 @@ public class PlaywrightBrowserManager {
         synchronized (monitor) {
             Browser current = browserRef.getAndSet(null);
             closeQuietly(current, reason);
+            Browser relaunched = launchBrowser(reason);
+            if (relaunched != null) {
+                browserRef.set(relaunched);
+            }
+            return relaunched;
+        }
+    }
+
+    /**
+     * 只有当“当前托管中的浏览器实例”仍然等于调用方手里的故障实例时，才执行真正的关闭与重建。
+     * 这样可以避免多个并发线程同时感知到旧浏览器失活时，后到达的线程把前一个线程刚重建好的新实例再次关掉。
+     */
+    public Browser restartBrowserIfCurrent(Browser expectedBrowser, String reason) {
+        if (expectedBrowser == null) {
+            return ensureBrowser(reason);
+        }
+        synchronized (monitor) {
+            Browser current = browserRef.get();
+            if (current != null && current != expectedBrowser) {
+                if (isHealthy(current)) {
+                    log.info("跳过过期浏览器重启请求，当前已有更新实例在服务, reason={}", reason);
+                    return current;
+                }
+            }
+
+            Browser currentToReplace = browserRef.getAndSet(null);
+            closeQuietly(currentToReplace, reason);
             Browser relaunched = launchBrowser(reason);
             if (relaunched != null) {
                 browserRef.set(relaunched);
@@ -77,6 +113,7 @@ public class PlaywrightBrowserManager {
     public void shutdown() {
         synchronized (monitor) {
             closeQuietly(browserRef.getAndSet(null), "application shutdown");
+            closePlaywrightQuietly(playwrightRef.getAndSet(null), "application shutdown");
         }
     }
 
@@ -101,9 +138,9 @@ public class PlaywrightBrowserManager {
     private Browser launchBrowser(String reason) {
         String browserType = normalizeBrowserType(props.getBrowser());
         List<LaunchAttempt> attempts = buildLaunchAttempts(browserType);
-        Exception lastError = null;
+        boolean runtimeRecreated = false;
 
-        for (int index = 0; index < attempts.size(); index++) {
+        for (int index = 0; index < attempts.size(); ) {
             LaunchAttempt attempt = attempts.get(index);
             try {
                 log.info("启动 Playwright 浏览器: browser={}, channel={}, headless={}, reason={}, attempt={}/{}",
@@ -113,21 +150,26 @@ public class PlaywrightBrowserManager {
                         reason,
                         index + 1,
                         attempts.size());
-                Browser browser = doLaunch(browserType, attempt.options());
+                Browser browser = doLaunch(currentPlaywright(), browserType, attempt.options());
                 if (index > 0) {
                     log.warn("Playwright 浏览器已通过降级参数启动成功, browser={}, strategy={}, reason={}",
                             browserType, attempt.label(), reason);
                 }
                 return browser;
             } catch (Exception e) {
-                lastError = e;
+                if (!runtimeRecreated && shouldRecreateRuntime(e) && recreatePlaywrightRuntime(reason, e)) {
+                    runtimeRecreated = true;
+                    continue;
+                }
                 if (index < attempts.size() - 1) {
                     log.warn("启动 Playwright 浏览器失败，准备降级重试, browser={}, strategy={}, reason={}, error={}",
                             browserType, attempt.label(), reason, e.getMessage());
+                    index++;
                     continue;
                 }
                 log.error("启动 Playwright 浏览器失败, browser={}, reason={}, error={}",
                         props.getBrowser(), reason, e.getMessage(), e);
+                break;
             }
         }
         return null;
@@ -172,12 +214,56 @@ public class PlaywrightBrowserManager {
         return options;
     }
 
-    private Browser doLaunch(String browserType, BrowserType.LaunchOptions options) {
+    /**
+     * 浏览器启动必须显式绑定当前可用的 Playwright runtime。
+     * 一旦 runtime 已经断链，这里会配合上层重建新的 runtime 后再重新尝试 launch。
+     */
+    private Browser doLaunch(Playwright runtime, String browserType, BrowserType.LaunchOptions options) {
         return switch (browserType) {
-            case "firefox" -> playwright.firefox().launch(options);
-            case "webkit" -> playwright.webkit().launch(options);
-            default -> playwright.chromium().launch(options);
+            case "firefox" -> runtime.firefox().launch(options);
+            case "webkit" -> runtime.webkit().launch(options);
+            default -> runtime.chromium().launch(options);
         };
+    }
+
+    /**
+     * 某些 “Playwright connection closed” 场景不是 Browser 实例坏了，
+     * 而是底层 Playwright 管道已经断开。此时只重启 Browser 没意义，
+     * 必须整套重建 runtime 才能恢复后续 launch/newPage。
+     */
+    private boolean recreatePlaywrightRuntime(String reason, Exception cause) {
+        try {
+            Playwright recreated = runtimeFactory.create();
+            if (recreated == null) {
+                log.error("重建 Playwright runtime 失败, reason={}, triggerError={}, recreateError={}",
+                        reason,
+                        cause == null ? null : cause.getMessage(),
+                        "factory returned null");
+                return false;
+            }
+            Playwright previous = playwrightRef.getAndSet(recreated);
+            closePlaywrightQuietly(previous, "recreate runtime before relaunch: " + reason);
+            playwrightRef.set(recreated);
+            log.warn("检测到 Playwright runtime 连接已断开，已重建运行时后重试, reason={}, error={}",
+                    reason, cause == null ? null : cause.getMessage());
+            return true;
+        } catch (Exception recreateError) {
+            log.error("重建 Playwright runtime 失败, reason={}, triggerError={}, recreateError={}",
+                    reason,
+                    cause == null ? null : cause.getMessage(),
+                    recreateError.getMessage(),
+                    recreateError);
+            return false;
+        }
+    }
+
+    private Playwright currentPlaywright() {
+        Playwright runtime = playwrightRef.get();
+        if (runtime != null) {
+            return runtime;
+        }
+        playwrightRef.compareAndSet(null, initialPlaywright);
+        return playwrightRef.get();
     }
 
     private String normalizedChannel(String browserType) {
@@ -212,11 +298,31 @@ public class PlaywrightBrowserManager {
         }
     }
 
+    private void closePlaywrightQuietly(Playwright runtime, String reason) {
+        if (runtime == null) {
+            return;
+        }
+        try {
+            log.info("关闭 Playwright runtime 实例, reason={}", reason);
+            runtime.close();
+        } catch (Exception e) {
+            log.warn("关闭 Playwright runtime 实例失败, reason={}, error={}", reason, e.getMessage());
+        }
+    }
+
     private String normalizeBrowserType(String browser) {
         if (!StringUtils.hasText(browser)) {
             return "chromium";
         }
         return browser.trim().toLowerCase();
+    }
+
+    private boolean shouldRecreateRuntime(Exception e) {
+        String message = e == null || e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+        return message.contains("playwright connection closed")
+                || message.contains("connection closed")
+                || message.contains("transport closed")
+                || message.contains("pipe closed");
     }
 
     private record LaunchAttempt(String label,

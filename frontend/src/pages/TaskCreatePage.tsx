@@ -1,38 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Alert,
-  Button,
-  Card,
-  Col,
-  Collapse,
-  Divider,
-  Form,
-  Input,
-  Row,
-  Select,
-  Space,
-  Tag,
-  Typography,
-  message,
-} from 'antd'
-import {
-  ApartmentOutlined,
-  ArrowLeftOutlined,
-  PlusOutlined,
-  RocketOutlined,
-  SearchOutlined,
-  ThunderboltOutlined,
-} from '@ant-design/icons'
+import { Alert, Button, Card, Col, Divider, Form, Input, Row, Select, Space, Tag, Typography } from 'antd'
+import { ArrowLeftOutlined, PlusOutlined, RocketOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { createTask, executeTask, listSchemas, previewWorkflow } from '../api/client'
-import type { AnalysisSchema, CreateTaskRequest, TaskNodeConfigSummary, TaskNodeInfo } from '../types'
-import { getAgentTypeText, getNodeDisplayName, getNodeNameLabel, getSourceTypeText } from '../utils/display'
-import { getCollectorNodeInsight, getDependencyNames } from '../utils/taskNodeInsights'
+import KnowledgeSourceIntakeCard from '../components/task-create/KnowledgeSourceIntakeCard'
+import SourceStrategySummary from '../components/task-create/SourceStrategySummary'
+import TaskPlanPreviewBoard from '../components/task-create/TaskPlanPreviewBoard'
+import type { AnalysisSchema, CreateTaskRequest, TaskNodeInfo } from '../types'
+import { appMessage } from '../utils/appMessage'
+import { buildConversationEntryUrl } from '../utils/conversationPresentation'
+import { buildGovernanceActionFailureMessage } from '../utils/governancePresentation'
+import { buildSourceStrategyOverview, buildTaskPlanPreview } from '../utils/taskNodeInsights'
 
 const { Text } = Typography
 
 const PRESET_DIMENSIONS = ['产品功能', '目标用户', '价格策略', '技术能力', '市场定位', '差异化优势', '商业模式']
 const PRESET_SOURCES = ['官网', '产品文档', '定价页面', '博客资讯', '公开测评']
+
+const INITIAL_FORM_VALUES = {
+  competitors: [{ name: '', url: '' }],
+  reportLanguage: '中文',
+  reportTemplate: '标准版',
+}
 
 interface CompetitorInput {
   name?: string
@@ -84,16 +73,6 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback
 }
 
-function summarizeList(items: string[], limit = 3) {
-  if (!items.length) return '未提供'
-  const visible = items.slice(0, limit)
-  return items.length > limit ? `${visible.join('、')} 等 ${items.length} 项` : visible.join('、')
-}
-
-function compactUrl(url: string) {
-  return url.replace(/^https?:\/\//, '').replace(/\/+$/, '')
-}
-
 function isValidHttpUrl(value?: string) {
   if (!value) return true
   try {
@@ -104,69 +83,6 @@ function isValidHttpUrl(value?: string) {
   }
 }
 
-function candidateLabel(candidate: { title?: string; url?: string; domain?: string }) {
-  return candidate.title || candidate.domain || (candidate.url ? compactUrl(candidate.url) : '未命名候选')
-}
-
-function searchModeDescription(mode?: string) {
-  if (mode === 'HYBRID') return '混合模式：浏览器优先，HTTP 兜底'
-  if (mode === 'BROWSER_ONLY') return '仅浏览器模式'
-  if (mode === 'HTTP_ONLY') return '仅 HTTP 模式'
-  if (mode === 'HEURISTIC_ONLY') return '仅启发式候选'
-  return '默认混合模式'
-}
-
-function collectorPreviewSummary(summaryData: TaskNodeConfigSummary | null | undefined, fallbackCandidateCount: number, fallbackQueryCount: number) {
-  const candidateCount = summaryData?.candidateCount ?? fallbackCandidateCount
-  const queryCount = summaryData?.queryCount ?? fallbackQueryCount
-  return `预备从 ${candidateCount} 个候选来源采集，已生成 ${queryCount} 组 Query`
-}
-
-function collectorPreviewMeta(summaryData: TaskNodeConfigSummary | null | undefined, fallback: {
-  searchMode?: string
-  verifyResultPage: boolean
-  minVerifiedCandidates: number | null
-}) {
-  return {
-    searchModeText: summaryData?.searchModeLabel
-      ? `搜索模式：${summaryData.searchModeLabel}`
-      : searchModeDescription(fallback.searchMode),
-    verificationText: summaryData?.verificationEnabled != null
-      ? summaryData.verificationEnabled
-        ? `结果页验证开启，至少验证 ${summaryData.minVerifiedCandidates || 1} 条`
-        : '结果页验证关闭'
-      : fallback.verifyResultPage
-        ? `结果页验证开启，至少验证 ${fallback.minVerifiedCandidates || 1} 条`
-        : '结果页验证关闭',
-  }
-}
-
-function pipelinePreviewSummary(node: TaskNodeInfo) {
-  const summaryData = node.configSummaryData
-  if (!summaryData) {
-    return node.configSummary || getNodeNameLabel(node.nodeName)
-  }
-  if (node.agentType === 'EXTRACTOR') {
-    return summaryData.dimensions?.length
-      ? `将按 ${summaryData.dimensions.slice(0, 3).join('、')}${summaryData.dimensions.length > 3 ? ' 等维度' : ''} 进行结构化抽取`
-      : summaryData.summaryText || getNodeNameLabel(node.nodeName)
-  }
-  if (node.agentType === 'ANALYZER') {
-    return `将汇总 ${summaryData.competitorCount ?? 0} 个竞品，分析 ${summaryData.dimensionCount ?? 0} 个维度`
-  }
-  if (node.agentType === 'WRITER') {
-    return summaryData.mode === 'revision'
-      ? '将基于评审反馈生成修订版报告'
-      : `将输出 ${summaryData.reportLanguage || '中文'} / ${summaryData.reportTemplate || '标准版'} 报告`
-  }
-  if (node.agentType === 'REVIEWER') {
-    return summaryData.sourceNode
-      ? `将按 ${summaryData.qualityPolicy || '标准质量评审'} 复核 ${summaryData.sourceNode}`
-      : `将按 ${summaryData.qualityPolicy || '标准质量评审'} 进行质量评审`
-  }
-  return summaryData.summaryText || node.configSummary || getNodeNameLabel(node.nodeName)
-}
-
 export default function TaskCreatePage() {
   const navigate = useNavigate()
   const [form] = Form.useForm()
@@ -175,6 +91,7 @@ export default function TaskCreatePage() {
   const [schemas, setSchemas] = useState<AnalysisSchema[]>([])
   const [workflowPreview, setWorkflowPreview] = useState<TaskNodeInfo[]>([])
   const [previewVersion, setPreviewVersion] = useState(0)
+  const [draftRequest, setDraftRequest] = useState<CreateTaskRequest>(() => buildCreateTaskRequest(INITIAL_FORM_VALUES))
 
   useEffect(() => {
     listSchemas()
@@ -194,6 +111,33 @@ export default function TaskCreatePage() {
         value: schema.id,
       })),
     [schemas],
+  )
+
+  const sourceStrategyOverview = useMemo(() => buildSourceStrategyOverview(workflowPreview), [workflowPreview])
+
+  const taskPlanPreview = useMemo(
+    () =>
+      buildTaskPlanPreview(
+        {
+          taskName: draftRequest.taskName,
+          subjectProduct: draftRequest.subjectProduct,
+        },
+        workflowPreview,
+      ),
+    [draftRequest.subjectProduct, draftRequest.taskName, workflowPreview],
+  )
+
+  /**
+   * 创建页还没有正式 taskId，这里只携带草稿阶段稳定存在的最小上下文，
+   * 让统一对话入口能围绕当前任务草稿继续追问，而不会绑定未保存的临时表单状态。
+   */
+  const conversationEntryUrl = useMemo(
+    () =>
+      buildConversationEntryUrl({
+        pageType: 'TASK_CREATE',
+        taskName: draftRequest.taskName,
+      }),
+    [draftRequest.taskName],
   )
 
   const refreshPreview = async () => {
@@ -233,101 +177,60 @@ export default function TaskCreatePage() {
 
       try {
         await executeTask(taskId)
-        message.success('任务已创建并启动')
+        appMessage.success('任务已创建并启动')
         navigate(`/task/${taskId}`)
       } catch (error) {
-        message.warning(`任务已创建，但自动启动失败：${getErrorMessage(error, '请前往任务详情页手动启动')}`)
+        appMessage.warning(buildGovernanceActionFailureMessage(error, '任务已创建，但自动启动失败', '请前往任务详情页手动启动'))
         navigate(`/task/${taskId}`)
       }
     } catch (error) {
-      message.error(`创建任务失败：${getErrorMessage(error, '请检查表单或稍后重试')}`)
+      appMessage.error(buildGovernanceActionFailureMessage(error, '创建任务失败', '请检查表单或稍后重试'))
     } finally {
       setLoading(false)
     }
   }
 
-  const previewCollectorNodes = useMemo(
-    () => workflowPreview.filter((node) => node.agentType === 'COLLECTOR'),
-    [workflowPreview],
-  )
-
-  const previewPipelineNodes = useMemo(
-    () => workflowPreview.filter((node) => node.agentType !== 'COLLECTOR'),
-    [workflowPreview],
-  )
-
-  const previewCollectorCards = useMemo(
-    () =>
-      previewCollectorNodes.map((node) => {
-        const insight = getCollectorNodeInsight(node)
-        return {
-          node,
-          insight,
-          summaryData: node.configSummaryData,
-          dependencies: getDependencyNames(node.dependsOn),
-        }
-      }),
-    [previewCollectorNodes],
-  )
-
-  const previewGroups = useMemo(() => {
-    const groups = new Map<string, typeof previewCollectorCards>()
-    previewCollectorCards.forEach((item) => {
-      const key = item.insight.competitorName || '未命名竞品'
-      const existing = groups.get(key) || []
-      existing.push(item)
-      groups.set(key, existing)
-    })
-    return Array.from(groups.entries())
-  }, [previewCollectorCards])
-
-  const previewSummary = useMemo(() => {
-    const browserEnabledCount = previewCollectorCards.filter((item) => item.insight.browserSearchEnabled).length
-    const queryCount = previewCollectorCards.reduce((sum, item) => sum + item.insight.searchQueries.length, 0)
-    return {
-      competitorCount: previewGroups.length,
-      collectorCount: previewCollectorCards.length,
-      browserEnabledCount,
-      pipelineCount: previewPipelineNodes.length,
-      queryCount,
-    }
-  }, [previewCollectorCards, previewGroups.length, previewPipelineNodes.length])
-
   const handleReset = () => {
     form.resetFields()
     setWorkflowPreview([])
+    setDraftRequest(buildCreateTaskRequest(INITIAL_FORM_VALUES))
     setPreviewVersion((current) => current + 1)
   }
 
   return (
     <div>
       <div className="page-toolbar">
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')}>
-          返回
-        </Button>
+        <Space wrap>
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')}>
+            返回
+          </Button>
+          <Button onClick={() => navigate(conversationEntryUrl)}>进入解释入口</Button>
+        </Space>
       </div>
 
       <div className="page-header">
         <h2>创建竞品分析任务</h2>
-        <p>先定义分析目标，再通过启动前 DAG 预览确认并行采集范围、补源策略和后续主链路。</p>
+        <p>先说明任务目标，再确认资料策略和执行计划；低层检索细节会留在后续按需查看的路径中。</p>
       </div>
 
       <Row gutter={[16, 16]} align="top">
         <Col xs={24} lg={14}>
-          <Card title="任务配置" className="work-card">
+          <Card title="任务目标" className="work-card">
             <Form
               form={form}
               layout="vertical"
               onFinish={handleSubmit}
               onValuesChange={() => {
+                setDraftRequest(buildCreateTaskRequest(form.getFieldsValue(true)))
                 setPreviewVersion((current) => current + 1)
               }}
-              initialValues={{
-                competitors: [{ name: '', url: '' }],
-                reportLanguage: '中文',
-                reportTemplate: '标准版',
-              }}
+              initialValues={INITIAL_FORM_VALUES}
             >
+              <Space direction="vertical" size={4} style={{ width: '100%', marginBottom: 16 }}>
+                <Text strong>任务目标</Text>
+                <Text type="secondary">先补充分析主题、本方产品和竞品对象，系统会据此生成来源策略与执行计划预览。</Text>
+              </Space>
+
               <Form.Item
                 name="taskName"
                 label="分析主题"
@@ -357,8 +260,7 @@ export default function TaskCreatePage() {
                         .map((item) => item?.name?.trim())
                         .filter(Boolean) as string[]
                       const uniqueNames = new Set(normalizedNames.map((item) => item.toLowerCase()))
-                      const valid = normalizedNames.length > 0
-                      if (!valid) {
+                      if (normalizedNames.length === 0) {
                         return Promise.reject(new Error('请至少添加一个竞品'))
                       }
                       if (uniqueNames.size !== normalizedNames.length) {
@@ -431,8 +333,12 @@ export default function TaskCreatePage() {
               </Form.List>
 
               <Divider orientation="left" plain>
-                分析设置
+                可调整输入
               </Divider>
+
+              <Space direction="vertical" size={4} style={{ width: '100%', marginBottom: 12 }}>
+                <Text type="secondary">这些设置会直接影响研究范围、来源覆盖和最终报告表达，可在启动前继续调整。</Text>
+              </Space>
 
               <Form.Item name="schemaId" label="分析结构模板">
                 <Select allowClear placeholder="可选，不填写则使用默认规则" options={schemaOptions} />
@@ -492,210 +398,43 @@ export default function TaskCreatePage() {
         </Col>
 
         <Col xs={24} lg={10}>
-          <Card title="启动前工作流预览" className="work-card">
-            {workflowPreview.length > 0 ? (
-              <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                <div className="create-preview-hero">
-                  <div className="create-preview-stat">
-                    <span className="create-preview-value">{previewSummary.competitorCount}</span>
-                    <span className="create-preview-label">竞品泳道</span>
-                  </div>
-                  <div className="create-preview-stat">
-                    <span className="create-preview-value">{previewSummary.collectorCount}</span>
-                    <span className="create-preview-label">采集节点</span>
-                  </div>
-                  <div className="create-preview-stat">
-                    <span className="create-preview-value">{previewSummary.queryCount}</span>
-                    <span className="create-preview-label">预设 Query</span>
-                  </div>
-                  <div className="create-preview-stat">
-                    <span className="create-preview-value">{previewSummary.browserEnabledCount}</span>
-                    <span className="create-preview-label">浏览器补源</span>
-                  </div>
-                </div>
-
-                <Alert
-                  type="info"
-                  showIcon
-                  message="系统会先规划采集，再并行执行各竞品采集分支"
-                  description="默认只展示业务摘要和关键补源策略；Query、候选来源与执行脚本等高级细节会收纳在折叠区里。"
-                />
-
-                <div>
-                  <div className="preview-section-title">
-                    <SearchOutlined />
-                    <span>采集泳道</span>
-                  </div>
-                  <div className="preview-lane-board">
-                    {previewGroups.map(([competitor, items]) => (
-                      <div className="preview-lane" key={competitor}>
-                        <div className="preview-lane-header">
-                          <Space direction="vertical" size={2}>
-                            <Text strong>{competitor}</Text>
-                            <Text type="secondary">
-                              {items.length > 1 ? `将并行启动 ${items.length} 个采集分支` : '将启动单一采集分支'}
-                            </Text>
-                          </Space>
-                          <Tag>{items.length > 1 ? '并行采集' : '单分支采集'}</Tag>
-                        </div>
-
-                        <div className="preview-lane-grid">
-                          {items.map(({ node, insight, summaryData, dependencies }) => (
-                            <div className="preview-lane-node" key={node.nodeName}>
-                              <Space direction="vertical" size={10} style={{ width: '100%' }}>
-                                <div>
-                                  <Text strong>{summaryData?.sourceTypeLabel || getSourceTypeText(insight.sourceType)}</Text>
-                                  <div className="preview-node-summary">
-                                    {collectorPreviewSummary(summaryData, insight.candidateCount, insight.searchQueries.length)}
-                                  </div>
-                                </div>
-
-                                <div className="preview-node-meta">
-                                  <span>{collectorPreviewMeta(summaryData, {
-                                    searchMode: insight.searchMode,
-                                    verifyResultPage: insight.verifyResultPage,
-                                    minVerifiedCandidates: insight.minVerifiedCandidates,
-                                  }).searchModeText}</span>
-                                  <span>
-                                    {collectorPreviewMeta(summaryData, {
-                                      searchMode: insight.searchMode,
-                                      verifyResultPage: insight.verifyResultPage,
-                                      minVerifiedCandidates: insight.minVerifiedCandidates,
-                                    }).verificationText}
-                                  </span>
-                                  <span>
-                                    {dependencies.length > 0
-                                      ? `依赖 ${dependencies.join('、')}`
-                                      : '无上游依赖，可直接并行执行'}
-                                  </span>
-                                </div>
-
-                                <Space wrap>
-                                  <Tag>{`范围 ${(summaryData?.sourceScope?.join('、') || insight.sourceScope.join('、')) || '未指定'}`}</Tag>
-                                  <Tag>{`规划入口 ${(summaryData?.competitorUrls?.length ?? insight.competitorUrls.length)} 个`}</Tag>
-                                  <Tag>{`候选 ${summaryData?.candidateCount ?? insight.candidateCount} 条`}</Tag>
-                                  {(summaryData?.browserSearchEnabled ?? insight.browserSearchEnabled) && <Tag color="cyan">浏览器补源开启</Tag>}
-                                </Space>
-
-                                <Collapse
-                                  size="small"
-                                  items={[
-                                    insight.searchQueries.length > 0
-                                      ? {
-                                          key: 'queries',
-                                          label: `搜索 Query (${insight.searchQueries.length})`,
-                                          children: (
-                                            <Space wrap>
-                                              {insight.searchQueries.map((query) => (
-                                                <Tag key={query}>{query}</Tag>
-                                              ))}
-                                            </Space>
-                                          ),
-                                        }
-                                      : {
-                                          key: 'queries',
-                                          label: '搜索 Query',
-                                          children: <Text type="secondary">当前未配置显式 Query</Text>,
-                                        },
-                                    insight.searchExecutionPlan?.steps?.length
-                                      ? {
-                                          key: 'plan',
-                                          label: `搜索执行脚本 (${insight.searchExecutionPlan.steps.length} 步)`,
-                                          children: (
-                                            <div className="preview-step-list">
-                                              {insight.searchExecutionPlan.steps.map((step, index) => (
-                                                <div className="preview-step-item" key={step.stepCode}>
-                                                  <Text strong>{`${index + 1}. ${step.goal || step.stepCode}`}</Text>
-                                                  {step.dependency && (
-                                                    <Text type="secondary">{`依赖 ${step.dependency}`}</Text>
-                                                  )}
-                                                </div>
-                                              ))}
-                                            </div>
-                                          ),
-                                        }
-                                      : {
-                                          key: 'plan',
-                                          label: '搜索执行脚本',
-                                          children: <Text type="secondary">当前未返回结构化执行脚本</Text>,
-                                        },
-                                    insight.sourceCandidates.length > 0
-                                      ? {
-                                          key: 'candidates',
-                                          label: `候选来源预览 (${insight.sourceCandidates.length})`,
-                                          children: (
-                                            <Space wrap>
-                                              {insight.sourceCandidates.map((candidate) => (
-                                                <Tag key={`${candidate.url}-${candidate.title || ''}`}>
-                                                  {candidateLabel(candidate)}
-                                                </Tag>
-                                              ))}
-                                            </Space>
-                                          ),
-                                        }
-                                      : {
-                                          key: 'candidates',
-                                          label: '候选来源预览',
-                                          children: <Text type="secondary">当前没有显式候选来源</Text>,
-                                        },
-                                  ]}
-                                />
-
-                                {((summaryData?.preferredDomains?.length || 0) > 0 || summaryData?.discoveryNotes || insight.discoveryNotes || node.nodeNotes) && (
-                                  <div className="preview-node-footnote">
-                                    {(summaryData?.preferredDomains?.length ?? insight.preferredDomains.length) > 0 && (
-                                      <Text type="secondary">{`优先域名：${summarizeList(summaryData?.preferredDomains || insight.preferredDomains, 3)}`}</Text>
-                                    )}
-                                    {(summaryData?.discoveryNotes || insight.discoveryNotes) && (
-                                      <Text type="secondary">{summaryData?.discoveryNotes || insight.discoveryNotes}</Text>
-                                    )}
-                                    {node.nodeNotes && <Text type="secondary">{node.nodeNotes}</Text>}
-                                  </div>
-                                )}
-                              </Space>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="dag-connector">{`以上 ${previewSummary.collectorCount} 个采集节点完成后，将汇聚到统一分析主链路`}</div>
-
-                <div>
-                  <div className="preview-section-title">
-                    <ApartmentOutlined />
-                    <span>汇聚主链路</span>
-                  </div>
-                  <div className="preview-pipeline-board">
-                    {previewPipelineNodes.map((node) => (
-                      <div className="preview-pipeline-node" key={node.nodeName}>
-                        <Text strong>{getNodeDisplayName(node)}</Text>
-                        <Text type="secondary">{getAgentTypeText(node.agentType)}</Text>
-                        <Text type="secondary">{pipelinePreviewSummary(node)}</Text>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </Space>
-            ) : (
-              <Alert
-                type="info"
-                showIcon
-                message="这里将显示启动前预览"
-                description="填写任务名称、本方产品和至少一个竞品后，系统会自动生成并行采集与后续处理链路的动态预览。"
-              />
-            )}
+          <Card title="来源策略" className="work-card">
+            <SourceStrategySummary
+              overview={sourceStrategyOverview}
+              hasReadyPreview={workflowPreview.length > 0}
+            />
             {previewLoading && <Text type="secondary">正在刷新预览...</Text>}
           </Card>
 
+          <Card title="执行计划预览" className="work-card" style={{ marginTop: 16 }}>
+            <TaskPlanPreviewBoard
+              plan={taskPlanPreview}
+              hasReadyPreview={workflowPreview.length > 0}
+            />
+          </Card>
+
           <Card className="work-card" style={{ marginTop: 16 }}>
-            <Space>
+            <Space align="start">
               <ThunderboltOutlined className="hint-icon" />
-              <Text>预览会直接告诉你哪些采集节点可并行启动、哪些启用了浏览器补源，以及最终会汇聚到哪条主链路。</Text>
+              <Text>
+                首屏会先帮助你确认任务目标、来源策略和执行节奏；原始检索词、候选链接与其他技术细节会放到后续按需查看的路径中。
+              </Text>
             </Space>
           </Card>
+
+          <div style={{ marginTop: 16 }}>
+            <KnowledgeSourceIntakeCard />
+          </div>
+
+          {workflowPreview.length === 0 && (
+            <Alert
+              style={{ marginTop: 16 }}
+              type="info"
+              showIcon
+              message="补全任务目标后将自动生成计划"
+              description="填写分析主题、本方产品和至少一个竞品后，系统会自动刷新来源策略与执行计划预览。"
+            />
+          )}
         </Col>
       </Row>
     </div>

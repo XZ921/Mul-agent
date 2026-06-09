@@ -17,6 +17,12 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/**
+ * 竞品知识沉淀实体。
+ * <p>
+ * Task 5.4 以后它不再只是“抽取结果表”，还承担跨任务可复用领域知识的载体职责，
+ * 因此需要显式保留记忆层级、版本来源和失效规则。
+ */
 @Data
 @Builder
 @NoArgsConstructor
@@ -49,6 +55,10 @@ public class CompetitorKnowledge {
     @Column(columnDefinition = "TEXT")
     @Schema(description = "Summary")
     private String summary;
+
+    @Column(name = "memory_layer", nullable = false, length = 40)
+    @Schema(description = "Memory layer", example = "DOMAIN")
+    private String memoryLayer;
 
     @Column(length = 500)
     @Schema(description = "Positioning")
@@ -86,6 +96,27 @@ public class CompetitorKnowledge {
     @Schema(description = "Field-level evidence coverage JSON")
     private String evidenceCoverage;
 
+    /**
+     * 标记领域知识来自哪个任务版本边界，避免跨任务沉淀时新旧来源混淆。
+     */
+    @Column(name = "version_source", nullable = false, length = 120)
+    @Schema(description = "Version source", example = "TASK_RAG@PLAN-22:analysis")
+    private String versionSource;
+
+    /**
+     * 标记领域知识在哪个边界下应该被重新评估。
+     */
+    @Column(name = "invalidation_scope", nullable = false, length = 40)
+    @Schema(description = "Invalidation scope", example = "DOMAIN_REFRESH")
+    private String invalidationScope;
+
+    /**
+     * 标记领域知识失效的主要原因。
+     */
+    @Column(name = "invalidation_reason", nullable = false, length = 120)
+    @Schema(description = "Invalidation reason", example = "SOURCE_EVIDENCE_CHANGED")
+    private String invalidationReason;
+
     @Schema(description = "Extracted time")
     private LocalDateTime extractedAt;
 
@@ -100,10 +131,30 @@ public class CompetitorKnowledge {
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
+        applyDefaults();
     }
 
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+        applyDefaults();
+    }
+
+    /**
+     * 统一补齐领域记忆默认边界，避免写回时把无版本、无失效规则的知识沉进长期层。
+     */
+    private void applyDefaults() {
+        if (this.memoryLayer == null || this.memoryLayer.isBlank()) {
+            this.memoryLayer = "DOMAIN";
+        }
+        if (this.versionSource == null || this.versionSource.isBlank()) {
+            this.versionSource = "UNSPECIFIED";
+        }
+        if (this.invalidationScope == null || this.invalidationScope.isBlank()) {
+            this.invalidationScope = "MANUAL_REVIEW";
+        }
+        if (this.invalidationReason == null || this.invalidationReason.isBlank()) {
+            this.invalidationReason = "NOT_EVALUATED";
+        }
     }
 }

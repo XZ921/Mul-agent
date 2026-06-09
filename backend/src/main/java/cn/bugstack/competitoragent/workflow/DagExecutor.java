@@ -3,13 +3,27 @@ package cn.bugstack.competitoragent.workflow;
 import cn.bugstack.competitoragent.agent.Agent;
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
+import cn.bugstack.competitoragent.model.dto.AgentLogResponse;
+import cn.bugstack.competitoragent.event.TaskEventPublisher;
+import cn.bugstack.competitoragent.log.AgentLogService;
+import cn.bugstack.competitoragent.model.entity.TaskNodeExecutionAttempt;
+import cn.bugstack.competitoragent.model.entity.TaskPlan;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
+import cn.bugstack.competitoragent.model.entity.WorkflowDeadLetterRecord;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
+import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
+import cn.bugstack.competitoragent.repository.TaskNodeExecutionAttemptRepository;
+import cn.bugstack.competitoragent.repository.WorkflowDeadLetterRecordRepository;
+import cn.bugstack.competitoragent.task.TaskExecutionLockService;
+import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
+import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
+import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
+import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,11 +31,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutorCompletionService;
@@ -40,16 +58,43 @@ public class DagExecutor {
     private final Map<AgentType, Agent> agentRegistry;
     private final ObjectMapper objectMapper;
     private final NodeExecutionRecoveryPolicy recoveryPolicy;
+    private final TaskSnapshotCacheService taskSnapshotCacheService;
+    private final TaskExecutionLockService taskExecutionLockService;
+    private final TaskEventPublisher taskEventPublisher;
+    private final AgentLogService agentLogService;
+    private final WorkflowEventPublisher workflowEventPublisher;
+    private final TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository;
+    private final WorkflowDeadLetterRecordRepository workflowDeadLetterRecordRepository;
+    private final DynamicTaskGraphService dynamicTaskGraphService;
+    private final TaskPlanRepository taskPlanRepository;
 
     public DagExecutor(TaskNodeRepository nodeRepository,
                        AnalysisTaskRepository taskRepository,
                        List<Agent> agents,
-                       ObjectMapper objectMapper) {
+                       ObjectMapper objectMapper,
+                       TaskSnapshotCacheService taskSnapshotCacheService,
+                       TaskExecutionLockService taskExecutionLockService,
+                       TaskEventPublisher taskEventPublisher,
+                       AgentLogService agentLogService,
+                       WorkflowEventPublisher workflowEventPublisher,
+                       TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository,
+                       WorkflowDeadLetterRecordRepository workflowDeadLetterRecordRepository,
+                       DynamicTaskGraphService dynamicTaskGraphService,
+                       TaskPlanRepository taskPlanRepository) {
         this.nodeRepository = nodeRepository;
         this.taskRepository = taskRepository;
         this.agentRegistry = buildAgentRegistry(agents);
         this.objectMapper = objectMapper;
         this.recoveryPolicy = new NodeExecutionRecoveryPolicy(objectMapper);
+        this.taskSnapshotCacheService = taskSnapshotCacheService;
+        this.taskExecutionLockService = taskExecutionLockService;
+        this.taskEventPublisher = taskEventPublisher;
+        this.agentLogService = agentLogService;
+        this.workflowEventPublisher = workflowEventPublisher;
+        this.taskNodeExecutionAttemptRepository = taskNodeExecutionAttemptRepository;
+        this.workflowDeadLetterRecordRepository = workflowDeadLetterRecordRepository;
+        this.dynamicTaskGraphService = dynamicTaskGraphService;
+        this.taskPlanRepository = taskPlanRepository;
     }
 
     public void execute(Long taskId, AgentContext context) {
@@ -59,13 +104,18 @@ public class DagExecutor {
             return;
         }
 
-        List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
+        // 执行期节点集合需要支持“终审失败后动态补图”场景。
+        // 仓储层可能返回只读集合，所以这里先复制成可变列表，
+        // 避免后续 append 动态节点时在运行期抛出 UnsupportedOperationException。
+        List<TaskNode> nodes = new ArrayList<>(
+                nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId));
         if (nodes.isEmpty()) {
             failTask(taskId, "No executable DAG nodes");
             return;
         }
 
         seedSharedOutputs(context, nodes);
+        refreshRuntimeSnapshot(taskId);
         Map<String, TaskNode> nodeMap = buildNodeMap(nodes);
         validateExecutableNodes(taskId, nodes, nodeMap);
 
@@ -102,6 +152,9 @@ public class DagExecutor {
                 runningCount--;
                 if (completedResult != null) {
                     lastTouchedNode = completedResult.getNode();
+                    if (maybeAppendDynamicPlan(taskId, nodes, nodeMap, completedResult.getNode())) {
+                        refreshRuntimeSnapshot(taskId);
+                    }
                 }
             }
         } finally {
@@ -115,6 +168,8 @@ public class DagExecutor {
      * 续跑时重新灌入已成功节点输出，让后续节点能像在同一条执行链中一样复用历史结果。
      */
     private void seedSharedOutputs(AgentContext context, List<TaskNode> nodes) {
+        taskSnapshotCacheService.getCachedNodeOutputs(context.getTaskId())
+                .forEach(context::putSharedOutput);
         for (TaskNode node : nodes) {
             if (node.getStatus() == TaskNodeStatus.SUCCESS
                     && node.getOutputData() != null
@@ -124,34 +179,12 @@ public class DagExecutor {
         }
     }
 
-    private AgentResult executeNodeWithRetry(Agent agent, AgentContext context, TaskNode node) {
-        int maxAttempts = node.isRetryable() ? Math.max(1, node.getMaxRetries() + 1) : 1;
-        AgentResult lastResult = null;
-
-        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            node.setRetryCount(attempt - 1);
-            try {
-                lastResult = agent.execute(context);
-                if (lastResult.getStatus() == TaskNodeStatus.SUCCESS) {
-                    return lastResult;
-                }
-                // 只有显式允许重试且次数未耗尽时，才进入下一轮尝试。
-                if (!node.isRetryable() || attempt >= maxAttempts) {
-                    return lastResult;
-                }
-                log.warn("node retry scheduled, nodeName={}, attempt={}/{}",
-                        node.getNodeName(), attempt, maxAttempts);
-            } catch (Exception e) {
-                lastResult = AgentResult.failed(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
-                if (!node.isRetryable() || attempt >= maxAttempts) {
-                    return lastResult;
-                }
-                log.warn("node retry after exception, nodeName={}, attempt={}/{}",
-                        node.getNodeName(), attempt, maxAttempts, e);
-            }
+    private AgentResult executeNodeOnce(Agent agent, AgentContext context) {
+        try {
+            return agent.execute(context);
+        } catch (Exception e) {
+            return AgentResult.failed(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
         }
-
-        return lastResult != null ? lastResult : AgentResult.failed("Unknown node execution failure");
     }
 
     private DispatchCycleResult dispatchExecutableNodes(Long taskId,
@@ -163,11 +196,21 @@ public class DagExecutor {
         boolean skippedAny = false;
         int submittedCount = 0;
         TaskNode lastTouchedNode = null;
+        LocalDateTime now = LocalDateTime.now();
         for (TaskNode node : nodes) {
             if (node.getStatus() == TaskNodeStatus.SUCCESS
+                    || node.getStatus() == TaskNodeStatus.COMPENSATED
                     || node.getStatus() == TaskNodeStatus.FAILED
                     || node.getStatus() == TaskNodeStatus.SKIPPED
                     || node.getStatus() == TaskNodeStatus.RUNNING) {
+                continue;
+            }
+            if (node.getStatus() == TaskNodeStatus.WAITING_INTERVENTION) {
+                continue;
+            }
+            if (node.getStatus() == TaskNodeStatus.WAITING_RETRY
+                    && node.getNextRetryAt() != null
+                    && node.getNextRetryAt().isAfter(now)) {
                 continue;
             }
             if (node.getControlState() == TaskNodeControlState.TERMINATE_REQUESTED
@@ -204,11 +247,20 @@ public class DagExecutor {
             }
 
             AgentContext nodeContext = forkNodeContext(sharedContext, node);
-            markNodeRunning(node, nodeContext);
-            completionService.submit(() -> executeRunningNode(taskId, sharedContext, node, nodeContext));
+            String lockOwner = "node-runner-" + taskId + "-" + node.getNodeName() + "-" + UUID.randomUUID();
+            if (!taskExecutionLockService.tryAcquireNodeExecutionLock(
+                    taskId,
+                    node.getNodeName(),
+                    lockOwner,
+                    Duration.ofMinutes(10))) {
+                continue;
+            }
+            workflowEventPublisher.publishNodeReady(node);
+            TaskNode runningNode = markNodeRunning(node, nodeContext);
+            completionService.submit(() -> executeRunningNode(taskId, sharedContext, runningNode, nodeContext, lockOwner));
             progressed = true;
             submittedCount++;
-            lastTouchedNode = node;
+            lastTouchedNode = runningNode;
         }
         return new DispatchCycleResult(progressed, skippedAny, submittedCount, lastTouchedNode);
     }
@@ -224,49 +276,351 @@ public class DagExecutor {
     private NodeExecutionResult executeRunningNode(Long taskId,
                                                    AgentContext sharedContext,
                                                    TaskNode node,
-                                                   AgentContext nodeContext) {
-        if (isTaskStopped(taskId)) {
-            markNodeStopped(node);
-            return new NodeExecutionResult(node);
+                                                   AgentContext nodeContext,
+                                                   String nodeLockOwner) {
+        try {
+            if (isTaskStopped(taskId)) {
+                markNodeStopped(node);
+                return new NodeExecutionResult(node);
+            }
+            Agent agent = agentRegistry.get(node.getAgentType());
+            if (agent == null) {
+                failNode(node, "Missing agent implementation: " + node.getAgentType());
+                return new NodeExecutionResult(node);
+            }
+
+            AgentResult result = executeNodeOnce(agent, nodeContext);
+            TaskNode latestNode = nodeRepository.findById(node.getId()).orElse(node);
+            if (latestNode.getControlState() == TaskNodeControlState.TERMINATE_REQUESTED) {
+                latestNode.setStatus(TaskNodeStatus.SKIPPED);
+                latestNode.setOutputData(null);
+                latestNode.setErrorMessage(defaultIfBlank(
+                        latestNode.getInterventionReason(),
+                        "节点已收到终止请求，当前轮执行结果已丢弃"));
+                latestNode.setInterventionReason(defaultIfBlank(
+                        latestNode.getInterventionReason(),
+                        "节点已收到终止请求，当前轮执行结果已丢弃"));
+                latestNode.setControlState(TaskNodeControlState.NONE);
+                latestNode.setCompletedAt(LocalDateTime.now());
+                TaskNode terminatedNode = nodeRepository.save(latestNode);
+                refreshRuntimeSnapshot(taskId);
+                taskEventPublisher.publishNodeStatusEvent(taskId, terminatedNode, "NODE_TERMINATED");
+                syncNodeState(node, terminatedNode);
+                return new NodeExecutionResult(terminatedNode);
+            }
+
+            TaskNode completedNode = applyExecutionResult(taskId, sharedContext, latestNode, result);
+            refreshRuntimeSnapshot(taskId);
+            publishNodeExecutionEvents(taskId, completedNode);
+            if (result.getStatus() == TaskNodeStatus.SUCCESS) {
+                workflowEventPublisher.publishNodeCompleted(completedNode, extractSourceUrls(result.getOutputData()));
+            } else {
+                workflowEventPublisher.publishNodeFailed(completedNode, extractSourceUrls(result.getOutputData()));
+            }
+            syncNodeState(node, completedNode);
+            return new NodeExecutionResult(completedNode);
+        } finally {
+            taskExecutionLockService.releaseNodeExecutionLock(taskId, node.getNodeName(), nodeLockOwner);
         }
-        Agent agent = agentRegistry.get(node.getAgentType());
-        if (agent == null) {
-            failNode(node, "Missing agent implementation: " + node.getAgentType());
-            return new NodeExecutionResult(node);
+    }
+
+    /**
+     * 节点执行结果统一在这里收口。
+     * 这样自动重试、人工介入、尝试记录和 DLQ 留痕都不会散落在多个分支里。
+     */
+    /**
+     * 终审节点产出的 revisionDirectives 在这里真正升级为“编排动作”。
+     * 只有当 Reviewer 已成功写入权威状态后，才允许派生新的 TaskPlan 和动态节点，
+     * 避免把瞬时失败或脏结果放大成重复补图。
+     */
+    private boolean maybeAppendDynamicPlan(Long taskId,
+                                           List<TaskNode> nodes,
+                                           Map<String, TaskNode> nodeMap,
+                                           TaskNode completedNode) {
+        JsonNode reviewOutput = readJson(completedNode == null ? null : completedNode.getOutputData());
+        if (!shouldCreateDynamicBackflow(completedNode, reviewOutput)) {
+            return false;
         }
 
-        AgentResult result = executeNodeWithRetry(agent, nodeContext, node);
-        TaskNode latestNode = nodeRepository.findById(node.getId()).orElse(node);
-        if (latestNode.getControlState() == TaskNodeControlState.TERMINATE_REQUESTED) {
-            node.setStatus(TaskNodeStatus.SKIPPED);
-            node.setOutputData(null);
-            node.setErrorMessage(defaultIfBlank(
-                    latestNode.getInterventionReason(),
-                    "节点已收到终止请求，当前轮执行结果已丢弃"));
-            node.setInterventionReason(defaultIfBlank(
-                    latestNode.getInterventionReason(),
-                    "节点已收到终止请求，当前轮执行结果已丢弃"));
-            node.setControlState(TaskNodeControlState.NONE);
-            node.setCompletedAt(LocalDateTime.now());
-            nodeRepository.save(node);
-            return new NodeExecutionResult(node);
+        List<RevisionDirective> directives = readRevisionDirectives(reviewOutput);
+        if (directives.isEmpty()) {
+            return false;
         }
 
-        node.setStatus(result.getStatus());
-        node.setOutputData(result.getOutputData());
-        node.setCompletedAt(LocalDateTime.now());
+        TaskPlan parentPlan = resolveParentPlan(completedNode);
+        if (parentPlan == null) {
+            return false;
+        }
+
+        return taskRepository.findById(taskId).map(task -> {
+            if (task.getCurrentPlanVersionId() == null || !task.getCurrentPlanVersionId().equals(parentPlan.getId())) {
+                return false;
+            }
+
+            WorkflowPlan baseWorkflowPlan = readWorkflowPlan(parentPlan.getPlanSnapshot());
+            if (baseWorkflowPlan == null) {
+                return false;
+            }
+
+            TaskPlan derivedPlan = dynamicTaskGraphService.createDynamicPlan(parentPlan, completedNode, directives, baseWorkflowPlan);
+            List<TaskNode> dynamicNodes = materializeDynamicNodes(taskId, completedNode, derivedPlan, nodeMap);
+            if (dynamicNodes.isEmpty()) {
+                return false;
+            }
+
+            nodeRepository.saveAll(dynamicNodes);
+            nodes.addAll(dynamicNodes);
+            nodes.sort(java.util.Comparator.comparingInt(TaskNode::getExecutionOrder));
+            for (TaskNode dynamicNode : dynamicNodes) {
+                nodeMap.put(dynamicNode.getNodeName(), dynamicNode);
+            }
+
+            task.setCurrentPlanVersionId(derivedPlan.getId());
+            task.setCurrentPlanVersion(derivedPlan.getPlanVersion());
+            task.setErrorMessage(null);
+            taskRepository.save(task);
+            log.info("dynamic backflow plan attached, taskId={}, triggerNode={}, planVersion={}, dynamicNodeCount={}",
+                    taskId, completedNode.getNodeName(), derivedPlan.getPlanVersion(), dynamicNodes.size());
+            return true;
+        }).orElse(false);
+    }
+
+    private boolean shouldCreateDynamicBackflow(TaskNode completedNode, JsonNode reviewOutput) {
+        if (completedNode == null
+                || completedNode.getAgentType() != AgentType.REVIEWER
+                || completedNode.getStatus() != TaskNodeStatus.SUCCESS
+                || reviewOutput == null) {
+            return false;
+        }
+        if (reviewOutput.path("passed").asBoolean(true)) {
+            return false;
+        }
+        if (reviewOutput.path("requiresHumanIntervention").asBoolean(false)) {
+            return false;
+        }
+        return "final".equalsIgnoreCase(reviewOutput.path("reviewStage").asText(""));
+    }
+
+    private List<RevisionDirective> readRevisionDirectives(JsonNode reviewOutput) {
+        if (reviewOutput == null) {
+            return List.of();
+        }
+        try {
+            if (reviewOutput.has("revisionDirectives") && reviewOutput.get("revisionDirectives").isArray()) {
+                List<RevisionDirective> directives = objectMapper.convertValue(
+                        reviewOutput.get("revisionDirectives"),
+                        new TypeReference<List<RevisionDirective>>() {});
+                return directives.stream().map(RevisionDirective::normalized).toList();
+            }
+            JsonNode revisionPlan = reviewOutput.get("revisionPlan");
+            if (revisionPlan != null && revisionPlan.has("directives") && revisionPlan.get("directives").isArray()) {
+                List<RevisionDirective> directives = objectMapper.convertValue(
+                        revisionPlan.get("directives"),
+                        new TypeReference<List<RevisionDirective>>() {});
+                return directives.stream().map(RevisionDirective::normalized).toList();
+            }
+        } catch (Exception e) {
+            log.warn("failed to parse revision directives from reviewer output", e);
+        }
+        return List.of();
+    }
+
+    private TaskPlan resolveParentPlan(TaskNode completedNode) {
+        if (completedNode == null || completedNode.getPlanVersionId() == null) {
+            return null;
+        }
+        return taskPlanRepository.findById(completedNode.getPlanVersionId()).orElse(null);
+    }
+
+    private WorkflowPlan readWorkflowPlan(String rawPlanSnapshot) {
+        if (rawPlanSnapshot == null || rawPlanSnapshot.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(rawPlanSnapshot, WorkflowPlan.class);
+        } catch (Exception e) {
+            log.warn("failed to parse workflow plan snapshot", e);
+            return null;
+        }
+    }
+
+    /**
+     * 动态计划快照里同时包含旧节点和新节点，这里只把当前派生分支上的新增节点落库。
+     */
+    private List<TaskNode> materializeDynamicNodes(Long taskId,
+                                                   TaskNode triggerNode,
+                                                   TaskPlan derivedPlan,
+                                                   Map<String, TaskNode> nodeMap) {
+        WorkflowPlan workflowPlan = readWorkflowPlan(derivedPlan == null ? null : derivedPlan.getPlanSnapshot());
+        if (workflowPlan == null || derivedPlan == null) {
+            return List.of();
+        }
+
+        List<TaskNode> materializedNodes = new java.util.ArrayList<>();
+        for (WorkflowPlan.WorkflowPlanNode planNode : workflowPlan.getNodes()) {
+            if (!planNode.isDynamicNode()
+                    || !derivedPlan.getBranchKey().equals(planNode.getBranchKey())
+                    || nodeMap.containsKey(planNode.getNodeName())) {
+                continue;
+            }
+            materializedNodes.add(TaskNode.builder()
+                    .taskId(taskId)
+                    .nodeName(planNode.getNodeName())
+                    .displayName(planNode.getDisplayName())
+                    .agentType(AgentType.valueOf(planNode.getAgentType()))
+                    .dependsOn(writeDependencyJson(planNode.getDependsOn()))
+                    .nodeConfig(planNode.getNodeConfig())
+                    .nodeNotes(planNode.getNotes())
+                    .allowFailedDependency(planNode.isAllowFailedDependency())
+                    .required(planNode.isRequired())
+                    .retryable(planNode.isRetryable())
+                    .maxRetries(planNode.getMaxRetries())
+                    .retryCount(0)
+                    .status(TaskNodeStatus.PENDING)
+                    .executionOrder(planNode.getExecutionOrder())
+                    .planVersionId(derivedPlan.getId())
+                    .branchKey(planNode.getBranchKey())
+                    .dynamicNode(planNode.isDynamicNode())
+                    .originNodeName(planNode.getOriginNodeName() == null ? triggerNode.getNodeName() : planNode.getOriginNodeName())
+                    .build());
+        }
+        return materializedNodes;
+    }
+
+    private String writeDependencyJson(List<String> dependencies) {
+        try {
+            return objectMapper.writeValueAsString(dependencies == null ? List.of() : dependencies);
+        } catch (Exception e) {
+            log.warn("failed to serialize dynamic node dependencies", e);
+            return "[]";
+        }
+    }
+
+    /**
+     * 这里必须持续使用数据库中的最新节点实体。
+     * 否则前一步 save 产生的新版本号如果没有带回，后续再次 save 同一个旧对象时就会触发乐观锁冲突。
+     */
+    private TaskNode applyExecutionResult(Long taskId,
+                                          AgentContext sharedContext,
+                                          TaskNode node,
+                                          AgentResult result) {
+        LocalDateTime now = LocalDateTime.now();
+        int attemptNo = resolveAttemptNo(node);
+        node.setLastEventId(UUID.randomUUID().toString());
+        node.setLastAttemptAt(now);
+        node.setCompletedAt(now);
         node.setControlState(TaskNodeControlState.NONE);
         node.setInterventionReason(null);
 
         if (result.getStatus() == TaskNodeStatus.SUCCESS) {
+            node.setStatus(TaskNodeStatus.SUCCESS);
+            node.setOutputData(result.getOutputData());
             node.setErrorMessage(null);
-            sharedContext.putSharedOutput(node.getNodeName(), result.getOutputData());
-        } else {
-            node.setErrorMessage(result.getErrorMessage());
+            node.setFailureCategory(null);
+            node.setNextRetryAt(null);
+            TaskNode savedNode = nodeRepository.save(node);
+            recordExecutionAttempt(savedNode, attemptNo, TaskNodeStatus.SUCCESS, null, null);
+            sharedContext.putSharedOutput(savedNode.getNodeName(), result.getOutputData());
+            taskSnapshotCacheService.cacheNodeOutput(taskId, node.getNodeName(), result.getOutputData());
+            return savedNode;
         }
 
-        nodeRepository.save(node);
-        return new NodeExecutionResult(node);
+        node.setOutputData(result.getOutputData());
+        NodeRetryDecision decision = NodeRetryDecision.evaluate(node, result.getErrorMessage());
+        node.setStatus(decision.getNextStatus());
+        node.setRetryCount(decision.getNextRetryCount());
+        node.setFailureCategory(decision.getFailureCategory());
+        node.setErrorMessage(result.getErrorMessage());
+        node.setInterventionReason(decision.requiresManualIntervention() ? decision.getUserReadableSummary() : null);
+        node.setNextRetryAt(decision.isRetryPlanned() ? now.plusNanos(1) : null);
+        TaskNode savedNode = nodeRepository.save(node);
+        recordExecutionAttempt(savedNode, attemptNo, decision.getNextStatus(), decision.getFailureCategory(), result.getErrorMessage());
+        if (decision.shouldEnterDlq()) {
+            recordDeadLetter(savedNode, result.getErrorMessage());
+        }
+        return savedNode;
+    }
+
+    private void recordExecutionAttempt(TaskNode node,
+                                        int attemptNo,
+                                        TaskNodeStatus resultStatus,
+                                        NodeFailureCategory failureCategory,
+                                        String errorSummary) {
+        if (node == null || node.getId() == null) {
+            return;
+        }
+        TaskNodeExecutionAttempt attempt = TaskNodeExecutionAttempt.builder()
+                .taskId(node.getTaskId())
+                .nodeId(node.getId())
+                .nodeName(node.getNodeName())
+                .attemptNo(attemptNo)
+                .idempotencyKey(buildAttemptIdempotencyKey(node, attemptNo))
+                .resultStatus(resultStatus)
+                .failureCategory(failureCategory)
+                .errorSummary(errorSummary)
+                .sourceEventId(node.getLastEventId())
+                .build();
+        taskNodeExecutionAttemptRepository.save(attempt);
+    }
+
+    private void recordDeadLetter(TaskNode node, String errorSummary) {
+        if (node == null || node.getId() == null) {
+            return;
+        }
+        List<TaskNodeExecutionAttempt> attempts = taskNodeExecutionAttemptRepository
+                .findByTaskIdAndNodeIdOrderByAttemptNoAsc(node.getTaskId(), node.getId());
+        WorkflowDeadLetterRecord record = WorkflowDeadLetterRecord.builder()
+                .taskId(node.getTaskId())
+                .nodeId(node.getId())
+                .nodeName(node.getNodeName())
+                .sourceEventId(node.getLastEventId())
+                .failureCategory(node.getFailureCategory())
+                .latestErrorSummary(errorSummary)
+                .retryHistory(buildRetryHistory(attempts))
+                .originalPayload(node.getInputData())
+                .build();
+        workflowDeadLetterRecordRepository.save(record);
+    }
+
+    private String buildAttemptIdempotencyKey(TaskNode node, int attemptNo) {
+        return "%d-%d-%s-%d".formatted(node.getTaskId(), node.getId(), node.getNodeName(), attemptNo);
+    }
+
+    /**
+     * retryCount 只服务于“当前这一轮自动重试预算”的判断；
+     * 但执行尝试历史需要跨人工恢复/重跑持续累加，否则会和旧的审计记录发生幂等键冲突。
+     */
+    private int resolveAttemptNo(TaskNode node) {
+        if (node == null || node.getTaskId() == null || node.getId() == null) {
+            return 1;
+        }
+        return taskNodeExecutionAttemptRepository
+                .findTopByTaskIdAndNodeIdOrderByAttemptNoDesc(node.getTaskId(), node.getId())
+                .map(attempt -> Math.max(1, attempt.getAttemptNo() + 1))
+                .orElse(1);
+    }
+
+    private String buildRetryHistory(List<TaskNodeExecutionAttempt> attempts) {
+        if (attempts == null || attempts.isEmpty()) {
+            return "[]";
+        }
+        List<Map<String, Object>> items = attempts.stream()
+                .map(attempt -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("attemptNo", attempt.getAttemptNo());
+                    item.put("resultStatus", attempt.getResultStatus() == null ? null : attempt.getResultStatus().name());
+                    item.put("failureCategory", attempt.getFailureCategory() == null ? null : attempt.getFailureCategory().name());
+                    item.put("errorSummary", attempt.getErrorSummary());
+                    item.put("createdAt", attempt.getCreatedAt());
+                    return item;
+                })
+                .toList();
+        try {
+            return objectMapper.writeValueAsString(items);
+        } catch (Exception e) {
+            log.warn("failed to serialize retry history", e);
+            return "[]";
+        }
     }
 
     private AgentContext forkNodeContext(AgentContext sharedContext, TaskNode node) {
@@ -307,7 +661,7 @@ public class DagExecutor {
 
     private boolean markTaskRunning(Long taskId) {
         return taskRepository.findById(taskId).map(task -> {
-            if (task.getStatus() == AnalysisTaskStatus.STOPPED) {
+            if (task.getStatus() != AnalysisTaskStatus.PENDING) {
                 return false;
             }
             task.setStatus(AnalysisTaskStatus.RUNNING);
@@ -317,11 +671,12 @@ public class DagExecutor {
             task.setCompletedAt(null);
             task.setErrorMessage(null);
             taskRepository.save(task);
+            refreshRuntimeSnapshot(taskId);
             return true;
         }).orElse(false);
     }
 
-    private void markNodeRunning(TaskNode node, AgentContext context) {
+    private TaskNode markNodeRunning(TaskNode node, AgentContext context) {
         node.setStatus(TaskNodeStatus.RUNNING);
         node.setControlState(TaskNodeControlState.NONE);
         node.setInputData(buildNodeInput(node, context));
@@ -329,7 +684,11 @@ public class DagExecutor {
         node.setInterventionReason(null);
         node.setStartedAt(LocalDateTime.now());
         node.setCompletedAt(null);
-        nodeRepository.save(node);
+        TaskNode savedNode = nodeRepository.save(node);
+        syncNodeState(node, savedNode);
+        refreshRuntimeSnapshot(savedNode.getTaskId());
+        taskEventPublisher.publishNodeStatusEvent(savedNode.getTaskId(), savedNode, "NODE_RUNNING");
+        return savedNode;
     }
 
     /**
@@ -360,6 +719,8 @@ public class DagExecutor {
         node.setStartedAt(node.getStartedAt() == null ? LocalDateTime.now() : node.getStartedAt());
         node.setCompletedAt(LocalDateTime.now());
         nodeRepository.save(node);
+        refreshRuntimeSnapshot(node.getTaskId());
+        taskEventPublisher.publishNodeStatusEvent(node.getTaskId(), node, "NODE_SKIPPED");
         log.warn("node skipped: {}, reason={}", node.getNodeName(), reason);
     }
 
@@ -367,10 +728,14 @@ public class DagExecutor {
         node.setStatus(TaskNodeStatus.FAILED);
         node.setControlState(TaskNodeControlState.NONE);
         node.setErrorMessage(errorMessage);
+        node.setFailureCategory(NodeFailureCategory.PERMANENT_BUSINESS);
         node.setInterventionReason(null);
         node.setStartedAt(node.getStartedAt() == null ? LocalDateTime.now() : node.getStartedAt());
         node.setCompletedAt(LocalDateTime.now());
         nodeRepository.save(node);
+        refreshRuntimeSnapshot(node.getTaskId());
+        taskEventPublisher.publishNodeStatusEvent(node.getTaskId(), node, "NODE_FAILED");
+        workflowEventPublisher.publishNodeFailed(node, List.of());
         log.error("node failed: {}, reason={}", node.getNodeName(), errorMessage);
     }
 
@@ -381,6 +746,8 @@ public class DagExecutor {
         node.setInterventionReason(null);
         node.setCompletedAt(LocalDateTime.now());
         nodeRepository.save(node);
+        refreshRuntimeSnapshot(node.getTaskId());
+        taskEventPublisher.publishNodeStatusEvent(node.getTaskId(), node, "NODE_STOPPED");
     }
 
     /**
@@ -398,7 +765,8 @@ public class DagExecutor {
                 return false;
             }
 
-            if (dependencyNode.getStatus() == TaskNodeStatus.SUCCESS) {
+            if (dependencyNode.getStatus() == TaskNodeStatus.SUCCESS
+                    || dependencyNode.getStatus() == TaskNodeStatus.COMPENSATED) {
                 continue;
             }
 
@@ -423,7 +791,8 @@ public class DagExecutor {
             if (dependencyNode == null) {
                 return DependencyState.BLOCKED;
             }
-            if (dependencyNode.getStatus() == TaskNodeStatus.SUCCESS) {
+            if (dependencyNode.getStatus() == TaskNodeStatus.SUCCESS
+                    || dependencyNode.getStatus() == TaskNodeStatus.COMPENSATED) {
                 continue;
             }
             if (node.isAllowFailedDependency()
@@ -432,7 +801,11 @@ public class DagExecutor {
                 continue;
             }
             if (dependencyNode.getStatus() == TaskNodeStatus.PENDING
+                    || dependencyNode.getStatus() == TaskNodeStatus.READY
+                    || dependencyNode.getStatus() == TaskNodeStatus.DISPATCHED
                     || dependencyNode.getStatus() == TaskNodeStatus.RUNNING
+                    || dependencyNode.getStatus() == TaskNodeStatus.WAITING_RETRY
+                    || dependencyNode.getStatus() == TaskNodeStatus.WAITING_INTERVENTION
                     || dependencyNode.getStatus() == TaskNodeStatus.PAUSED) {
                 waiting = true;
                 continue;
@@ -466,6 +839,13 @@ public class DagExecutor {
             task.setErrorMessage(resolution.getErrorMessage());
             task.setCompletedAt(resolution.resolveCompletedAtForPersistence(task.getCompletedAt()));
             taskRepository.save(task);
+            TaskProgressSnapshot snapshot = TaskProgressSnapshot.fromTask(
+                    task,
+                    resolution.getStatus(),
+                    resolution.getErrorMessage(),
+                    nodes);
+            taskSnapshotCacheService.saveTaskSnapshot(snapshot);
+            taskEventPublisher.publishTaskSnapshot(snapshot);
         });
     }
 
@@ -475,6 +855,13 @@ public class DagExecutor {
             task.setErrorMessage(errorMessage);
             task.setCompletedAt(LocalDateTime.now());
             taskRepository.save(task);
+            TaskProgressSnapshot snapshot = TaskProgressSnapshot.fromTask(
+                    task,
+                    AnalysisTaskStatus.FAILED,
+                    errorMessage,
+                    nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId));
+            taskSnapshotCacheService.saveTaskSnapshot(snapshot);
+            taskEventPublisher.publishTaskSnapshot(snapshot);
         });
     }
 
@@ -517,6 +904,13 @@ public class DagExecutor {
             task.setErrorMessage("任务已由用户主动停止");
             task.setCompletedAt(LocalDateTime.now());
             taskRepository.save(task);
+            TaskProgressSnapshot snapshot = TaskProgressSnapshot.fromTask(
+                    task,
+                    AnalysisTaskStatus.STOPPED,
+                    task.getErrorMessage(),
+                    nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId));
+            taskSnapshotCacheService.saveTaskSnapshot(snapshot);
+            taskEventPublisher.publishTaskSnapshot(snapshot);
         });
         log.info("task stopped during dag execution, taskId={}, currentNode={}",
                 taskId, currentNode == null ? "unknown" : currentNode.getNodeName());
@@ -784,21 +1178,209 @@ public class DagExecutor {
             if (latest == null) {
                 continue;
             }
-            node.setStatus(latest.getStatus());
-            node.setControlState(latest.getControlState());
-            node.setNodeConfig(latest.getNodeConfig());
-            node.setInputData(latest.getInputData());
-            node.setOutputData(latest.getOutputData());
-            node.setErrorMessage(latest.getErrorMessage());
-            node.setInterventionReason(latest.getInterventionReason());
-            node.setStartedAt(latest.getStartedAt());
-            node.setCompletedAt(latest.getCompletedAt());
-            node.setRetryCount(latest.getRetryCount());
+            syncNodeState(node, latest);
         }
+    }
+
+    /**
+     * 节点对象会在调度线程、工作线程和轮询刷新之间反复传递。
+     * 统一把数据库最新状态与 @Version 版本号回写到内存对象，才能避免后续继续拿旧版本对象去 merge。
+     */
+    private void syncNodeState(TaskNode target, TaskNode source) {
+        if (target == null || source == null) {
+            return;
+        }
+        target.setStatus(source.getStatus());
+        target.setControlState(source.getControlState());
+        target.setNodeConfig(source.getNodeConfig());
+        target.setInputData(source.getInputData());
+        target.setOutputData(source.getOutputData());
+        target.setErrorMessage(source.getErrorMessage());
+        target.setInterventionReason(source.getInterventionReason());
+        target.setStartedAt(source.getStartedAt());
+        target.setCompletedAt(source.getCompletedAt());
+        target.setRetryCount(source.getRetryCount());
+        target.setFailureCategory(source.getFailureCategory());
+        target.setNextRetryAt(source.getNextRetryAt());
+        target.setLastEventId(source.getLastEventId());
+        target.setStateVersion(source.getStateVersion());
+    }
+
+    /**
+     * 每次任务或节点状态发生关键流转时，都把最新快照刷入 Redis。
+     * 这样后续的任务详情拉取、恢复判断和 SSE 接入都能基于统一快照工作。
+     */
+    private void refreshRuntimeSnapshot(Long taskId) {
+        taskRepository.findById(taskId).ifPresent(task -> {
+            List<TaskNode> latestNodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
+            TaskProgressSnapshot snapshot = TaskProgressSnapshot.fromTask(
+                    task,
+                    task.getStatus(),
+                    task.getErrorMessage(),
+                    latestNodes);
+            taskSnapshotCacheService.saveTaskSnapshot(snapshot);
+            taskEventPublisher.publishTaskSnapshot(snapshot);
+        });
+    }
+
+    /**
+     * 节点执行完成后，统一补发节点状态、搜索进度、日志与诊断事件。
+     * 这样前端既能刷新 DAG 视图，也能同步更新日志面板和诊断区域。
+     */
+    private void publishNodeExecutionEvents(Long taskId, TaskNode node) {
+        if (node == null) {
+            return;
+        }
+        String action = switch (node.getStatus()) {
+            case SUCCESS -> "NODE_COMPLETED";
+            case WAITING_RETRY -> "NODE_WAITING_RETRY";
+            case WAITING_INTERVENTION -> "NODE_WAITING_INTERVENTION";
+            case COMPENSATED -> "NODE_COMPENSATED";
+            default -> "NODE_FAILED";
+        };
+        taskEventPublisher.publishNodeStatusEvent(taskId, node, action);
+        publishSearchProgressEventIfPresent(taskId, node);
+        publishDiagnosisEventIfPresent(taskId, node);
+        boolean publishedFromLog = agentLogService.publishLatestLogEvent(taskId, node.getNodeName(), node.getAgentType());
+        if (!publishedFromLog) {
+            publishAgentOutputFallbackEvent(taskId, node);
+        }
+    }
+
+    /**
+     * Collector 事件留痕采用“结构化优先、最小兜底其次”策略。
+     * 如果节点输出里已经带有完整 searchProgress / searchExecutionTrace，就原样透传；
+     * 否则至少补一条可恢复的最小进度事件，保证断线重连后仍能知道该采集节点已经走到哪一步。
+     */
+    private void publishSearchProgressEventIfPresent(Long taskId, TaskNode node) {
+        if (node.getAgentType() != AgentType.COLLECTOR) {
+            return;
+        }
+        Map<String, Object> payload = buildSearchProgressEventPayload(node);
+        if (payload.isEmpty()) {
+            return;
+        }
+        taskEventPublisher.publishSearchProgressEvent(taskId, node.getNodeName(), payload);
+    }
+
+    /**
+     * Reviewer 输出中的诊断、问题与人工介入标记，会被压成一条可直接展示的诊断事件。
+     */
+    private void publishDiagnosisEventIfPresent(Long taskId, TaskNode node) {
+        if (node.getAgentType() != AgentType.REVIEWER || node.getOutputData() == null || node.getOutputData().isBlank()) {
+            return;
+        }
+        JsonNode output = readJson(node.getOutputData());
+        if (output == null) {
+            return;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("nodeName", node.getNodeName());
+        payload.put("passed", output.path("passed").asBoolean(false));
+        payload.put("score", output.path("score").asInt(-1));
+        payload.put("summary", output.path("summary").asText(null));
+        payload.put("requiresHumanIntervention", output.path("requiresHumanIntervention").asBoolean(false));
+        if (output.has("diagnoses")) {
+            payload.put("diagnoses", objectMapper.convertValue(output.get("diagnoses"), new TypeReference<List<Map<String, Object>>>() {
+            }));
+        }
+        if (output.has("issues")) {
+            payload.put("issues", objectMapper.convertValue(output.get("issues"), new TypeReference<List<Map<String, Object>>>() {
+            }));
+        }
+        taskEventPublisher.publishDiagnosisEvent(taskId, node.getNodeName(), payload);
+    }
+
+    /**
+     * 某些测试桩会直接 mock/spying Agent.execute，绕过 BaseAgent 的统一日志落库。
+     * 为了不让 SSE 最小留痕依赖“日志一定先写库成功”这条前提，这里补一条节点级兜底输出事件。
+     */
+    private void publishAgentOutputFallbackEvent(Long taskId, TaskNode node) {
+        if (node.getAgentType() == null) {
+            return;
+        }
+        AgentLogResponse fallbackLog = AgentLogResponse.builder()
+                .taskId(taskId)
+                .agentType(node.getAgentType())
+                .agentName(node.getDisplayName() == null || node.getDisplayName().isBlank()
+                        ? node.getAgentType().name()
+                        : node.getDisplayName())
+                .status(node.getStatus())
+                .reasoningSummary(node.getErrorMessage())
+                .outputData(node.getOutputData())
+                .errorMessage(node.getErrorMessage())
+                .createdAt(node.getCompletedAt() == null ? LocalDateTime.now() : node.getCompletedAt())
+                .build();
+        taskEventPublisher.publishAgentLogEvent(taskId, node.getNodeName(), fallbackLog);
+    }
+
+    private Map<String, Object> buildSearchProgressEventPayload(TaskNode node) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("nodeName", node.getNodeName());
+        JsonNode output = readJson(node.getOutputData());
+        if (output != null) {
+            JsonNode searchProgress = output.get("searchProgress");
+            JsonNode executionTrace = output.get("searchExecutionTrace");
+            JsonNode progressSnapshots = output.get("searchProgressSnapshots");
+            if (searchProgress != null && !searchProgress.isNull()) {
+                payload.put("searchProgress", objectMapper.convertValue(searchProgress, new TypeReference<Map<String, Object>>() {
+                }));
+            }
+            if (executionTrace != null && !executionTrace.isNull()) {
+                payload.put("searchExecutionTrace", objectMapper.convertValue(executionTrace, new TypeReference<Map<String, Object>>() {
+                }));
+            }
+            if (progressSnapshots != null && progressSnapshots.isArray()) {
+                payload.put("searchProgressSnapshots", objectMapper.convertValue(progressSnapshots, new TypeReference<List<Map<String, Object>>>() {
+                }));
+            }
+        }
+
+        if (payload.size() > 1) {
+            return payload;
+        }
+
+        // 即使结构化搜索输出缺失，也补一条最小进度事件，保证前端断线恢复时至少能看到该采集节点已完成/失败。
+        payload.put("searchProgress", Map.of(
+                "status", node.getStatus() == TaskNodeStatus.SUCCESS ? "SUCCESS" : "FAILED",
+                "currentStep", node.getStatus() == TaskNodeStatus.SUCCESS ? "完成补源" : "补源失败",
+                "message", defaultIfBlank(node.getErrorMessage(),
+                        node.getStatus() == TaskNodeStatus.SUCCESS ? "采集节点已完成，使用最小事件留痕兜底。" : "采集节点执行失败，请查看节点详情。"),
+                "updatedAt", node.getCompletedAt() == null ? LocalDateTime.now() : node.getCompletedAt()
+        ));
+        return payload;
     }
 
     private String defaultIfBlank(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value;
+    }
+
+    /**
+     * Task 4.1 先约定最小可追溯语义：
+     * 如果节点输出中已经带有 sourceUrls，就把它们同步带入内部工作流事件。
+     * 更复杂的证据回指结构由后续 Task RAG 阶段继续扩展。
+     */
+    private List<String> extractSourceUrls(String rawOutput) {
+        if (rawOutput == null || rawOutput.isBlank()) {
+            return List.of();
+        }
+        JsonNode output;
+        try {
+            output = objectMapper.readTree(rawOutput);
+        } catch (Exception ignored) {
+            return List.of();
+        }
+        JsonNode sourceUrls = output.get("sourceUrls");
+        if (sourceUrls == null || !sourceUrls.isArray()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.convertValue(sourceUrls, new TypeReference<List<String>>() {
+            });
+        } catch (IllegalArgumentException e) {
+            log.warn("failed to convert sourceUrls from workflow output", e);
+            return List.of();
+        }
     }
 
     private enum DependencyState {

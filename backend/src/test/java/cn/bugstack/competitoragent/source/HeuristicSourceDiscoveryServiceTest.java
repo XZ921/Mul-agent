@@ -62,6 +62,9 @@ class HeuristicSourceDiscoveryServiceTest {
         assertEquals(docsPlan.getCandidates().stream().map(SourceCandidate::getUrl).toList(),
                 docsPlan.getUrls());
         assertTrue(docsPlan.getCandidates().get(0).getTotalScore() >= docsPlan.getCandidates().get(docsPlan.getCandidates().size() - 1).getTotalScore());
+        assertNotNull(docsPlan.getCandidates().get(0).getTrustTier());
+        assertNotNull(docsPlan.getCandidates().get(0).getRankingSummary());
+        assertTrue(docsPlan.getCandidates().get(0).getRankingReasons().stream().anyMatch(reason -> !reason.isBlank()));
     }
 
     @Test

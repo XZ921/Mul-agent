@@ -1,0 +1,55 @@
+spring:
+  datasource:
+    driver-class-name: org.h2.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+    url: jdbc:h2:mem:competitor-agent-phase5;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    hikari:
+      connection-timeout: 5000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      maximum-pool-size: 4
+      minimum-idle: 1
+      pool-name: CompetitorAgentPhase5Pool
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    open-in-view: false
+  flyway:
+    enabled: false
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 16379
+      database: 15
+      timeout: 1s
+  autoconfigure:
+    exclude:
+      - org.apache.rocketmq.spring.autoconfigure.RocketMQAutoConfiguration
+
+rocketmq:
+  enabled: true
+  required: true
+  name-server: 127.0.0.1:9876
+  producer:
+    group: competitor-agent-workflow-producer-phase5
+    send-message-timeout-millis: 3000
+  consumer:
+    group: competitor-agent-workflow-consumer-phase5
+  workflow:
+    topic: task-workflow-events-phase5
+    dispatch-tag: TASK_EXECUTION_REQUESTED
+    lifecycle-tag: NODE_LIFECYCLE
+    outbox:
+      scan-interval: 5s
+      max-retries: 6
+      batch-size: 20
+
+logging:
+  level:
+    root: INFO
+    cn.bugstack.competitoragent: INFO
+    org.apache.rocketmq: WARN

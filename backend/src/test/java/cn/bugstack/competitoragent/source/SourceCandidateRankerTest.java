@@ -61,7 +61,40 @@ class SourceCandidateRankerTest {
         assertEquals("2026-05-25", keptCandidate.getPublishedAt());
         assertEquals("SELECTED", keptCandidate.getSelectionStage());
         assertEquals("KEEP_FRESHER_SEARCH_RESULT", keptCandidate.getSelectionReason());
+        assertEquals("优先保留更新且更可靠的搜索候选", keptCandidate.getSelectionSummary());
+        assertEquals(SourceTrustTier.HIGH, keptCandidate.getTrustTier());
+        assertNotNull(keptCandidate.getRankingSummary());
+        assertTrue(keptCandidate.getRankingSummary().contains("来源可信度"));
+        assertTrue(keptCandidate.getRankingReasons().stream().anyMatch(reason -> reason.contains("搜索补源")));
         assertNotNull(keptCandidate.getDomain());
+    }
+
+    @Test
+    void shouldAttachTrustTierAndRankingReasonsToRankedCandidates() {
+        List<SourceCandidate> ranked = ranker.rankAndDeduplicate(List.of(
+                candidate("https://docs.example.com/api", "Example API Reference", "DOCS", "SEARCH",
+                        "2026-05-18", 0.84, 0.72, 0.90),
+                candidate("https://reviews.example.net/post", "Community Review", "REVIEW", "SEARCH",
+                        "2026-04-01", 0.72, 0.58, 0.60)
+        ));
+
+        SourceCandidate docsCandidate = ranked.stream()
+                .filter(candidate -> "https://docs.example.com/api".equals(candidate.getUrl()))
+                .findFirst()
+                .orElseThrow();
+        SourceCandidate reviewCandidate = ranked.stream()
+                .filter(candidate -> "https://reviews.example.net/post".equals(candidate.getUrl()))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(SourceTrustTier.HIGH, docsCandidate.getTrustTier());
+        assertEquals("高可信", docsCandidate.getTrustTierLabel());
+        assertNotNull(docsCandidate.getRankingSummary());
+        assertTrue(docsCandidate.getRankingReasons().stream().anyMatch(reason -> reason.contains("文档域名")));
+
+        assertEquals(SourceTrustTier.MEDIUM, reviewCandidate.getTrustTier());
+        assertEquals("中可信", reviewCandidate.getTrustTierLabel());
+        assertTrue(reviewCandidate.getRankingReasons().stream().anyMatch(reason -> reason.contains("第三方")));
     }
 
     private SourceCandidate candidate(String url,

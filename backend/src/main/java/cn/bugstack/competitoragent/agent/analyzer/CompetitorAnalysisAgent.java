@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.agent.analyzer;
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.agent.BaseAgent;
+import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.llm.LlmClient;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.model.entity.CompetitorKnowledge;
@@ -11,6 +12,7 @@ import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.workflow.contract.AnalysisResult;
 import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
+import cn.bugstack.competitoragent.workflow.contract.SectionEvidenceBundle;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,6 +35,16 @@ import java.util.Map;
 @Component
 public class CompetitorAnalysisAgent extends BaseAgent {
 
+    private static final List<SectionMapping> SECTION_MAPPINGS = List.of(
+            new SectionMapping("overview", "overview", "产品概览", "summary", "SECTION"),
+            new SectionMapping("features", "featureComparison", "功能对比", "coreFeatures", "SECTION"),
+            new SectionMapping("positioning", "positioningComparison", "市场定位", "positioning", "SECTION"),
+            new SectionMapping("pricing", "pricingComparison", "定价策略", "pricing", "SECTION"),
+            new SectionMapping("targetUsers", "targetUserComparison", "目标用户", "targetUsers", "SECTION"),
+            new SectionMapping("strengths", "strengthsSummary", "优势判断", "strengths", "SECTION"),
+            new SectionMapping("weaknesses", "weaknessesSummary", "短板与风险", "weaknesses", "SECTION")
+    );
+
     private final CompetitorKnowledgeRepository knowledgeRepository;
     private final LlmClient llmClient;
     private final PromptTemplateService promptService;
@@ -42,8 +54,9 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                                    CompetitorKnowledgeRepository knowledgeRepository,
                                    LlmClient llmClient,
                                    PromptTemplateService promptService,
+                                   AgentContextAssembler agentContextAssembler,
                                    ObjectMapper objectMapper) {
-        super(logRepository);
+        super(logRepository, agentContextAssembler);
         this.knowledgeRepository = knowledgeRepository;
         this.llmClient = llmClient;
         this.promptService = promptService;
@@ -80,6 +93,8 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                 "subjectProduct", context.getSubjectProduct(),
                 "analysisDimensions", context.getAnalysisDimensions() != null
                         ? context.getAnalysisDimensions() : "产品功能,价格策略,目标用户,市场定位",
+                // 统一上下文由基类预先装配，这里只负责把摘要传给 Prompt 模板消费。
+                "taskRagContext", context.getTaskRagPromptContext(),
                 "competitorData", competitorData
         ));
 
@@ -94,6 +109,8 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                 return AgentResult.failed("竞品分析失败：模型未返回 JSON 对象");
             }
             AnalysisResult analysisResult = normalizeAnalysisResult(analysisJson, knowledges);
+            // 把最终实际消费的 Task RAG 摘要一并写回运行态输出，方便后续节点和审计接口复核。
+            analysisResult.setTaskRagContext(context.getTaskRagPromptContext());
             String outputJson = objectMapper.writeValueAsString(analysisResult);
             return AgentResult.success(outputJson,
                     "竞品分析完成：共处理 " + knowledges.size() + " 个竞品",
@@ -131,6 +148,7 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         LinkedHashSet<String> issueFlags = new LinkedHashSet<>(readStringList(analysisJson.path("issueFlags")));
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>(readStringList(analysisJson.path("sourceUrls")));
         List<EvidenceFragment> evidenceFragments = new ArrayList<>(readEvidenceFragments(analysisJson.path("evidenceFragments")));
+        List<SectionEvidenceBundle> sectionEvidenceBundles = new ArrayList<>(readSectionEvidenceBundles(analysisJson.path("sectionEvidenceBundles")));
 
         String featureComparison = readTextWithAliases(analysisJson,
                 List.of("featureComparison", "featureHighlights", "featureSummary"), issueFlags);
@@ -156,6 +174,9 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         if (evidenceFragments.isEmpty()) {
             evidenceFragments.addAll(buildKnowledgeEvidenceFragments(knowledges, issueFlags));
         }
+        if (sectionEvidenceBundles.isEmpty()) {
+            sectionEvidenceBundles.addAll(buildSectionEvidenceBundles(knowledges, analysisJson, issueFlags));
+        }
 
         return AnalysisResult.builder()
                 .overview(analysisJson.path("overview").asText(null))
@@ -171,6 +192,7 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                 .sourceUrls(new ArrayList<>(sourceUrls))
                 .issueFlags(new ArrayList<>(issueFlags))
                 .evidenceFragments(normalizeEvidenceFragments(evidenceFragments))
+                .sectionEvidenceBundles(normalizeSectionEvidenceBundles(sectionEvidenceBundles))
                 .build();
     }
 
@@ -272,6 +294,17 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         return fragments;
     }
 
+    private List<SectionEvidenceBundle> readSectionEvidenceBundles(JsonNode node) {
+        if (!(node instanceof ArrayNode arrayNode)) {
+            return List.of();
+        }
+        List<SectionEvidenceBundle> bundles = new ArrayList<>();
+        for (JsonNode item : arrayNode) {
+            bundles.add(objectMapper.convertValue(item, SectionEvidenceBundle.class).normalized());
+        }
+        return bundles;
+    }
+
     /**
      * 如果模型没有主动返回 evidenceFragments，就直接从抽取阶段落库的 sources/sourceUrls 回填。
      * 这样 Writer 可以只依赖 AnalysisResult，而不用重新猜测知识对象里的来源结构。
@@ -311,11 +344,204 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         return fragments;
     }
 
+    /**
+     * 分析阶段按“可读章节”重新聚合证据束。
+     * 这里把知识库中的字段 coverage 映射成对比章节，再额外生成一个 conclusion bundle，
+     * 确保 Writer 和报告接口都能直接拿到“这段结论引用了哪些来源、哪里仍有缺口”。
+     */
+    private List<SectionEvidenceBundle> buildSectionEvidenceBundles(List<CompetitorKnowledge> knowledges,
+                                                                   ObjectNode analysisJson,
+                                                                   LinkedHashSet<String> inheritedIssueFlags) {
+        List<SectionEvidenceBundle> bundles = new ArrayList<>();
+        for (SectionMapping mapping : SECTION_MAPPINGS) {
+            List<EvidenceFragment> sectionFragments = new ArrayList<>();
+            LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+            LinkedHashSet<String> missingFields = new LinkedHashSet<>();
+
+            for (CompetitorKnowledge knowledge : knowledges) {
+                JsonNode coverageNode = readCoverageNode(knowledge, mapping.knowledgeFieldKey());
+                String status = coverageNode == null ? "EMPTY" : coverageNode.path("status").asText("EMPTY");
+                List<EvidenceFragment> fieldFragments = buildKnowledgeFieldFragments(knowledge, mapping, status, coverageNode);
+                sectionFragments.addAll(fieldFragments);
+                sourceUrls.addAll(EvidenceFragment.collectSourceUrls(fieldFragments));
+                if (!"TRACEABLE".equalsIgnoreCase(status)) {
+                    missingFields.add(mapping.analysisFieldKey());
+                }
+            }
+
+            bundles.add(SectionEvidenceBundle.builder()
+                    .stage("ANALYZE")
+                    .sectionType(mapping.sectionType())
+                    .sectionKey(mapping.sectionKey())
+                    .sectionTitle(mapping.sectionTitle())
+                    .summary(truncate(analysisJson.path(mapping.analysisFieldKey()).asText(""), 160))
+                    .fieldNames(List.of(mapping.analysisFieldKey()))
+                    .missingFields(new ArrayList<>(missingFields))
+                    .sourceUrls(new ArrayList<>(sourceUrls))
+                    .issueFlags(missingFields.isEmpty() ? List.of() : List.of("SECTION_EVIDENCE_GAP"))
+                    .evidenceFragments(sectionFragments)
+                    .build()
+                    .normalized());
+        }
+
+        bundles.add(buildConclusionBundle(analysisJson, knowledges, inheritedIssueFlags, bundles));
+        return bundles;
+    }
+
+    private JsonNode readCoverageNode(CompetitorKnowledge knowledge, String fieldKey) {
+        JsonNode coverage = readJsonNode(knowledge.getEvidenceCoverage());
+        if (coverage == null || coverage.isMissingNode() || coverage.isNull()) {
+            return null;
+        }
+        JsonNode node = coverage.path(fieldKey);
+        return node.isMissingNode() ? null : node;
+    }
+
+    private List<EvidenceFragment> buildKnowledgeFieldFragments(CompetitorKnowledge knowledge,
+                                                                SectionMapping mapping,
+                                                                String status,
+                                                                JsonNode coverageNode) {
+        List<String> evidenceIds = readStringList(coverageNode == null ? null : coverageNode.path("evidenceIds"));
+        List<String> sourceUrls = readStringList(coverageNode == null ? null : coverageNode.path("sourceUrls"));
+        Map<String, JsonNode> sourceByEvidenceId = readSourceMap(knowledge.getSources());
+        List<EvidenceFragment> fragments = new ArrayList<>();
+        if (!evidenceIds.isEmpty()) {
+            for (String evidenceId : evidenceIds) {
+                JsonNode source = sourceByEvidenceId.get(evidenceId);
+                fragments.add(EvidenceFragment.builder()
+                        .stage("ANALYZE")
+                        .competitorName(knowledge.getCompetitorName())
+                        .fieldName(mapping.analysisFieldKey())
+                        .fieldLabel(mapping.sectionTitle())
+                        .sectionKey(mapping.sectionKey())
+                        .sectionTitle(mapping.sectionTitle())
+                        .coverageStatus(status)
+                        .evidenceId(evidenceId)
+                        .sourceUrl(source == null ? null : source.path("url").asText(null))
+                        .title(source == null ? null : source.path("title").asText(null))
+                        .snippet(source == null ? null : source.path("snippet").asText(null))
+                        .issueFlags("TRACEABLE".equalsIgnoreCase(status) ? List.of() : List.of(status))
+                        .gapComment("TRACEABLE".equalsIgnoreCase(status) ? null : "字段缺少稳定证据支撑")
+                        .build()
+                        .normalized());
+            }
+            return fragments;
+        }
+        if (!sourceUrls.isEmpty()) {
+            for (String sourceUrl : sourceUrls) {
+                fragments.add(EvidenceFragment.builder()
+                        .stage("ANALYZE")
+                        .competitorName(knowledge.getCompetitorName())
+                        .fieldName(mapping.analysisFieldKey())
+                        .fieldLabel(mapping.sectionTitle())
+                        .sectionKey(mapping.sectionKey())
+                        .sectionTitle(mapping.sectionTitle())
+                        .coverageStatus(status)
+                        .sourceUrl(sourceUrl)
+                        .issueFlags("TRACEABLE".equalsIgnoreCase(status) ? List.of() : List.of(status))
+                        .gapComment("TRACEABLE".equalsIgnoreCase(status) ? null : "字段缺少稳定证据支撑")
+                        .build()
+                        .normalized());
+            }
+            return fragments;
+        }
+        fragments.add(EvidenceFragment.builder()
+                .stage("ANALYZE")
+                .competitorName(knowledge.getCompetitorName())
+                .fieldName(mapping.analysisFieldKey())
+                .fieldLabel(mapping.sectionTitle())
+                .sectionKey(mapping.sectionKey())
+                .sectionTitle(mapping.sectionTitle())
+                .coverageStatus(status)
+                .issueFlags("TRACEABLE".equalsIgnoreCase(status) ? List.of() : List.of(status))
+                .gapComment("EMPTY".equalsIgnoreCase(status) ? "字段暂无内容" : "字段缺少稳定证据支撑")
+                .build()
+                .normalized());
+        return fragments;
+    }
+
+    private Map<String, JsonNode> readSourceMap(String rawSources) {
+        JsonNode sourcesNode = readJsonNode(rawSources);
+        Map<String, JsonNode> sourceByEvidenceId = new LinkedHashMap<>();
+        if (sourcesNode != null && sourcesNode.isArray()) {
+            for (JsonNode item : sourcesNode) {
+                String evidenceId = item.path("evidenceId").asText(null);
+                if (evidenceId != null && !evidenceId.isBlank()) {
+                    sourceByEvidenceId.putIfAbsent(evidenceId, item);
+                }
+            }
+        }
+        return sourceByEvidenceId;
+    }
+
+    private SectionEvidenceBundle buildConclusionBundle(ObjectNode analysisJson,
+                                                       List<CompetitorKnowledge> knowledges,
+                                                       LinkedHashSet<String> inheritedIssueFlags,
+                                                       List<SectionEvidenceBundle> sectionBundles) {
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        List<EvidenceFragment> conclusionFragments = new ArrayList<>();
+        for (SectionEvidenceBundle sectionBundle : sectionBundles) {
+            sourceUrls.addAll(sectionBundle.getSourceUrls() == null ? List.of() : sectionBundle.getSourceUrls());
+            conclusionFragments.addAll(sectionBundle.getEvidenceFragments() == null ? List.of() : sectionBundle.getEvidenceFragments());
+        }
+        sourceUrls.addAll(collectKnowledgeSourceUrls(knowledges));
+        if (conclusionFragments.isEmpty()) {
+            conclusionFragments.addAll(buildKnowledgeEvidenceFragments(knowledges, inheritedIssueFlags));
+        }
+        LinkedHashSet<String> missingFields = new LinkedHashSet<>();
+        if (analysisJson.path("recommendations").isMissingNode() || analysisJson.path("recommendations").isEmpty()) {
+            missingFields.add("recommendations");
+        }
+        if (sourceUrls.isEmpty()) {
+            missingFields.add("conclusion");
+        }
+        return SectionEvidenceBundle.builder()
+                .stage("ANALYZE")
+                .sectionType("CONCLUSION")
+                .sectionKey("conclusion")
+                .sectionTitle("结论与建议")
+                .summary(firstNonBlank(
+                        truncate(analysisJson.path("overview").asText(""), 160),
+                        truncate(analysisJson.path("recommendations").toString(), 160)
+                ))
+                .fieldNames(List.of("overview", "recommendations", "opportunities", "risks"))
+                .missingFields(new ArrayList<>(missingFields))
+                .sourceUrls(new ArrayList<>(sourceUrls))
+                .issueFlags(missingFields.isEmpty() ? List.of() : List.of("SECTION_EVIDENCE_GAP"))
+                .evidenceFragments(conclusionFragments)
+                .build()
+                .normalized();
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
+        }
+        return fallback;
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.length() <= maxLength ? value : value.substring(0, maxLength) + "...";
+    }
+
     private List<EvidenceFragment> normalizeEvidenceFragments(List<EvidenceFragment> fragments) {
         List<EvidenceFragment> normalized = new ArrayList<>();
         for (EvidenceFragment fragment : fragments) {
             if (fragment != null) {
                 normalized.add(fragment.normalized());
+            }
+        }
+        return normalized;
+    }
+
+    private List<SectionEvidenceBundle> normalizeSectionEvidenceBundles(List<SectionEvidenceBundle> bundles) {
+        List<SectionEvidenceBundle> normalized = new ArrayList<>();
+        for (SectionEvidenceBundle bundle : bundles) {
+            if (bundle != null) {
+                normalized.add(bundle.normalized());
             }
         }
         return normalized;
@@ -330,5 +556,12 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         } catch (JsonProcessingException e) {
             return null;
         }
+    }
+
+    private record SectionMapping(String sectionKey,
+                                  String analysisFieldKey,
+                                  String sectionTitle,
+                                  String knowledgeFieldKey,
+                                  String sectionType) {
     }
 }

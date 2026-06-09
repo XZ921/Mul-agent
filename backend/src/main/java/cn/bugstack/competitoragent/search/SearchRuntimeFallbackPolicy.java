@@ -60,7 +60,9 @@ public class SearchRuntimeFallbackPolicy {
         if (normalized.contains("browser has been closed")
                 || normalized.contains("target page, context or browser has been closed")
                 || normalized.contains("playwright connection closed")
-                || normalized.contains("connection closed")) {
+                || normalized.contains("connection closed")
+                || normalized.contains("__adopt__")
+                || normalized.contains("cannot find object")) {
             return "browser_unavailable";
         }
         return "runtime_failure";

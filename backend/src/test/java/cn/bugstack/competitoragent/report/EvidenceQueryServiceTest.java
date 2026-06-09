@@ -2,8 +2,12 @@ package cn.bugstack.competitoragent.report;
 
 import cn.bugstack.competitoragent.model.dto.ReportResponse.EvidenceInfo;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.EvidenceReference;
+import cn.bugstack.competitoragent.model.dto.ReportResponse.FieldEvidenceDetail;
+import cn.bugstack.competitoragent.model.dto.ReportResponse.SectionEvidenceBundleInfo;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
+import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
+import cn.bugstack.competitoragent.workflow.contract.SectionEvidenceBundle;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Sort;
@@ -14,6 +18,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -114,5 +119,66 @@ class EvidenceQueryServiceTest {
         assertEquals(2, references.size());
         assertEquals("E001", references.get(0).getEvidenceId());
         assertEquals("https://missing.example.com", references.get(1).getUrl());
+    }
+
+    @Test
+    void shouldProjectSectionEvidenceBundleWithResolvedEvidenceAndGapDetails() {
+        EvidenceInfo evidence = new EvidenceInfo(
+                "E001",
+                "Docs",
+                "https://docs.example.com",
+                "snippet",
+                "Notion AI",
+                LocalDateTime.now(),
+                "DOCS",
+                "SEARCH",
+                "docs.example.com",
+                "reason",
+                null,
+                0.91,
+                true,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                java.util.Map.of()
+        );
+        SectionEvidenceBundle bundle = SectionEvidenceBundle.builder()
+                .stage("WRITE")
+                .sectionType("CONCLUSION")
+                .sectionKey("conclusion")
+                .sectionTitle("结论")
+                .gapSummary("recommendations 缺少证据")
+                .missingFields(List.of("recommendations"))
+                .issueFlags(List.of("SECTION_EVIDENCE_GAP"))
+                .evidenceFragments(List.of(
+                        EvidenceFragment.builder()
+                                .fieldName("recommendations")
+                                .fieldLabel("结论建议")
+                                .coverageStatus("TRACEABLE")
+                                .evidenceId("E001")
+                                .sourceUrl("https://docs.example.com")
+                                .build(),
+                        EvidenceFragment.builder()
+                                .fieldName("risks")
+                                .fieldLabel("风险判断")
+                                .coverageStatus("MISSING_EVIDENCE")
+                                .gapComment("缺少稳定来源")
+                                .issueFlags(List.of("MISSING_EVIDENCE"))
+                                .build()
+                ))
+                .build();
+
+        SectionEvidenceBundleInfo info = service.toSectionEvidenceBundleInfo(List.of(evidence), bundle);
+
+        assertEquals("conclusion", info.getSectionKey());
+        assertEquals(2, info.getFields().size());
+        assertEquals("E001", info.getFields().get(0).getEvidence().getEvidenceId());
+        assertEquals("MISSING_EVIDENCE", info.getFields().get(1).getCoverageStatus());
+        assertTrue(info.getGapSummary().contains("recommendations"));
     }
 }

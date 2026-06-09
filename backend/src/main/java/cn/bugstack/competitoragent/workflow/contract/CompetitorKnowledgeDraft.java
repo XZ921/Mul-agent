@@ -44,6 +44,9 @@ public class CompetitorKnowledgeDraft {
     /** 草稿层面的统一证据片段 */
     private List<EvidenceFragment> evidenceFragments;
 
+    /** 草稿层面的章节证据束，保留字段证据如何汇聚到章节的语义 */
+    private List<SectionEvidenceBundle> sectionEvidenceBundles;
+
     /** 草稿层面的缺口/问题标记 */
     private List<String> issueFlags;
 

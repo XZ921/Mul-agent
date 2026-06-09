@@ -1,5 +1,6 @@
 import { Alert, Card, Progress, Space, Tag, Typography } from 'antd'
 import type { TaskInfo } from '../../types'
+import { getTaskEventStreamStatusText } from '../../utils/display'
 import { taskStatusTag } from './shared'
 import TaskInterventionBar from './TaskInterventionBar'
 import type { HeroTone } from './types'
@@ -15,6 +16,10 @@ type TaskStatusHeroProps = {
   pendingActionCount: number
   reviewRiskTotal: number
   activeCollectorCount: number
+  streamStatus: 'idle' | 'connecting' | 'open' | 'fallback' | 'closed'
+  fallbackPollingActive: boolean
+  streamLastError?: string | null
+  streamLastEventAt?: string | null
   actionLoading: boolean
   onExecute: () => void
   onStop: () => void
@@ -32,6 +37,10 @@ export default function TaskStatusHero({
   pendingActionCount,
   reviewRiskTotal,
   activeCollectorCount,
+  streamStatus,
+  fallbackPollingActive,
+  streamLastError,
+  streamLastEventAt,
   actionLoading,
   onExecute,
   onStop,
@@ -39,6 +48,8 @@ export default function TaskStatusHero({
   onRetry,
   onViewReport,
 }: TaskStatusHeroProps) {
+  const streamStatusText = getTaskEventStreamStatusText(streamStatus, fallbackPollingActive)
+
   return (
     <Card className={`work-card hero-card hero-tone-${heroTone}`}>
       <Space direction="vertical" size={20} style={{ width: '100%' }}>
@@ -73,14 +84,15 @@ export default function TaskStatusHero({
                 ? `当前有 ${pendingActionCount} 个节点状态需要重点关注，建议优先处理失败、暂停或终止请求中的节点。`
                 : reviewRiskTotal > 0
                   ? `当前识别到 ${reviewRiskTotal} 个证据风险问题，建议先前往报告页处理后再继续终审。`
-                  : task.interventionSummary || '系统会在任务执行中持续展示节点状态、人工干预能力与证据风险提示。'}
+                  : task.interventionSummary || '这里会持续同步任务阶段、关键变化和可继续处理的入口。'}
             </Text>
           </div>
           <div className="hero-actions">
             <TaskInterventionBar
-              title="任务级操作"
-              description="这里统一承接任务的启动、恢复、停止、重置和报告查看入口。"
+              title="主要动作"
+              description="这里集中放置继续执行、停止任务和查看报告等关键操作。"
               badgeText={pendingActionCount > 0 ? `待处理 ${pendingActionCount}` : '运行正常'}
+              statusHint={streamStatusText}
               tone={pendingActionCount > 0 ? 'warning' : task.status === 'FAILED' ? 'error' : 'info'}
               actions={[
                 ...(task.canExecute
@@ -149,6 +161,18 @@ export default function TaskStatusHero({
         </div>
 
         <Progress percent={progressPercent} status={task.status === 'FAILED' || task.status === 'STOPPED' ? 'exception' : undefined} />
+
+        <Alert
+          type={fallbackPollingActive ? 'warning' : streamStatus === 'open' ? 'success' : 'info'}
+          showIcon
+          message={streamStatusText}
+          description={
+            streamLastError
+              || (streamLastEventAt
+                ? `最近一次状态更新时间：${streamLastEventAt}`
+                : '首次进入页面会先载入当前快照，后续状态会自动同步到页面。')
+          }
+        />
 
         {task.errorMessage && (
           <Alert

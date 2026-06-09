@@ -1,7 +1,14 @@
 package cn.bugstack.competitoragent.source;
 
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * 搜索式补源配置。
@@ -10,6 +17,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Data
 @ConfigurationProperties(prefix = "source-discovery.search")
 public class SearchProviderProperties {
+
+    /**
+     * Provider 路由顺序。
+     * 默认顺序遵循“结构化搜索优先、浏览器预览次之、通用 HTTP 兜底”的原则，
+     * 这样即使某一条渠道失败，也能继续尝试后续 provider。
+     */
+    private List<String> providerOrder = List.of("qianfan", "serpapi", "browserPreview", "http");
+
+    /**
+     * 各 Provider 的路由开关与降级策略。
+     * key 使用 providerKey，对应 SearchSourceProviderDescriptor 中声明的稳定标识。
+     */
+    private Map<String, ProviderRouteProperties> providers = new LinkedHashMap<>();
 
     /** true 表示规划期优先走浏览器预览补源。 */
     private boolean browserPreviewEnabled = false;
@@ -51,4 +71,42 @@ public class SearchProviderProperties {
     private String urlField = "url";
     private String snippetField = "snippet";
     private String publishedAtField = "publishedAt";
+
+    /**
+     * 解析指定 Provider 的路由配置。
+     * 统一做 key 标准化，避免大小写差异导致的配置失效。
+     */
+    public ProviderRouteProperties resolveProvider(String providerKey) {
+        if (providerKey == null) {
+            return null;
+        }
+        return providers.get(providerKey.trim().toLowerCase(Locale.ROOT));
+    }
+
+    /**
+     * 单个 Provider 的路由覆盖项。
+     * 只覆盖调度层行为，不负责各渠道自身的 API 参数绑定。
+     */
+    @Data
+    @NoArgsConstructor
+    @lombok.Builder
+    public static class ProviderRouteProperties {
+
+        /**
+         * 是否启用该 Provider。
+         * 为空时表示沿用 Provider 自身在 descriptor 中声明的默认行为。
+         */
+        private Boolean enabled;
+
+        /**
+         * 当该 Provider 执行失败时，是否允许继续降级到后续渠道。
+         * 为空时表示沿用 descriptor 中声明的默认行为。
+         */
+        private Boolean failOpen;
+
+        public ProviderRouteProperties(Boolean enabled, Boolean failOpen) {
+            this.enabled = enabled;
+            this.failOpen = failOpen;
+        }
+    }
 }

@@ -11,11 +11,13 @@ import cn.bugstack.competitoragent.model.dto.ReportResponse.QualityIssue;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.ReportDiagnosisInfo;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.ReviewCheckpoint;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.ReviewNextAction;
+import cn.bugstack.competitoragent.model.dto.ReportResponse.RevisionDirectiveInfo;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.SectionEvidenceCoverage;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
 import cn.bugstack.competitoragent.workflow.contract.QualityDiagnosis;
+import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -122,6 +124,7 @@ public class ReportDiagnosisAssembler {
                 .contentEvidences(contentEvidences)
                 .sections(diagnosisSections)
                 .nextActions(mergeNextActions(initialReview, finalReview))
+                .revisionDirectives(mergeRevisionDirectives(initialReview, finalReview, sections))
                 .build();
     }
 
@@ -286,6 +289,61 @@ public class ReportDiagnosisAssembler {
             }
             String key = safe(action.getActionType()) + "|" + safe(action.getTargetNode()) + "|" + safe(action.getTitle());
             merged.putIfAbsent(key, action);
+        }
+    }
+
+    /**
+     * 修订指令是“问题诊断”到“执行动作”的桥梁。
+     * 这里将初审/终审产出的结构化指令合并为单一前端出口，
+     * 让报告页能够直接展示补源、重跑和改写建议，而不用再猜测 nextActions 的含义。
+     */
+    private List<RevisionDirectiveInfo> mergeRevisionDirectives(ReviewCheckpoint initialReview,
+                                                               ReviewCheckpoint finalReview,
+                                                               Map<String, SectionAccumulator> sections) {
+        LinkedHashMap<String, RevisionDirectiveInfo> merged = new LinkedHashMap<>();
+        appendRevisionDirectives(merged, finalReview, sections);
+        appendRevisionDirectives(merged, initialReview, sections);
+        return new ArrayList<>(merged.values());
+    }
+
+    private void appendRevisionDirectives(Map<String, RevisionDirectiveInfo> merged,
+                                          ReviewCheckpoint checkpoint,
+                                          Map<String, SectionAccumulator> sections) {
+        if (checkpoint == null || checkpoint.getRevisionDirectives() == null) {
+            return;
+        }
+        for (RevisionDirective directive : checkpoint.getRevisionDirectives()) {
+            if (directive == null) {
+                continue;
+            }
+            RevisionDirective normalized = directive.normalized();
+            String lookupSection = normalizeSection(normalized.getTargetSection());
+            String key = safe(normalized.getCategory())
+                    + "|"
+                    + safe(normalized.getTargetNode())
+                    + "|"
+                    + safe(normalized.getTargetSection())
+                    + "|"
+                    + safe(normalized.getActionType());
+            List<String> directiveSourceUrls = normalized.getSourceUrls();
+            if ((directiveSourceUrls == null || directiveSourceUrls.isEmpty())
+                    && normalized.getTargetSection() != null
+                    && sections.containsKey(lookupSection)) {
+                directiveSourceUrls = new ArrayList<>(sections.get(lookupSection).sourceUrls);
+            }
+            merged.putIfAbsent(key, RevisionDirectiveInfo.builder()
+                    .category(normalized.getCategory())
+                    .actionType(normalized.getActionType())
+                    .priority(normalized.getPriority())
+                    .targetNode(normalized.getTargetNode())
+                    .targetSection(normalized.getTargetSection())
+                    .summary(normalized.getSummary())
+                    .searchFeedback(normalized.getSearchFeedback())
+                    .searchQueries(normalized.getSearchQueries())
+                    .sourceUrls(directiveSourceUrls == null ? List.of() : directiveSourceUrls)
+                    .expectedOutcome(normalized.getExpectedOutcome())
+                    .build()
+                    .normalized());
         }
     }
 

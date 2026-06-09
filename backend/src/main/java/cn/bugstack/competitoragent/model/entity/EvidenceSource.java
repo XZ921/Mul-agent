@@ -25,7 +25,8 @@ import java.time.LocalDateTime;
         @Index(name = "idx_evidence_competitor", columnList = "competitorName"),
         @Index(name = "idx_evidence_evidence_id", columnList = "evidenceId"),
         @Index(name = "idx_evidence_source_type", columnList = "sourceType"),
-        @Index(name = "idx_evidence_discovery_method", columnList = "discoveryMethod")
+        @Index(name = "idx_evidence_discovery_method", columnList = "discoveryMethod"),
+        @Index(name = "idx_evidence_source_category", columnList = "sourceCategory")
 })
 @Schema(description = "证据来源")
 public class EvidenceSource {
@@ -83,6 +84,10 @@ public class EvidenceSource {
     @Column(length = 50)
     @Schema(description = "补源方式", example = "SEARCH")
     private String discoveryMethod;
+
+    @Column(length = 50)
+    @Schema(description = "来源分类", example = "AI_DISCOVERED")
+    private String sourceCategory;
 
     @Column(length = 255)
     @Schema(description = "来源域名", example = "docs.notion.so")

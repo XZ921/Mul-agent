@@ -77,6 +77,24 @@ class QianfanSearchSourceProviderTest {
         assertTrue(provider.search("哔哩哔哩", List.of("DOCS")).isEmpty());
     }
 
+    @Test
+    void shouldExposeStableDescriptorMetadata() {
+        QianfanSearchSourceProvider provider = new QianfanSearchSourceProvider(
+                qianfanSearchProperties("https://qianfan.baidubce.com/v2/ai_search/web_search"),
+                searchProviderProperties(),
+                promptTemplateService(),
+                new ObjectMapper()
+        );
+
+        SearchSourceProviderDescriptor descriptor = provider.descriptor();
+
+        assertEquals("qianfan", descriptor.getProviderKey());
+        assertEquals("千帆搜索", descriptor.getDisplayName());
+        assertTrue(descriptor.getCapabilities().contains("CHINESE_RESULTS"));
+        assertTrue(descriptor.isEnabled(new SearchProviderProperties()));
+        assertTrue(descriptor.isFailOpen(new SearchProviderProperties()));
+    }
+
     private PromptTemplateService promptTemplateService() {
         PromptTemplateService service = new PromptTemplateService(new ObjectMapper());
         service.init();

@@ -2,12 +2,18 @@ import dayjs from 'dayjs'
 import { Tag } from 'antd'
 import type { NodeStatus, TaskInfo, TaskNodeInfo, TaskStatus } from '../../types'
 import { getNodeStatusText, getTaskStatusText } from '../../utils/display'
+import { formatDiagnosticJson } from '../../utils/taskPresentation'
 import { getCollectorNodeInsight } from '../../utils/taskNodeInsights'
 import type { HeroTone, ReviewPayload } from './types'
 
 const nodeStatusColorMap: Record<NodeStatus, string> = {
   PENDING: 'default',
+  READY: 'blue',
+  DISPATCHED: 'processing',
   RUNNING: 'processing',
+  WAITING_RETRY: 'orange',
+  WAITING_INTERVENTION: 'gold',
+  COMPENSATED: 'success',
   PAUSED: 'warning',
   SUCCESS: 'success',
   FAILED: 'error',
@@ -23,12 +29,19 @@ const taskStatusColorMap: Record<TaskStatus, string> = {
 }
 
 export function isTerminalNodeStatus(status: NodeStatus) {
-  return status === 'SUCCESS' || status === 'FAILED' || status === 'SKIPPED'
+  return status === 'SUCCESS' || status === 'FAILED' || status === 'COMPENSATED' || status === 'SKIPPED'
 }
 
 export function getNodeNoticeType(status: NodeStatus) {
   if (status === 'FAILED') return 'error' as const
-  if (status === 'SKIPPED' || status === 'PAUSED') return 'warning' as const
+  if (
+    status === 'SKIPPED'
+    || status === 'PAUSED'
+    || status === 'WAITING_RETRY'
+    || status === 'WAITING_INTERVENTION'
+  ) {
+    return 'warning' as const
+  }
   return 'info' as const
 }
 
@@ -42,11 +55,7 @@ export function taskStatusTag(status: TaskStatus) {
 
 export function pretty(value?: string | null) {
   if (!value) return ''
-  try {
-    return JSON.stringify(JSON.parse(value), null, 2)
-  } catch {
-    return value
-  }
+  return formatDiagnosticJson(value)
 }
 
 export function formatScore(value: unknown) {
@@ -182,6 +191,70 @@ function parseJson(value?: string | null) {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeOptionalString(value: unknown) {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function normalizeReviewIssue(
+  value: unknown,
+): { type?: string; section?: string; severity?: string; suggestion?: string } | null {
+  if (!isRecord(value)) {
+    return null
+  }
+  return {
+    type: normalizeOptionalString(value.type),
+    section: normalizeOptionalString(value.section),
+    severity: normalizeOptionalString(value.severity),
+    suggestion: normalizeOptionalString(value.suggestion),
+  }
+}
+
+function normalizeReviewNextAction(
+  value: unknown,
+): { title?: string; description?: string; actionType?: string; targetNode?: string; priority?: string } | null {
+  if (!isRecord(value)) {
+    return null
+  }
+  return {
+    title: normalizeOptionalString(value.title),
+    description: normalizeOptionalString(value.description),
+    actionType: normalizeOptionalString(value.actionType),
+    targetNode: normalizeOptionalString(value.targetNode),
+    priority: normalizeOptionalString(value.priority),
+  }
+}
+
+function normalizeRevisionPlan(value: unknown) {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  return {
+    rewriteRequired: typeof value.rewriteRequired === 'boolean' ? value.rewriteRequired : undefined,
+    summary: normalizeOptionalString(value.summary),
+    items: Array.isArray(value.items)
+      ? value.items
+          .map((item) => normalizeReviewIssue(item))
+          .filter((item): item is NonNullable<ReturnType<typeof normalizeReviewIssue>> => item !== null)
+      : [],
+    rewriteGuidelines: normalizeStringArray(value.rewriteGuidelines),
+  }
+}
+
 export function parseReviewPayload(value?: string | null): ReviewPayload | null {
   const parsed = parseJson(value) as
       | {
@@ -208,6 +281,10 @@ export function parseReviewPayload(value?: string | null): ReviewPayload | null 
     | null
 
   if (!parsed) return null
+
+  // 评审节点的 outputData 会同时来自首屏快照、SSE 增量事件和历史缓存回放。
+  // 这些来源里经常混入对象/字符串/null 等脏结构，如果这里直接透传，抽屉渲染期在展开
+  // revisionPlan.rewriteGuidelines、issues.length、nextActions.map 时就会整页白屏。
   return {
     score: typeof parsed.score === 'number' ? parsed.score : null,
     passed: typeof parsed.passed === 'boolean' ? parsed.passed : null,
@@ -215,9 +292,17 @@ export function parseReviewPayload(value?: string | null): ReviewPayload | null 
       typeof parsed.requiresHumanIntervention === 'boolean' ? parsed.requiresHumanIntervention : null,
     autoRewriteAllowed: typeof parsed.autoRewriteAllowed === 'boolean' ? parsed.autoRewriteAllowed : null,
     summary: parsed.summary || null,
-    issues: Array.isArray(parsed.issues) ? parsed.issues : [],
-    revisionPlan: parsed.revisionPlan || null,
-    nextActions: Array.isArray(parsed.nextActions) ? parsed.nextActions : [],
+    issues: Array.isArray(parsed.issues)
+      ? parsed.issues
+          .map((item) => normalizeReviewIssue(item))
+          .filter((item): item is NonNullable<ReturnType<typeof normalizeReviewIssue>> => item !== null)
+      : [],
+    revisionPlan: normalizeRevisionPlan(parsed.revisionPlan),
+    nextActions: Array.isArray(parsed.nextActions)
+      ? parsed.nextActions
+          .map((item) => normalizeReviewNextAction(item))
+          .filter((item): item is NonNullable<ReturnType<typeof normalizeReviewNextAction>> => item !== null)
+      : [],
   }
 }
 
@@ -227,9 +312,32 @@ export function isEvidenceRiskIssue(issue: { type?: string; severity?: string; s
   return type.includes('evidence') || type.includes('claim') || type.includes('证据') || type.includes('支撑')
 }
 
+/**
+ * 执行控制台首屏需要优先回答“当前卡在哪一步”。
+ * 这里把失败节点映射成业务阶段文案，避免页面在任务仍是 RUNNING 时只能笼统显示“任务执行中”。
+ */
+function getBlockedStageLabel(node: TaskNodeInfo) {
+  if (node.agentType === 'COLLECTOR') return '采集受阻'
+  if (node.nodeName === 'extract_schema') return '结构化抽取受阻'
+  if (node.nodeName === 'analyze_competitors') return '竞品分析受阻'
+  if (node.nodeName === 'write_report' || node.nodeName === 'rewrite_report') return '报告生成受阻'
+  if (node.nodeName === 'quality_check' || node.nodeName === 'quality_check_final') return '质量评审受阻'
+  return '当前任务受阻'
+}
+
 export function getTaskStageLabel(task: TaskInfo, nodes: TaskNodeInfo[]) {
   if (task.status === 'SUCCESS') return '已完成，可查看报告'
   if (nodes.some((node) => node.status === 'PAUSED')) return '等待人工恢复'
+
+  if (nodes.some((node) => node.status === 'WAITING_INTERVENTION')) return '等待人工处理'
+  if (nodes.some((node) => node.status === 'WAITING_RETRY')) return '等待系统重试'
+
+  const failedNode = [...nodes]
+    .filter((node) => node.status === 'FAILED')
+    .sort((left, right) => (left.executionOrder || 0) - (right.executionOrder || 0))[0]
+  if (failedNode) {
+    return getBlockedStageLabel(failedNode)
+  }
 
   const runningNode = nodes.find((node) => node.status === 'RUNNING')
   if (runningNode?.agentType === 'COLLECTOR') return '采集执行中'
@@ -247,7 +355,17 @@ export function getTaskStageLabel(task: TaskInfo, nodes: TaskNodeInfo[]) {
 export function getTaskHeroTone(task: TaskInfo, nodes: TaskNodeInfo[]): HeroTone {
   if (task.status === 'FAILED') return 'danger'
   if (task.status === 'SUCCESS') return 'success'
-  if (nodes.some((node) => node.status === 'PAUSED')) return 'warning'
+  if (nodes.some((node) => node.status === 'FAILED')) return 'danger'
+  if (
+    nodes.some(
+      (node) =>
+        node.status === 'PAUSED'
+        || node.status === 'WAITING_RETRY'
+        || node.status === 'WAITING_INTERVENTION',
+    )
+  ) {
+    return 'warning'
+  }
   if (task.status === 'RUNNING') return 'active'
   return 'default'
 }
@@ -289,8 +407,32 @@ export function getReviewerHeadline(node: TaskNodeInfo) {
 }
 
 export function getNodeHeadline(node: TaskNodeInfo) {
+  if (node.status === 'WAITING_INTERVENTION') {
+    return node.interventionSummary || '等待人工处理后继续当前节点'
+  }
+  if (node.status === 'WAITING_RETRY') {
+    return node.statusSummary || '系统正在等待下一次自动重试'
+  }
+  if (node.status === 'COMPENSATED') {
+    return node.outputSummary || '当前分支已完成补偿收口'
+  }
+  if (node.status === 'READY') {
+    return node.statusSummary || '已准备执行，等待系统调度'
+  }
+  if (node.status === 'DISPATCHED') {
+    return node.statusSummary || '已进入执行队列，等待节点启动'
+  }
   if (node.agentType === 'COLLECTOR') return getCollectorHeadline(node)
   if (node.agentType === 'REVIEWER') return getReviewerHeadline(node)
+  if (node.status === 'FAILED') {
+    // 执行控制台与节点摘要首层只提示“当前卡在哪个业务阶段”，
+    // 具体报错细节留给下方“为什么需要处理”和 Alert 区，避免同一句错误在首层重复堆叠。
+    return node.interventionSummary
+      ? `${getBlockedStageLabel(node)}，请查看处理建议`
+      : node.errorMessage
+        ? `${getBlockedStageLabel(node)}，请查看失败原因`
+        : getBlockedStageLabel(node)
+  }
   if (node.status === 'PAUSED') return '已暂停，等待人工恢复'
   if (node.interventionReason) return node.interventionReason
   if (node.outputSummary) return node.outputSummary
@@ -298,4 +440,50 @@ export function getNodeHeadline(node: TaskNodeInfo) {
   if (node.configSummaryData?.summaryText) return node.configSummaryData.summaryText
   if (node.configSummary) return node.configSummary
   return '等待执行'
+}
+
+/**
+ * 节点摘要层默认先回答“现在怎么了”，避免用户先读一整屏字段再自己拼状态。
+ */
+export function getNodeSituationSummary(node: TaskNodeInfo) {
+  const headline = getNodeHeadline(node)
+  const statusText = getNodeStatusText(node.status)
+  return headline === statusText ? statusText : `${statusText}：${headline}`
+}
+
+/**
+ * 节点主路径默认只给业务原因与处理建议，不让用户先掉进原始配置或 trace 里排查。
+ */
+export function getNodeHandlingReason(node: TaskNodeInfo) {
+  if (node.errorMessage && node.interventionSummary) {
+    return `${node.errorMessage}；${node.interventionSummary}`
+  }
+  if (node.interventionSummary) return node.interventionSummary
+  if (node.errorMessage) return node.errorMessage
+  if (node.interventionReason) return node.interventionReason
+  if (node.status === 'WAITING_INTERVENTION') return '当前节点需要人工确认或补充信息后才能继续。'
+  if (node.status === 'WAITING_RETRY') return '当前节点已经进入自动重试等待期，系统会按策略继续处理。'
+  if (node.status === 'COMPENSATED') return '当前节点已通过补偿动作安全收口，通常不需要继续人工处理。'
+  if (node.status === 'READY' || node.status === 'DISPATCHED') return '当前节点已经进入待调度阶段，请等待系统继续推进。'
+  if (node.nodeNotes) return node.nodeNotes
+  if (node.status === 'PAUSED') return '该节点已暂停，等待人工恢复或跳过。'
+  if (node.status === 'RUNNING') return '当前节点仍在执行，请结合摘要观察是否需要人工干预。'
+  if (node.status === 'SUCCESS') return '当前节点已按计划完成，通常不需要额外处理。'
+  return '当前暂无额外处理说明。'
+}
+
+/**
+ * 这里把节点可执行动作转成一句用户语言，便于列表和抽屉都先交付“下一步做什么”。
+ */
+export function getNodeActionSummary(node: TaskNodeInfo) {
+  const actions = ['查看追踪']
+
+  if (node.canPause) actions.push('暂停节点')
+  if (node.canResumeNode) actions.push('恢复节点')
+  if (node.canSkip) actions.push('手动跳过')
+  if (node.canTerminate) actions.push(node.status === 'RUNNING' ? '请求终止' : '强制终止')
+  if (node.canRerun) actions.push('从该节点重跑')
+  if (node.canUpdateConfigAndRerun) actions.push('应用建议或高级修改')
+
+  return actions.length > 0 ? actions.join('、') : '当前无需额外操作，继续观察即可。'
 }

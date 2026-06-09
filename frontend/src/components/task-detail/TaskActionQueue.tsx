@@ -11,7 +11,7 @@ type TaskActionQueueProps = {
 
 export default function TaskActionQueue({ items, actionLoading, overflowCount = 0 }: TaskActionQueueProps) {
   return (
-    <Card title="异常与待办" className="work-card">
+    <Card title="当前关键问题" className="work-card">
       {items.length > 0 ? (
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
           <div className="action-queue">
@@ -25,6 +25,7 @@ export default function TaskActionQueue({ items, actionLoading, overflowCount = 
                     <Text strong>{item.title}</Text>
                   </Space>
                   <Text type="secondary">{item.description}</Text>
+                  <Text strong>下一步动作</Text>
                   <Space wrap>
                     {item.actions.map((action) => (
                       <Button
@@ -56,8 +57,8 @@ export default function TaskActionQueue({ items, actionLoading, overflowCount = 
         <Alert
           showIcon
           type="success"
-          message="当前没有阻塞型待办"
-          description="节点状态正常时，这里会保持简洁，让用户把注意力留给 DAG 总览与业务结果。"
+          message="当前没有阻塞型问题"
+          description="节点状态正常时，这里会保持简洁，让用户把注意力留给任务图进展与业务结果。"
         />
       )}
     </Card>

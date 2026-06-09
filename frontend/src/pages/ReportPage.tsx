@@ -15,7 +15,6 @@ import {
   Spin,
   Tag,
   Typography,
-  message,
 } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -27,11 +26,14 @@ import {
   getExportUrl,
   getHtmlExportUrl,
   getReport,
+  listTaskExports,
   listReportEvidences,
   rerunTaskNode,
 } from '../api/client'
 import EvidenceList from '../components/EvidenceList'
 import MarkdownReport from '../components/MarkdownReport'
+import AuditSummaryPanel from '../components/report/AuditSummaryPanel'
+import DeliveryExportPanel from '../components/report/DeliveryExportPanel'
 import ReportDiagnosisPanel from '../components/task-detail/ReportDiagnosisPanel'
 import type {
   CompetitorEvidenceCoverageInfo,
@@ -39,12 +41,18 @@ import type {
   EvidenceCoverageOverviewInfo,
   EvidenceInfo,
   QualityIssue,
+  ReportExportInfo,
   ReportInfo,
   ReviewCheckpointInfo,
   ReviewNextAction,
   SearchAuditOverviewInfo,
+  SectionEvidenceBundleInfo,
   SectionEvidenceCoverageInfo,
 } from '../types'
+import { appMessage } from '../utils/appMessage'
+import { buildConversationEntryUrl } from '../utils/conversationPresentation'
+import { buildGovernanceActionFailureMessage } from '../utils/governancePresentation'
+import { normalizeSectionEvidenceBundles } from '../utils/reportDiagnosis'
 import {
   getNodeNameLabel,
   getNodeStatusText,
@@ -52,9 +60,11 @@ import {
   getReviewSectionText,
   getReviewSeverityText,
   getReviewTypeText,
+  getSourceTypeText,
   normalizeReportSummary,
   normalizeReportTitle,
 } from '../utils/display'
+import { getTaskDetailEntryGuidance } from '../utils/taskPresentation'
 
 const { Paragraph, Text } = Typography
 
@@ -62,6 +72,21 @@ function issueColor(severity: QualityIssue['severity']) {
   if (severity === 'ERROR') return 'red'
   if (severity === 'WARNING') return 'orange'
   return 'blue'
+}
+
+function deliveryStatusColor(status?: string | null) {
+  if (status === 'READY') return 'green'
+  if (status === 'BLOCKED') return 'red'
+  if (status === 'NEEDS_EVIDENCE') return 'orange'
+  return 'blue'
+}
+
+function deliveryStatusText(status?: string | null, readyForDelivery?: boolean | null) {
+  if (status === 'READY' || readyForDelivery === true) return '可正式交付'
+  if (status === 'BLOCKED') return '存在阻塞问题'
+  if (status === 'NEEDS_EVIDENCE') return '需先补证据'
+  if (status === 'REVIEW_REQUIRED') return '仍需继续复核'
+  return '待确认'
 }
 
 function uniqueOptions(values: Array<string | null | undefined>) {
@@ -144,6 +169,26 @@ function coverageFieldLabel(status?: string) {
   if (status === 'UNTRACEABLE') return '不可追溯'
   if (status === 'EMPTY') return '空字段'
   return status || '未标注'
+}
+
+function evidenceBundleTypeText(sectionType?: string | null) {
+  if (sectionType === 'CONCLUSION') return '关键结论'
+  if (sectionType === 'SECTION') return '章节依据'
+  return '正文依据'
+}
+
+function evidenceBundleHeadline(bundle: SectionEvidenceBundleInfo) {
+  if (bundle.summary) return normalizeReportSummary(bundle.summary)
+  if (bundle.gapSummary) return bundle.gapSummary
+  return `${bundle.sectionTitle || bundle.sectionKey || '该章节'}的关键证据已整理完成`
+}
+
+function evidenceFieldStatusText(status?: string | null) {
+  if (status === 'TRACEABLE') return '已能直接回指证据'
+  if (status === 'MISSING_EVIDENCE') return '仍需补齐稳定证据'
+  if (status === 'UNTRACEABLE') return '当前判断还不能回指来源'
+  if (status === 'EMPTY') return '该字段当前仍为空'
+  return '该字段仍需补充说明'
 }
 
 function buildTaskContextUrl(
@@ -475,6 +520,133 @@ function SearchAuditOverviewPanel({ overview }: { overview: SearchAuditOverviewI
   )
 }
 
+/**
+ * 报告页默认主路径需要先回答“关键结论从哪里来、哪里还缺证据”。
+ * 这里直接消费 sectionEvidenceBundles，把章节摘要、缺口和来源入口整理成业务可读列表，
+ * 避免用户再去理解原始结构体或 coverage JSON。
+ */
+function SectionEvidenceTracePanel({
+  bundles,
+}: {
+  bundles: SectionEvidenceBundleInfo[]
+}) {
+  if (!bundles.length) {
+    return (
+      <Alert
+        type="info"
+        showIcon
+        message="当前报告还没有整理出章节级证据追溯"
+        description="这通常意味着任务生成于旧版本，或当前报告尚未写入结构化章节追溯信息。"
+      />
+    )
+  }
+
+  const gapCount = bundles.filter((bundle) => bundle.hasGap).length
+  const sourceCount = new Set(bundles.flatMap((bundle) => bundle.sourceUrls || [])).size
+  const referenceCount = bundles.reduce((count, bundle) => count + (bundle.evidenceReferences || []).length, 0)
+
+  return (
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Alert
+        type={gapCount > 0 ? 'warning' : 'success'}
+        showIcon
+        message={gapCount > 0 ? `当前有 ${gapCount} 个章节仍需补齐证据链路` : '关键章节都已具备可追溯入口'}
+        description={
+          gapCount > 0
+            ? '建议先处理“仍需补证据”的章节，再触发重写或终审，避免把证据缺口带入最终交付。'
+            : '可以直接从下方章节定位关键结论对应的来源与证据片段。'
+        }
+      />
+
+      <div className="report-inline-metrics">
+        <div className="report-inline-metric">
+          <span className="report-inline-value">{bundles.length}</span>
+          <span className="report-inline-label">追溯章节</span>
+        </div>
+        <div className="report-inline-metric">
+          <span className="report-inline-value">{gapCount}</span>
+          <span className="report-inline-label">仍需补证据</span>
+        </div>
+        <div className="report-inline-metric">
+          <span className="report-inline-value">{sourceCount}</span>
+          <span className="report-inline-label">关联来源</span>
+        </div>
+        <div className="report-inline-metric">
+          <span className="report-inline-value">{referenceCount}</span>
+          <span className="report-inline-label">已挂接证据</span>
+        </div>
+      </div>
+
+      <List
+        size="small"
+        bordered
+        dataSource={bundles}
+        renderItem={(bundle) => (
+          <List.Item>
+            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+              <Space wrap>
+                <Tag color={bundle.hasGap ? 'orange' : 'green'}>
+                  {bundle.sectionTitle || bundle.sectionKey || '未命名章节'}
+                </Tag>
+                <Tag color="blue">{evidenceBundleTypeText(bundle.sectionType)}</Tag>
+                {(bundle.sourceUrls || []).length > 0 && <Tag>{`来源 ${(bundle.sourceUrls || []).length}`}</Tag>}
+                {bundle.hasGap ? <Tag color="orange">仍需补证据</Tag> : <Tag color="green">可直接追溯</Tag>}
+              </Space>
+
+              <Text strong>{evidenceBundleHeadline(bundle)}</Text>
+              {bundle.gapSummary && <Text type="secondary">{bundle.gapSummary}</Text>}
+              {(bundle.missingFields || []).length > 0 && (
+                <Text type="secondary">{`仍需补齐：${(bundle.missingFields || []).join('、')}`}</Text>
+              )}
+
+              {(bundle.fields || []).length > 0 && (
+                <List
+                  size="small"
+                  dataSource={(bundle.fields || []).slice(0, 3)}
+                  renderItem={(field) => (
+                    <List.Item>
+                      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                        <Space wrap>
+                          <Tag>{field.fieldLabel || field.fieldName || '未命名字段'}</Tag>
+                          <Tag color={coverageFieldTone(field.coverageStatus || undefined)}>
+                            {coverageFieldLabel(field.coverageStatus || undefined)}
+                          </Tag>
+                        </Space>
+                        <Text type="secondary">{field.gapComment || evidenceFieldStatusText(field.coverageStatus)}</Text>
+                      </Space>
+                    </List.Item>
+                  )}
+                />
+              )}
+
+              {(bundle.evidenceReferences || []).length > 0 && (
+                <div className="diagnosis-evidence-list">
+                  {(bundle.evidenceReferences || []).slice(0, 2).map((reference, index) => (
+                    <div className="diagnosis-evidence-item" key={`${reference.evidenceId || reference.url || 'trace'}-${index}`}>
+                      <Space wrap>
+                        {reference.evidenceId && <Tag color="blue">{reference.evidenceId}</Tag>}
+                        {reference.competitorName && <Tag>{reference.competitorName}</Tag>}
+                        {reference.sourceType && <Tag color="cyan">{getSourceTypeText(reference.sourceType)}</Tag>}
+                      </Space>
+                      <Text strong>{reference.title || reference.url || '未命名证据'}</Text>
+                      {reference.url && (
+                        <a href={reference.url} target="_blank" rel="noopener noreferrer" className="diagnosis-link">
+                          {reference.url}
+                        </a>
+                      )}
+                      {reference.contentSnippet && <Paragraph className="diagnosis-snippet">“{reference.contentSnippet}”</Paragraph>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Space>
+          </List.Item>
+        )}
+      />
+    </Space>
+  )
+}
+
 function KnowledgeTracePanel({ knowledges }: { knowledges: CompetitorKnowledgeInfo[] }) {
   if (!knowledges.length) {
     return <Alert type="info" showIcon message="暂无竞品知识溯源信息" />
@@ -547,6 +719,7 @@ export default function ReportPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [evidenceOpen, setEvidenceOpen] = useState(false)
   const [evidenceLoading, setEvidenceLoading] = useState(false)
+  const [deliveryExports, setDeliveryExports] = useState<ReportExportInfo[]>([])
   const [filteredEvidences, setFilteredEvidences] = useState<EvidenceInfo[]>([])
   const [evidenceFilters, setEvidenceFilters] = useState<{
     competitorName?: string
@@ -556,11 +729,18 @@ export default function ReportPage() {
 
   const fetchReport = async () => {
     try {
-      const res = await getReport(taskId)
-      setReport(res.data)
-      setFilteredEvidences(res.data.evidences || [])
+      const reportResponse = await getReport(taskId)
+      setReport(reportResponse.data)
+      setFilteredEvidences(reportResponse.data.evidences || [])
+
+      try {
+        const exportResponse = await listTaskExports(taskId)
+        setDeliveryExports(exportResponse.data || [])
+      } catch {
+        setDeliveryExports([])
+      }
     } catch {
-      message.error('加载报告失败')
+      appMessage.error('加载报告失败')
     } finally {
       setLoading(false)
     }
@@ -592,6 +772,29 @@ export default function ReportPage() {
   const reviewProblemCount = latestReview?.issues?.length || diagnosisCount
   const evidenceMissingCount = report?.evidenceCoverageOverview?.missingEvidenceFields ?? 0
   const searchAuditDegradedCount = report?.searchAuditOverview?.degradedCount ?? 0
+  const sectionEvidenceBundles = useMemo(
+    () => normalizeSectionEvidenceBundles(report?.sectionEvidenceBundles),
+    [report?.sectionEvidenceBundles],
+  )
+  const deliverySummary = report?.deliverySummary ?? null
+  const auditSummary = report?.auditSummary ?? null
+  const evidenceEntryPoint = report?.evidenceEntryPoint ?? null
+  const taskDetailGuidance = getTaskDetailEntryGuidance('report')
+  /**
+   * 报告页缺少独立 taskName 字段时，使用当前报告标题作为阅读上下文名称，
+   * 确保统一对话入口至少能保留“来自哪份报告”的业务语义和证据回指范围。
+   */
+  const conversationEntryUrl = useMemo(
+    () =>
+      buildConversationEntryUrl({
+        pageType: 'REPORT',
+        taskId,
+        taskName: report ? normalizeReportTitle(report.title) : null,
+        reportId: report?.id,
+        reportTitle: report ? normalizeReportTitle(report.title) : null,
+      }),
+    [report, taskId],
+  )
 
   const fetchFilteredEvidences = async (nextFilters: typeof evidenceFilters) => {
     setEvidenceFilters(nextFilters)
@@ -603,7 +806,7 @@ export default function ReportPage() {
       const res = await listReportEvidences(taskId, normalizedFilters)
       setFilteredEvidences(res.data || [])
     } catch {
-      message.error('筛选证据来源失败')
+      appMessage.error('筛选证据来源失败')
     } finally {
       setEvidenceLoading(false)
     }
@@ -611,14 +814,14 @@ export default function ReportPage() {
 
   const handleRewriteReport = async () => {
     if (!rewriteRecommended) {
-      message.warning('当前不建议直接自动改写，请先回到任务页补证据或调整采集策略')
+      appMessage.warning('当前不建议直接自动改写，请先回到任务页补证据或调整采集策略')
       navigate(`/task/${taskId}`)
       return
     }
     setActionLoading(true)
     try {
       await rerunTaskNode(taskId, 'rewrite_report')
-      message.success('已触发 rewrite_report 重跑，请回到任务页观察执行进度')
+      appMessage.success('已触发 rewrite_report 重跑，请回到任务页观察执行进度')
       navigate(
         buildTaskContextUrl(taskId, {
           actionType: 'REWRITE_CLAIM',
@@ -626,8 +829,8 @@ export default function ReportPage() {
           actionTitle: '报告重写',
         }),
       )
-    } catch {
-      message.error('触发报告重写失败')
+    } catch (error) {
+      appMessage.error(buildGovernanceActionFailureMessage(error, '触发报告重写失败', '请稍后重试'))
     } finally {
       setActionLoading(false)
     }
@@ -659,7 +862,7 @@ export default function ReportPage() {
     setActionLoading(true)
     try {
       await rerunTaskNode(taskId, targetNode)
-      message.success(`已触发 ${targetNode} 重跑`)
+      appMessage.success(`已触发 ${targetNode} 重跑`)
       navigate(
         buildTaskContextUrl(taskId, {
           actionType: action.actionType,
@@ -667,8 +870,8 @@ export default function ReportPage() {
           actionTitle: action.title || actionTypeText(action.actionType),
         }),
       )
-    } catch {
-      message.error('执行评审建议失败')
+    } catch (error) {
+      appMessage.error(buildGovernanceActionFailureMessage(error, '执行评审建议失败', '请稍后重试'))
     } finally {
       setActionLoading(false)
     }
@@ -689,6 +892,74 @@ export default function ReportPage() {
     )
   }
 
+  // 将初审/终审这类原始评审结构后置到高级诊断区，避免默认主路径被实现细节打断。
+  const advancedDiagnosisItems = [
+    {
+      key: 'coverage',
+      label: `章节证据覆盖${report.evidenceCoverageOverview ? ` · 缺证据 ${evidenceMissingCount}` : ''}`,
+      children: <EvidenceCoverageOverviewPanel overview={report.evidenceCoverageOverview} />,
+    },
+    {
+      key: 'audit',
+      label: `搜索审计${report.searchAuditOverview ? ` · 降级 ${searchAuditDegradedCount}` : ''}`,
+      children: <SearchAuditOverviewPanel overview={report.searchAuditOverview} />,
+    },
+    {
+      key: 'knowledge',
+      label: `知识溯源 · ${report.competitorKnowledges.length} 个竞品`,
+      children: <KnowledgeTracePanel knowledges={report.competitorKnowledges} />,
+    },
+    ...(report.initialReview || report.finalReview
+      ? [
+          {
+            key: 'review-checkpoints',
+            label: '评审检查点',
+            children: (
+              <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <ReviewCheckpointPanel
+                  title="初审结果"
+                  review={report.initialReview}
+                  actionLoading={actionLoading}
+                  onAction={handleReviewAction}
+                />
+                <ReviewCheckpointPanel
+                  title="终审结果"
+                  review={report.finalReview}
+                  actionLoading={actionLoading}
+                  onAction={handleReviewAction}
+                />
+              </Space>
+            ),
+          },
+        ]
+      : []),
+    qualityIssueCount > 0
+      ? {
+          key: 'feedback',
+          label: `最新质量反馈 · ${qualityIssueCount} 条`,
+          children: (
+            <Collapse
+              items={report.qualityIssues.map((issue, index) => ({
+                key: `quality-${index}`,
+                label: (
+                  <Space>
+                    <Tag color={issueColor(issue.severity)}>{getReviewSeverityText(issue.severity)}</Tag>
+                    <span>{getReviewSectionText(issue.section)}</span>
+                    <span className="muted-text">{getReviewTypeText(issue.type)}</span>
+                  </Space>
+                ),
+                children: <p>{issue.suggestion}</p>,
+              }))}
+            />
+          ),
+        }
+      : {
+          key: 'feedback',
+          label: '最新质量反馈',
+          children: <Alert type="success" showIcon message="当前没有额外质量反馈" />,
+        },
+  ]
+
   return (
     <div>
       <div className="page-toolbar">
@@ -696,6 +967,7 @@ export default function ReportPage() {
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(`/task/${taskId}`)}>
             返回任务
           </Button>
+          <Button onClick={() => navigate(conversationEntryUrl)}>用对话完善草稿</Button>
           <Button icon={<DownloadOutlined />} onClick={() => window.open(getExportUrl(taskId))}>
             导出文本版
           </Button>
@@ -710,8 +982,33 @@ export default function ReportPage() {
 
       <div className="page-header">
         <h2>{normalizeReportTitle(report.title)}</h2>
-        <p>先看质量结论和修订动作，再下钻证据覆盖、搜索审计与知识溯源。</p>
+        <p>先看交付结果、问题诊断和修订动作，再沿着关键章节回查证据依据。</p>
       </div>
+
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message={taskDetailGuidance.message}
+        description={taskDetailGuidance.description}
+      />
+
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message="Phase 5 已正式交付边界"
+        description={
+          <Space direction="vertical" size={4}>
+            <Text>
+              Phase 5 已正式交付组织知识、模型治理、回放恢复、正式导出与治理提示。
+            </Text>
+            <Text>
+              当前工作台仍未进入 Phase 6 的 Planner Agent、Tool Router、Guardrail Engine 与自主循环。
+            </Text>
+          </Space>
+        }
+      />
 
       <Card
         className={`work-card hero-card ${
@@ -791,6 +1088,74 @@ export default function ReportPage() {
         </Space>
       </Card>
 
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} lg={10}>
+          <Card title="交付状态摘要" className="work-card">
+            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+              <Space wrap>
+                <Tag color={deliveryStatusColor(deliverySummary?.deliveryStatus)}>
+                  {deliveryStatusText(deliverySummary?.deliveryStatus, deliverySummary?.readyForDelivery)}
+                </Tag>
+                {deliverySummary?.blockerCount != null && (
+                  <Tag color="red">阻塞 {deliverySummary.blockerCount}</Tag>
+                )}
+                {deliverySummary?.evidenceGapCount != null && (
+                  <Tag color="orange">缺证据 {deliverySummary.evidenceGapCount}</Tag>
+                )}
+              </Space>
+
+              <Text>{deliverySummary?.summary || report.summary || '当前暂无可读交付摘要。'}</Text>
+
+              {deliverySummary?.primaryIssue && (
+                <div>
+                  <Text strong>最大问题</Text>
+                  <Paragraph style={{ marginBottom: 0, marginTop: 8 }}>{deliverySummary.primaryIssue}</Paragraph>
+                </div>
+              )}
+
+              {deliverySummary?.recommendedAction && (
+                <div>
+                  <Text strong>建议动作</Text>
+                  <Paragraph style={{ marginBottom: 0, marginTop: 8 }}>
+                    {deliverySummary.recommendedAction}
+                  </Paragraph>
+                </div>
+              )}
+
+              {evidenceEntryPoint && (
+                <Alert
+                  type="info"
+                  showIcon
+                  message="证据入口"
+                  description={
+                    <Space direction="vertical" size={4}>
+                      <Text>{evidenceEntryPoint.summary || '请先从关键证据入口回查来源。'}</Text>
+                      {evidenceEntryPoint.url && (
+                        <a href={evidenceEntryPoint.url} target="_blank" rel="noreferrer">
+                          优先核对：{evidenceEntryPoint.title || evidenceEntryPoint.url}
+                        </a>
+                      )}
+                    </Space>
+                  }
+                />
+              )}
+            </Space>
+          </Card>
+        </Col>
+
+        <Col xs={24} lg={14}>
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <AuditSummaryPanel auditSummary={auditSummary} />
+
+            <DeliveryExportPanel
+              deliveryExports={deliveryExports}
+              onOpenTextExport={() => window.open(getExportUrl(taskId))}
+              onOpenHtmlExport={() => window.open(getHtmlExportUrl(taskId))}
+            />
+          </Space>
+        </Col>
+      </Row>
+
       <Card title="报告正文" className="work-card" style={{ marginTop: 16 }}>
         <MarkdownReport content={report.content} evidences={report.evidences} />
       </Card>
@@ -819,37 +1184,6 @@ export default function ReportPage() {
                 actionLoading={actionLoading}
                 onAction={handleReviewAction}
               />
-
-              <ReviewCheckpointPanel
-                title="初审结果"
-                review={report.initialReview}
-                actionLoading={actionLoading}
-                onAction={handleReviewAction}
-              />
-              <ReviewCheckpointPanel
-                title="终审结果"
-                review={report.finalReview}
-                actionLoading={actionLoading}
-                onAction={handleReviewAction}
-              />
-
-              {!report.initialReview && !report.finalReview && qualityIssueCount > 0 && (
-                <Card size="small" className="review-subpanel" title="最新质量反馈">
-                  <Collapse
-                    items={report.qualityIssues.map((issue, index) => ({
-                      key: String(index),
-                      label: (
-                        <Space>
-                          <Tag color={issueColor(issue.severity)}>{getReviewSeverityText(issue.severity)}</Tag>
-                          <span>{getReviewSectionText(issue.section)}</span>
-                          <span className="muted-text">{getReviewTypeText(issue.type)}</span>
-                        </Space>
-                      ),
-                      children: <p>{issue.suggestion}</p>,
-                    }))}
-                  />
-                </Card>
-              )}
             </Space>
           </Card>
         </Col>
@@ -927,51 +1261,17 @@ export default function ReportPage() {
         </Col>
       </Row>
 
-      <Card title="证据与高级追踪" className="work-card" style={{ marginTop: 16 }}>
-        <Collapse
-          items={[
-            {
-              key: 'coverage',
-              label: `章节证据覆盖${report.evidenceCoverageOverview ? ` · 缺证据 ${evidenceMissingCount}` : ''}`,
-              children: <EvidenceCoverageOverviewPanel overview={report.evidenceCoverageOverview} />,
-            },
-            {
-              key: 'audit',
-              label: `搜索审计${report.searchAuditOverview ? ` · 降级 ${searchAuditDegradedCount}` : ''}`,
-              children: <SearchAuditOverviewPanel overview={report.searchAuditOverview} />,
-            },
-            {
-              key: 'knowledge',
-              label: `知识溯源 · ${report.competitorKnowledges.length} 个竞品`,
-              children: <KnowledgeTracePanel knowledges={report.competitorKnowledges} />,
-            },
-            qualityIssueCount > 0
-              ? {
-                  key: 'feedback',
-                  label: `最新质量反馈 · ${qualityIssueCount} 条`,
-                  children: (
-                    <Collapse
-                      items={report.qualityIssues.map((issue, index) => ({
-                        key: `quality-${index}`,
-                        label: (
-                          <Space>
-                            <Tag color={issueColor(issue.severity)}>{getReviewSeverityText(issue.severity)}</Tag>
-                            <span>{getReviewSectionText(issue.section)}</span>
-                            <span className="muted-text">{getReviewTypeText(issue.type)}</span>
-                          </Space>
-                        ),
-                        children: <p>{issue.suggestion}</p>,
-                      }))}
-                    />
-                  ),
-                }
-              : {
-                  key: 'feedback',
-                  label: '最新质量反馈',
-                  children: <Alert type="success" showIcon message="当前没有额外质量反馈" />,
-                },
-          ]}
-        />
+      <Card
+        title="关键证据追溯"
+        extra={<Button type="link" onClick={() => setEvidenceOpen(true)}>查看全部证据</Button>}
+        className="work-card"
+        style={{ marginTop: 16 }}
+      >
+        <SectionEvidenceTracePanel bundles={sectionEvidenceBundles} />
+      </Card>
+
+      <Card title="高级诊断与运行追踪" className="work-card" style={{ marginTop: 16 }}>
+        <Collapse items={advancedDiagnosisItems} />
       </Card>
 
       <Modal

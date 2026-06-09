@@ -6,16 +6,22 @@ package cn.bugstack.competitoragent.source;
  */
 public enum SourceSelectionReason {
 
-    LOW_SIGNAL_UTILITY_PAGE("DISCARDED"),
-    KEEP_FRESHER_SEARCH_RESULT("SELECTED");
+    LOW_SIGNAL_UTILITY_PAGE("DISCARDED", "识别为低价值工具页，已在排序阶段降权留档"),
+    KEEP_FRESHER_SEARCH_RESULT("SELECTED", "优先保留更新且更可靠的搜索候选");
 
     private final String selectionStage;
+    private final String summary;
 
-    SourceSelectionReason(String selectionStage) {
+    SourceSelectionReason(String selectionStage, String summary) {
         this.selectionStage = selectionStage;
+        this.summary = summary;
     }
 
     public String getSelectionStage() {
         return selectionStage;
+    }
+
+    public String getSummary() {
+        return summary;
     }
 }

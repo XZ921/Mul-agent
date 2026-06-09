@@ -1,6 +1,8 @@
 package cn.bugstack.competitoragent.controller;
 
 import cn.bugstack.competitoragent.model.dto.CreateTaskRequest;
+import cn.bugstack.competitoragent.model.dto.TaskListPageResponse;
+import cn.bugstack.competitoragent.model.dto.TaskListSummaryResponse;
 import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
 import cn.bugstack.competitoragent.model.dto.TaskResponse;
 import cn.bugstack.competitoragent.model.enums.AgentType;
@@ -19,6 +21,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -44,7 +47,10 @@ class TaskControllerTest {
                 .canResume(true)
                 .canRetry(false)
                 .canViewReport(false)
+                .eventStreamPath("/api/task/88/events")
                 .interventionSummary("当前支持基于已有检查点恢复执行。")
+                .resumeAdvice("适合你主动停止任务后想沿用已有成果继续时使用。系统会保留已完成节点，只恢复中断链路。")
+                .replayEntrySummary("需要回看失败原因、检查点和原始输入输出时，请先进入节点追踪，再展开高级诊断。")
                 .build());
         when(taskService.getTaskNodes(88L)).thenReturn(List.of(TaskNodeResponse.builder()
                 .id(1001L)
@@ -57,6 +63,10 @@ class TaskControllerTest {
                 .canSkip(true)
                 .affectedNodeCount(3)
                 .affectedNodeNames(List.of("extract_schema", "analyze_competitors", "write_report"))
+                .impactSummary("恢复后会继续当前节点及其后续待执行链路，不会清空无关已完成节点。")
+                .checkpointSummary("该节点不提供独立检查点，主要复用的是未受影响上游结果。")
+                .replayEntrySummary("如需确认暂停前发生了什么，请先打开节点追踪，再进入高级诊断查看回放。")
+                .eventKey("extract_schema")
                 .interventionSummary("节点已暂停，可恢复后继续执行。")
                 .build()));
 
@@ -65,14 +75,21 @@ class TaskControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.status").value("STOPPED"))
                 .andExpect(jsonPath("$.data.canResume").value(true))
-                .andExpect(jsonPath("$.data.interventionSummary").value("当前支持基于已有检查点恢复执行。"));
+                .andExpect(jsonPath("$.data.eventStreamPath").value("/api/task/88/events"))
+                .andExpect(jsonPath("$.data.interventionSummary").value("当前支持基于已有检查点恢复执行。"))
+                .andExpect(jsonPath("$.data.resumeAdvice").value("适合你主动停止任务后想沿用已有成果继续时使用。系统会保留已完成节点，只恢复中断链路。"))
+                .andExpect(jsonPath("$.data.replayEntrySummary").value("需要回看失败原因、检查点和原始输入输出时，请先进入节点追踪，再展开高级诊断。"));
 
         mockMvc.perform(get("/api/task/88/nodes"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].nodeName").value("extract_schema"))
                 .andExpect(jsonPath("$.data[0].status").value("PAUSED"))
                 .andExpect(jsonPath("$.data[0].canResumeNode").value(true))
-                .andExpect(jsonPath("$.data[0].affectedNodeCount").value(3));
+                .andExpect(jsonPath("$.data[0].eventKey").value("extract_schema"))
+                .andExpect(jsonPath("$.data[0].affectedNodeCount").value(3))
+                .andExpect(jsonPath("$.data[0].impactSummary").value("恢复后会继续当前节点及其后续待执行链路，不会清空无关已完成节点。"))
+                .andExpect(jsonPath("$.data[0].checkpointSummary").value("该节点不提供独立检查点，主要复用的是未受影响上游结果。"))
+                .andExpect(jsonPath("$.data[0].replayEntrySummary").value("如需确认暂停前发生了什么，请先打开节点追踪，再进入高级诊断查看回放。"));
     }
 
     @Test
@@ -129,5 +146,47 @@ class TaskControllerTest {
         mockMvc.perform(post("/api/task/18/nodes/collect_sources_01_01/rerun"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Task rerun scheduled from node collect_sources_01_01"));
+    }
+
+    @Test
+    void shouldReturnFormalTaskListPaginationPayload() throws Exception {
+        when(taskService.listTasks(null, 2, 10)).thenReturn(TaskListPageResponse.builder()
+                .items(List.of(TaskResponse.builder()
+                        .id(21L)
+                        .taskName("Phase 3 task")
+                        .status(AnalysisTaskStatus.RUNNING)
+                        .build()))
+                .attentionItems(List.of(TaskResponse.builder()
+                        .id(22L)
+                        .taskName("Attention task")
+                        .status(AnalysisTaskStatus.FAILED)
+                        .build()))
+                .summary(TaskListSummaryResponse.builder()
+                        .total(12)
+                        .running(3)
+                        .success(6)
+                        .failed(2)
+                        .stopped(1)
+                        .avgProgress(54)
+                        .build())
+                .pageNum(2)
+                .pageSize(10)
+                .total(12)
+                .totalPages(2)
+                .build());
+
+        mockMvc.perform(get("/api/task/list")
+                        .param("pageNum", "2")
+                        .param("pageSize", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pageNum").value(2))
+                .andExpect(jsonPath("$.data.pageSize").value(10))
+                .andExpect(jsonPath("$.data.total").value(12))
+                .andExpect(jsonPath("$.data.totalPages").value(2))
+                .andExpect(jsonPath("$.data.items[0].taskName").value("Phase 3 task"))
+                .andExpect(jsonPath("$.data.attentionItems[0].taskName").value("Attention task"))
+                .andExpect(jsonPath("$.data.summary.failed").value(2));
+
+        verify(taskService).listTasks(null, 2, 10);
     }
 }

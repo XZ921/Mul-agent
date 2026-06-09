@@ -73,6 +73,8 @@ public class SourceCandidateRanker {
         double quality = clamp(candidate.getQualityScore() > 0 ? candidate.getQualityScore() : inferQuality(normalizedDomain, candidate.getDiscoveryMethod()));
         double total = round(relevance * 0.5 + freshness * 0.2 + quality * 0.3);
         SourceSelectionReason decisionReason = resolveDecisionReason(candidate);
+        SourceTrustTier trustTier = resolveTrustTier(candidate, normalizedDomain);
+        List<String> rankingReasons = buildRankingReasons(candidate, normalizedDomain, trustTier, freshness);
 
         // 登录、招聘等工具页虽然可能有较高文本相关度，但对竞品研究价值低，
         // 这里直接降权并打上淘汰原因，避免它们在排序时挤占真正高价值的文档和定价页。
@@ -92,6 +94,10 @@ public class SourceCandidateRanker {
                 .freshnessScore(round(freshness))
                 .qualityScore(round(quality))
                 .totalScore(total)
+                .trustTier(trustTier)
+                .trustTierLabel(trustTier.getDisplayName())
+                .rankingReasons(rankingReasons)
+                .rankingSummary(buildRankingSummary(trustTier, rankingReasons))
                 .searchQuery(candidate.getSearchQuery())
                 .searchEngine(candidate.getSearchEngine())
                 .resultRank(candidate.getResultRank())
@@ -101,6 +107,7 @@ public class SourceCandidateRanker {
                 .matchedSignals(candidate.getMatchedSignals())
                 .selectionStage(resolveSelectionStage(candidate, decisionReason))
                 .selectionReason(resolveSelectionReason(candidate, decisionReason))
+                .selectionSummary(resolveSelectionSummary(candidate, decisionReason))
                 .build();
     }
 
@@ -140,6 +147,7 @@ public class SourceCandidateRanker {
         return candidate.toBuilder()
                 .selectionStage(SourceSelectionReason.KEEP_FRESHER_SEARCH_RESULT.getSelectionStage())
                 .selectionReason(SourceSelectionReason.KEEP_FRESHER_SEARCH_RESULT.name())
+                .selectionSummary(SourceSelectionReason.KEEP_FRESHER_SEARCH_RESULT.getSummary())
                 .build();
     }
 
@@ -213,6 +221,75 @@ public class SourceCandidateRanker {
             return 0.88;
         }
         return 0.70;
+    }
+
+    /**
+     * 来源可信度是对“这个候选本身是否像一个可靠来源”的判断，
+     * 与相关度分数不同，它更偏向来源治理解释语义，因此单独输出给前端和诊断链路。
+     */
+    private SourceTrustTier resolveTrustTier(SourceCandidate candidate, String domain) {
+        if (isUtilityPage(candidate)) {
+            return SourceTrustTier.LOW;
+        }
+        String normalizedDomain = defaultText(domain).toLowerCase(Locale.ROOT);
+        String sourceType = defaultText(candidate.getSourceType()).toUpperCase(Locale.ROOT);
+        if (normalizedDomain.startsWith("docs.")
+                || normalizedDomain.contains("help")
+                || normalizedDomain.contains("support")
+                || normalizedDomain.contains("g2.com")
+                || normalizedDomain.contains("capterra.com")) {
+            return SourceTrustTier.HIGH;
+        }
+        if ("OFFICIAL".equals(sourceType) || "PRICING".equals(sourceType) || "DOCS".equals(sourceType)) {
+            return SourceTrustTier.HIGH;
+        }
+        if ("REVIEW".equals(sourceType) || "SEARCH".equalsIgnoreCase(candidate.getDiscoveryMethod())) {
+            return SourceTrustTier.MEDIUM;
+        }
+        return SourceTrustTier.LOW;
+    }
+
+    /**
+     * 排序原因要能直接解释“为什么这个来源会排在当前位置”，
+     * 因此这里输出的是面向人类可读的原因列表，而不是只有最终总分。
+     */
+    private List<String> buildRankingReasons(SourceCandidate candidate,
+                                             String domain,
+                                             SourceTrustTier trustTier,
+                                             double freshness) {
+        List<String> reasons = new ArrayList<>();
+        reasons.add("来源可信度：" + trustTier.getDisplayName());
+
+        String normalizedDomain = defaultText(domain).toLowerCase(Locale.ROOT);
+        if (normalizedDomain.startsWith("docs.") || normalizedDomain.contains("help") || normalizedDomain.contains("support")) {
+            reasons.add("命中文档域名，适合作为高价值文档来源");
+        } else if (normalizedDomain.contains("g2.com") || normalizedDomain.contains("capterra.com")) {
+            reasons.add("命中知名第三方测评平台，适合作为公开评价来源");
+        } else if ("REVIEW".equalsIgnoreCase(candidate.getSourceType())) {
+            reasons.add("第三方评测来源可补充官网之外的外部视角");
+        } else if ("OFFICIAL".equalsIgnoreCase(candidate.getSourceType()) || "PRICING".equalsIgnoreCase(candidate.getSourceType())) {
+            reasons.add("官网或定价入口通常是高权威的一手来源");
+        }
+
+        if (HIGH_PRIORITY_DISCOVERY_METHODS.contains(defaultText(candidate.getDiscoveryMethod()).toUpperCase(Locale.ROOT))) {
+            reasons.add("搜索补源命中，优先级高于纯启发式候选");
+        } else if ("HEURISTIC".equalsIgnoreCase(candidate.getDiscoveryMethod())) {
+            reasons.add("启发式候选作为站内结构补充，优先级低于搜索直命中");
+        }
+
+        if (freshness >= 0.80D) {
+            reasons.add("发布时间较新，适合优先用于当前阶段分析");
+        } else if (freshness <= 0.50D) {
+            reasons.add("发布时间较旧，排序时已适度降权");
+        }
+        return reasons;
+    }
+
+    private String buildRankingSummary(SourceTrustTier trustTier, List<String> rankingReasons) {
+        if (rankingReasons == null || rankingReasons.isEmpty()) {
+            return "来源可信度：" + trustTier.getDisplayName();
+        }
+        return String.join("；", rankingReasons);
     }
 
     private int comparePublishedAt(String left, String right) {
@@ -293,6 +370,17 @@ public class SourceCandidateRanker {
             return decisionReason.name();
         }
         return candidate.getSelectionReason();
+    }
+
+    private String resolveSelectionSummary(SourceCandidate candidate, SourceSelectionReason decisionReason) {
+        if (decisionReason != null) {
+            return decisionReason.getSummary();
+        }
+        return candidate.getSelectionSummary();
+    }
+
+    private String defaultText(String value) {
+        return value == null ? "" : value;
     }
 
     private double clamp(double value) {

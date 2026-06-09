@@ -16,9 +16,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -246,7 +248,88 @@ class BrowserSearchRuntimeServiceTest {
         assertTrue(result.isFallbackSuggested());
         assertEquals("search_timeout", result.getBlockedReason());
         assertTrue(result.getSummary().contains("超时"));
-        verify(browserManager, times(2)).restartBrowser(anyString());
+        // 搜索超时属于页面级失败，不应误伤全局共享浏览器，否则会把其他并发线程一并打断。
+        verify(browserManager, times(0)).restartBrowser(anyString());
+    }
+
+    @Test
+    void shouldNotRestartSharedBrowserWhenNewTabCreationFails() {
+        SearchBrowserProperties properties = new SearchBrowserProperties();
+        properties.setEnabled(true);
+        properties.setMaxRetries(1);
+        SearchEngineProperties engines = defaultEngines();
+
+        Browser browser = mock(Browser.class);
+        BrowserContext context = mock(BrowserContext.class);
+
+        when(browserManager.getBrowser()).thenReturn(browser);
+        when(browser.newContext(any(Browser.NewContextOptions.class))).thenReturn(context);
+        // 模拟 Playwright 在高并发或系统资源紧张时，尚未进入页面导航就直接报“无法新建标签页”。
+        when(context.newPage()).thenThrow(new IllegalStateException(
+                "Protocol error (Target.createTarget): Failed to open a new tab"
+        ));
+
+        BrowserSearchRuntimeService service = new BrowserSearchRuntimeService(
+                browserManager,
+                properties,
+                engines,
+                new ObjectMapper(),
+                new SearchRuntimeFallbackPolicy(properties)
+        );
+
+        BrowserSearchRuntimeResult result = service.search(CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩")
+                .sourceType("OFFICIAL")
+                .browserSearchEnabled(Boolean.TRUE)
+                .searchQueries(List.of("哔哩哔哩 官方网站"))
+                .maxSearchResults(1)
+                .build());
+
+        assertTrue(result.getCandidates().isEmpty());
+        assertTrue(result.isFallbackSuggested());
+        // 这里的关键断言是：单次标签页创建失败不能立刻重启共享浏览器，否则会把其他并发线程一起打断。
+        verify(browserManager, times(0)).restartBrowser(anyString());
+    }
+
+    @Test
+    void shouldRestartSharedBrowserWhenPlaywrightConnectionIsClosed() {
+        SearchBrowserProperties properties = new SearchBrowserProperties();
+        properties.setEnabled(true);
+        properties.setMaxRetries(1);
+        SearchEngineProperties engines = defaultEngines();
+
+        Browser browser = mock(Browser.class);
+        BrowserContext context = mock(BrowserContext.class);
+
+        when(browserManager.getBrowser()).thenReturn(browser);
+        when(browser.newContext(any(Browser.NewContextOptions.class))).thenReturn(context);
+        // 这里模拟真正的浏览器实例失活，此时重启共享浏览器才是合理的恢复动作。
+        when(context.newPage()).thenThrow(new IllegalStateException(
+                "Target page, context or browser has been closed"
+        ));
+
+        BrowserSearchRuntimeService service = new BrowserSearchRuntimeService(
+                browserManager,
+                properties,
+                engines,
+                new ObjectMapper(),
+                new SearchRuntimeFallbackPolicy(properties)
+        );
+
+        BrowserSearchRuntimeResult result = service.search(CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩")
+                .sourceType("OFFICIAL")
+                .browserSearchEnabled(Boolean.TRUE)
+                .searchQueries(List.of("哔哩哔哩 官方网站"))
+                .maxSearchResults(1)
+                .build());
+
+        assertTrue(result.getCandidates().isEmpty());
+        assertTrue(result.isFallbackSuggested());
+        // 真正的浏览器实例失活时，需要对“当前仍被托管的故障实例”发起定向重启，
+        // 不能退回到无条件 restartBrowser，否则并发线程会把刚拉起的新实例再次关掉。
+        verify(browserManager, times(2)).restartBrowserIfCurrent(same(browser), anyString());
+        verify(browserManager, never()).restartBrowser(anyString());
     }
 
     @Test

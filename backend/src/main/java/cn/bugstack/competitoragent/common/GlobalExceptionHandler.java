@@ -1,5 +1,7 @@
 package cn.bugstack.competitoragent.common;
 
+import cn.bugstack.competitoragent.governance.GovernanceBlockException;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -11,9 +13,11 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -47,6 +51,14 @@ public class GlobalExceptionHandler {
         errorDetail.put("errorCode", e.getCode());
         errorDetail.put("errorType", e.getResultCode().name());
         errorDetail.put("detail", e.getMessage());
+        if (e instanceof GovernanceBlockException governanceBlockException) {
+            /**
+             * 治理阻断和普通业务失败不同，这里显式透出结构化治理判定，
+             * 让前端可以直接消费“为什么被阻断、下一步做什么”。
+             */
+            errorDetail.put("governanceBlocked", true);
+            errorDetail.put("governanceDecision", governanceBlockException.getDecision());
+        }
 
         return ApiResponse.error(e.getResultCode(), errorDetail);
     }
@@ -158,7 +170,22 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.OK)
-    public ApiResponse<Map<String, Object>> handleUnknownException(Exception e) {
+    public ApiResponse<Map<String, Object>> handleUnknownException(Exception e, HttpServletResponse response) {
+        /**
+         * SSE 客户端刷新/关闭页面后，容器会抛出 AsyncRequestNotUsableException / ClientAbortException。
+         * 这类异常说明“连接已经断开”，不是接口真正失败。
+         * 如果这里继续尝试输出统一 ApiResponse：
+         * 1. 响应往往已经是 text/event-stream；
+         * 2. response 可能已 committed；
+         * 3. Spring 会再次抛出 HttpMessageNotWritableException，形成二次 ERROR。
+         * 因此这里要直接静默吞掉，避免污染日志和告警。
+         */
+        if (shouldIgnoreSseDisconnectException(e, response)) {
+            log.info("[SSE连接已断开] type={}, message={}, traceId={}",
+                    e.getClass().getName(), e.getMessage(), TraceIdHolder.get());
+            return null;
+        }
+
         log.error("[未知异常] type={}, message={}, traceId={}",
                 e.getClass().getName(), e.getMessage(), TraceIdHolder.get(), e);
 
@@ -169,5 +196,53 @@ public class GlobalExceptionHandler {
         errorDetail.put("detail", e.getMessage() != null ? e.getMessage() : "未知错误");
 
         return ApiResponse.error(ResultCode.INTERNAL_ERROR, errorDetail);
+    }
+
+    /**
+     * 统一判断当前异常是否属于 SSE 客户端主动断连后的无害异常。
+     * 只在异步请求已不可用、客户端主动中止连接、IO 异常三类场景下才忽略，
+     * 避免把真正的后端执行错误误判成普通断连。
+     */
+    private boolean shouldIgnoreSseDisconnectException(Exception e, HttpServletResponse response) {
+        if (e == null) {
+            return false;
+        }
+        boolean asyncRequestClosed = containsExceptionType(e, AsyncRequestNotUsableException.class);
+        boolean clientAborted = containsExceptionSimpleName(e, "ClientAbortException");
+        boolean ioException = containsExceptionType(e, IOException.class);
+        if (!asyncRequestClosed && !clientAborted && !ioException) {
+            return false;
+        }
+
+        if (response == null) {
+            return true;
+        }
+        if (response.isCommitted()) {
+            return true;
+        }
+        String contentType = response.getContentType();
+        return contentType != null && contentType.contains("text/event-stream");
+    }
+
+    private boolean containsExceptionType(Throwable throwable, Class<? extends Throwable> targetType) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (targetType.isInstance(current)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private boolean containsExceptionSimpleName(Throwable throwable, String simpleName) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (simpleName.equals(current.getClass().getSimpleName())) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

@@ -9,6 +9,7 @@ import {
   getReviewTypeText,
   getSourceTypeText,
 } from '../../utils/display'
+import { normalizeReportDiagnosis } from '../../utils/reportDiagnosis'
 
 const { Paragraph, Text } = Typography
 
@@ -38,11 +39,20 @@ function actionPriorityColor(priority?: string | null) {
   return 'blue'
 }
 
+function directiveCategoryText(category?: string | null) {
+  if (category === 'SEARCH_QUALITY') return '补证路径'
+  if (category === 'CONTENT_REWRITE') return '改写路径'
+  if (category === 'FINAL_REVIEW') return '复核路径'
+  return category || '处理路径'
+}
+
 interface ReportDiagnosisPanelProps {
   diagnosis: ReportDiagnosisInfo | null | undefined
   actionLoading?: boolean
   onAction?: (action: ReviewNextAction) => Promise<void> | void
   compact?: boolean
+  streamStatusText?: string | null
+  streamStatusTone?: 'info' | 'warning' | 'success'
 }
 
 function renderSection(section: DiagnosisSectionInfo, actionLoading: boolean, onAction?: (action: ReviewNextAction) => Promise<void> | void) {
@@ -135,48 +145,86 @@ export default function ReportDiagnosisPanel({
   actionLoading = false,
   onAction,
   compact = false,
+  streamStatusText,
+  streamStatusTone = 'info',
 }: ReportDiagnosisPanelProps) {
-  if (!diagnosis) {
+  const safeDiagnosis = normalizeReportDiagnosis(diagnosis)
+
+  if (!safeDiagnosis) {
     return <Empty description="当前报告尚未返回统一诊断模型" />
   }
 
-  const sections = compact ? diagnosis.sections.slice(0, 2) : diagnosis.sections
-  const contentEvidences = compact ? (diagnosis.contentEvidences || []).slice(0, 4) : diagnosis.contentEvidences || []
+  const sections = compact ? safeDiagnosis.sections.slice(0, 2) : safeDiagnosis.sections
+  const contentEvidences = compact ? (safeDiagnosis.contentEvidences || []).slice(0, 4) : safeDiagnosis.contentEvidences || []
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      {streamStatusText && (
+        <Alert
+          type={streamStatusTone}
+          showIcon
+          message={streamStatusText}
+        />
+      )}
+
       <div className="diagnosis-summary-grid">
         <div className="diagnosis-summary-card">
-          <span className="diagnosis-summary-value">{diagnosis.diagnosisCount ?? 0}</span>
+          <span className="diagnosis-summary-value">{safeDiagnosis.diagnosisCount ?? 0}</span>
           <span className="diagnosis-summary-label">诊断项</span>
         </div>
         <div className="diagnosis-summary-card">
-          <span className="diagnosis-summary-value">{diagnosis.blockerCount ?? 0}</span>
+          <span className="diagnosis-summary-value">{safeDiagnosis.blockerCount ?? 0}</span>
           <span className="diagnosis-summary-label">阻塞问题</span>
         </div>
         <div className="diagnosis-summary-card">
-          <span className="diagnosis-summary-value">{diagnosis.evidenceGapCount ?? 0}</span>
+          <span className="diagnosis-summary-value">{safeDiagnosis.evidenceGapCount ?? 0}</span>
           <span className="diagnosis-summary-label">证据缺口</span>
         </div>
         <div className="diagnosis-summary-card">
-          <span className="diagnosis-summary-value">{(diagnosis.sourceUrls || []).length}</span>
+          <span className="diagnosis-summary-value">{(safeDiagnosis.sourceUrls || []).length}</span>
           <span className="diagnosis-summary-label">关联来源</span>
         </div>
       </div>
 
-      {(diagnosis.blockerCount || 0) > 0 && (
+      {(safeDiagnosis.blockerCount || 0) > 0 && (
         <Alert
           type="warning"
           showIcon
-          message={`当前存在 ${diagnosis.blockerCount} 个阻塞级问题`}
+          message={`当前存在 ${safeDiagnosis.blockerCount} 个阻塞级问题`}
           description="建议优先处理阻塞问题对应的章节与证据，再决定是否重跑节点或继续改写。"
         />
       )}
 
-      {diagnosis.nextActions && diagnosis.nextActions.length > 0 && onAction && (
+      {(safeDiagnosis.revisionDirectives || []).length > 0 && (
+        <Card size="small" title="修订路径建议">
+          <div className="diagnosis-next-actions">
+            {(safeDiagnosis.revisionDirectives || []).map((directive, index) => (
+              <div className="diagnosis-next-action" key={`${directive.category || 'directive'}-${index}`}>
+                <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                  <Space wrap>
+                    <Tag color={actionPriorityColor(directive.priority)}>{directive.priority || 'MEDIUM'}</Tag>
+                    <Tag color="geekblue">{directiveCategoryText(directive.category)}</Tag>
+                    {directive.actionType && <Tag>{actionTypeText(directive.actionType)}</Tag>}
+                    {directive.targetSection && <Tag>{getReviewSectionText(directive.targetSection)}</Tag>}
+                    {directive.targetNode && <Tag>{getNodeNameLabel(directive.targetNode)}</Tag>}
+                  </Space>
+                  <Text strong>{directive.summary || '请按当前修订路径处理问题'}</Text>
+                  {directive.searchFeedback && <Text type="secondary">{directive.searchFeedback}</Text>}
+                  {directive.expectedOutcome && <Text>{directive.expectedOutcome}</Text>}
+                  {(directive.sourceUrls || []).length > 0 && (
+                    <Text type="secondary">{`关联来源：${(directive.sourceUrls || []).join('、')}`}</Text>
+                  )}
+                </Space>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {safeDiagnosis.nextActions && safeDiagnosis.nextActions.length > 0 && onAction && (
         <Card size="small" title="建议动作">
           <div className="diagnosis-next-actions">
-            {diagnosis.nextActions.map((action, index) => (
+            {safeDiagnosis.nextActions.map((action, index) => (
               <div className="diagnosis-next-action" key={`${action.actionType || 'action'}-${index}`}>
                 <Space direction="vertical" size={8} style={{ width: '100%' }}>
                   <Space wrap>

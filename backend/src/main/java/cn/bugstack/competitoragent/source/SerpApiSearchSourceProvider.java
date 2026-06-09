@@ -42,10 +42,25 @@ public class SerpApiSearchSourceProvider implements SearchSourceProvider {
             .build();
 
     @Override
+    public SearchSourceProviderDescriptor descriptor() {
+        return SearchSourceProviderDescriptor.builder()
+                .providerKey("serpapi")
+                .displayName("SerpApi")
+                .capabilities(List.of("WEB_SEARCH", "GLOBAL_RESULTS"))
+                .defaultEnabled(true)
+                .defaultFailOpen(true)
+                .build();
+    }
+
+    @Override
+    public boolean isAvailable() {
+        return StringUtils.hasText(properties.getApiKey())
+                && UrlSecurityUtils.isHttpsUrl(properties.getEndpoint());
+    }
+
+    @Override
     public List<SourceCandidate> search(String competitorName, List<String> requestedScopes) {
-        if (!StringUtils.hasText(properties.getApiKey())
-                || !StringUtils.hasText(competitorName)
-                || !UrlSecurityUtils.isHttpsUrl(properties.getEndpoint())) {
+        if (!isAvailable() || !StringUtils.hasText(competitorName)) {
             return List.of();
         }
 

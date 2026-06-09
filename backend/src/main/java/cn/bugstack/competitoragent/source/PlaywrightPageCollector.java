@@ -149,7 +149,7 @@ public class PlaywrightPageCollector implements SourceCollector {
             if (shouldRestartBrowser(e)) {
                 log.warn("检测到 Playwright 浏览器疑似失活，准备自动重启后重试: url={}, error={}",
                         UrlSecurityUtils.maskForLog(url), e.getMessage());
-                browserManager.restartBrowser("page collect failure: " + e.getMessage());
+                browserManager.restartBrowserIfCurrent(browser, "page collect failure: " + e.getMessage());
                 return retryCollectByBrowser(url, competitorName, sourceType, fallbackReason, e);
             }
             log.error("页面采集失败: url={}, error={}", UrlSecurityUtils.maskForLog(url), e.getMessage());

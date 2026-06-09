@@ -22,6 +22,7 @@
         <langchain4j.version>0.35.0</langchain4j.version>
         <knife4j.version>4.5.0</knife4j.version>
         <playwright.version>1.44.0</playwright.version>
+        <spring.profiles.active>test</spring.profiles.active>
     </properties>
 
     <dependencies>
@@ -41,6 +42,17 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- Redis 任务快照、分布式锁与中间态缓存 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-spring-boot-starter</artifactId>
+            <version>2.3.5</version>
         </dependency>
 
         <!-- PostgreSQL -->
@@ -156,10 +168,25 @@
                 <configuration>
                     <argLine>-Dfile.encoding=UTF-8</argLine>
                     <systemPropertyVariables>
-                        <spring.profiles.active>test</spring.profiles.active>
+                        <spring.profiles.active>${spring.profiles.active}</spring.profiles.active>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>phase4-integration</id>
+            <properties>
+                <spring.profiles.active>phase4-integration</spring.profiles.active>
+            </properties>
+        </profile>
+        <profile>
+            <id>phase5-integration</id>
+            <properties>
+                <spring.profiles.active>phase5-integration</spring.profiles.active>
+            </properties>
+        </profile>
+    </profiles>
 </project>

@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.model.dto;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.workflow.NodeFailureCategory;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -64,6 +65,9 @@ public class TaskNodeResponse {
     @Schema(description = "Current retry count", example = "0")
     private int retryCount;
 
+    @Schema(description = "Failure category when node is not successful")
+    private NodeFailureCategory failureCategory;
+
     @Schema(description = "Node status", example = "SUCCESS")
     private TaskNodeStatus status;
 
@@ -79,11 +83,32 @@ public class TaskNodeResponse {
     @Schema(description = "Execution order", example = "0")
     private int executionOrder;
 
+    @Schema(description = "所属计划版本 ID", example = "12")
+    private Long planVersionId;
+
+    @Schema(description = "所属计划版本号", example = "3")
+    private Integer planVersion;
+
+    @Schema(description = "节点分支键", example = "root/review-2")
+    private String branchKey;
+
+    @Schema(description = "是否为动态节点")
+    private Boolean dynamicNode;
+
+    @Schema(description = "动态节点来源节点名")
+    private String originNodeName;
+
     @Schema(description = "Input summary")
     private String inputSummary;
 
     @Schema(description = "Output summary")
     private String outputSummary;
+
+    @Schema(description = "AI 治理摘要")
+    private String aiGovernanceSummary;
+
+    @Schema(description = "User readable status summary")
+    private String statusSummary;
 
     @Schema(description = "Raw input JSON")
     private String inputData;
@@ -96,6 +121,12 @@ public class TaskNodeResponse {
 
     @Schema(description = "Completed at")
     private LocalDateTime completedAt;
+
+    @Schema(description = "Last attempt time")
+    private LocalDateTime lastAttemptAt;
+
+    @Schema(description = "Next retry time")
+    private LocalDateTime nextRetryAt;
 
     @Schema(description = "是否允许从该节点重跑")
     private Boolean canRerun;
@@ -126,4 +157,22 @@ public class TaskNodeResponse {
 
     @Schema(description = "节点级人工干预规则摘要")
     private String interventionSummary;
+
+    @Schema(description = "适合直接从该节点重跑的业务说明")
+    private String rerunActionSummary;
+
+    @Schema(description = "适合修改配置后重跑的业务说明")
+    private String configRerunActionSummary;
+
+    @Schema(description = "该节点人工干预会影响的业务范围说明")
+    private String impactSummary;
+
+    @Schema(description = "该节点检查点复用说明")
+    private String checkpointSummary;
+
+    @Schema(description = "该节点追踪与回放入口说明")
+    private String replayEntrySummary;
+
+    @Schema(description = "节点在任务事件流中的标识键")
+    private String eventKey;
 }

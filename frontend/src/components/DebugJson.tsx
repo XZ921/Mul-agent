@@ -1,22 +1,7 @@
 import { Alert, Typography } from 'antd'
+import { formatDiagnosticJson } from '../utils/taskPresentation'
 
 const { Paragraph } = Typography
-
-function formatJsonValue(value: string | object | null | undefined) {
-  if (value == null || value === '') return ''
-  if (typeof value === 'string') {
-    try {
-      return JSON.stringify(JSON.parse(value), null, 2)
-    } catch {
-      return value
-    }
-  }
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
-}
 
 type DebugJsonProps = {
   value: string | object | null | undefined
@@ -24,7 +9,7 @@ type DebugJsonProps = {
 }
 
 export default function DebugJson({ value, emptyText }: DebugJsonProps) {
-  const content = formatJsonValue(value)
+  const content = formatDiagnosticJson(value)
 
   if (!content) {
     return <Alert type="info" showIcon message={emptyText} />

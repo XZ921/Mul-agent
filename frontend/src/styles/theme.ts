@@ -18,6 +18,17 @@ export const appThemeTokens = {
   colorFillTertiary: '#f7f9fc',
   colorBrandStrong: '#143d69',
   colorBrandMuted: '#5d6b82',
+  colorConversationContextBgStart: '#f7f9fc',
+  colorConversationContextBgEnd: '#ffffff',
+  colorConversationContextBorder: '#dbe4f0',
+  colorConversationDetailBg: '#f7f9fc',
+  colorConversationDetailBorder: '#dbe4f0',
+  colorConversationMessageUserBgStart: '#ffffff',
+  colorConversationMessageUserBgEnd: '#edf3fb',
+  colorConversationMessageAssistantBgStart: '#ffffff',
+  colorConversationMessageAssistantBgEnd: '#f7f9fc',
+  colorConversationComposerBorder: '#dbe4f0',
+  shadowConversationComposer: '0 12px 24px rgba(25, 52, 84, 0.08)',
   borderRadius: 10,
   borderRadiusLG: 14,
   fontFamily: '"Segoe UI", "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif',
@@ -77,11 +88,24 @@ export function applyThemeCssVariables() {
   root.style.setProperty('--app-color-bg-page', appThemeTokens.colorBgLayout)
   root.style.setProperty('--app-color-bg-card', appThemeTokens.colorBgContainer)
   root.style.setProperty('--app-color-border', appThemeTokens.colorBorderSecondary)
+  root.style.setProperty('--app-color-fill-secondary', appThemeTokens.colorFillSecondary)
+  root.style.setProperty('--app-color-fill-tertiary', appThemeTokens.colorFillTertiary)
   root.style.setProperty('--app-color-text', appThemeTokens.colorText)
   root.style.setProperty('--app-color-text-secondary', appThemeTokens.colorTextSecondary)
   root.style.setProperty('--app-color-text-tertiary', appThemeTokens.colorTextTertiary)
   root.style.setProperty('--app-color-brand-strong', appThemeTokens.colorBrandStrong)
   root.style.setProperty('--app-color-brand-muted', appThemeTokens.colorBrandMuted)
+  root.style.setProperty('--app-conversation-context-bg-start', appThemeTokens.colorConversationContextBgStart)
+  root.style.setProperty('--app-conversation-context-bg-end', appThemeTokens.colorConversationContextBgEnd)
+  root.style.setProperty('--app-conversation-context-border', appThemeTokens.colorConversationContextBorder)
+  root.style.setProperty('--app-conversation-detail-bg', appThemeTokens.colorConversationDetailBg)
+  root.style.setProperty('--app-conversation-detail-border', appThemeTokens.colorConversationDetailBorder)
+  root.style.setProperty('--app-conversation-message-user-start', appThemeTokens.colorConversationMessageUserBgStart)
+  root.style.setProperty('--app-conversation-message-user-end', appThemeTokens.colorConversationMessageUserBgEnd)
+  root.style.setProperty('--app-conversation-message-assistant-start', appThemeTokens.colorConversationMessageAssistantBgStart)
+  root.style.setProperty('--app-conversation-message-assistant-end', appThemeTokens.colorConversationMessageAssistantBgEnd)
+  root.style.setProperty('--app-conversation-composer-border', appThemeTokens.colorConversationComposerBorder)
+  root.style.setProperty('--app-conversation-composer-shadow', appThemeTokens.shadowConversationComposer)
   root.style.setProperty('--app-radius-sm', `${appThemeTokens.borderRadius}px`)
   root.style.setProperty('--app-radius-lg', `${appThemeTokens.borderRadiusLG}px`)
   root.style.setProperty('--app-font-family', appThemeTokens.fontFamily)

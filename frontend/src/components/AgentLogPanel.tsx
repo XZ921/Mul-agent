@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Button, Card, Descriptions, List, Modal, Select, Space, Table, Tag, Typography, message } from 'antd'
+import { Alert, Button, Card, Descriptions, List, Modal, Select, Space, Table, Tag, Typography } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { getAgentLogDetail, getAgentLogs } from '../api/client'
+import AdvancedDiagnosticSection from './AdvancedDiagnosticSection'
 import DebugJson from './DebugJson'
-import type { AgentLog, AgentType, NodeStatus } from '../types'
-import { getAgentTypeText, getNodeStatusText } from '../utils/display'
+import type { AgentLog, AgentType, NodeStatus, TaskEventConnectionStatus } from '../types'
+import { appMessage } from '../utils/appMessage'
+import { getAgentTypeText, getNodeStatusText, getTaskEventStreamStatusText } from '../utils/display'
 
 const { Text } = Typography
 
@@ -19,7 +21,12 @@ const agentColorMap: Record<AgentType, string> = {
 
 const statusColor: Record<NodeStatus, string> = {
   PENDING: 'default',
+  READY: 'blue',
+  DISPATCHED: 'processing',
   RUNNING: 'processing',
+  WAITING_RETRY: 'orange',
+  WAITING_INTERVENTION: 'gold',
+  COMPENSATED: 'green',
   PAUSED: 'warning',
   SUCCESS: 'green',
   FAILED: 'red',
@@ -29,6 +36,10 @@ const statusColor: Record<NodeStatus, string> = {
 interface Props {
   taskId: number
   autoRefresh?: boolean
+  logs?: AgentLog[]
+  streamStatus?: TaskEventConnectionStatus
+  fallbackPollingActive?: boolean
+  onRefresh?: () => Promise<void> | void
 }
 
 function parseJson(value?: string | null) {
@@ -110,7 +121,36 @@ function progressStatusTag(status?: string) {
   return <Tag>{status || '未知状态'}</Tag>
 }
 
-export default function AgentLogPanel({ taskId, autoRefresh = false }: Props) {
+function buildLogRiskSummary(logs: AgentLog[]) {
+  // 日志面板默认只回答“有没有风险、要不要进一步排查”，
+  // 详细表格、追踪编号和原始执行记录统一后置到高级诊断层。
+  if (logs.length === 0) {
+    return '当前还没有智能体日志，任务推进后会在高级诊断里补充完整执行明细。'
+  }
+
+  const failedCount = logs.filter((log) => log.status === 'FAILED').length
+  const interventionCount = logs.filter((log) => log.needsHumanIntervention).length
+  const runningCount = logs.filter((log) => log.status === 'RUNNING').length
+
+  if (failedCount > 0 || interventionCount > 0) {
+    return `当前有 ${failedCount} 条失败日志、${interventionCount} 条需人工关注记录，建议先进入高级诊断查看失败原因和追踪编号。`
+  }
+
+  if (runningCount > 0) {
+    return `当前有 ${runningCount} 个智能体仍在执行，详细日志表与原始轨迹已后置到高级诊断。`
+  }
+
+  return '当前日志整体稳定，详细执行表和原始轨迹默认收纳到高级诊断，避免首屏直接暴露技术细节。'
+}
+
+export default function AgentLogPanel({
+  taskId,
+  autoRefresh = false,
+  logs: controlledLogs,
+  streamStatus,
+  fallbackPollingActive = false,
+  onRefresh,
+}: Props) {
   const [logs, setLogs] = useState<AgentLog[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedLog, setSelectedLog] = useState<AgentLog | null>(null)
@@ -120,7 +160,14 @@ export default function AgentLogPanel({ taskId, autoRefresh = false }: Props) {
   const pollingRef = useRef<number | null>(null)
   const fetchingRef = useRef(false)
 
+  const useExternalLogs = Array.isArray(controlledLogs)
+
   const fetchLogs = useCallback(async () => {
+    // 任务详情页接入 SSE 后，日志列表优先消费外部受控数据；这里只保留统一刷新兜底。
+    if (useExternalLogs) {
+      await onRefresh?.()
+      return
+    }
     if (fetchingRef.current) return
     fetchingRef.current = true
     setLoading(true)
@@ -128,19 +175,20 @@ export default function AgentLogPanel({ taskId, autoRefresh = false }: Props) {
       const res = await getAgentLogs(taskId)
       setLogs(res.data || [])
     } catch {
-      message.error('获取智能体日志失败')
+      appMessage.error('获取智能体日志失败')
     } finally {
       fetchingRef.current = false
       setLoading(false)
     }
-  }, [taskId])
+  }, [onRefresh, taskId, useExternalLogs])
 
   useEffect(() => {
+    if (useExternalLogs) return
     fetchLogs()
-  }, [fetchLogs])
+  }, [fetchLogs, useExternalLogs])
 
   useEffect(() => {
-    if (!autoRefresh) return
+    if (!autoRefresh || useExternalLogs) return
     let cancelled = false
 
     const schedule = () => {
@@ -162,7 +210,12 @@ export default function AgentLogPanel({ taskId, autoRefresh = false }: Props) {
         window.clearTimeout(pollingRef.current)
       }
     }
-  }, [autoRefresh, fetchLogs])
+  }, [autoRefresh, fetchLogs, useExternalLogs])
+
+  useEffect(() => {
+    if (!useExternalLogs) return
+    setLogs(controlledLogs || [])
+  }, [controlledLogs, useExternalLogs])
 
   const filteredLogs = agentFilter ? logs.filter((log) => log.agentType === agentFilter) : logs
   const logSummary = useMemo(
@@ -174,6 +227,11 @@ export default function AgentLogPanel({ taskId, autoRefresh = false }: Props) {
     }),
     [logs],
   )
+  const riskSummaryText = useMemo(() => buildLogRiskSummary(logs), [logs])
+
+  const streamStatusText = streamStatus
+    ? getTaskEventStreamStatusText(streamStatus, fallbackPollingActive)
+    : null
 
   const handleViewDetail = async (log: AgentLog) => {
     setSelectedLog(log)
@@ -253,27 +311,11 @@ export default function AgentLogPanel({ taskId, autoRefresh = false }: Props) {
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <Card className="work-card">
         <Space direction="vertical" size={14} style={{ width: '100%' }}>
-          <div className="table-toolbar">
-            <Space wrap>
-              <Text strong>智能体执行日志</Text>
-              {autoRefresh && <Tag color="blue">自动刷新中</Tag>}
-            </Space>
-            <Space wrap>
-              <Select
-                allowClear
-                placeholder="按智能体类型筛选"
-                style={{ width: 190 }}
-                value={agentFilter}
-                onChange={setAgentFilter}
-                options={(['COLLECTOR', 'EXTRACTOR', 'ANALYZER', 'WRITER', 'REVIEWER'] as AgentType[]).map((type) => ({
-                  label: <Tag color={agentColorMap[type]}>{getAgentTypeText(type)}</Tag>,
-                  value: type,
-                }))}
-              />
-              <Button icon={<ReloadOutlined />} onClick={fetchLogs}>
-                刷新
-              </Button>
-            </Space>
+          <div>
+            <Text strong>日志风险摘要</Text>
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+              {riskSummaryText}
+            </Typography.Paragraph>
           </div>
 
           <div className="report-inline-metrics">
@@ -295,22 +337,72 @@ export default function AgentLogPanel({ taskId, autoRefresh = false }: Props) {
             </div>
           </div>
 
-          <Alert
-            type={autoRefresh ? 'info' : 'success'}
-            showIcon
-            message={autoRefresh ? '运行中任务会按节流轮询刷新日志' : '当前已停止自动刷新'}
-            description={autoRefresh ? '页面切到后台时会暂停轮询，避免重复定时器和无意义请求。' : '如需查看最新日志，可手动刷新。'}
-          />
+          <AdvancedDiagnosticSection
+            summary="日志表、筛选器、追踪编号和原始执行细节仅在需要排查时展开，避免默认首屏变成调试台。"
+          >
+            <Space direction="vertical" size={12} style={{ width: '100%' }}>
+              <div className="table-toolbar">
+                <Space wrap>
+                  <Text strong>智能体执行日志</Text>
+                  {useExternalLogs ? (
+                    <Tag color={fallbackPollingActive ? 'orange' : streamStatus === 'open' ? 'green' : 'blue'}>
+                      {fallbackPollingActive
+                        ? '自动刷新兜底中'
+                        : streamStatus === 'open'
+                          ? '实时同步中'
+                          : '状态通道准备中'}
+                    </Tag>
+                  ) : autoRefresh ? (
+                    <Tag color="blue">自动刷新中</Tag>
+                  ) : null}
+                </Space>
+                <Space wrap>
+                  <Select
+                    allowClear
+                    placeholder="按智能体类型筛选"
+                    style={{ width: 190 }}
+                    value={agentFilter}
+                    onChange={setAgentFilter}
+                    options={(['COLLECTOR', 'EXTRACTOR', 'ANALYZER', 'WRITER', 'REVIEWER'] as AgentType[]).map((type) => ({
+                      label: <Tag color={agentColorMap[type]}>{getAgentTypeText(type)}</Tag>,
+                      value: type,
+                    }))}
+                  />
+                  <Button icon={<ReloadOutlined />} onClick={() => void fetchLogs()}>
+                    刷新
+                  </Button>
+                </Space>
+              </div>
 
-          <Table
-            rowKey="id"
-            columns={columns}
-            dataSource={filteredLogs}
-            loading={loading}
-            size="small"
-            pagination={{ pageSize: 10 }}
-            locale={{ emptyText: '暂无智能体执行日志' }}
-          />
+              <Alert
+                type={fallbackPollingActive ? 'warning' : autoRefresh || useExternalLogs ? 'info' : 'success'}
+                showIcon
+                message={
+                  streamStatusText
+                  || (autoRefresh ? '运行中任务会按节流轮询刷新日志' : '当前已停止自动刷新')
+                }
+                description={
+                  useExternalLogs
+                    ? (fallbackPollingActive
+                        ? '当前日志会优先跟随实时进度更新；如果实时同步暂不可用，会回退到任务页统一自动刷新快照。'
+                        : '日志由任务详情页统一增量归并，手动刷新会补拉最新快照。')
+                    : autoRefresh
+                      ? '页面切到后台时会暂停轮询，避免重复定时器和无意义请求。'
+                      : '如需查看最新日志，可手动刷新。'
+                }
+              />
+
+              <Table
+                rowKey="id"
+                columns={columns}
+                dataSource={filteredLogs}
+                loading={loading}
+                size="small"
+                pagination={{ pageSize: 10 }}
+                locale={{ emptyText: '暂无智能体执行日志' }}
+              />
+            </Space>
+          </AdvancedDiagnosticSection>
         </Space>
       </Card>
 

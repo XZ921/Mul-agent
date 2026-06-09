@@ -71,9 +71,17 @@ describe('ReportDiagnosisPanel', () => {
     const user = userEvent.setup()
     const onAction = vi.fn()
 
-    render(<ReportDiagnosisPanel diagnosis={diagnosis} onAction={onAction} />)
+    render(
+      <ReportDiagnosisPanel
+        diagnosis={diagnosis}
+        onAction={onAction}
+        streamStatusText="实时进度通道已连接，后续状态会持续同步到页面"
+        streamStatusTone="success"
+      />,
+    )
 
     expect(screen.getByText('章节诊断')).toBeInTheDocument()
+    expect(screen.getByText('实时进度通道已连接，后续状态会持续同步到页面')).toBeInTheDocument()
     expect(screen.getByText('关键结论缺少来源引用')).toBeInTheDocument()
     expect(screen.getByText('关键结论缺少可回指的证据编号。')).toBeInTheDocument()
     expect(screen.getAllByText('E-001').length).toBeGreaterThan(0)
@@ -83,5 +91,52 @@ describe('ReportDiagnosisPanel', () => {
     await user.click(screen.getByRole('button', { name: '从采集节点补证据' }))
     expect(onAction).toHaveBeenCalledTimes(1)
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ actionType: 'RERUN_NODE', targetNode: 'collect_sources_web' }))
+  })
+
+  it('does not crash when diagnosis arrays are malformed during realtime merge', () => {
+    render(
+      <ReportDiagnosisPanel
+        diagnosis={{
+          diagnosisCount: 1,
+          blockerCount: 0,
+          evidenceGapCount: 0,
+          sourceUrls: null as unknown as string[],
+          sections: null as unknown as ReportDiagnosisInfo['sections'],
+          nextActions: { actionType: 'RERUN_NODE' } as unknown as ReportDiagnosisInfo['nextActions'],
+          contentEvidences: { evidenceId: 'E-001' } as unknown as ReportDiagnosisInfo['contentEvidences'],
+        }}
+      />,
+    )
+
+    expect(screen.getByText('当前没有章节级诊断问题')).toBeInTheDocument()
+    expect(screen.getAllByText('0').length).toBeGreaterThan(0)
+  })
+
+  it('renders revision directives as user-readable repair guidance', () => {
+    render(
+      <ReportDiagnosisPanel
+        diagnosis={{
+          ...diagnosis,
+          revisionDirectives: [
+            {
+              category: 'SEARCH_QUALITY',
+              actionType: 'SUPPLEMENT_EVIDENCE',
+              priority: 'HIGH',
+              targetNode: 'collect_sources_web',
+              targetSection: '结论',
+              summary: '补充官网安全能力证据',
+              searchFeedback: '当前搜索结果缺少安全专题页面。',
+              sourceUrls: ['https://docs.notion.so/ai'],
+              expectedOutcome: '让报告结论能直接回指官网说明。',
+            },
+          ],
+        } as unknown as ReportDiagnosisInfo}
+      />,
+    )
+
+    expect(screen.getByText('修订路径建议')).toBeInTheDocument()
+    expect(screen.getByText('补充官网安全能力证据')).toBeInTheDocument()
+    expect(screen.getByText('让报告结论能直接回指官网说明。')).toBeInTheDocument()
+    expect(screen.getByText('当前搜索结果缺少安全专题页面。')).toBeInTheDocument()
   })
 })

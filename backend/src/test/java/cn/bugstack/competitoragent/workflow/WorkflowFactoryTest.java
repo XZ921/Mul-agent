@@ -2,6 +2,8 @@ package cn.bugstack.competitoragent.workflow;
 
 import cn.bugstack.competitoragent.config.CollectorProperties;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
+import cn.bugstack.competitoragent.model.entity.TaskNode;
+import cn.bugstack.competitoragent.model.entity.TaskPlan;
 import cn.bugstack.competitoragent.repository.AnalysisSchemaRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
@@ -25,6 +27,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.when;
 
 class WorkflowFactoryTest {
 
@@ -177,6 +182,49 @@ class WorkflowFactoryTest {
         assertTrue(config.path("discoveryNotes").asText().contains("执行阶段"));
     }
 
+    @Test
+    void shouldWritePlanVersionMetadataIntoCreatedNodes() throws Exception {
+        SearchBrowserProperties searchBrowserProperties = buildBrowserProperties();
+        TaskNodeRepository nodeRepository = Mockito.mock(TaskNodeRepository.class);
+        DynamicTaskGraphService dynamicTaskGraphService = Mockito.mock(DynamicTaskGraphService.class);
+        when(nodeRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(dynamicTaskGraphService.ensureInitialPlan(anyLong(), any(WorkflowPlan.class)))
+                .thenReturn(TaskPlan.builder()
+                        .id(31L)
+                        .taskId(88L)
+                        .planVersion(1)
+                        .branchKey("root")
+                        .planType("INITIAL")
+                        .active(true)
+                        .planSnapshot("{}")
+                        .build());
+
+        WorkflowFactory workflowFactory = buildWorkflowFactory(
+                nodeRepository,
+                searchBrowserProperties,
+                new HeuristicSourceDiscoveryService(buildSearchSourceProvider(), new SourceCandidateRanker()),
+                dynamicTaskGraphService
+        );
+
+        AnalysisTask task = AnalysisTask.builder()
+                .id(88L)
+                .taskName("create workflow")
+                .subjectProduct("subject")
+                .competitorNames(objectMapper.writeValueAsString(List.of("Notion AI")))
+                .competitorUrls(objectMapper.writeValueAsString(List.of("https://www.notion.so")))
+                .sourceScope(objectMapper.writeValueAsString(List.of("瀹樼綉")))
+                .build();
+
+        List<TaskNode> savedNodes = workflowFactory.createWorkflow(task);
+
+        assertEquals(31L, task.getCurrentPlanVersionId());
+        assertEquals(1, task.getCurrentPlanVersion());
+        assertFalse(savedNodes.isEmpty());
+        assertTrue(savedNodes.stream().allMatch(node -> Long.valueOf(31L).equals(node.getPlanVersionId())));
+        assertTrue(savedNodes.stream().allMatch(node -> "root".equals(node.getBranchKey())));
+        assertTrue(savedNodes.stream().noneMatch(TaskNode::isDynamicNode));
+    }
+
     private SearchBrowserProperties buildBrowserProperties() {
         SearchBrowserProperties properties = new SearchBrowserProperties();
         properties.setEnabled(true);
@@ -186,19 +234,33 @@ class WorkflowFactoryTest {
 
     private WorkflowFactory buildWorkflowFactory(SearchBrowserProperties searchBrowserProperties) {
         return buildWorkflowFactory(
+                Mockito.mock(TaskNodeRepository.class),
                 searchBrowserProperties,
-                new HeuristicSourceDiscoveryService(buildSearchSourceProvider(), new SourceCandidateRanker())
+                new HeuristicSourceDiscoveryService(buildSearchSourceProvider(), new SourceCandidateRanker()),
+                Mockito.mock(DynamicTaskGraphService.class)
         );
     }
 
     private WorkflowFactory buildWorkflowFactory(SearchBrowserProperties searchBrowserProperties,
                                                  SourceDiscoveryService sourceDiscoveryService) {
+        return buildWorkflowFactory(
+                Mockito.mock(TaskNodeRepository.class),
+                searchBrowserProperties,
+                sourceDiscoveryService,
+                Mockito.mock(DynamicTaskGraphService.class)
+        );
+    }
+
+    private WorkflowFactory buildWorkflowFactory(TaskNodeRepository nodeRepository,
+                                                 SearchBrowserProperties searchBrowserProperties,
+                                                 SourceDiscoveryService sourceDiscoveryService,
+                                                 DynamicTaskGraphService dynamicTaskGraphService) {
         SearchProperties searchProperties = new SearchProperties();
         searchProperties.setMode("HYBRID");
         CollectorProperties collectorProperties = new CollectorProperties();
         collectorProperties.setMaxPagesPerCompetitor(5);
         return new WorkflowFactory(
-                Mockito.mock(TaskNodeRepository.class),
+                nodeRepository,
                 Mockito.mock(AnalysisSchemaRepository.class),
                 sourceDiscoveryService,
                 new SourceCandidateRanker(),
@@ -207,7 +269,8 @@ class WorkflowFactoryTest {
                 promptTemplateService,
                 searchBrowserProperties,
                 searchProperties,
-                collectorProperties
+                collectorProperties,
+                dynamicTaskGraphService
         );
     }
 

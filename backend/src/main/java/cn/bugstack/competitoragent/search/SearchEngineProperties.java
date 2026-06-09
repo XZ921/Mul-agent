@@ -34,6 +34,20 @@ public class SearchEngineProperties extends LinkedHashMap<String, SearchEnginePr
         return get(normalized);
     }
 
+    /**
+     * 解析可用的引擎 key。
+     * 与 resolve 的区别在于，这里会在命中别名后额外校验该引擎当前是否启用，
+     * 便于多搜索渠道统一记录“最终实际落到哪个稳定引擎标识”。
+     */
+    public String resolveAvailableEngineKey(String engineKey) {
+        String normalized = normalizeEngineKey(engineKey);
+        EngineConfig config = get(normalized);
+        if (config != null && config.isEnabled()) {
+            return normalized;
+        }
+        return resolveFirstEnabledEngineKey();
+    }
+
     public String resolveFirstEnabledEngineKey() {
         for (Map.Entry<String, EngineConfig> entry : entrySet()) {
             if (entry.getValue() != null && entry.getValue().isEnabled()) {

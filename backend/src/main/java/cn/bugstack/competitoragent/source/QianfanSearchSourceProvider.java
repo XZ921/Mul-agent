@@ -41,10 +41,25 @@ public class QianfanSearchSourceProvider implements SearchSourceProvider {
             .build();
 
     @Override
+    public SearchSourceProviderDescriptor descriptor() {
+        return SearchSourceProviderDescriptor.builder()
+                .providerKey("qianfan")
+                .displayName("千帆搜索")
+                .capabilities(List.of("WEB_SEARCH", "CHINESE_RESULTS"))
+                .defaultEnabled(true)
+                .defaultFailOpen(true)
+                .build();
+    }
+
+    @Override
+    public boolean isAvailable() {
+        return StringUtils.hasText(properties.getApiKey())
+                && UrlSecurityUtils.isHttpsUrl(properties.getEndpoint());
+    }
+
+    @Override
     public List<SourceCandidate> search(String competitorName, List<String> requestedScopes) {
-        if (!StringUtils.hasText(properties.getApiKey())
-                || !StringUtils.hasText(competitorName)
-                || !UrlSecurityUtils.isHttpsUrl(properties.getEndpoint())) {
+        if (!isAvailable() || !StringUtils.hasText(competitorName)) {
             return List.of();
         }
 

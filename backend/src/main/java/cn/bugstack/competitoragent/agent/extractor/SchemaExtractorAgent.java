@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.agent.extractor;
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.agent.BaseAgent;
+import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.llm.LlmClient;
 import cn.bugstack.competitoragent.llm.LlmException;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
@@ -17,6 +18,7 @@ import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
 import cn.bugstack.competitoragent.workflow.contract.ExtractResult;
 import cn.bugstack.competitoragent.workflow.contract.FeatureItem;
 import cn.bugstack.competitoragent.workflow.contract.PricingItem;
+import cn.bugstack.competitoragent.workflow.contract.SectionEvidenceBundle;
 import cn.bugstack.competitoragent.workflow.contract.StrengthWeaknessItem;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -51,6 +53,15 @@ public class SchemaExtractorAgent extends BaseAgent {
             "strengths",
             "weaknesses"
     );
+    private static final List<CoverageFieldDefinition> COVERAGE_FIELD_DEFINITIONS = List.of(
+            new CoverageFieldDefinition("summary", "产品概览"),
+            new CoverageFieldDefinition("positioning", "市场定位"),
+            new CoverageFieldDefinition("targetUsers", "目标用户"),
+            new CoverageFieldDefinition("coreFeatures", "核心能力"),
+            new CoverageFieldDefinition("pricing", "定价策略"),
+            new CoverageFieldDefinition("strengths", "优势判断"),
+            new CoverageFieldDefinition("weaknesses", "短板与风险")
+    );
 
     private final EvidenceSourceRepository evidenceRepository;
     private final CompetitorKnowledgeRepository knowledgeRepository;
@@ -63,8 +74,9 @@ public class SchemaExtractorAgent extends BaseAgent {
                                 CompetitorKnowledgeRepository knowledgeRepository,
                                 LlmClient llmClient,
                                 PromptTemplateService promptService,
+                                AgentContextAssembler agentContextAssembler,
                                 ObjectMapper objectMapper) {
-        super(logRepository);
+        super(logRepository, agentContextAssembler);
         this.evidenceRepository = evidenceRepository;
         this.knowledgeRepository = knowledgeRepository;
         this.llmClient = llmClient;
@@ -103,6 +115,7 @@ public class SchemaExtractorAgent extends BaseAgent {
         LinkedHashSet<String> aggregatedSourceUrls = new LinkedHashSet<>();
         LinkedHashSet<String> aggregatedIssueFlags = new LinkedHashSet<>();
         List<EvidenceFragment> aggregatedFragments = new ArrayList<>();
+        List<SectionEvidenceBundle> aggregatedSectionBundles = new ArrayList<>();
         int successCount = 0;
 
         for (Map.Entry<String, List<EvidenceSource>> entry : evidencesByCompetitor.entrySet()) {
@@ -110,7 +123,11 @@ public class SchemaExtractorAgent extends BaseAgent {
             List<EvidenceSource> competitorEvidence = entry.getValue();
 
             try {
-                NormalizedSchema normalizedSchema = extractAndNormalize(competitorName, competitorEvidence);
+                NormalizedSchema normalizedSchema = extractAndNormalize(
+                        competitorName,
+                        competitorEvidence,
+                        context.getTaskRagPromptContext()
+                );
                 CompetitorKnowledge knowledge = buildKnowledge(context, competitorName, normalizedSchema.schema());
                 knowledgeRepository.save(knowledge);
 
@@ -125,6 +142,7 @@ public class SchemaExtractorAgent extends BaseAgent {
                 aggregatedSourceUrls.addAll(draft.getSourceUrls());
                 aggregatedIssueFlags.addAll(draft.getIssueFlags());
                 aggregatedFragments.addAll(draft.getEvidenceFragments());
+                aggregatedSectionBundles.addAll(draft.getSectionEvidenceBundles());
                 successCount++;
             } catch (Exception e) {
                 log.error("extract competitor schema failed: {}", competitorName, e);
@@ -146,6 +164,7 @@ public class SchemaExtractorAgent extends BaseAgent {
                     .sourceUrls(new ArrayList<>(aggregatedSourceUrls))
                     .issueFlags(new ArrayList<>(aggregatedIssueFlags))
                     .evidenceFragments(normalizeEvidenceFragments(aggregatedFragments))
+                    .sectionEvidenceBundles(normalizeSectionEvidenceBundles(aggregatedSectionBundles))
                     .build();
             Map<String, Object> output = new LinkedHashMap<>();
             output.put("contractVersion", extractResult.getContractVersion());
@@ -154,8 +173,11 @@ public class SchemaExtractorAgent extends BaseAgent {
             output.put("results", extractionSummaries);
             output.put("drafts", extractResult.getDrafts());
             output.put("sourceUrls", extractResult.getSourceUrls());
+            // 统一把本次实际消费的 Task RAG 摘要写回节点输出，避免后续只能从 prompt 日志倒推。
+            output.put("taskRagContext", context.getTaskRagPromptContext());
             output.put("issueFlags", extractResult.getIssueFlags());
             output.put("evidenceFragments", extractResult.getEvidenceFragments());
+            output.put("sectionEvidenceBundles", extractResult.getSectionEvidenceBundles());
             String outputJson = objectMapper.writeValueAsString(output);
             return AgentResult.success(outputJson,
                     "已抽取竞品知识：" + successCount + "/" + evidencesByCompetitor.size());
@@ -175,12 +197,16 @@ public class SchemaExtractorAgent extends BaseAgent {
     /**
      * 提示词同时注入证据目录和正文内容，方便模型既输出结构化字段，又能引用 evidenceId。
      */
-    private NormalizedSchema extractAndNormalize(String competitorName, List<EvidenceSource> competitorEvidence)
+    private NormalizedSchema extractAndNormalize(String competitorName,
+                                                List<EvidenceSource> competitorEvidence,
+                                                String taskRagContext)
             throws LlmException, JsonProcessingException {
         String prompt = promptService.render("extractor", Map.of(
                 "competitorName", competitorName,
                 "evidenceCatalog", buildEvidenceCatalog(competitorEvidence),
-                "collectedContent", buildCollectedContent(competitorEvidence)
+                "collectedContent", buildCollectedContent(competitorEvidence),
+                // 统一任务上下文在这里透传给 Prompt，保证提取阶段也能看到检索结论与缺口说明。
+                "taskRagContext", taskRagContext
         ));
         JsonProcessingException lastParseException = null;
 
@@ -256,8 +282,14 @@ public class SchemaExtractorAgent extends BaseAgent {
         ObjectNode coverage = buildCoverage(schemaJson, evidenceById);
         schemaJson.set("evidenceCoverage", coverage);
         issueFlags.addAll(collectCoverageIssueFlags(coverage));
-        return new NormalizedSchema(schemaJson, new ArrayList<>(issueFlags),
-                buildEvidenceFragments("EXTRACT", competitorEvidence, issueFlags));
+        List<EvidenceFragment> evidenceFragments = buildEvidenceFragments("EXTRACT", competitorEvidence, issueFlags);
+        List<SectionEvidenceBundle> sectionEvidenceBundles = buildSectionEvidenceBundles(
+                competitorNameFromEvidence(competitorEvidence),
+                schemaJson,
+                coverage,
+                evidenceById
+        );
+        return new NormalizedSchema(schemaJson, new ArrayList<>(issueFlags), evidenceFragments, sectionEvidenceBundles);
     }
 
     /**
@@ -552,6 +584,7 @@ public class SchemaExtractorAgent extends BaseAgent {
                 .weaknesses(convertValue(schemaJson.path("weaknesses"), StrengthWeaknessItem.class))
                 .sourceUrls(readStringList(schemaJson.path("sourceUrls")))
                 .evidenceFragments(normalizeEvidenceFragments(normalizedSchema.evidenceFragments()))
+                .sectionEvidenceBundles(normalizeSectionEvidenceBundles(normalizedSchema.sectionEvidenceBundles()))
                 .issueFlags(normalizedSchema.issueFlags())
                 .evidenceCoverage(coverage)
                 .fieldsExtracted(countExtractedFields(schemaJson))
@@ -688,7 +721,149 @@ public class SchemaExtractorAgent extends BaseAgent {
         return normalized;
     }
 
-    private record NormalizedSchema(ObjectNode schema, List<String> issueFlags, List<EvidenceFragment> evidenceFragments) {
+    private List<SectionEvidenceBundle> normalizeSectionEvidenceBundles(List<SectionEvidenceBundle> bundles) {
+        List<SectionEvidenceBundle> normalized = new ArrayList<>();
+        for (SectionEvidenceBundle bundle : bundles) {
+            if (bundle != null) {
+                normalized.add(bundle.normalized());
+            }
+        }
+        return normalized;
+    }
+
+    /**
+     * 根据字段级 coverage 组装章节证据束。
+     * 这里显式把“字段状态 + evidenceId/sourceUrl + 缺口说明”一起压入 bundle，
+     * 后续分析、写作、报告接口就不需要再猜某个章节到底缺的是值还是缺的是证据。
+     */
+    private List<SectionEvidenceBundle> buildSectionEvidenceBundles(String competitorName,
+                                                                   ObjectNode schemaJson,
+                                                                   ObjectNode coverage,
+                                                                   Map<String, EvidenceSource> evidenceById) {
+        List<SectionEvidenceBundle> bundles = new ArrayList<>();
+        for (CoverageFieldDefinition definition : COVERAGE_FIELD_DEFINITIONS) {
+            JsonNode coverageNode = coverage.path(definition.fieldKey());
+            String status = coverageNode.path("status").asText("EMPTY");
+            List<String> evidenceIds = readStringList(coverageNode.path("evidenceIds"));
+            List<String> sourceUrls = readStringList(coverageNode.path("sourceUrls"));
+            List<EvidenceFragment> fieldFragments = buildFieldEvidenceFragments(
+                    "EXTRACT",
+                    competitorName,
+                    definition,
+                    status,
+                    evidenceIds,
+                    sourceUrls,
+                    evidenceById
+            );
+            List<String> missingFields = "TRACEABLE".equalsIgnoreCase(status) ? List.of() : List.of(definition.fieldKey());
+            bundles.add(SectionEvidenceBundle.builder()
+                    .stage("EXTRACT")
+                    .sectionType("SECTION")
+                    .sectionKey(definition.fieldKey())
+                    .sectionTitle(definition.sectionTitle())
+                    .summary(summarizeFieldValue(schemaJson.path(definition.fieldKey())))
+                    .fieldNames(List.of(definition.fieldKey()))
+                    .missingFields(missingFields)
+                    .sourceUrls(sourceUrls)
+                    .issueFlags(missingFields.isEmpty() ? List.of() : List.of("SECTION_EVIDENCE_GAP"))
+                    .evidenceFragments(fieldFragments)
+                    .build()
+                    .normalized());
+        }
+        return bundles;
+    }
+
+    private List<EvidenceFragment> buildFieldEvidenceFragments(String stage,
+                                                               String competitorName,
+                                                               CoverageFieldDefinition definition,
+                                                               String status,
+                                                               List<String> evidenceIds,
+                                                               List<String> sourceUrls,
+                                                               Map<String, EvidenceSource> evidenceById) {
+        List<EvidenceFragment> fragments = new ArrayList<>();
+        if (!evidenceIds.isEmpty()) {
+            for (String evidenceId : evidenceIds) {
+                EvidenceSource matched = evidenceById.get(evidenceId);
+                String sourceUrl = matched != null ? matched.getUrl() : sourceUrls.stream().findFirst().orElse(null);
+                fragments.add(EvidenceFragment.builder()
+                        .stage(stage)
+                        .competitorName(competitorName)
+                        .fieldName(definition.fieldKey())
+                        .fieldLabel(definition.sectionTitle())
+                        .sectionKey(definition.fieldKey())
+                        .sectionTitle(definition.sectionTitle())
+                        .coverageStatus(status)
+                        .evidenceId(evidenceId)
+                        .sourceUrl(sourceUrl)
+                        .title(matched == null ? null : matched.getTitle())
+                        .snippet(matched == null ? null : truncate(matched.getContentSnippet(), 180))
+                        .issueFlags("TRACEABLE".equalsIgnoreCase(status) ? List.of() : List.of(status))
+                        .gapComment("TRACEABLE".equalsIgnoreCase(status) ? null : "字段缺少稳定证据支撑")
+                        .build()
+                        .normalized());
+            }
+            return fragments;
+        }
+        if (!sourceUrls.isEmpty()) {
+            for (String sourceUrl : sourceUrls) {
+                fragments.add(EvidenceFragment.builder()
+                        .stage(stage)
+                        .competitorName(competitorName)
+                        .fieldName(definition.fieldKey())
+                        .fieldLabel(definition.sectionTitle())
+                        .sectionKey(definition.fieldKey())
+                        .sectionTitle(definition.sectionTitle())
+                        .coverageStatus(status)
+                        .sourceUrl(sourceUrl)
+                        .issueFlags("TRACEABLE".equalsIgnoreCase(status) ? List.of() : List.of(status))
+                        .gapComment("TRACEABLE".equalsIgnoreCase(status) ? null : "字段缺少稳定证据支撑")
+                        .build()
+                        .normalized());
+            }
+            return fragments;
+        }
+        fragments.add(EvidenceFragment.builder()
+                .stage(stage)
+                .competitorName(competitorName)
+                .fieldName(definition.fieldKey())
+                .fieldLabel(definition.sectionTitle())
+                .sectionKey(definition.fieldKey())
+                .sectionTitle(definition.sectionTitle())
+                .coverageStatus(status)
+                .issueFlags("TRACEABLE".equalsIgnoreCase(status) ? List.of() : List.of(status))
+                .gapComment("EMPTY".equalsIgnoreCase(status) ? "字段暂无内容" : "字段缺少稳定证据支撑")
+                .build()
+                .normalized());
+        return fragments;
+    }
+
+    private String summarizeFieldValue(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        if (node.isTextual()) {
+            return truncate(node.asText(), 120);
+        }
+        if (node.isArray() || node.isObject()) {
+            return truncate(node.toString(), 120);
+        }
+        return truncate(node.asText(), 120);
+    }
+
+    private String competitorNameFromEvidence(List<EvidenceSource> competitorEvidence) {
+        if (competitorEvidence == null || competitorEvidence.isEmpty()) {
+            return null;
+        }
+        return competitorEvidence.get(0).getCompetitorName();
+    }
+
+    private record NormalizedSchema(ObjectNode schema,
+                                    List<String> issueFlags,
+                                    List<EvidenceFragment> evidenceFragments,
+                                    List<SectionEvidenceBundle> sectionEvidenceBundles) {
+    }
+
+    private record CoverageFieldDefinition(String fieldKey, String sectionTitle) {
     }
 
     private record ParsedSchemaRoot(ObjectNode objectNode, List<String> issueFlags) {

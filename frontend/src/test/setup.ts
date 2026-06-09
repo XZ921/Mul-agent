@@ -18,3 +18,15 @@ Object.defineProperty(window, 'matchMedia', {
 if (!window.scrollTo) {
   window.scrollTo = () => {}
 }
+
+const nativeGetComputedStyle = window.getComputedStyle.bind(window)
+
+Object.defineProperty(window, 'getComputedStyle', {
+  writable: true,
+  value: (element: Element, pseudoElt?: string) => {
+    if (pseudoElt) {
+      return nativeGetComputedStyle(element)
+    }
+    return nativeGetComputedStyle(element)
+  },
+})

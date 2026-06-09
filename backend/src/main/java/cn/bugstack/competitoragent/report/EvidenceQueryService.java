@@ -1,9 +1,14 @@
 package cn.bugstack.competitoragent.report;
 
 import cn.bugstack.competitoragent.model.dto.ReportResponse.EvidenceInfo;
+import cn.bugstack.competitoragent.model.dto.ReportResponse.EvidenceEntryPointInfo;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.EvidenceReference;
+import cn.bugstack.competitoragent.model.dto.ReportResponse.FieldEvidenceDetail;
+import cn.bugstack.competitoragent.model.dto.ReportResponse.SectionEvidenceBundleInfo;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
+import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
+import cn.bugstack.competitoragent.workflow.contract.SectionEvidenceBundle;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -103,6 +108,120 @@ public class EvidenceQueryService {
     }
 
     /**
+     * 交付中心主路径并不需要一次性展开全部证据，
+     * 更重要的是先告诉用户“应该优先点开哪条证据”。
+     * 因此这里统一从 section bundle 与 evidence 列表中挑选一个最小证据入口摘要。
+     */
+    public EvidenceEntryPointInfo toEvidenceEntryPointInfo(List<EvidenceInfo> evidences,
+                                                           List<SectionEvidenceBundleInfo> bundles) {
+        SectionEvidenceBundleInfo primaryBundle = selectPrimaryBundle(bundles);
+        EvidenceReference primaryReference = selectPrimaryReference(primaryBundle, evidences);
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+
+        if (primaryBundle != null && primaryBundle.getSourceUrls() != null) {
+            sourceUrls.addAll(primaryBundle.getSourceUrls());
+        }
+        if (primaryReference != null && StringUtils.hasText(primaryReference.getUrl())) {
+            sourceUrls.add(primaryReference.getUrl().trim());
+        }
+
+        String summary = null;
+        if (primaryBundle != null && StringUtils.hasText(primaryBundle.getSummary())) {
+            summary = primaryBundle.getSummary().trim();
+        } else if (primaryReference != null && StringUtils.hasText(primaryReference.getTitle())) {
+            summary = "可优先核对证据：" + primaryReference.getTitle().trim();
+        } else if (primaryBundle != null && StringUtils.hasText(primaryBundle.getGapSummary())) {
+            summary = primaryBundle.getGapSummary().trim();
+        } else if (primaryReference != null && StringUtils.hasText(primaryReference.getUrl())) {
+            summary = "可优先核对来源链接：" + primaryReference.getUrl().trim();
+        } else {
+            summary = "当前暂无可直接展开的关键证据入口";
+        }
+
+        return EvidenceEntryPointInfo.builder()
+                .summary(summary)
+                .sectionKey(primaryBundle == null ? null : primaryBundle.getSectionKey())
+                .sectionTitle(primaryBundle == null ? null : primaryBundle.getSectionTitle())
+                .evidenceId(primaryReference == null ? null : primaryReference.getEvidenceId())
+                .title(primaryReference == null ? null : primaryReference.getTitle())
+                .url(primaryReference == null ? null : primaryReference.getUrl())
+                .sourceType(primaryReference == null ? null : primaryReference.getSourceType())
+                .sourceUrls(new ArrayList<>(sourceUrls))
+                .build();
+    }
+
+    /**
+     * 报告接口需要的 section bundle 视图在这里统一投影：
+     * 1. 原始 bundle 保留字段级缺口语义；
+     * 2. evidenceId/sourceUrl 会在这里解析成 EvidenceReference；
+     * 3. 即使某个字段完全没有命中证据，也会保留 gapComment 与 issueFlags，不会静默丢失。
+     */
+    public SectionEvidenceBundleInfo toSectionEvidenceBundleInfo(List<EvidenceInfo> evidences,
+                                                                 SectionEvidenceBundle bundle) {
+        if (bundle == null) {
+            return null;
+        }
+        SectionEvidenceBundle normalized = bundle.normalized();
+        List<FieldEvidenceDetail> fields = new ArrayList<>();
+        LinkedHashMap<String, EvidenceReference> references = new LinkedHashMap<>();
+
+        for (EvidenceFragment fragment : normalized.getEvidenceFragments() == null
+                ? List.<EvidenceFragment>of()
+                : normalized.getEvidenceFragments()) {
+            EvidenceFragment normalizedFragment = fragment.normalized();
+            List<EvidenceReference> resolved = resolveEvidenceReferences(
+                    evidences,
+                    normalizedFragment.getEvidenceId() == null ? List.of() : List.of(normalizedFragment.getEvidenceId()),
+                    normalizedFragment.getSourceUrl() == null ? List.of() : List.of(normalizedFragment.getSourceUrl())
+            );
+            EvidenceReference evidence = resolved.isEmpty() ? null : resolved.get(0);
+            if (evidence != null) {
+                String key = evidence.getEvidenceId() != null && !evidence.getEvidenceId().isBlank()
+                        ? "ID:" + evidence.getEvidenceId()
+                        : "URL:" + evidence.getUrl();
+                references.putIfAbsent(key, evidence);
+            }
+            fields.add(FieldEvidenceDetail.builder()
+                    .fieldName(normalizedFragment.getFieldName())
+                    .fieldLabel(normalizedFragment.getFieldLabel())
+                    .coverageStatus(normalizedFragment.getCoverageStatus())
+                    .gapComment(normalizedFragment.getGapComment())
+                    .evidenceId(normalizedFragment.getEvidenceId())
+                    .sourceUrl(normalizedFragment.getSourceUrl())
+                    .title(normalizedFragment.getTitle())
+                    .snippet(normalizedFragment.getSnippet())
+                    .issueFlags(normalizedFragment.getIssueFlags())
+                    .evidence(evidence)
+                    .build());
+        }
+
+        for (EvidenceReference evidenceReference : resolveEvidenceReferences(evidences, List.of(), normalized.getSourceUrls())) {
+            String key = evidenceReference.getEvidenceId() != null && !evidenceReference.getEvidenceId().isBlank()
+                    ? "ID:" + evidenceReference.getEvidenceId()
+                    : "URL:" + evidenceReference.getUrl();
+            references.putIfAbsent(key, evidenceReference);
+        }
+
+        return SectionEvidenceBundleInfo.builder()
+                .stage(normalized.getStage())
+                .sectionType(normalized.getSectionType())
+                .sectionKey(normalized.getSectionKey())
+                .sectionTitle(normalized.getSectionTitle())
+                .summary(normalized.getSummary())
+                .gapSummary(normalized.getGapSummary())
+                .hasGap(!normalized.getMissingFields().isEmpty()
+                        || normalized.getIssueFlags().contains("SECTION_EVIDENCE_GAP")
+                        || normalized.getIssueFlags().contains("NO_USABLE_EVIDENCE"))
+                .fieldNames(normalized.getFieldNames())
+                .missingFields(normalized.getMissingFields())
+                .sourceUrls(normalized.getSourceUrls())
+                .issueFlags(normalized.getIssueFlags())
+                .fields(fields)
+                .evidenceReferences(new ArrayList<>(references.values()))
+                .build();
+    }
+
+    /**
      * 诊断条目可能只带 evidenceIds，也可能只带 sourceUrls。
      * 这里统一解析成轻量 EvidenceReference，前端就不需要再自己做“编号匹配 + URL 回退”的二次组装。
      */
@@ -153,6 +272,55 @@ public class EvidenceQueryService {
                     : EvidenceReference.builder().url(normalizedUrl).build());
         }
         return resolved;
+    }
+
+    /**
+     * 优先选择已经被 writer / diagnosis 收口过的 section bundle，
+     * 这样主路径证据入口就会尽量贴近“当前结论最依赖哪一段证据”。
+     */
+    private SectionEvidenceBundleInfo selectPrimaryBundle(List<SectionEvidenceBundleInfo> bundles) {
+        if (bundles == null || bundles.isEmpty()) {
+            return null;
+        }
+        for (SectionEvidenceBundleInfo bundle : bundles) {
+            if (bundle == null) {
+                continue;
+            }
+            if (bundle.getEvidenceReferences() != null && !bundle.getEvidenceReferences().isEmpty()) {
+                return bundle;
+            }
+            if (bundle.getFields() != null && !bundle.getFields().isEmpty()) {
+                return bundle;
+            }
+            if (bundle.getSourceUrls() != null && !bundle.getSourceUrls().isEmpty()) {
+                return bundle;
+            }
+        }
+        return bundles.get(0);
+    }
+
+    /**
+     * 证据入口优先取 bundle 里已经解析好的 EvidenceReference，
+     * 如未命中再回退到报告 evidence 列表的第一条，保证主路径始终能落到一个稳定入口。
+     */
+    private EvidenceReference selectPrimaryReference(SectionEvidenceBundleInfo primaryBundle,
+                                                     List<EvidenceInfo> evidences) {
+        if (primaryBundle != null) {
+            if (primaryBundle.getEvidenceReferences() != null && !primaryBundle.getEvidenceReferences().isEmpty()) {
+                return primaryBundle.getEvidenceReferences().get(0);
+            }
+            if (primaryBundle.getFields() != null) {
+                for (FieldEvidenceDetail field : primaryBundle.getFields()) {
+                    if (field != null && field.getEvidence() != null) {
+                        return field.getEvidence();
+                    }
+                }
+            }
+        }
+        if (evidences == null || evidences.isEmpty()) {
+            return null;
+        }
+        return toEvidenceReference(evidences.get(0));
     }
 
     /**

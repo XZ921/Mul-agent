@@ -3,8 +3,10 @@ package cn.bugstack.competitoragent.agent.writer;
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.agent.BaseAgent;
+import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.llm.LlmClient;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
+import cn.bugstack.competitoragent.memory.MemoryWritebackService;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.model.entity.Report;
 import cn.bugstack.competitoragent.model.enums.AgentType;
@@ -12,6 +14,7 @@ import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
+import cn.bugstack.competitoragent.workflow.contract.SectionEvidenceBundle;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -36,6 +39,7 @@ public class ReportWriterAgent extends BaseAgent {
     private final EvidenceSourceRepository evidenceRepository;
     private final LlmClient llmClient;
     private final PromptTemplateService promptService;
+    private final MemoryWritebackService memoryWritebackService;
     private final ObjectMapper objectMapper;
 
     public ReportWriterAgent(AgentExecutionLogRepository logRepository,
@@ -43,12 +47,15 @@ public class ReportWriterAgent extends BaseAgent {
                              EvidenceSourceRepository evidenceRepository,
                              LlmClient llmClient,
                              PromptTemplateService promptService,
+                             AgentContextAssembler agentContextAssembler,
+                             MemoryWritebackService memoryWritebackService,
                              ObjectMapper objectMapper) {
-        super(logRepository);
+        super(logRepository, agentContextAssembler);
         this.reportRepository = reportRepository;
         this.evidenceRepository = evidenceRepository;
         this.llmClient = llmClient;
         this.promptService = promptService;
+        this.memoryWritebackService = memoryWritebackService;
         this.objectMapper = objectMapper;
     }
 
@@ -98,6 +105,8 @@ public class ReportWriterAgent extends BaseAgent {
                 "subjectProduct", safe(context.getSubjectProduct()),
                 "reportLanguage", safe(context.getReportLanguage(), "中文"),
                 "analysisResult", normalizedAnalysis.serializedAnalysis(),
+                // Writer 在撰写阶段也需要感知统一检索摘要，避免把证据缺口写成确定性结论。
+                "taskRagContext", context.getTaskRagPromptContext(),
                 "currentReport", currentReport,
                 "evidenceList", evidenceList.toString(),
                 "revisionMode", String.valueOf(revisionMode),
@@ -120,6 +129,9 @@ public class ReportWriterAgent extends BaseAgent {
             report.setEvidenceCount(evidences.size());
             report.setSummary(buildSummary(reportContent, revisionMode));
             reportRepository.save(report);
+            // 任务级报告写回只作为“可复用上下文增强”，不能反向阻塞报告主链路。
+            // 因此这里采用独立 try-catch，把 traceable 结论沉淀为短期记忆，失败仅记日志。
+            writeTraceableConclusionBack(context, report, normalizedAnalysis, evidences, reportContent, revisionMode);
 
             log.info("report writing done, taskId={}, revisionMode={}, length={}",
                     context.getTaskId(), revisionMode, reportContent.length());
@@ -130,8 +142,11 @@ public class ReportWriterAgent extends BaseAgent {
             output.put("summary", report.getSummary());
             output.put("revisionMode", revisionMode);
             output.put("sourceUrls", normalizedAnalysis.sourceUrls());
+            // 报告输出保留本次写作真正使用的 Task RAG 摘要，方便报告页和审计页直接回查。
+            output.put("taskRagContext", context.getTaskRagPromptContext());
             output.put("issueFlags", normalizedAnalysis.issueFlags());
             output.put("evidenceFragments", normalizedAnalysis.evidenceFragments());
+            output.put("sectionEvidenceBundles", normalizedAnalysis.sectionEvidenceBundles());
             output.put("revisionFocus", revisionFocus);
             String outputJson = objectMapper.writeValueAsString(output);
 
@@ -259,6 +274,7 @@ public class ReportWriterAgent extends BaseAgent {
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>(readStringList(normalized.path("sourceUrls")));
         LinkedHashSet<String> issueFlags = new LinkedHashSet<>(readStringList(normalized.path("issueFlags")));
         List<EvidenceFragment> evidenceFragments = readEvidenceFragments(normalized.path("evidenceFragments"));
+        List<SectionEvidenceBundle> sectionEvidenceBundles = readSectionEvidenceBundles(normalized.path("sectionEvidenceBundles"));
 
         if (sourceUrls.isEmpty()) {
             for (EvidenceSource evidence : evidences) {
@@ -274,14 +290,17 @@ public class ReportWriterAgent extends BaseAgent {
         if (evidenceFragments.isEmpty()) {
             evidenceFragments = buildEvidenceFragmentsFromEvidence(evidences, issueFlags);
         }
+        sectionEvidenceBundles = ensureWriterSectionBundles(normalized, sectionEvidenceBundles, evidenceFragments, sourceUrls, issueFlags);
 
         normalized.putPOJO("sourceUrls", new ArrayList<>(sourceUrls));
         normalized.putPOJO("issueFlags", new ArrayList<>(issueFlags));
         normalized.putPOJO("evidenceFragments", normalizeEvidenceFragments(evidenceFragments));
+        normalized.putPOJO("sectionEvidenceBundles", normalizeSectionEvidenceBundles(sectionEvidenceBundles));
         return new NormalizedAnalysisPayload(normalized.toPrettyString(),
                 new ArrayList<>(sourceUrls),
                 new ArrayList<>(issueFlags),
-                normalizeEvidenceFragments(evidenceFragments));
+                normalizeEvidenceFragments(evidenceFragments),
+                normalizeSectionEvidenceBundles(sectionEvidenceBundles));
     }
 
     private List<String> readStringList(JsonNode node) {
@@ -307,6 +326,17 @@ public class ReportWriterAgent extends BaseAgent {
             fragments.add(objectMapper.convertValue(item, EvidenceFragment.class).normalized());
         }
         return fragments;
+    }
+
+    private List<SectionEvidenceBundle> readSectionEvidenceBundles(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        List<SectionEvidenceBundle> bundles = new ArrayList<>();
+        for (JsonNode item : node) {
+            bundles.add(objectMapper.convertValue(item, SectionEvidenceBundle.class).normalized());
+        }
+        return bundles;
     }
 
     /**
@@ -342,9 +372,141 @@ public class ReportWriterAgent extends BaseAgent {
         return normalized;
     }
 
+    private List<SectionEvidenceBundle> normalizeSectionEvidenceBundles(List<SectionEvidenceBundle> bundles) {
+        List<SectionEvidenceBundle> normalized = new ArrayList<>();
+        for (SectionEvidenceBundle bundle : bundles) {
+            if (bundle != null) {
+                normalized.add(bundle.normalized());
+            }
+        }
+        return normalized;
+    }
+
+    /**
+     * Writer 阶段无论 Analyzer 是否显式提供章节证据束，都补上一份 report_conclusion，
+     * 这样最终报告接口总能回答“这段结论用了哪些来源、有没有明显证据缺口”。
+     */
+    private List<SectionEvidenceBundle> ensureWriterSectionBundles(ObjectNode normalized,
+                                                                  List<SectionEvidenceBundle> inheritedBundles,
+                                                                  List<EvidenceFragment> evidenceFragments,
+                                                                  LinkedHashSet<String> sourceUrls,
+                                                                  LinkedHashSet<String> issueFlags) {
+        List<SectionEvidenceBundle> bundles = new ArrayList<>(normalizeSectionEvidenceBundles(inheritedBundles));
+        boolean hasReportConclusion = bundles.stream()
+                .anyMatch(bundle -> "report_conclusion".equals(bundle.getSectionKey()));
+        if (!hasReportConclusion) {
+            LinkedHashSet<String> missingFields = new LinkedHashSet<>();
+            if (issueFlags.contains("MISSING_EVIDENCE")) {
+                missingFields.add("recommendations");
+            }
+            if (sourceUrls.isEmpty()) {
+                missingFields.add("report");
+            }
+            bundles.add(SectionEvidenceBundle.builder()
+                    .stage("WRITE")
+                    .sectionType("CONCLUSION")
+                    .sectionKey("report_conclusion")
+                    .sectionTitle("报告结论")
+                    .summary(firstNonBlank(
+                            normalized.path("overview").asText(null),
+                            normalized.path("featureComparison").asText(null)
+                    ))
+                    .fieldNames(List.of("report", "recommendations"))
+                    .missingFields(new ArrayList<>(missingFields))
+                    .sourceUrls(new ArrayList<>(sourceUrls))
+                    .issueFlags(missingFields.isEmpty() ? List.of() : List.of("SECTION_EVIDENCE_GAP"))
+                    .evidenceFragments(evidenceFragments)
+                    .build()
+                    .normalized());
+        }
+        return bundles;
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
+        }
+        return fallback;
+    }
+
+    /**
+     * Writer 产出的报告结论已经是“任务内可直接消费”的短期资产，
+     * 这里把结论、sourceUrls、问题标记与任务上下文一起写回，供后续重跑或同计划版本复用。
+     */
+    private void writeTraceableConclusionBack(AgentContext context,
+                                              Report report,
+                                              NormalizedAnalysisPayload normalizedAnalysis,
+                                              List<EvidenceSource> evidences,
+                                              String reportContent,
+                                              boolean revisionMode) {
+        try {
+            MemoryWritebackService.WritebackRequest request = MemoryWritebackService.WritebackRequest.builder()
+                    .taskId(context.getTaskId())
+                    .planVersionId(context.getPlanVersionId())
+                    .branchKey(context.getBranchKey())
+                    .nodeName(firstNonBlank(context.getCurrentNodeName(), "write_report"))
+                    .competitorName(resolvePrimaryCompetitorName(evidences))
+                    .snapshotType("REPORT_CONCLUSION")
+                    .queryText(resolveWritebackQuery(context))
+                    .summary(firstNonBlank(report.getSummary(), buildSummary(reportContent, revisionMode)))
+                    .gapSummary(buildGapSummary(normalizedAnalysis.issueFlags()))
+                    .sourceUrls(normalizedAnalysis.sourceUrls())
+                    .issueFlags(normalizedAnalysis.issueFlags())
+                    .contextPayload(buildWriterWritebackContext(reportContent, normalizedAnalysis))
+                    .writebackCategory("VERIFIED_TASK_CONCLUSION")
+                    .qualitySignal("TRACEABLE")
+                    .reuseReason("当前报告结论已绑定 sourceUrls，仅在同计划版本任务上下文内复用")
+                    .build();
+            memoryWritebackService.writeback(request);
+        } catch (Exception e) {
+            log.warn("report writeback skipped, taskId={}, nodeName={}, reason={}",
+                    context.getTaskId(), context.getCurrentNodeName(), e.getMessage(), e);
+        }
+    }
+
+    private String resolvePrimaryCompetitorName(List<EvidenceSource> evidences) {
+        if (evidences == null) {
+            return null;
+        }
+        for (EvidenceSource evidence : evidences) {
+            if (evidence != null && evidence.getCompetitorName() != null && !evidence.getCompetitorName().isBlank()) {
+                return evidence.getCompetitorName();
+            }
+        }
+        return null;
+    }
+
+    private String resolveWritebackQuery(AgentContext context) {
+        if (context.getTaskRagContextBundle() != null
+                && context.getTaskRagContextBundle().getQuery() != null
+                && !context.getTaskRagContextBundle().getQuery().isBlank()) {
+            return context.getTaskRagContextBundle().getQuery();
+        }
+        return firstNonBlank(context.getTaskName(), context.getSubjectProduct());
+    }
+
+    private String buildGapSummary(List<String> issueFlags) {
+        if (issueFlags == null || issueFlags.isEmpty()) {
+            return "当前报告结论已完成可追溯整理";
+        }
+        return "报告写回时仍需关注的问题标记：" + String.join(", ", issueFlags);
+    }
+
+    private String buildWriterWritebackContext(String reportContent,
+                                               NormalizedAnalysisPayload normalizedAnalysis) throws Exception {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("reportContent", reportContent);
+        payload.put("sourceUrls", normalizedAnalysis.sourceUrls());
+        payload.put("issueFlags", normalizedAnalysis.issueFlags());
+        payload.put("evidenceFragments", normalizedAnalysis.evidenceFragments());
+        payload.put("sectionEvidenceBundles", normalizedAnalysis.sectionEvidenceBundles());
+        return objectMapper.writeValueAsString(payload);
+    }
+
     private record NormalizedAnalysisPayload(String serializedAnalysis,
                                              List<String> sourceUrls,
                                              List<String> issueFlags,
-                                             List<EvidenceFragment> evidenceFragments) {
+                                             List<EvidenceFragment> evidenceFragments,
+                                             List<SectionEvidenceBundle> sectionEvidenceBundles) {
     }
 }

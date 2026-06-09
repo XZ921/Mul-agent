@@ -180,8 +180,9 @@ public class BrowserSearchRuntimeService {
             RuntimeException lastError = null;
             String failureCode = null;
             for (int attempt = 1; attempt <= attempts; attempt++) {
+                Browser runtimeBrowser = null;
                 try {
-                    Browser runtimeBrowser = browserManager.getBrowser();
+                    runtimeBrowser = browserManager.getBrowser();
                     if (runtimeBrowser == null) {
                         return new SearchAttemptResult(List.of(), "browser_unavailable");
                     }
@@ -211,7 +212,18 @@ public class BrowserSearchRuntimeService {
                             engineKey,
                             attempt,
                         attempts);
-                    browserManager.restartBrowser("browser runtime search failed: " + e.getMessage());
+                    /**
+                     * 这里不能把所有运行时异常都升级成“全局浏览器重启”。
+                     * 像 Target.createTarget 这类“当前标签页/系统资源暂时不足”的失败，
+                     * 如果直接重启共享浏览器，会把其他并发中的搜索线程和页面采集线程一起打断，
+                     * 形成连锁报错。只有明确识别为浏览器实例失活时，才允许重启共享浏览器。
+                     */
+                    if (shouldRestartSharedBrowser(failureCode)) {
+                        browserManager.restartBrowserIfCurrent(
+                                runtimeBrowser,
+                                "browser runtime search failed: " + e.getMessage()
+                        );
+                    }
                 }
             }
             if (lastError != null) {
@@ -232,6 +244,10 @@ public class BrowserSearchRuntimeService {
             }
         }
         return new SearchAttemptResult(List.of(), blockedReason);
+    }
+
+    private boolean shouldRestartSharedBrowser(String failureCode) {
+        return "browser_unavailable".equalsIgnoreCase(failureCode);
     }
 
     private SearchAttemptResult searchOnce(Browser browser,

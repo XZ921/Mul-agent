@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.controller;
 
 import cn.bugstack.competitoragent.common.ApiResponse;
 import cn.bugstack.competitoragent.model.dto.CreateTaskRequest;
+import cn.bugstack.competitoragent.model.dto.TaskListPageResponse;
 import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
 import cn.bugstack.competitoragent.model.dto.TaskResponse;
 import cn.bugstack.competitoragent.model.dto.UpdateNodeConfigRequest;
@@ -44,20 +45,24 @@ public class TaskController {
 
     @GetMapping("/list")
     @Operation(summary = "List tasks")
-    public ApiResponse<List<TaskResponse>> listTasks(
+    public ApiResponse<TaskListPageResponse> listTasks(
             @Parameter(description = "Task status filter")
-            @RequestParam(required = false) String status) {
-        return ApiResponse.success(taskService.listTasks(status));
+            @RequestParam(required = false) String status,
+            @Parameter(description = "Page number, starting from 1")
+            @RequestParam(defaultValue = "1") int pageNum,
+            @Parameter(description = "Page size")
+            @RequestParam(defaultValue = "10") int pageSize) {
+        return ApiResponse.success(taskService.listTasks(status, pageNum, pageSize));
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get task detail")
+    @Operation(summary = "Get task detail", description = "返回最新任务快照，增量更新请订阅 /api/task/{id}/events")
     public ApiResponse<TaskResponse> getTask(@PathVariable Long id) {
         return ApiResponse.success(taskService.getTask(id));
     }
 
     @GetMapping("/{id}/nodes")
-    @Operation(summary = "Get task nodes")
+    @Operation(summary = "Get task nodes", description = "返回节点快照，节点运行中的实时变化会继续通过任务 SSE 主通道推送")
     public ApiResponse<List<TaskNodeResponse>> getTaskNodes(@PathVariable Long id) {
         return ApiResponse.success(taskService.getTaskNodes(id));
     }

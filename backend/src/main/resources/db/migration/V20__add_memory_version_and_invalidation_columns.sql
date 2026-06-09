@@ -1,0 +1,17 @@
+-- Task 5.4.c：把记忆写回策略中的版本来源、失效规则与复用说明正式落库。
+-- 这样无论是短期记忆、领域记忆还是复用审计记录，都能解释“来自哪个版本、何时失效、为什么允许复用”。
+
+ALTER TABLE memory_snapshot
+    ADD COLUMN IF NOT EXISTS version_source VARCHAR(120) NOT NULL DEFAULT 'UNSPECIFIED',
+    ADD COLUMN IF NOT EXISTS invalidation_scope VARCHAR(40) NOT NULL DEFAULT 'MANUAL_REVIEW',
+    ADD COLUMN IF NOT EXISTS invalidation_reason VARCHAR(120) NOT NULL DEFAULT 'NOT_EVALUATED';
+
+ALTER TABLE competitor_knowledge
+    ADD COLUMN IF NOT EXISTS version_source VARCHAR(120) NOT NULL DEFAULT 'UNSPECIFIED',
+    ADD COLUMN IF NOT EXISTS invalidation_scope VARCHAR(40) NOT NULL DEFAULT 'MANUAL_REVIEW',
+    ADD COLUMN IF NOT EXISTS invalidation_reason VARCHAR(120) NOT NULL DEFAULT 'NOT_EVALUATED';
+
+ALTER TABLE memory_reuse_record
+    ADD COLUMN IF NOT EXISTS reuse_reason TEXT,
+    ADD COLUMN IF NOT EXISTS version_source VARCHAR(120) NOT NULL DEFAULT 'UNSPECIFIED',
+    ADD COLUMN IF NOT EXISTS invalidation_scope VARCHAR(40) NOT NULL DEFAULT 'MANUAL_REVIEW';

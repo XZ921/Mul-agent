@@ -1,0 +1,20 @@
+services:
+  namesrv:
+    image: apache/rocketmq:5.3.1
+    container_name: phase4-rocketmq-namesrv
+    command: sh mqnamesrv
+    ports:
+      - "9876:9876"
+
+  broker:
+    image: apache/rocketmq:5.3.1
+    container_name: phase4-rocketmq-broker
+    command: sh mqbroker -n namesrv:9876 --enable-proxy
+    depends_on:
+      - namesrv
+    environment:
+      NAMESRV_ADDR: namesrv:9876
+    ports:
+      - "10909:10909"
+      - "10911:10911"
+      - "10912:10912"
