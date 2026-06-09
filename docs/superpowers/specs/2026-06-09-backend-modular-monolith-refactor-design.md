@@ -44,6 +44,9 @@
   - `ai-platform`
 - 证据能力采用明确归属：当前阶段证据归 `collection-intelligence`，`report-delivery` 只读 evidence facade。
 - `knowledge-intelligence` 当前可以先承载抽取与分析，但必须设定未来拆分触发条件。
+- `BaseAgent` 不作为干净的 `agent-runtime` 基线组成部分，当前仅视作 legacy runtime support。
+- `AgentContext` 不再作为业务字段汇聚容器，只保留最小运行时上下文。
+- `workflow.contract` 暂列为 legacy shared contract，后续按归属逐步回收。
 
 ## 4. 重构目标与非目标
 
@@ -132,6 +135,13 @@
 
 该模块可以被业务模块依赖，但它不负责配额、组织策略与安全审批。
 
+关于审计与预算的边界进一步约束如下：
+
+- `ai-platform` 负责执行模型调用，并记录原始 AI 调用事实
+- `governance-platform` 负责基于审计事实做预算、配额、策略判断
+- audit write 可以在 `ai-platform`
+- policy decision 必须留在 `governance-platform`
+
 ### 6.4 agent-runtime
 
 `agent-runtime` 只承载 Agent 运行时抽象，不承载具体业务 Agent 逻辑。范围包括：
@@ -139,13 +149,45 @@
 - `Agent`
 - `AgentContext`
 - `AgentResult`
-- `BaseAgent`
 - `AgentCapability`
 - `AgentCapabilityRegistry`
 - `AgentExecutionRequest`
 - `AgentExecutionResponse`
 
 该模块是阶段 1 前置基线，必须先冻结边界，再允许任务域与采集域分别重构。
+
+当前明确不直接纳入 `agent-runtime` 的对象：
+
+- `BaseAgent`
+
+原因如下：
+
+- 当前 `BaseAgent` 直接依赖 `AgentExecutionLogRepository`
+- 当前 `BaseAgent` 直接依赖 `AgentContextAssembler`
+- 当前 `BaseAgent` 直接依赖 `ModelInvocationContextHolder`
+- 当前 `BaseAgent` 直接依赖 `AgentExecutionLog` entity
+- 当前 `BaseAgent` 直接依赖 `TaskNodeStatus`
+
+因此本阶段将 `BaseAgent` 视为 legacy runtime support，后续拆分方向为：
+
+- `AgentExecutionTemplate`
+- `AgentLogPort`
+- `AgentContextEnrichmentPort`
+
+### 6.5 AgentContext 约束
+
+`AgentContext` 作为所有 Agent 共用的运行时上下文，必须显式限制体积与职责：
+
+- 只保留执行运行时最小上下文
+- 不作为任务域、知识域、报告域的共享大对象
+- 不能继续无节制塞入业务字段
+
+约束如下：
+
+- 业务模块需要的输入必须通过各自 `Command / Input DTO` 显式传入
+- `AgentContext` 不承载模块内部 entity
+- `AgentContext` 不承载模块内部聚合根
+- `AgentContext` 不承载临时视图拼装结果
 
 ### 6.5 task-orchestration
 
@@ -182,6 +224,7 @@
 - 证据归 `collection-intelligence`
 - `report-delivery` 不允许直接查 `EvidenceSourceRepository`
 - 其他模块通过 evidence facade 或 query result 读取证据视图
+- 任务清理、重跑、节点重跑触发证据清理时，必须通过 `CollectionArtifactCleanupFacade`
 
 ### 6.7 knowledge-intelligence
 
@@ -238,6 +281,23 @@
 - `ConversationAgent`
 
 该模块只调用其他模块暴露的应用接口，不直接操作运行时内部对象。
+
+### 6.10 workflow.contract 归属策略
+
+当前 `workflow.contract` 中存在大量历史共享对象，它们并不都属于 workflow 自身，因此本阶段采用过渡策略：
+
+- `workflow.contract` 暂列为 legacy shared contract
+- 不再继续向其中新增新对象，除非显式审批
+- 后续按归属逐步拆回业务模块
+
+建议归属如下：
+
+- `CollectResult`、`CollectedDocument` -> `collection-intelligence`
+- `ExtractResult`、`CompetitorKnowledgeDraft` -> `knowledge-intelligence`
+- `AnalysisResult` -> `knowledge-intelligence`
+- `QualityDiagnosis`、`QualityIssue`、`QualityDimension`、`QualityCheckResult` -> `report-delivery`
+- `EvidenceFragment`、`SectionEvidenceBundle` -> evidence facade contract 或 shared contract 白名单
+- `RevisionDirective` -> 先保留在 legacy shared contract，待动态计划边界稳定后再归属
 
 ## 7. 模块内部统一分层
 
@@ -317,6 +377,8 @@
 - evidence 当前归 `collection-intelligence`
 - 其他模块读取证据只能通过 evidence facade
 - `report-delivery` 不允许直接依赖 `EvidenceSourceRepository`
+- `task-orchestration` 不允许直接清理证据仓储
+- 任务删除、任务重跑、节点重跑触发的证据清理只能通过 `CollectionArtifactCleanupFacade`
 
 ## 9. 包级落地策略
 
@@ -329,6 +391,22 @@
 5. 再搬 package
 
 第一轮不要追求大规模改包名，因为这会显著提高 merge 冲突概率。
+
+逻辑模块名与 Java package 的建议映射如下：
+
+| 逻辑模块名 | Java package 建议 |
+| --- | --- |
+| `task-orchestration` | `task` 或 `taskorchestration` |
+| `collection-intelligence` | `collection` |
+| `knowledge-intelligence` | `knowledge` |
+| `report-delivery` | `report` |
+| `conversation-entry` | `conversation` |
+| `agent-runtime` | `agentruntime` |
+| `shared-kernel` | `shared` |
+| `governance-platform` | `governance` |
+| `ai-platform` | `ai` 或 `aiplatform` |
+
+执行阶段必须统一选择一套命名，不允许每个模块各自起包名。
 
 ## 10. 当前扁平 model / repository 的过渡策略
 
@@ -353,16 +431,53 @@
 
 - 历史跨模块直连被替换完毕后，删除对应白名单
 
-## 11. 关键代码映射建议
+## 11. 第一批 application facade 清单
 
-### 11.1 agent-runtime 前置基线
+为避免执行阶段重新退回到 `repository/entity` 直连，当前先固定第一批 facade 名单：
+
+- `TaskRuntimeFacade`
+- `TaskQueryFacade`
+- `CollectionEvidenceFacade`
+- `CollectionArtifactCleanupFacade`
+- `KnowledgeRetrievalFacade`
+- `ReportQueryFacade`
+- `AgentRuntimeFacade`
+
+### 11.1 第一批 facade 职责
+
+- `TaskRuntimeFacade`
+  - 负责任务执行、重跑、恢复、节点控制类命令入口
+- `TaskQueryFacade`
+  - 负责任务详情、节点视图、回放视图、进度快照查询
+- `CollectionEvidenceFacade`
+  - 负责按任务、节点、证据类型读取证据视图
+- `CollectionArtifactCleanupFacade`
+  - 负责按任务或节点清理证据、搜索 checkpoint、采集缓存
+- `KnowledgeRetrievalFacade`
+  - 负责任务级检索、知识级检索、RAG 摘要查询
+- `ReportQueryFacade`
+  - 负责报告读取、导出视图、交付视图查询
+- `AgentRuntimeFacade`
+  - 负责面向编排层暴露统一 Agent 执行入口
+
+### 11.2 第一阶段最低要求
+
+第一阶段不要求这些 facade 全部功能完备，但要求：
+
+- 名字固定
+- 归属固定
+- 输入输出方向固定
+- 新增跨模块调用优先走 facade
+
+## 12. 关键代码映射建议
+
+### 12.1 agent-runtime 前置基线
 
 必须先抽出以下类并冻结接口：
 
 - `Agent`
 - `AgentContext`
 - `AgentResult`
-- `BaseAgent`
 - `AgentCapability`
 - `AgentCapabilityRegistry`
 - `SpringAgentCapabilityRegistry`
@@ -374,7 +489,11 @@
 - `task-orchestration` 只依赖 `agent-runtime`
 - 各业务 Agent 再回归各自模块
 
-### 11.2 task-orchestration
+保留为 legacy runtime support 的对象：
+
+- `BaseAgent`
+
+### 12.2 task-orchestration
 
 优先整理：
 
@@ -391,7 +510,7 @@
 - `RecoveryEngine`
 - `TaskEventReplayService`
 
-### 11.3 collection-intelligence
+### 12.3 collection-intelligence
 
 优先整理：
 
@@ -404,8 +523,9 @@
 - `BrowserSearchRuntimeService`
 - `CollectorAgent`
 - 证据 facade 与 query result
+- 证据清理 facade
 
-### 11.4 knowledge-intelligence
+### 12.4 knowledge-intelligence
 
 优先整理：
 
@@ -422,7 +542,7 @@
 - `SchemaExtractorAgent`
 - `CompetitorAnalysisAgent`
 
-### 11.5 report-delivery
+### 12.5 report-delivery
 
 优先整理：
 
@@ -434,7 +554,7 @@
 - `ReportWriterAgent`
 - `QualityReviewAgent`
 
-### 11.6 conversation-entry
+### 12.6 conversation-entry
 
 优先整理：
 
@@ -446,9 +566,9 @@
 - `FormDraftBuilder`
 - `ConversationAgent`
 
-## 12. 双人并行开发策略
+## 13. 双人并行开发策略
 
-### 12.1 前置基线
+### 13.1 前置基线
 
 第一步不是直接拆 task 和 collection，而是先冻结 `agent-runtime` 边界。
 
@@ -458,14 +578,14 @@
 - `CollectorAgent`、`ReportWriterAgent`、`QualityReviewAgent` 等都绕不开 Agent SPI
 - 如果不先冻结 Agent 运行时接口，两个人重构时仍会同时改 Agent 相关抽象
 
-### 12.2 第一条并行主线
+### 13.2 第一条并行主线
 
 在 `agent-runtime` 基线稳定后，双人第一轮并行建议如下：
 
 - 开发者 A：`task-orchestration`
 - 开发者 B：`collection-intelligence`
 
-### 12.3 第二条并行主线
+### 13.3 第二条并行主线
 
 第一轮稳定后再推进：
 
@@ -473,19 +593,27 @@
 - `report-delivery`
 - `conversation-entry`
 
-## 13. 迁移计划
+建议双人分工如下：
+
+- 开发者 A：`agent-runtime` 基线 + `task-orchestration`
+- 开发者 B：`collection-intelligence` + evidence facade
+
+## 14. 迁移计划
 
 ### 阶段 0：确认模块边界
 
 - 固化模块划分
 - 固化 evidence 归属
 - 固化 `shared-kernel` 准入标准
+- 固化 facade 名单
+- 固化 `workflow.contract` 过渡归属策略
 
 ### 阶段 1：agent-runtime 前置基线
 
 - 抽出 Agent SPI 与能力注册
 - 冻结 `Agent / AgentContext / AgentResult / Registry` 边界
 - 让业务 Agent 不再承担运行时抽象职责
+- `BaseAgent` 保留为 legacy runtime support，不强行迁入纯净运行时模块
 
 ### 阶段 2：ArchUnit 建立硬约束
 
@@ -495,6 +623,7 @@
 - `entity`
 - `infrastructure`
 - `controller`
+- facade 依赖方向
 
 当前阶段允许显式白名单。
 
@@ -502,55 +631,66 @@
 
 - `task-orchestration`：拆命令、查询、状态机、回放、恢复
 - `collection-intelligence`：拆验证、选择、补源、证据 facade
+- `task-orchestration` 对证据清理改为调用 `CollectionArtifactCleanupFacade`
 
 ### 阶段 4：收口 knowledge / report / conversation
 
 - 统一 facade
 - 替换跨模块实体读取
 - 收敛 query result
+- 按归属拆回 `workflow.contract`
 
 ### 阶段 5：评估是否拆 Maven 多模块
 
 只有在模块边界稳定后再考虑。
 
-## 14. 可执行验收标准
+## 15. 可执行验收标准
 
 ### 14.1 结构验收
 
 - ArchUnit 至少覆盖 `repository / entity / infrastructure / controller` 四类禁令
 - 历史跨模块访问有显式白名单，并记录计划删除阶段
 - `report-delivery` 不再直接访问证据仓储
+- 新增跨模块调用默认只落到 facade
 
-### 14.2 类级验收
+### 15.2 类级验收
 
-- `AnalysisTaskService` 行数下降到 200 行以内，只保留 facade / 治理入口
+- `AnalysisTaskService` 行数下降到 200 行以内可作为辅助指标，但不是唯一质量指标
+- `AnalysisTaskService` 不再持有 repository，或只保留治理 / 门面必要依赖
+- `AnalysisTaskService` 不再包含 DTO 组装、节点恢复、派生数据删除等私有实现
 - `DagExecutor` 不再包含搜索事件 payload 构造、动态计划追加细节
 - `SearchExecutionCoordinator` 拆出候选验证、目标选择、补源策略
 - `ReportService` 拆出报告组装、覆盖率诊断、导出逻辑
 
-### 14.3 协作验收
+### 15.3 协作验收
 
 - 双线分支连续合并 3 次无同文件冲突
 - 新增跨模块调用默认落在 facade，而不是直接读取实体
+- `BaseAgent` 与证据清理不再成为 task 与 collection 的共享冲突点
 
-## 15. 风险与控制
+## 16. 风险与控制
 
-### 15.1 主要风险
+### 16.1 主要风险
 
 - `shared-kernel` 膨胀为大杂烩
 - `governance-platform` 与 `ai-platform` 边界重新混回去
 - `knowledge-intelligence` 长期不拆，变成第二个大模块
 - 迁移初期为了追求“目录漂亮”而大规模改包名
+- `AgentContext` 持续膨胀为共享大对象
+- `workflow.contract` 长期不拆，继续承担隐式共享模型职责
 
-### 15.2 控制策略
+### 16.2 控制策略
 
 - shared 对象新增必须说明归属理由
 - `agent-runtime` 必须前置冻结
 - evidence 必须先定归属再拆报告
 - 第一轮优先拆职责，不优先搬文件
 - 为 `knowledge-intelligence` 记录未来拆分触发条件
+- `BaseAgent` 不强行纳入纯净运行时基线
+- `AgentContext` 新增字段必须说明运行时必要性
+- `workflow.contract` 只减不增，新增共享契约必须走明确审批
 
-## 16. 最终结论
+## 17. 最终结论
 
 当前最稳妥的方案是：
 
