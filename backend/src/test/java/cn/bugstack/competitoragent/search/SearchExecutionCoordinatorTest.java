@@ -6,6 +6,7 @@ import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
 import cn.bugstack.competitoragent.source.SourceCollector;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 
 import java.util.List;
 
@@ -16,8 +17,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -84,6 +89,185 @@ class SearchExecutionCoordinatorTest {
         assertEquals("v1", result.getExecutionTrace().getTraceVersion());
         assertEquals("SKIP_SUPPLEMENT_ENOUGH_VERIFIED", result.getExecutionTrace().getFallbackDecision());
         assertNotNull(result.getAuditSnapshot());
+    }
+
+    @Test
+    void shouldTriggerBrowserSupplementInBrowserOnlyModeWhenPlannedCandidatesFailVerification() {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of(SourceCandidate.builder()
+                        .url("https://docs.notion.ai/reference")
+                        .title("Notion Browser Docs")
+                        .sourceType("DOCS")
+                        .discoveryMethod("BROWSER")
+                        .reason("浏览器补源候选")
+                        .domain("docs.notion.ai")
+                        .searchQuery("Notion AI documentation")
+                        .searchEngine("bing")
+                        .resultRank(1)
+                        .browserTraceId("trace-browser-002")
+                        .relevanceScore(0.95)
+                        .freshnessScore(0.63)
+                        .qualityScore(0.92)
+                        .build()))
+                .executedQueries(List.of("Notion AI documentation"))
+                .searchEngine("bing")
+                .summary("browser search returned one candidate")
+                .fallbackSuggested(false)
+                .browserTraceId("trace-browser-002")
+                .build());
+        when(sourceCollector.collect("https://planned.example.com/docs", "Notion AI", "DOCS"))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://planned.example.com/docs")
+                        .title("Planned Docs")
+                        .content("")
+                        .snippet("")
+                        .competitorName("Notion AI")
+                        .sourceType("DOCS")
+                        .success(false)
+                        .errorMessage("planned page unavailable")
+                        .build());
+        when(sourceCollector.collect("https://docs.notion.ai/reference", "Notion AI", "DOCS"))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://docs.notion.ai/reference")
+                        .title("Reference")
+                        .content("documentation api reference guide")
+                        .snippet("api reference")
+                        .competitorName("Notion AI")
+                        .sourceType("DOCS")
+                        .success(true)
+                        .build());
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Notion AI")
+                .sourceType("DOCS")
+                .sourceCandidates(List.of(SourceCandidate.builder()
+                        .url("https://planned.example.com/docs")
+                        .title("Planned Docs")
+                        .sourceType("DOCS")
+                        .discoveryMethod("HEURISTIC")
+                        .reason("规划期候选")
+                        .domain("planned.example.com")
+                        .relevanceScore(0.90)
+                        .freshnessScore(0.70)
+                        .qualityScore(0.88)
+                        .build()))
+                .verifyCandidates(Boolean.TRUE)
+                .browserSearchEnabled(Boolean.TRUE)
+                .searchMode("BROWSER_ONLY")
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertEquals("https://docs.notion.ai/reference", result.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertEquals("BROWSER", result.getExecutionTrace().getSupplementMethod());
+        assertEquals("USE_BROWSER_SUPPLEMENT", result.getExecutionTrace().getFallbackDecision());
+        verify(browserSearchRuntimeService).search(any());
+        verify(searchSourceProvider, never()).search(any(), any());
+    }
+
+    @Test
+    void shouldVerifyCandidatesBeforeSelectingTargetsAndSkipSupplementWhenVerifiedCandidatesAreEnough() {
+        CandidateVerifier candidateVerifier = mock(CandidateVerifier.class);
+        BrowserSearchRuntimeService browserRuntimeService = mock(BrowserSearchRuntimeService.class);
+        SearchSourceProvider sourceProvider = mock(SearchSourceProvider.class);
+        CollectionTargetSelector targetSelector = spy(new CollectionTargetSelector());
+        SearchExecutionCoordinator searchCoordinator = new SearchExecutionCoordinator(
+                candidateVerifier,
+                browserRuntimeService,
+                sourceProvider,
+                new SourceCandidateRanker(),
+                targetSelector
+        );
+        SourceCandidate plannedCandidate = SourceCandidate.builder()
+                .url("https://planned.example.com/docs")
+                .title("Planned Docs")
+                .sourceType("DOCS")
+                .discoveryMethod("HEURISTIC")
+                .reason("规划期候选")
+                .domain("planned.example.com")
+                .relevanceScore(0.90)
+                .freshnessScore(0.70)
+                .qualityScore(0.88)
+                .build();
+        SourceCandidate verifiedCandidate = plannedCandidate.toBuilder()
+                .verified(Boolean.TRUE)
+                .selectionStage("VERIFIED")
+                .selectionReason("运行期验证通过，允许直接进入正式采集")
+                .build();
+        SearchCollectionTarget verifiedTarget = SearchCollectionTarget.builder()
+                .candidate(verifiedCandidate)
+                .build();
+        when(candidateVerifier.verify(eq("Notion AI"), eq("DOCS"), any()))
+                .thenReturn(CandidateVerificationResult.builder()
+                        .updatedCandidates(List.of(verifiedCandidate))
+                        .attemptedTargets(List.of(verifiedTarget))
+                        .verifiedTargets(List.of(verifiedTarget))
+                        .build());
+
+        SearchExecutionResult result = searchCoordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Notion AI")
+                .sourceType("DOCS")
+                .sourceCandidates(List.of(plannedCandidate))
+                .verifyCandidates(Boolean.TRUE)
+                .browserSearchEnabled(Boolean.TRUE)
+                .searchMode("HYBRID")
+                .maxSearchResults(2)
+                .minVerifiedCandidates(1)
+                .build());
+
+        InOrder inOrder = inOrder(candidateVerifier, targetSelector);
+        inOrder.verify(candidateVerifier).verify(eq("Notion AI"), eq("DOCS"), any());
+        inOrder.verify(targetSelector).selectTargets(any(), any(), anyInt());
+        verify(browserRuntimeService, never()).search(any());
+        assertEquals("SKIP_SUPPLEMENT_ENOUGH_VERIFIED", result.getExecutionTrace().getFallbackDecision());
+        assertEquals("https://planned.example.com/docs", result.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertEquals(Boolean.TRUE, result.getSelectedTargets().get(0).getCandidate().getVerified());
+    }
+
+    @Test
+    void shouldKeepPlannedCandidatesWhenRuntimeSupplementReturnsEmpty() {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of("Notion AI documentation"))
+                .searchEngine("bing")
+                .summary("browser search returned empty")
+                .fallbackSuggested(true)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Notion AI")
+                .sourceType("DOCS")
+                .sourceCandidates(List.of(SourceCandidate.builder()
+                        .url("https://planned.example.com/docs")
+                        .title("Planned Docs")
+                        .sourceType("DOCS")
+                        .discoveryMethod("HEURISTIC")
+                        .reason("规划期候选")
+                        .domain("planned.example.com")
+                        .relevanceScore(0.90)
+                        .freshnessScore(0.70)
+                        .qualityScore(0.88)
+                        .build()))
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.TRUE)
+                .searchMode("HYBRID")
+                .maxSearchResults(2)
+                .minVerifiedCandidates(1)
+                .build());
+
+        SearchExecutionStep supplementStep = result.getExecutionPlan().getSteps().stream()
+                .filter(step -> "BROWSER_SUPPLEMENT_SEARCH".equals(step.getStepCode()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(SearchExecutionStep.StepStatus.SUCCESS, supplementStep.getStatus());
+        assertTrue(supplementStep.getMessage().contains("回退到规划期候选"));
+        assertEquals(1, result.getSelectedTargets().size());
+        assertEquals("https://planned.example.com/docs", result.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertEquals("NO_NEW_CANDIDATES_KEEP_PLANNED", result.getExecutionTrace().getFallbackDecision());
+        assertEquals("NONE", result.getExecutionTrace().getSupplementMethod());
+        verify(browserSearchRuntimeService).search(any());
+        verify(searchSourceProvider).search(any(), any());
     }
 
     @Test

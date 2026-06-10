@@ -86,6 +86,7 @@ public class SearchExecutionCoordinator {
                 .blockedCount(0)
                 .build();
 
+        // 职责边界 1：先验证规划期高优先级候选，只有在验证不足时才允许进入补源阶段。
         if (!Boolean.TRUE.equals(config.getVerifyCandidates()) || allCandidates.isEmpty()) {
             markStepSkipped(executionPlan, "VERIFY_TOP_CANDIDATES", "当前节点未启用运行期候选验证");
             appendSnapshotAndPublish(progressSnapshots, executionPlan, "VERIFY_TOP_CANDIDATES",
@@ -129,6 +130,7 @@ public class SearchExecutionCoordinator {
                     false, null, progressListener, allCandidates, List.of(), null);
         }
 
+        // 职责边界 2：补源只负责在“验证不足”或“候选池不足”时扩充候选，补不到也必须保留规划期候选作为兜底。
         if (shouldSupplement(config, verifiedCount, minVerifiedCount, allCandidates.size(), targetCount, resultPageVerificationEnabled)) {
             if (isTimedOut(searchStartedAt, searchTimeoutMillis)) {
                 circuitBroken = true;
@@ -208,6 +210,7 @@ public class SearchExecutionCoordinator {
             fallbackDecision = "SKIP_SUPPLEMENT_ENOUGH_VERIFIED";
         }
 
+        // 职责边界 3：目标选择永远发生在验证/补源之后，只从已经收束完的候选集合中挑选最终采集目标。
         markStepRunning(executionPlan, "SELECT_TARGETS", "正在汇总候选并选择最终采集目标");
         appendSnapshotAndPublish(progressSnapshots, executionPlan, "SELECT_TARGETS",
                 "正在汇总候选并选择最终采集目标", circuitBroken, degradationReason,
@@ -651,13 +654,12 @@ public class SearchExecutionCoordinator {
                                      int candidateCount,
                                      int targetCount,
                                      boolean resultPageVerificationEnabled) {
-        if ("BROWSER_ONLY".equalsIgnoreCase(config.getSearchMode()) && candidateCount >= targetCount) {
-            return false;
-        }
         boolean runtimeSearchEnabled = !"HEURISTIC_ONLY".equalsIgnoreCase(config.getSearchMode());
         if (!runtimeSearchEnabled) {
             return false;
         }
+        // 一旦启用了结果页验证，是否补源必须由“验证是否达标”决定，
+        // 不能仅凭规划期候选数量够用就跳过，否则会把“候选数量够但验证全失败”的场景误判为无需补源。
         if (resultPageVerificationEnabled && Boolean.TRUE.equals(config.getVerifyCandidates())) {
             return verifiedCount < minVerifiedCount;
         }

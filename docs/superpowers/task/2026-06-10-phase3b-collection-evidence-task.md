@@ -35,6 +35,7 @@
 - `backend/src/main/java/cn/bugstack/competitoragent/collection/application/CollectionEvidenceFacade.java`
 - `backend/src/main/java/cn/bugstack/competitoragent/collection/application/CollectionEvidenceFacadeImpl.java`
 - `backend/src/main/java/cn/bugstack/competitoragent/collection/application/cleanup/CollectionArtifactCleanupPort.java`
+- `backend/src/main/java/cn/bugstack/competitoragent/task/TaskArtifactCleanupService.java`
 - `backend/src/main/java/cn/bugstack/competitoragent/search/SearchExecutionCoordinator.java`
 - `backend/src/test/java/cn/bugstack/competitoragent/report/EvidenceQueryServiceTest.java`
 - `backend/src/test/java/cn/bugstack/competitoragent/search/SearchExecutionCoordinatorTest.java`
@@ -42,9 +43,11 @@
 ### May Modify
 
 - `backend/src/main/java/cn/bugstack/competitoragent/repository/EvidenceSourceRepository.java`
+- `backend/src/test/java/cn/bugstack/competitoragent/architecture/ArchitectureWhitelist.java`
 - `backend/src/test/java/cn/bugstack/competitoragent/agent/collector/CollectorAgentTest.java`
 - `backend/src/test/java/cn/bugstack/competitoragent/search/CandidateVerifierTest.java`
 - `backend/src/test/java/cn/bugstack/competitoragent/source/SourceCandidateRankerTest.java`
+- `docs/superpowers/task/2026-06-10-architecture-whitelist-ledger.md`
 
 ### Read For Context
 
@@ -57,7 +60,7 @@
 
 本阶段明确采用第三种路线：
 
-- 先用 contract test 锁定 `TaskRuntimeCommandAppService.buildEvidencePrefix(...)` 的现有算法
+- 先用 contract test 锁定 `TaskArtifactCleanupService.buildEvidencePrefix(...)` 的现有算法
 - 再在 collection 内部引入复用同一算法的数据集与断言
 - phase3b 不允许新造第三种 evidence 前缀规则
 - phase3b 不强求立即抽 shared-kernel；是否抽成 collection 内部工具，等 contract test 稳定后再迁移
@@ -152,8 +155,9 @@ mvn -Dtest=EvidenceQueryServiceTest test
 ### 执行步骤
 
 - [ ] Step 1：创建 `CollectionArtifactCleanupPort` 并实现 `cleanupTaskArtifacts(...)` 与 `cleanupNodeArtifacts(...)`。
-- [ ] Step 2：保留 `EvidenceSourceRepository.deleteByTaskIdAndEvidenceIdStartingWith(...)`，不新增模糊删除 SQL。
-- [ ] Step 3：新增 contract test，锁定 evidenceId 前缀编码与节点级删除使用同一算法。
+- [ ] Step 2：把 `TaskArtifactCleanupService` 中的 evidence 删除职责迁出到 collection cleanup port，回收 task 侧对 `EvidenceSourceRepository` 的历史直连。
+- [ ] Step 3：保留 `EvidenceSourceRepository.deleteByTaskIdAndEvidenceIdStartingWith(...)`，不新增模糊删除 SQL。
+- [ ] Step 4：新增 contract test，锁定 evidenceId 前缀编码与节点级删除使用同一算法，并同步更新白名单台账。
 
 ### 最小实现形状
 

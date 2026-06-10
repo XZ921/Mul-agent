@@ -29,6 +29,7 @@ final class ArchitecturePackageMapping {
      * 因此先按搜索、来源以及采集 Agent 的真实位置登记，供后续 phase3b 统一收口。
      */
     static final List<String> COLLECTION_PACKAGES = List.of(
+            "cn.bugstack.competitoragent.collection..",
             "cn.bugstack.competitoragent.search..",
             "cn.bugstack.competitoragent.source..",
             "cn.bugstack.competitoragent.agent.collector.."

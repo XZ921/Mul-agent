@@ -296,6 +296,33 @@ class CollectorAgentTest {
     }
 
     @Test
+    void shouldEncodeTaskAndNodeNameInEvidenceId() throws Exception {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of())
+                .summary("mock")
+                .fallbackSuggested(true)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        when(sourceCollector.collect("https://example.com/docs", "Feishu", "DOCS"))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://example.com/docs")
+                        .title("Docs")
+                        .content("content")
+                        .snippet("snippet")
+                        .competitorName("Feishu")
+                        .sourceType("DOCS")
+                        .success(true)
+                        .build());
+
+        AgentResult result = collectorAgent.execute(buildContext("[\"https://example.com/docs\"]"));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertTrue(output.path("documents").get(0).path("evidenceId").asText()
+                .startsWith("T0001-COLLECT_SOURCES_01_01-"));
+    }
+
+    @Test
     void shouldEmitSelectedTargetSummaryWithTrustTierRankingReasonAndSelectionSummary() throws Exception {
         when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
                 .candidates(List.of())

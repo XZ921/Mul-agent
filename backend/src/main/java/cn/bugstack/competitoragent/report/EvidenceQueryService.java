@@ -37,6 +37,34 @@ public class EvidenceQueryService {
     private final EvidenceSourceRepository evidenceRepository;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 为 phase3b 的 collection facade 提供稳定的任务级证据读取入口。
+     * 这里先复用既有 repository 排序语义，保证 report 现有 evidence 展示顺序不发生漂移。
+     */
+    public List<EvidenceInfo> listTaskEvidence(Long taskId) {
+        if (taskId == null) {
+            return List.of();
+        }
+        return evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(taskId).stream()
+                .map(this::toEvidenceInfo)
+                .toList();
+    }
+
+    /**
+     * 节点级证据读取当前必须与既有 cleanup 前缀编码保持同义，
+     * 这样后续节点重跑时，“查到哪些证据”和“删掉哪些证据”才不会出现边界错位。
+     */
+    public List<EvidenceInfo> listEvidencesByNode(Long taskId, String nodeName) {
+        if (taskId == null || !StringUtils.hasText(nodeName)) {
+            return List.of();
+        }
+        String evidencePrefix = buildEvidencePrefix(taskId, nodeName);
+        return listTaskEvidence(taskId).stream()
+                .filter(evidence -> StringUtils.hasText(evidence.getEvidenceId()))
+                .filter(evidence -> evidence.getEvidenceId().startsWith(evidencePrefix))
+                .toList();
+    }
+
     public List<EvidenceInfo> listEvidences(Long taskId,
                                             String competitorName,
                                             String sourceType,
@@ -400,5 +428,17 @@ public class EvidenceQueryService {
         } catch (JsonProcessingException e) {
             return new java.util.LinkedHashMap<>(Map.of("raw", json));
         }
+    }
+
+    /**
+     * 这里先按 phase3a 已在线上的清理前缀算法做同义复用，
+     * phase3b Task 2 再通过 contract test 显式锁定这条跨模块约束。
+     */
+    private String buildEvidencePrefix(Long taskId, String nodeName) {
+        long safeTaskId = taskId == null ? 0L : taskId;
+        String safeNodeName = nodeName == null || nodeName.isBlank()
+                ? "NODE"
+                : nodeName.toUpperCase().replaceAll("[^A-Z0-9]+", "_");
+        return String.format("T%04d-%s-", safeTaskId % 10000, safeNodeName);
     }
 }

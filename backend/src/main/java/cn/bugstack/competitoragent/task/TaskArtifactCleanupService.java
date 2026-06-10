@@ -4,7 +4,6 @@ import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.AiCallAuditRecordRepository;
 import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.repository.ConversationSessionRepository;
-import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.FormDraftRepository;
 import cn.bugstack.competitoragent.repository.IntentDecisionRepository;
 import cn.bugstack.competitoragent.repository.KnowledgeDocumentRepository;
@@ -51,7 +50,6 @@ public class TaskArtifactCleanupService {
     private final KnowledgeDocumentRepository knowledgeDocumentRepository;
     private final RetrievalIndexRepository retrievalIndexRepository;
     private final RetrievalChunkRepository retrievalChunkRepository;
-    private final EvidenceSourceRepository evidenceRepository;
     private final MemorySnapshotRepository memorySnapshotRepository;
     private final MemoryReuseRecordRepository memoryReuseRecordRepository;
     private final AgentExecutionLogRepository logRepository;
@@ -98,7 +96,6 @@ public class TaskArtifactCleanupService {
         retrievalIndexRepository.deleteByTaskId(taskId);
         retrievalChunkRepository.deleteByTaskId(taskId);
 
-        evidenceRepository.deleteByTaskId(taskId);
         memorySnapshotRepository.deleteByTaskId(taskId);
         memoryReuseRecordRepository.deleteByTaskId(taskId);
 
@@ -146,12 +143,6 @@ public class TaskArtifactCleanupService {
             affectedNodeNames.add(affectedNode.getNodeName());
         }
 
-        if (targetNode.getNodeName().startsWith("collect_sources")) {
-            evidenceRepository.deleteByTaskIdAndEvidenceIdStartingWith(
-                    taskId,
-                    buildEvidencePrefix(taskId, targetNode.getNodeName()));
-        }
-
         if (affectedNodeNames.contains("extract_schema")) {
             knowledgeRepository.deleteByTaskId(taskId);
             reportRepository.deleteByTaskId(taskId);
@@ -161,13 +152,5 @@ public class TaskArtifactCleanupService {
         if (affectedNodeNames.contains("analyze_competitors") || "write_report".equals(targetNode.getNodeName())) {
             reportRepository.deleteByTaskId(taskId);
         }
-    }
-
-    private String buildEvidencePrefix(Long taskId, String nodeName) {
-        long safeTaskId = taskId == null ? 0L : taskId;
-        String safeNodeName = nodeName == null || nodeName.isBlank()
-                ? "NODE"
-                : nodeName.toUpperCase().replaceAll("[^A-Z0-9]+", "_");
-        return String.format("T%04d-%s-", safeTaskId % 10000, safeNodeName);
     }
 }

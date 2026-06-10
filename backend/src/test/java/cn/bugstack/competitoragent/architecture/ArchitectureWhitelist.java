@@ -6,7 +6,6 @@ import cn.bugstack.competitoragent.agent.collector.CollectorAgent;
 import cn.bugstack.competitoragent.agent.extractor.SchemaExtractorAgent;
 import cn.bugstack.competitoragent.agent.reviewer.QualityReviewAgent;
 import cn.bugstack.competitoragent.agent.writer.ReportWriterAgent;
-import cn.bugstack.competitoragent.task.TaskArtifactCleanupService;
 import cn.bugstack.competitoragent.workflow.WorkflowFactory;
 
 import java.util.List;
@@ -69,13 +68,6 @@ final class ArchitectureWhitelist {
                     "workflow_should_not_depend_on_business_agent_implementations",
                     WorkflowFactory.class.getName(),
                     "WorkflowFactory 仍承担把搜索规划翻译成 Collector 节点配置的历史职责，需等待 phase3b 的 collection facade 稳定后再回收。",
-                    "phase3b-collection-evidence-task",
-                    "B"
-            ),
-            new Exemption(
-                    "task_should_not_depend_on_evidence_repository_directly",
-                    TaskArtifactCleanupService.class.getName(),
-                    "phase3a 仅建立 cleanup coordinator 与 legacy adapter，TaskArtifactCleanupService 仍暂时承接证据清理；待 phase3b 把 evidence 删除迁到 CollectionArtifactCleanupPort 后再回收该豁免。",
                     "phase3b-collection-evidence-task",
                     "B"
             )

@@ -13,12 +13,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -28,6 +30,56 @@ class EvidenceQueryServiceTest {
 
     private final EvidenceSourceRepository evidenceRepository = mock(EvidenceSourceRepository.class);
     private final EvidenceQueryService service = new EvidenceQueryService(evidenceRepository, new ObjectMapper());
+
+    @Test
+    void should_list_task_evidence_in_repository_order() {
+        EvidenceSource first = EvidenceSource.builder()
+                .taskId(12L)
+                .evidenceId("T0012-COLLECT_SOURCES-001")
+                .competitorName("A")
+                .title("A")
+                .url("https://a.com")
+                .build();
+        EvidenceSource second = EvidenceSource.builder()
+                .taskId(12L)
+                .evidenceId("T0012-WRITE_REPORT-001")
+                .competitorName("B")
+                .title("B")
+                .url("https://b.com")
+                .build();
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(12L)).thenReturn(List.of(first, second));
+
+        List<EvidenceInfo> actual = invokeListTaskEvidence(12L);
+
+        assertEquals(2, actual.size());
+        assertEquals("T0012-COLLECT_SOURCES-001", actual.get(0).getEvidenceId());
+        assertEquals("T0012-WRITE_REPORT-001", actual.get(1).getEvidenceId());
+        verify(evidenceRepository).findByTaskIdOrderByEvidenceIdAsc(12L);
+    }
+
+    @Test
+    void should_filter_evidence_by_node_prefix() {
+        EvidenceSource first = EvidenceSource.builder()
+                .taskId(12L)
+                .evidenceId("T0012-COLLECT_SOURCES-001")
+                .competitorName("A")
+                .title("A")
+                .url("https://a.com")
+                .build();
+        EvidenceSource second = EvidenceSource.builder()
+                .taskId(12L)
+                .evidenceId("T0012-WRITE_REPORT-001")
+                .competitorName("B")
+                .title("B")
+                .url("https://b.com")
+                .build();
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(12L)).thenReturn(List.of(first, second));
+
+        List<EvidenceInfo> actual = invokeListEvidencesByNode(12L, "collect_sources");
+
+        assertEquals(1, actual.size());
+        assertEquals("T0012-COLLECT_SOURCES-001", actual.get(0).getEvidenceId());
+    }
 
     @Test
     void shouldMergeStructuredMetadataIntoEvidenceInfo() {
@@ -180,5 +232,27 @@ class EvidenceQueryServiceTest {
         assertEquals("E001", info.getFields().get(0).getEvidence().getEvidenceId());
         assertEquals("MISSING_EVIDENCE", info.getFields().get(1).getCoverageStatus());
         assertTrue(info.getGapSummary().contains("recommendations"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<EvidenceInfo> invokeListTaskEvidence(Long taskId) {
+        try {
+            Method method = EvidenceQueryService.class.getMethod("listTaskEvidence", Long.class);
+            return (List<EvidenceInfo>) method.invoke(service, taskId);
+        } catch (ReflectiveOperationException e) {
+            fail("phase3b Task 1 要求 EvidenceQueryService 暴露 listTaskEvidence(Long) 以支撑 CollectionEvidenceFacade", e);
+            return List.of();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<EvidenceInfo> invokeListEvidencesByNode(Long taskId, String nodeName) {
+        try {
+            Method method = EvidenceQueryService.class.getMethod("listEvidencesByNode", Long.class, String.class);
+            return (List<EvidenceInfo>) method.invoke(service, taskId, nodeName);
+        } catch (ReflectiveOperationException e) {
+            fail("phase3b Task 1 要求 EvidenceQueryService 暴露 listEvidencesByNode(Long, String) 以支撑节点级证据读取", e);
+            return List.of();
+        }
     }
 }
