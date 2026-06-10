@@ -28,6 +28,8 @@ public class SpringAgentCapabilityRegistry implements AgentCapabilityRegistry {
 
     @Override
     public AgentCapability resolve(AgentType agentType) {
+        // Phase 1 明确保留当前 null-return 兼容语义：
+        // 缺少 capability 时由 DagExecutor 收口为节点失败，而不是在 registry 层直接 fail-fast。
         return capabilities.get(agentType);
     }
 
