@@ -37,6 +37,21 @@ public class KnowledgeDocumentQueryService {
     }
 
     /**
+     * 为 phase4a 的 knowledge facade 提供稳定的任务级知识读取入口。
+     * 这里沿用 repository 的升序语义，保证 task 级知识列表在 facade 收口后仍保持可预测顺序。
+     */
+    public List<KnowledgeDocumentResponse> listByTaskId(Long taskId) {
+        if (taskId == null) {
+            return List.of();
+        }
+        List<KnowledgeDocumentResponse> responses = new ArrayList<>();
+        for (KnowledgeDocument document : knowledgeDocumentRepository.findByTaskIdOrderByIdAsc(taskId)) {
+            responses.add(toResponse(document));
+        }
+        return responses;
+    }
+
+    /**
      * 这里故意把“消费链路摘要”放在查询服务层统一生成，
      * 因为它本质上是多个知识文档查询结果之间的聚合判断，而不是单个实体字段本身。
      */

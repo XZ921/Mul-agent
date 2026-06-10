@@ -5,10 +5,12 @@ import cn.bugstack.competitoragent.model.entity.KnowledgeDocument;
 import cn.bugstack.competitoragent.repository.KnowledgeDocumentRepository;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -17,6 +19,38 @@ class KnowledgeDocumentQueryServiceTest {
     private final KnowledgeDocumentRepository knowledgeDocumentRepository = mock(KnowledgeDocumentRepository.class);
     private final KnowledgeDocumentQueryService knowledgeDocumentQueryService =
             new KnowledgeDocumentQueryService(knowledgeDocumentRepository);
+
+    @Test
+    void should_list_task_documents_in_repository_order() {
+        KnowledgeDocument firstDocument = buildTaskDocument(
+                101L,
+                "TASK-DOC-001",
+                "T0005-COLLECT_SOURCES-001",
+                "治理手册",
+                List.of("https://docs.example.com/governance")
+        );
+        KnowledgeDocument secondDocument = buildTaskDocument(
+                102L,
+                "TASK-DOC-002",
+                "T0005-COLLECT_SOURCES-002",
+                "发布规范",
+                List.of("https://docs.example.com/release")
+        );
+
+        when(knowledgeDocumentRepository.findByTaskIdOrderByIdAsc(5L))
+                .thenReturn(List.of(firstDocument, secondDocument));
+        when(knowledgeDocumentRepository.findTaskDocumentsBySourceUrlLikeOrderByIdAsc("https://docs.example.com/governance"))
+                .thenReturn(List.of());
+        when(knowledgeDocumentRepository.findTaskDocumentsBySourceUrlLikeOrderByIdAsc("https://docs.example.com/release"))
+                .thenReturn(List.of());
+
+        List<KnowledgeDocumentResponse> actual = invokeListByTaskId(5L);
+
+        assertEquals(2, actual.size());
+        assertEquals("治理手册", actual.get(0).getTitle());
+        assertEquals("发布规范", actual.get(1).getTitle());
+        assertEquals(List.of("https://docs.example.com/governance"), actual.get(0).getSourceUrls());
+    }
 
     @Test
     void shouldBuildTraceableResponseWithSourceUrlsAndTaskConsumptionChain() {
@@ -128,5 +162,45 @@ class KnowledgeDocumentQueryServiceTest {
                 .documentVersion(1)
                 .status("READY")
                 .build();
+    }
+
+    private KnowledgeDocument buildTaskDocument(Long id,
+                                                String documentKey,
+                                                String evidenceId,
+                                                String title,
+                                                List<String> sourceUrls) {
+        return KnowledgeDocument.builder()
+                .id(id)
+                .taskId(5L)
+                .competitorName("Notion AI")
+                .evidenceId(evidenceId)
+                .documentKey(documentKey)
+                .knowledgeScope("TASK")
+                .knowledgeDomainId(9L)
+                .knowledgeDomainKey("task-notion-governance")
+                .sourceType("DOCS")
+                .sourceCategory("TASK_EVIDENCE")
+                .discoveryMethod("AI_DISCOVERED")
+                .sourceDomain("docs.example.com")
+                .sourceLifecycle("ACTIVE")
+                .trustLevel("VERIFIED")
+                .title(title)
+                .url(sourceUrls.get(0))
+                .sourceUrls(sourceUrls)
+                .issueFlags(List.of())
+                .documentVersion(1)
+                .status("READY")
+                .build();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<KnowledgeDocumentResponse> invokeListByTaskId(Long taskId) {
+        try {
+            Method method = KnowledgeDocumentQueryService.class.getMethod("listByTaskId", Long.class);
+            return (List<KnowledgeDocumentResponse>) method.invoke(knowledgeDocumentQueryService, taskId);
+        } catch (ReflectiveOperationException e) {
+            fail("phase4a Task 1 要求 KnowledgeDocumentQueryService 暴露 listByTaskId(Long) 供 KnowledgeRetrievalFacade 复用", e);
+            return List.of();
+        }
     }
 }

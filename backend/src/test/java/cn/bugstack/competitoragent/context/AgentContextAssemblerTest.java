@@ -10,8 +10,16 @@ import cn.bugstack.competitoragent.repository.MemoryReuseRecordRepository;
 import cn.bugstack.competitoragent.repository.MemorySnapshotRepository;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -251,6 +259,103 @@ class AgentContextAssemblerTest {
         assertTrue(promptContext.contains("任务即时上下文"));
         assertTrue(promptContext.contains("https://example.com/domain-memory"));
         assertTrue(promptContext.contains("collect_sources"));
+    }
+
+    @Test
+    void shouldOnlyWriteTaskRagContextBundleBackToAgentContext() {
+        // Task 2 需要把 AgentContext 固定为最小运行时边界，
+        // 即使后续装配了检索与记忆信息，也只能通过 taskRagContextBundle 回写摘要。
+        AgentContext context = AgentContext.builder()
+                .taskId(6L)
+                .taskName("Notion AI 边界锁定")
+                .subjectProduct("我们的产品")
+                .analysisDimensions("企业治理")
+                .currentNodeName("analyze_competitors")
+                .traceId("trace-task-2")
+                .branchKey("phase4a")
+                .planVersionId(3L)
+                .build();
+        when(queryBuilder.buildQuery(context)).thenReturn("Notion AI boundary lock");
+
+        TaskRetrievalService.RetrievedChunk retrievedChunk = TaskRetrievalService.RetrievedChunk.builder()
+                .chunkKey("TASK-DOC-006#CHUNK-001")
+                .documentKey("TASK-DOC-006")
+                .retrievalScope("TASK")
+                .competitorName("Notion AI")
+                .evidenceId("E-TASK-006")
+                .sourceCategory("TASK_KNOWLEDGE")
+                .snippet("Task 2 只允许回写运行时摘要。")
+                .content("AgentContextAssembler 仍然只允许把 TaskRagContextBundle 作为运行时摘要回写到 AgentContext。")
+                .sourceUrls(List.of("https://docs.example.com/boundary"))
+                .build();
+        TaskRetrievalService.RetrievalResult retrievalResult = TaskRetrievalService.RetrievalResult.builder()
+                .query("Notion AI boundary lock")
+                .chunks(List.of(retrievedChunk))
+                .sourceUrls(List.of("https://docs.example.com/boundary"))
+                .gapSummary("当前边界锁定测试只验证运行时摘要回写。")
+                .issueFlags(List.of("BOUNDARY_LOCK"))
+                .build();
+        when(retrievalService.retrieve(eq(6L), eq("Notion AI boundary lock"), eq("analyze_competitors")))
+                .thenReturn(retrievalResult);
+        when(rerankService.rerank(eq("Notion AI boundary lock"), eq(List.of(retrievedChunk)), eq("analyze_competitors")))
+                .thenReturn(List.of(retrievedChunk));
+        when(memorySnapshotRepository.save(any(MemorySnapshot.class))).thenAnswer(invocation -> {
+            MemorySnapshot snapshot = invocation.getArgument(0);
+            snapshot.setId(301L);
+            return snapshot;
+        });
+
+        AgentContext assembledContext = newAssembler().assemble(context);
+
+        assertNotNull(assembledContext.getTaskRagContextBundle());
+        assertEquals(context.getTaskId(), assembledContext.getTaskId());
+        assertEquals(context.getTaskName(), assembledContext.getTaskName());
+        assertEquals(context.getSubjectProduct(), assembledContext.getSubjectProduct());
+        assertEquals(context.getAnalysisDimensions(), assembledContext.getAnalysisDimensions());
+        assertEquals(context.getCurrentNodeName(), assembledContext.getCurrentNodeName());
+        assertEquals(context.getTraceId(), assembledContext.getTraceId());
+        assertEquals(context.getPlanVersionId(), assembledContext.getPlanVersionId());
+        assertEquals(context.getBranchKey(), assembledContext.getBranchKey());
+        assertEquals(
+                Set.of(
+                        "taskId",
+                        "taskName",
+                        "subjectProduct",
+                        "competitorNames",
+                        "competitorUrls",
+                        "analysisDimensions",
+                        "sourceScope",
+                        "reportLanguage",
+                        "reportTemplate",
+                        "currentNodeName",
+                        "currentNodeConfig",
+                        "traceId",
+                        "planVersionId",
+                        "branchKey",
+                        "taskRagContextBundle",
+                        "sharedState",
+                        "createdAt"
+                ),
+                Arrays.stream(AgentContext.class.getDeclaredFields())
+                        .map(Field::getName)
+                        .collect(Collectors.toSet())
+        );
+    }
+
+    @Test
+    void shouldDeclareAgentContextBoundaryInAssemblerClassComment() throws IOException {
+        // Task 2 不仅要靠实现习惯维持边界，还要把禁止事项写入类注释，
+        // 防止后续再把 KnowledgeDocument、检索片段或 MemorySnapshot 直接塞回 AgentContext。
+        String source = Files.readString(
+                Path.of("src/main/java/cn/bugstack/competitoragent/context/AgentContextAssembler.java"),
+                StandardCharsets.UTF_8
+        );
+
+        assertTrue(source.contains("只允许把 TaskRagContextBundle"));
+        assertTrue(source.contains("KnowledgeDocument"));
+        assertTrue(source.contains("RetrievalChunk"));
+        assertTrue(source.contains("MemorySnapshot"));
+        assertTrue(source.contains("AgentContext"));
     }
 
     /**

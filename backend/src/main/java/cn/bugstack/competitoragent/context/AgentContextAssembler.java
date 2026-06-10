@@ -24,6 +24,12 @@ import java.util.List;
  * Task 4.5 先完成了检索知识上下文装配；
  * Task 5.4.b 在此基础上继续接入记忆融合服务，
  * 让上下文输入可以显式区分“知识上下文、可复用记忆、任务即时上下文”。
+ * <p>
+ * phase4a / Task 2 进一步锁定运行时边界：这里即使会接触 KnowledgeDocument、
+ * RetrievalChunk、MemorySnapshot 等知识/检索/记忆对象，也只允许把 TaskRagContextBundle
+ * 这种运行时摘要回写到 AgentContext。
+ * 禁止把 KnowledgeDocument、RetrievalChunk、MemorySnapshot 或其它业务集合直接塞进 AgentContext，
+ * 避免 AgentContext 重新膨胀为跨模块共享的大对象容器。
  */
 @Component
 public class AgentContextAssembler {
