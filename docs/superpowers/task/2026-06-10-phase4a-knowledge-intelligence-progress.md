@@ -1,11 +1,11 @@
 # Phase 4A Knowledge Intelligence Progress
 
 - 当前阶段：Phase 4A Knowledge Intelligence
-- 当前 Task：Task 4 提交与合入执行
-- 当前 Step：Step 5 正在执行 phase4a 提交与 integration 合入
-- 状态：IN_PROGRESS
+- 当前 Task：Task 4 已提交并合入 integration
+- 当前 Step：Step 6 phase4a 合入完成回写与 phase4b 门禁放行
+- 状态：SUCCESS
 - 已完成：4 / 4
-- 剩余步骤：完成 `phase4a` commit、合入 `integration/backend-modular-monolith-refactor`、合入后 fresh 验证与最终回写；在此之前不得进入 `phase4b`
+- 剩余步骤：无；`phase4b` 可基于最新 `integration/backend-modular-monolith-refactor` 新建 worktree 后串行开工
 - 阻塞项：无；`phase3b` 已于 2026-06-10 合入 `integration/backend-modular-monolith-refactor`，当前已满足进入 `phase4a / Task 1` 的串行门禁
 - 执行工作区：`E:\java_study\Mul-agnet\.worktrees\a-phase4a-knowledge-intelligence`
 - 执行分支：`a/phase4a-knowledge-intelligence`
@@ -46,10 +46,10 @@
   - [x] 本轮 fresh 验证：已完成
   - [x] 本轮可提交/可合入判定：已完成
   - [x] 本轮提交与合入准备：已完成
-  - [ ] 本轮提交执行：进行中
-  - [ ] 本轮 integration 合入：待执行
-  - [ ] 合入后 fresh 验证：待执行
-  - [ ] Phase 4A 合入完成回写：待执行
+  - [x] 本轮提交执行：已完成
+  - [x] 本轮 integration 合入：已完成
+  - [x] 合入后 fresh 验证：已完成
+  - [x] Phase 4A 合入完成回写：已完成
   - [x] Task 1 上下文采集：已完成
   - [x] Task 1 设计确认：已完成
   - [x] TDD 红灯测试：已完成
@@ -66,7 +66,7 @@
   - [x] Task 4 提交标准复核：已完成
   - [x] Task 4 阶段验证：已完成
   - [x] Phase 4A 完成记录：已完成
-  - [ ] Phase 4A 提交/合入 integration：待执行
+  - [x] Phase 4A 提交/合入 integration：已完成
 - 本轮接管记录：
   - 已确认当前执行工作区为 `E:\java_study\Mul-agnet\.worktrees\a-phase4a-knowledge-intelligence`，当前分支为 `a/phase4a-knowledge-intelligence`，属于 linked worktree，不会在主工作区直接开发。
   - 已确认 `integration/backend-modular-monolith-refactor` 与当前分支 `HEAD` 仍指向同一基线提交 `9ef6dfc`，当前 phase4a 变更全部处于未提交工作树状态，尚未发生 commit / merge。
@@ -90,7 +90,14 @@
 - 本轮提交与合入执行记录：
   - 已确认 `integration/backend-modular-monolith-refactor` 主工作区当前干净，无未提交修改，适合承接 `phase4a` 的本地 fast-forward 合入。
   - 已确认 `a/phase4a-knowledge-intelligence` 仍停留在 linked worktree，当前只会暂存并提交 phase4a 白名单文件，不会扩散到其它阶段文件。
-  - 当前进入 Step 5：先执行 feature branch commit，再切回 integration 完成合入与合入后 fresh 验证。
+  - 已在 `a/phase4a-knowledge-intelligence` 上提交 `3988435 feat(knowledge): complete phase4a retrieval facade boundary`，只包含 phase4a 白名单内 9 个文件。
+  - 已在主仓 `integration/backend-modular-monolith-refactor` 上执行 `git merge --ff-only a/phase4a-knowledge-intelligence`，integration 已 fast-forward 到 `3988435`。
+  - 合入后 fresh 验证采用顺序执行口径：
+    - `mvn "-Dtest=KnowledgeDocumentQueryServiceTest,TaskRetrievalServiceTest,KnowledgeRetrievalFacadeImplTest" test` -> `Tests run: 11, Failures: 0, Errors: 0`
+    - `mvn "-Dtest=AgentContextAssemblerTest" test` -> `Tests run: 6, Failures: 0, Errors: 0`
+    - `mvn "-Dtest=KnowledgeIngestionServiceTest,KnowledgeDocumentQueryServiceTest,TaskRetrievalServiceTest,TaskRetrievalIndexServiceTest,TaskRerankServiceTest,AgentContextAssemblerTest" test` -> `Tests run: 26, Failures: 0, Errors: 0`
+  - 一次并行执行的 `AgentContextAssemblerTest` 命令曾出现编译失败；根因已确认是多个 Maven 进程并行共享同一 `backend/target` 目录导致的构建互扰，不属于 phase4a 代码回归。顺序单独重跑后已通过。
+  - 结论：`phase4a` 已于 2026-06-10 正式提交并合入 `integration/backend-modular-monolith-refactor`，当前已满足进入 `phase4b` 的串行门禁。
 - Task 1 启动前上下文记录：
   - 当前 `KnowledgeDocumentQueryService` 已提供 `listByDomainKey(...)` 与 `toResponse(...)`，但尚未提供 task 侧统一 facade。
   - 当前 `TaskRetrievalService` 对外结果类型仍是内部 `RetrievalResult`，`phase4a / Task 1` 需要把跨模块读取收口到稳定投影视图。
@@ -143,4 +150,4 @@
   - 阶段收尾验证：执行 `mvn "-Dtest=KnowledgeIngestionServiceTest,KnowledgeDocumentQueryServiceTest,TaskRetrievalServiceTest,TaskRetrievalIndexServiceTest,TaskRerankServiceTest,AgentContextAssemblerTest" test`，结果 `Tests run: 26, Failures: 0, Errors: 0`。
   - 本地复核未发现 phase4a 范围内的额外行为回归：`KnowledgeRetrievalFacade` 只暴露稳定投影视图，`KnowledgeDocumentQueryService` 仅补 task 级读取入口，`AgentContextAssembler` 只补边界注释与锁定测试。
   - 结论：phase4a 的 Task 1 - Task 4 已全部完成，当前已满足“可提交/可合入 integration 前置检查通过”的条件；但在真正进入 `phase4b` 编码前，仍需先完成 phase4a 的提交并合入 `integration/backend-modular-monolith-refactor`。
-- 最后更新：2026-06-10 20:52
+- 最后更新：2026-06-10 20:58
