@@ -18,11 +18,11 @@ import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
-import cn.bugstack.competitoragent.task.TaskArtifactCleanupService;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
 import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskRecoveryService;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
+import cn.bugstack.competitoragent.task.application.cleanup.TaskArtifactCleanupCoordinator;
 import cn.bugstack.competitoragent.task.assembler.TaskNodeViewAssembler;
 import cn.bugstack.competitoragent.workflow.WorkflowFactory;
 import cn.bugstack.competitoragent.workflow.WorkflowPlan;
@@ -47,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -98,7 +99,7 @@ class TaskDefinitionAppServiceTest {
     private OrganizationQuotaPolicy organizationQuotaPolicy;
 
     @Mock
-    private TaskArtifactCleanupService taskArtifactCleanupService;
+    private TaskArtifactCleanupCoordinator taskArtifactCleanupCoordinator;
 
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
@@ -118,10 +119,6 @@ class TaskDefinitionAppServiceTest {
         taskDefinitionAppService = new TaskDefinitionAppService(
                 taskRepository,
                 nodeRepository,
-                evidenceRepository,
-                knowledgeRepository,
-                reportRepository,
-                logRepository,
                 workflowFactory,
                 taskSnapshotCacheService,
                 taskEventPublisher,
@@ -129,7 +126,7 @@ class TaskDefinitionAppServiceTest {
                 assembler,
                 objectMapper,
                 organizationQuotaPolicy,
-                taskArtifactCleanupService,
+                taskArtifactCleanupCoordinator,
                 taskQuotaCoordinator);
     }
 
@@ -253,11 +250,33 @@ class TaskDefinitionAppServiceTest {
         taskDefinitionAppService.deleteTask(taskId);
 
         assertFalse(task.isTaskQuotaReserved());
-        verify(taskArtifactCleanupService).cleanupTaskArtifacts(taskId);
+        verify(taskArtifactCleanupCoordinator).cleanupTaskArtifacts(taskId);
         verify(organizationQuotaPolicy).releaseReservation(any(), any(), any(), any(Integer.class), any());
         verify(nodeRepository).deleteAll(nodes);
         verify(taskRepository).delete(task);
         verify(taskSnapshotCacheService).evictTaskRuntime(taskId);
+    }
+
+    @Test
+    void shouldPropagateCleanupFailureWhenDeletingTask() {
+        Long taskId = 1003L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.FAILED)
+                .taskQuotaReserved(true)
+                .build();
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        doThrow(new IllegalStateException("cleanup failed"))
+                .when(taskArtifactCleanupCoordinator).cleanupTaskArtifacts(taskId);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> taskDefinitionAppService.deleteTask(taskId));
+
+        assertEquals("cleanup failed", exception.getMessage());
+        verify(taskArtifactCleanupCoordinator).cleanupTaskArtifacts(taskId);
+        verify(nodeRepository, never()).deleteAll(any());
+        verify(taskRepository, never()).delete(task);
     }
 
     private static CreateTaskRequest buildRequest() {

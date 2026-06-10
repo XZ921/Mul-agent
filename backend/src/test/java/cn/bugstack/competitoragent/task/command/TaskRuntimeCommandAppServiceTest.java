@@ -18,11 +18,11 @@ import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.task.AnalysisTaskRunner;
-import cn.bugstack.competitoragent.task.TaskArtifactCleanupService;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
 import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskRecoveryService;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
+import cn.bugstack.competitoragent.task.application.cleanup.TaskArtifactCleanupCoordinator;
 import cn.bugstack.competitoragent.workflow.CompensationGraphAssembler;
 import cn.bugstack.competitoragent.workflow.DynamicTaskGraphService;
 import cn.bugstack.competitoragent.workflow.TaskPlanVersioner;
@@ -49,6 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -91,7 +92,7 @@ class TaskRuntimeCommandAppServiceTest {
     private TaskRecoveryService taskRecoveryService;
 
     @Mock
-    private TaskArtifactCleanupService taskArtifactCleanupService;
+    private TaskArtifactCleanupCoordinator taskArtifactCleanupCoordinator;
 
     @Mock
     private OrganizationQuotaPolicy organizationQuotaPolicy;
@@ -113,17 +114,13 @@ class TaskRuntimeCommandAppServiceTest {
         taskRuntimeCommandAppService = new TaskRuntimeCommandAppService(
                 taskRepository,
                 nodeRepository,
-                evidenceRepository,
-                knowledgeRepository,
-                reportRepository,
-                logRepository,
                 taskSnapshotCacheService,
                 taskEventPublisher,
                 taskRunner,
                 workflowEventOutboxService,
                 dynamicTaskGraphService,
                 taskRecoveryService,
-                taskArtifactCleanupService,
+                taskArtifactCleanupCoordinator,
                 taskQuotaCoordinator,
                 objectMapper);
     }
@@ -315,7 +312,7 @@ class TaskRuntimeCommandAppServiceTest {
         assertEquals(AnalysisTaskStatus.PENDING, task.getStatus());
         assertNull(task.getErrorMessage());
         assertNull(task.getCompletedAt());
-        verify(taskArtifactCleanupService).cleanupTaskArtifacts(taskId);
+        verify(taskArtifactCleanupCoordinator).cleanupTaskArtifacts(taskId);
         verify(taskSnapshotCacheService).evictTaskRuntime(taskId);
         verify(nodeRepository).saveAll(List.of(collectNode, extractNode));
         verify(taskRepository).save(task);
@@ -345,10 +342,32 @@ class TaskRuntimeCommandAppServiceTest {
         assertEquals(AnalysisTaskStatus.PENDING, task.getStatus());
         assertNull(task.getErrorMessage());
         assertNull(task.getCompletedAt());
-        verify(taskArtifactCleanupService).cleanupTaskArtifacts(taskId);
+        verify(taskArtifactCleanupCoordinator).cleanupTaskArtifacts(taskId);
         verify(taskSnapshotCacheService).evictTaskRuntime(taskId);
         verify(nodeRepository).saveAll(List.of(collectNode, extractNode));
         verify(taskRepository).save(task);
+        verifyNoInteractions(taskRunner, workflowEventOutboxService);
+    }
+
+    @Test
+    void shouldPropagateCleanupFailureInSameUseCase() {
+        Long taskId = 1002L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.FAILED)
+                .build();
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        doThrow(new IllegalStateException("cleanup failed"))
+                .when(taskArtifactCleanupCoordinator).cleanupTaskArtifacts(taskId);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> taskRuntimeCommandAppService.retryTask(taskId));
+
+        assertEquals("cleanup failed", exception.getMessage());
+        verify(taskArtifactCleanupCoordinator).cleanupTaskArtifacts(taskId);
+        verify(nodeRepository, never()).findByTaskIdOrderByExecutionOrderAsc(taskId);
+        verify(taskRepository, never()).save(task);
         verifyNoInteractions(taskRunner, workflowEventOutboxService);
     }
 
@@ -382,12 +401,36 @@ class TaskRuntimeCommandAppServiceTest {
         assertEquals(AnalysisTaskStatus.PENDING, task.getStatus());
         assertNull(task.getErrorMessage());
         assertNull(task.getCompletedAt());
-        verify(evidenceRepository).deleteByTaskIdAndEvidenceIdStartingWith(taskId, "T0103-COLLECT_SOURCES_WEB-");
-        verify(knowledgeRepository).deleteByTaskId(taskId);
-        verify(reportRepository).deleteByTaskId(taskId);
+        verify(taskArtifactCleanupCoordinator).cleanupNodeArtifacts(taskId, "collect_sources_web");
         verify(taskRepository).save(task);
         verify(nodeRepository).saveAll(List.of(collectWeb, extractSchema, analyze, write));
         verify(workflowEventOutboxService).assertWorkflowIngressReady();
+        verify(taskRunner).runTask(taskId);
+    }
+
+    @Test
+    void shouldDelegateNodeCleanupToCleanupCoordinatorForRewriteBranchRerun() {
+        Long taskId = 1103L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.FAILED)
+                .build();
+        TaskNode writeReport = successfulNode(taskId, "write_report", AgentType.WRITER, "[\"analyze_competitors\"]", 0);
+        TaskNode qualityCheck = successfulNode(taskId, "quality_check", AgentType.REVIEWER, "[\"write_report\"]", 1);
+        TaskNode rewriteReport = failedNode(taskId, "rewrite_report", AgentType.WRITER, "[\"quality_check\"]", 2);
+        TaskNode finalReview = failedNode(taskId, "quality_check_final", AgentType.REVIEWER, "[\"rewrite_report\"]", 3);
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId))
+                .thenReturn(List.of(writeReport, qualityCheck, rewriteReport, finalReview));
+
+        taskRuntimeCommandAppService.rerunFromNode(taskId, "rewrite_report");
+
+        assertPendingCleared(rewriteReport);
+        assertPendingCleared(finalReview);
+        assertEquals(TaskNodeStatus.SUCCESS, writeReport.getStatus());
+        assertEquals(TaskNodeStatus.SUCCESS, qualityCheck.getStatus());
+        verify(taskArtifactCleanupCoordinator).cleanupNodeArtifacts(taskId, "rewrite_report");
         verify(taskRunner).runTask(taskId);
     }
 

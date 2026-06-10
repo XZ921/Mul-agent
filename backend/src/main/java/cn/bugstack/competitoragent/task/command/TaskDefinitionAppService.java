@@ -13,16 +13,12 @@ import cn.bugstack.competitoragent.model.dto.TaskResponse;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
-import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
-import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
-import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
-import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
-import cn.bugstack.competitoragent.task.TaskArtifactCleanupService;
 import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
+import cn.bugstack.competitoragent.task.application.cleanup.TaskArtifactCleanupCoordinator;
 import cn.bugstack.competitoragent.task.assembler.TaskNodeViewAssembler;
 import cn.bugstack.competitoragent.workflow.NodeExecutionRecoveryPolicy;
 import cn.bugstack.competitoragent.workflow.WorkflowFactory;
@@ -50,10 +46,6 @@ public class TaskDefinitionAppService {
 
     private final AnalysisTaskRepository taskRepository;
     private final TaskNodeRepository nodeRepository;
-    private final EvidenceSourceRepository evidenceRepository;
-    private final CompetitorKnowledgeRepository knowledgeRepository;
-    private final ReportRepository reportRepository;
-    private final AgentExecutionLogRepository logRepository;
     private final WorkflowFactory workflowFactory;
     private final TaskSnapshotCacheService taskSnapshotCacheService;
     private final TaskEventPublisher taskEventPublisher;
@@ -61,7 +53,7 @@ public class TaskDefinitionAppService {
     private final TaskNodeViewAssembler assembler;
     private final ObjectMapper objectMapper;
     private final OrganizationQuotaPolicy organizationQuotaPolicy;
-    private final TaskArtifactCleanupService taskArtifactCleanupService;
+    private final TaskArtifactCleanupCoordinator taskArtifactCleanupCoordinator;
     private final TaskQuotaCoordinator taskQuotaCoordinator;
 
     @Transactional
@@ -123,7 +115,7 @@ public class TaskDefinitionAppService {
         }
 
         taskQuotaCoordinator.releaseTaskQuotaIfHeld(task);
-        taskArtifactCleanupService.cleanupTaskArtifacts(taskId);
+        taskArtifactCleanupCoordinator.cleanupTaskArtifacts(taskId);
         nodeRepository.deleteAll(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId));
         taskRepository.delete(task);
         taskSnapshotCacheService.evictTaskRuntime(taskId);

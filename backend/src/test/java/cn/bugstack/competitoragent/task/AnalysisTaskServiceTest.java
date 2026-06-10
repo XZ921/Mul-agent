@@ -29,6 +29,13 @@ import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
 import cn.bugstack.competitoragent.task.TaskArtifactCleanupService;
 import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
+import cn.bugstack.competitoragent.task.application.TaskQueryFacade;
+import cn.bugstack.competitoragent.task.application.TaskQueryFacadeImpl;
+import cn.bugstack.competitoragent.task.application.TaskRuntimeFacade;
+import cn.bugstack.competitoragent.task.application.TaskRuntimeFacadeImpl;
+import cn.bugstack.competitoragent.task.application.cleanup.TaskArtifactCleanupCoordinator;
+import cn.bugstack.competitoragent.task.application.cleanup.TaskArtifactCleanupCoordinatorImpl;
+import cn.bugstack.competitoragent.task.application.cleanup.TaskArtifactCleanupPort;
 import cn.bugstack.competitoragent.task.assembler.TaskNodeViewAssembler;
 import cn.bugstack.competitoragent.task.command.TaskDefinitionAppService;
 import cn.bugstack.competitoragent.task.command.TaskRuntimeCommandAppService;
@@ -132,10 +139,23 @@ class AnalysisTaskServiceTest {
     @Mock
     private TaskArtifactCleanupService taskArtifactCleanupService;
 
+    @Mock
+    private TaskArtifactCleanupCoordinator taskArtifactCleanupCoordinator;
+
+    @Mock
+    private TaskQueryFacade taskQueryFacade;
+
+    @Mock
+    private TaskRuntimeFacade taskRuntimeFacade;
+
+    @Mock
+    private TaskDefinitionAppService taskDefinitionAppService;
+
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
     private AnalysisTaskService taskService;
+    private AnalysisTaskService delegatingTaskService;
 
     @BeforeEach
     void setUp() {
@@ -158,29 +178,40 @@ class AnalysisTaskServiceTest {
                 taskRepository,
                 nodeRepository,
                 assembler);
+        TaskArtifactCleanupCoordinator realTaskArtifactCleanupCoordinator =
+                new TaskArtifactCleanupCoordinatorImpl(List.<TaskArtifactCleanupPort>of(
+                        new TaskArtifactCleanupPort() {
+                            @Override
+                            public String moduleName() {
+                                return "analysis-task-service-test-port";
+                            }
+
+                            @Override
+                            public void cleanupTaskArtifacts(Long taskId) {
+                                taskArtifactCleanupService.cleanupTaskArtifacts(taskId);
+                            }
+
+                            @Override
+                            public void cleanupNodeArtifacts(Long taskId, String nodeName) {
+                                taskArtifactCleanupService.cleanupNodeArtifacts(taskId, nodeName);
+                            }
+                        }
+                ));
         TaskRuntimeCommandAppService taskRuntimeCommandAppService = new TaskRuntimeCommandAppService(
                 taskRepository,
                 nodeRepository,
-                evidenceRepository,
-                knowledgeRepository,
-                reportRepository,
-                logRepository,
                 taskSnapshotCacheService,
                 taskEventPublisher,
                 taskRunner,
                 workflowEventOutboxService,
                 realDynamicTaskGraphService,
                 taskRecoveryService,
-                taskArtifactCleanupService,
+                realTaskArtifactCleanupCoordinator,
                 taskQuotaCoordinator,
                 objectMapper);
-        TaskDefinitionAppService taskDefinitionAppService = new TaskDefinitionAppService(
+        TaskDefinitionAppService realTaskDefinitionAppService = new TaskDefinitionAppService(
                 taskRepository,
                 nodeRepository,
-                evidenceRepository,
-                knowledgeRepository,
-                reportRepository,
-                logRepository,
                 workflowFactory,
                 taskSnapshotCacheService,
                 taskEventPublisher,
@@ -188,12 +219,37 @@ class AnalysisTaskServiceTest {
                 assembler,
                 objectMapper,
                 organizationQuotaPolicy,
-                taskArtifactCleanupService,
+                realTaskArtifactCleanupCoordinator,
                 taskQuotaCoordinator);
+        TaskQueryFacade realTaskQueryFacade = new TaskQueryFacadeImpl(taskQueryAppService);
+        TaskRuntimeFacade realTaskRuntimeFacade = new TaskRuntimeFacadeImpl(taskRuntimeCommandAppService);
         taskService = new AnalysisTaskService(
-                taskQueryAppService,
-                taskRuntimeCommandAppService,
+                realTaskQueryFacade,
+                realTaskRuntimeFacade,
+                realTaskDefinitionAppService);
+        delegatingTaskService = new AnalysisTaskService(
+                taskQueryFacade,
+                taskRuntimeFacade,
                 taskDefinitionAppService);
+    }
+
+    @Test
+    void shouldDelegateRuntimeOperationsToTaskRuntimeFacade() {
+        delegatingTaskService.executeTask(1L);
+
+        verify(taskRuntimeFacade).executeTask(1L);
+        verifyNoInteractions(taskQueryFacade);
+    }
+
+    @Test
+    void shouldDelegateQueriesToTaskQueryFacade() {
+        TaskResponse response = TaskResponse.builder().id(1L).taskName("task").build();
+        when(taskQueryFacade.getTask(1L)).thenReturn(response);
+
+        TaskResponse actual = delegatingTaskService.getTask(1L);
+
+        assertSame(response, actual);
+        verify(taskQueryFacade).getTask(1L);
     }
 
     @Test
@@ -440,9 +496,7 @@ class AnalysisTaskServiceTest {
         assertNull(task.getErrorMessage());
         assertNull(task.getCompletedAt());
 
-        verify(evidenceRepository).deleteByTaskIdAndEvidenceIdStartingWith(taskId, "T0011-COLLECT_SOURCES_WEB-");
-        verify(knowledgeRepository).deleteByTaskId(taskId);
-        verify(reportRepository).deleteByTaskId(taskId);
+        verify(taskArtifactCleanupService).cleanupNodeArtifacts(taskId, "collect_sources_web");
         verify(taskRunner).runTask(taskId);
 
         ArgumentCaptor<List<TaskNode>> savedNodesCaptor = ArgumentCaptor.forClass(List.class);
@@ -478,9 +532,7 @@ class AnalysisTaskServiceTest {
         assertEquals(TaskNodeStatus.SUCCESS, writeReport.getStatus());
         assertEquals(TaskNodeStatus.SUCCESS, qualityCheck.getStatus());
 
-        verify(reportRepository, never()).deleteByTaskId(taskId);
-        verify(knowledgeRepository, never()).deleteByTaskId(taskId);
-        verify(evidenceRepository, never()).deleteByTaskIdAndEvidenceIdStartingWith(any(), any());
+        verify(taskArtifactCleanupService).cleanupNodeArtifacts(taskId, "rewrite_report");
         verify(taskRunner).runTask(taskId);
     }
 

@@ -10,19 +10,15 @@ import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
-import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
-import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
-import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
-import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
 import cn.bugstack.competitoragent.task.AnalysisTaskRunner;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
-import cn.bugstack.competitoragent.task.TaskArtifactCleanupService;
 import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskRecoveryService;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
+import cn.bugstack.competitoragent.task.application.cleanup.TaskArtifactCleanupCoordinator;
 import cn.bugstack.competitoragent.workflow.DynamicTaskGraphService;
 import cn.bugstack.competitoragent.workflow.NodeExecutionRecoveryPolicy;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService;
@@ -37,10 +33,8 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * 任务运行时命令应用服务。
@@ -55,17 +49,13 @@ public class TaskRuntimeCommandAppService {
 
     private final AnalysisTaskRepository taskRepository;
     private final TaskNodeRepository nodeRepository;
-    private final EvidenceSourceRepository evidenceRepository;
-    private final CompetitorKnowledgeRepository knowledgeRepository;
-    private final ReportRepository reportRepository;
-    private final AgentExecutionLogRepository logRepository;
     private final TaskSnapshotCacheService taskSnapshotCacheService;
     private final TaskEventPublisher taskEventPublisher;
     private final AnalysisTaskRunner taskRunner;
     private final WorkflowEventOutboxService workflowEventOutboxService;
     private final DynamicTaskGraphService dynamicTaskGraphService;
     private final TaskRecoveryService taskRecoveryService;
-    private final TaskArtifactCleanupService taskArtifactCleanupService;
+    private final TaskArtifactCleanupCoordinator taskArtifactCleanupCoordinator;
     private final TaskQuotaCoordinator taskQuotaCoordinator;
     private final ObjectMapper objectMapper;
 
@@ -142,7 +132,7 @@ public class TaskRuntimeCommandAppService {
                     "No downstream nodes affected by rerun: " + nodeName);
         }
 
-        invalidateDerivedDataForNodeRerun(taskId, targetNode, affectedNodes);
+        taskArtifactCleanupCoordinator.cleanupNodeArtifacts(taskId, targetNode.getNodeName());
         for (TaskNode node : affectedNodes) {
             reuseSearchCheckpointIfPresent(node);
             resetNodeExecutionState(node, true);
@@ -386,7 +376,7 @@ public class TaskRuntimeCommandAppService {
      */
     private void resetTaskForExecution(AnalysisTask task) {
         Long taskId = task.getId();
-        taskArtifactCleanupService.cleanupTaskArtifacts(taskId);
+        taskArtifactCleanupCoordinator.cleanupTaskArtifacts(taskId);
         taskSnapshotCacheService.evictTaskRuntime(taskId);
 
         List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
@@ -465,42 +455,6 @@ public class TaskRuntimeCommandAppService {
                 .orElse(null);
         return dynamicTaskGraphService.calculateAffectedNodes(nodes, startNode);
     }
-
-    /**
-     * 从指定节点重跑时，要同步清理该分支已经派生出的证据、知识和报告。
-     * 清理范围必须与受影响节点范围保持一致，否则会出现“节点重跑了，但旧产物还在”的伪成功状态。
-     */
-    private void invalidateDerivedDataForNodeRerun(Long taskId, TaskNode targetNode, List<TaskNode> affectedNodes) {
-        Set<String> affectedNodeNames = new HashSet<>();
-        for (TaskNode affectedNode : affectedNodes) {
-            affectedNodeNames.add(affectedNode.getNodeName());
-        }
-
-        if (targetNode.getNodeName().startsWith("collect_sources")) {
-            evidenceRepository.deleteByTaskIdAndEvidenceIdStartingWith(
-                    taskId,
-                    buildEvidencePrefix(taskId, targetNode.getNodeName()));
-        }
-
-        if (affectedNodeNames.contains("extract_schema")) {
-            knowledgeRepository.deleteByTaskId(taskId);
-            reportRepository.deleteByTaskId(taskId);
-            return;
-        }
-
-        if (affectedNodeNames.contains("analyze_competitors") || "write_report".equals(targetNode.getNodeName())) {
-            reportRepository.deleteByTaskId(taskId);
-        }
-    }
-
-    private String buildEvidencePrefix(Long taskId, String nodeName) {
-        long safeTaskId = taskId == null ? 0L : taskId;
-        String safeNodeName = nodeName == null || nodeName.isBlank()
-                ? "NODE"
-                : nodeName.toUpperCase().replaceAll("[^A-Z0-9]+", "_");
-        return String.format("T%04d-%s-", safeTaskId % 10000, safeNodeName);
-    }
-
 
     /**
      * Collector 节点重跑前，尽量把上一次搜索审计快照回写到 nodeConfig，

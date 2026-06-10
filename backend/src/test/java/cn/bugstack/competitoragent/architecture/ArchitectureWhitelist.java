@@ -7,8 +7,6 @@ import cn.bugstack.competitoragent.agent.extractor.SchemaExtractorAgent;
 import cn.bugstack.competitoragent.agent.reviewer.QualityReviewAgent;
 import cn.bugstack.competitoragent.agent.writer.ReportWriterAgent;
 import cn.bugstack.competitoragent.task.TaskArtifactCleanupService;
-import cn.bugstack.competitoragent.task.command.TaskDefinitionAppService;
-import cn.bugstack.competitoragent.task.command.TaskRuntimeCommandAppService;
 import cn.bugstack.competitoragent.workflow.WorkflowFactory;
 
 import java.util.List;
@@ -77,23 +75,9 @@ final class ArchitectureWhitelist {
             new Exemption(
                     "task_should_not_depend_on_evidence_repository_directly",
                     TaskArtifactCleanupService.class.getName(),
-                    "phase3a 之前清理职责仍集中在 task 层，当前需要直接删除任务级证据与派生工件，后续改由 cleanup coordinator / cleanup port 收口。",
-                    "phase3a-task-orchestration-task",
-                    "A"
-            ),
-            new Exemption(
-                    "task_should_not_depend_on_evidence_repository_directly",
-                    TaskDefinitionAppService.class.getName(),
-                    "任务定义应用服务仍沿用历史 EvidenceSourceRepository 入口执行全量任务清理，phase3a 会把这类直连迁到稳定 facade / cleanup 协调器。",
-                    "phase3a-task-orchestration-task",
-                    "A"
-            ),
-            new Exemption(
-                    "task_should_not_depend_on_evidence_repository_directly",
-                    TaskRuntimeCommandAppService.class.getName(),
-                    "节点重跑与派生数据失效逻辑仍直接删除节点前缀证据，phase3a 会把这类直连迁到 cleanup 协调入口。",
-                    "phase3a-task-orchestration-task",
-                    "A"
+                    "phase3a 仅建立 cleanup coordinator 与 legacy adapter，TaskArtifactCleanupService 仍暂时承接证据清理；待 phase3b 把 evidence 删除迁到 CollectionArtifactCleanupPort 后再回收该豁免。",
+                    "phase3b-collection-evidence-task",
+                    "B"
             )
     );
 

@@ -5,9 +5,9 @@ import cn.bugstack.competitoragent.model.dto.TaskListPageResponse;
 import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
 import cn.bugstack.competitoragent.model.dto.TaskResponse;
 import cn.bugstack.competitoragent.model.dto.UpdateNodeConfigRequest;
+import cn.bugstack.competitoragent.task.application.TaskQueryFacade;
+import cn.bugstack.competitoragent.task.application.TaskRuntimeFacade;
 import cn.bugstack.competitoragent.task.command.TaskDefinitionAppService;
-import cn.bugstack.competitoragent.task.command.TaskRuntimeCommandAppService;
-import cn.bugstack.competitoragent.task.query.TaskQueryAppService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,8 +25,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AnalysisTaskService {
 
-    private final TaskQueryAppService taskQueryAppService;
-    private final TaskRuntimeCommandAppService taskRuntimeCommandAppService;
+    private final TaskQueryFacade taskQueryFacade;
+    private final TaskRuntimeFacade taskRuntimeFacade;
     private final TaskDefinitionAppService taskDefinitionAppService;
 
     @Transactional
@@ -35,15 +35,15 @@ public class AnalysisTaskService {
     }
 
     public TaskListPageResponse listTasks(String status, int pageNum, int pageSize) {
-        return taskQueryAppService.listTasks(status, pageNum, pageSize);
+        return taskQueryFacade.listTasks(status, pageNum, pageSize);
     }
 
     public TaskResponse getTask(Long taskId) {
-        return taskQueryAppService.getTask(taskId);
+        return taskQueryFacade.getTask(taskId);
     }
 
     public List<TaskNodeResponse> getTaskNodes(Long taskId) {
-        return taskQueryAppService.getTaskNodes(taskId);
+        return taskQueryFacade.getTaskNodes(taskId);
     }
 
     public List<TaskNodeResponse> previewWorkflow(CreateTaskRequest request) {
@@ -52,52 +52,52 @@ public class AnalysisTaskService {
 
     @Transactional
     public void executeTask(Long taskId) {
-        taskRuntimeCommandAppService.executeTask(taskId);
+        taskRuntimeFacade.executeTask(taskId);
     }
 
     @Transactional
     public void retryTask(Long taskId) {
-        taskRuntimeCommandAppService.retryTask(taskId);
+        taskRuntimeFacade.retryTask(taskId);
     }
 
     @Transactional
     public void rerunFromNode(Long taskId, String nodeName) {
-        taskRuntimeCommandAppService.rerunFromNode(taskId, nodeName);
+        taskRuntimeFacade.rerunFromNode(taskId, nodeName);
     }
 
     @Transactional
     public void resumeTask(Long taskId) {
-        taskRuntimeCommandAppService.resumeTask(taskId);
+        taskRuntimeFacade.resumeTask(taskId);
     }
 
     @Transactional
     public void updateNodeConfigAndRerun(Long taskId, String nodeName, UpdateNodeConfigRequest request) {
-        taskRuntimeCommandAppService.updateNodeConfigAndRerun(taskId, nodeName, request);
+        taskRuntimeFacade.updateNodeConfigAndRerun(taskId, nodeName, request);
     }
 
     @Transactional
     public void pauseNode(Long taskId, String nodeName) {
-        taskRuntimeCommandAppService.pauseNode(taskId, nodeName);
+        taskRuntimeFacade.pauseNode(taskId, nodeName);
     }
 
     @Transactional
     public void resumeNode(Long taskId, String nodeName) {
-        taskRuntimeCommandAppService.resumeNode(taskId, nodeName);
+        taskRuntimeFacade.resumeNode(taskId, nodeName);
     }
 
     @Transactional
     public void skipNode(Long taskId, String nodeName) {
-        taskRuntimeCommandAppService.skipNode(taskId, nodeName);
+        taskRuntimeFacade.skipNode(taskId, nodeName);
     }
 
     @Transactional
     public void terminateNode(Long taskId, String nodeName) {
-        taskRuntimeCommandAppService.terminateNode(taskId, nodeName);
+        taskRuntimeFacade.terminateNode(taskId, nodeName);
     }
 
     @Transactional
     public void stopTask(Long taskId) {
-        taskRuntimeCommandAppService.stopTask(taskId);
+        taskRuntimeFacade.stopTask(taskId);
     }
 
     @Transactional
