@@ -11,13 +11,22 @@ import cn.bugstack.competitoragent.agent.extractor.SchemaExtractorAgent;
 import cn.bugstack.competitoragent.agent.reviewer.QualityReviewAgent;
 import cn.bugstack.competitoragent.agent.writer.ReportWriterAgent;
 import cn.bugstack.competitoragent.agent.capability.SpringAgentCapabilityRegistry;
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaClass;
 import cn.bugstack.competitoragent.workflow.WorkflowFactory;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
+import java.util.List;
+
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static cn.bugstack.competitoragent.architecture.ArchitecturePackageMapping.COLLECTION_PACKAGES;
+import static cn.bugstack.competitoragent.architecture.ArchitecturePackageMapping.CONVERSATION_PACKAGES;
+import static cn.bugstack.competitoragent.architecture.ArchitecturePackageMapping.REPORT_PACKAGES;
+import static cn.bugstack.competitoragent.architecture.ArchitecturePackageMapping.RUNTIME_BASELINE_CLASS_NAMES;
+import static cn.bugstack.competitoragent.architecture.ArchitecturePackageMapping.TASK_PACKAGES;
 
 /**
  * Phase 1 先建立后端模块依赖基线。
@@ -30,43 +39,29 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 )
 class BackendModuleDependencyTest {
 
-    /**
-     * 这批类是当前代码库里仍然直接依赖 repository 的历史 Agent 基线。
-     * Phase 1 先把它们显式登记出来，避免未来新增同类耦合时被历史问题“淹没”。
-     * 后续每完成一段 Agent 去持久化改造，就应从这里删除对应豁免。
-     */
-    private static final String LEGACY_AGENT_REPOSITORY_EXEMPTIONS =
-            BaseAgent.class.getSimpleName()
-                    + ", " + CompetitorAnalysisAgent.class.getSimpleName()
-                    + ", " + CollectorAgent.class.getSimpleName()
-                    + ", " + SchemaExtractorAgent.class.getSimpleName()
-                    + ", " + QualityReviewAgent.class.getSimpleName()
-                    + ", " + ReportWriterAgent.class.getSimpleName();
-
-    /**
-     * WorkflowFactory 仍然承担“把搜索规划翻译成 Collector 节点配置”的历史职责，
-     * 因此当前阶段会直接引用 CollectorNodeConfig。
-     * Task 3 只允许做具名类级豁免，明确记录这处历史耦合，后续在 collection facade 稳定后回收。
-     */
-    private static final String LEGACY_WORKFLOW_AGENT_PACKAGE_EXEMPTIONS =
-            WorkflowFactory.class.getSimpleName();
-
     @ArchTest
     static final ArchRule runtime_baseline_should_not_depend_on_repositories_or_entities =
             noClasses()
-                    .that().haveFullyQualifiedName(Agent.class.getName())
-                    .or().haveFullyQualifiedName(AgentContext.class.getName())
-                    .or().haveFullyQualifiedName(AgentResult.class.getName())
-                    .or().haveFullyQualifiedName(AgentCapabilityRegistry.class.getName())
-                    .or().haveFullyQualifiedName(SpringAgentCapabilityRegistry.class.getName())
+                    .that(hasAnyRuntimeBaselineClassName())
                     .should().dependOnClassesThat().resideInAnyPackage("..repository..", "..model.entity..")
                     .because("Phase 1 freezes a minimal runtime baseline. Runtime contracts and registry must stay free of repositories and entities.");
+
+    @ArchTest
+    static final ArchRule task_should_not_depend_on_evidence_repository_directly =
+            noClasses()
+                    .that().resideInAnyPackage(packages(TASK_PACKAGES))
+                    .and(isNotWhitelistedForRule("task_should_not_depend_on_evidence_repository_directly"))
+                    .should().dependOnClassesThat()
+                    .haveFullyQualifiedName("cn.bugstack.competitoragent.repository.EvidenceSourceRepository")
+                    .because("task-orchestration should stop adding direct evidence repository access and move through explicit cleanup or facade entry points. "
+                            + "Legacy class-level exemptions: "
+                            + ArchitectureWhitelist.summaryForRule("task_should_not_depend_on_evidence_repository_directly"));
 
     @ArchTest
     static final ArchRule workflow_should_not_depend_on_business_agent_implementations =
             noClasses()
                     .that().resideInAPackage("..workflow..")
-                    .and().doNotHaveFullyQualifiedName(WorkflowFactory.class.getName())
+                    .and(isNotWhitelistedForRule("workflow_should_not_depend_on_business_agent_implementations"))
                     .should().dependOnClassesThat().resideInAnyPackage(
                             "..agent.collector..",
                             "..agent.analyzer..",
@@ -75,21 +70,18 @@ class BackendModuleDependencyTest {
                             "..agent.writer..",
                             "..agent.conversation..")
                     .because("workflow should trigger runtime capabilities instead of directly coupling to concrete business Agent implementations. "
-                            + "Legacy class-level exemption: " + LEGACY_WORKFLOW_AGENT_PACKAGE_EXEMPTIONS);
+                            + "Legacy class-level exemptions: "
+                            + ArchitectureWhitelist.summaryForRule("workflow_should_not_depend_on_business_agent_implementations"));
 
     @ArchTest
     static final ArchRule agent_classes_should_not_access_task_repositories =
             noClasses()
                     .that().resideInAPackage("..agent..")
-                    .and().doNotHaveFullyQualifiedName(BaseAgent.class.getName())
-                    .and().doNotHaveFullyQualifiedName(CompetitorAnalysisAgent.class.getName())
-                    .and().doNotHaveFullyQualifiedName(CollectorAgent.class.getName())
-                    .and().doNotHaveFullyQualifiedName(SchemaExtractorAgent.class.getName())
-                    .and().doNotHaveFullyQualifiedName(QualityReviewAgent.class.getName())
-                    .and().doNotHaveFullyQualifiedName(ReportWriterAgent.class.getName())
+                    .and(isNotWhitelistedForRule("agent_classes_should_not_access_task_repositories"))
                     .should().dependOnClassesThat().resideInAnyPackage("..repository..")
                     .because("Agent implementations should return structured results; task-runtime owns persistence and state transitions. "
-                            + "Legacy baseline exemptions: " + LEGACY_AGENT_REPOSITORY_EXEMPTIONS);
+                            + "Legacy class-level exemptions: "
+                            + ArchitectureWhitelist.summaryForRule("agent_classes_should_not_access_task_repositories"));
 
     @ArchTest
     static final ArchRule controllers_should_not_depend_on_workflow_internals =
@@ -99,9 +91,51 @@ class BackendModuleDependencyTest {
                     .because("REST controllers should call application services or facades, not runtime internals.");
 
     @ArchTest
-    static final ArchRule report_should_not_depend_on_source_provider_implementations =
+    static final ArchRule report_should_not_depend_on_collection_implementations =
             noClasses()
-                    .that().resideInAPackage("..report..")
-                    .should().dependOnClassesThat().resideInAnyPackage("..source..", "..search..")
-                    .because("report-delivery consumes report/evidence views, not collection provider internals.");
+                    .that().resideInAnyPackage(packages(REPORT_PACKAGES))
+                    .should().dependOnClassesThat().resideInAnyPackage(packages(COLLECTION_PACKAGES))
+                    .because("report-delivery consumes stable evidence views, not collection implementation packages.");
+
+    @ArchTest
+    static final ArchRule conversation_should_not_depend_on_workflow_internals =
+            noClasses()
+                    .that().resideInAnyPackage(packages(CONVERSATION_PACKAGES))
+                    .should().dependOnClassesThat().resideInAnyPackage("..workflow..")
+                    .because("conversation-entry should call task facades or stable read views instead of workflow internals.");
+
+    /**
+     * ArchUnit 的 `resideInAnyPackage` 需要可变参数，这里把集中维护的映射常量转成统一入口，
+     * 避免后续规则再次散落重复的字符串展开逻辑。
+     */
+    private static String[] packages(List<String> packagePatterns) {
+        return packagePatterns.toArray(String[]::new);
+    }
+
+    /**
+     * runtime baseline 是一组离散类而不是单个 package，
+     * 因此这里按 FQCN 判断，保证 phase1 冻结下来的最小运行时边界继续由同一入口守护。
+     */
+    private static DescribedPredicate<JavaClass> hasAnyRuntimeBaselineClassName() {
+        return new DescribedPredicate<>("phase1 runtime baseline classes") {
+            @Override
+            public boolean test(JavaClass input) {
+                return RUNTIME_BASELINE_CLASS_NAMES.contains(input.getName());
+            }
+        };
+    }
+
+    /**
+     * 所有历史豁免都必须从 ArchitectureWhitelist 读取，
+     * 这样规则入口只保留“规则本身”，而不是再次堆叠一组散落常量。
+     */
+    private static DescribedPredicate<JavaClass> isNotWhitelistedForRule(String ruleName) {
+        List<String> whitelistedClassNames = ArchitectureWhitelist.classNamesForRule(ruleName);
+        return new DescribedPredicate<>("not whitelisted for rule " + ruleName) {
+            @Override
+            public boolean test(JavaClass input) {
+                return !whitelistedClassNames.contains(input.getName());
+            }
+        };
+    }
 }
