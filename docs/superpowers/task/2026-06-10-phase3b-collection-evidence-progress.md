@@ -1,12 +1,12 @@
 # Phase 3B Collection Evidence Progress
 
 - 当前阶段：Phase 3B Collection Evidence
-- 当前 Task：Phase 3B 提交与合入 integration
-- 当前 Step：Step 1 重新验证并执行提交，随后合入 `integration/backend-modular-monolith-refactor`
-- 状态：IN_PROGRESS
+- 当前 Task：Phase 3B 已提交并合入 integration
+- 当前 Step：Step 1 合并后验证通过，串行门禁已打开，可进入 `phase4a / Task 1`
+- 状态：SUCCESS
 - 已完成：4 / 4
-- 剩余步骤：提交当前 phase3b 未提交变更；把 `a/phase3b-collection-evidence` 合入 `integration/backend-modular-monolith-refactor`；随后基于最新 integration 创建 `phase4a` 新 worktree / 分支
-- 阻塞项：当前 `a/phase3b-collection-evidence` 与 `integration/backend-modular-monolith-refactor` 的 HEAD 同为 `4f87a6e`，`git rev-list --left-right --count integration/backend-modular-monolith-refactor...a/phase3b-collection-evidence` 结果为 `0 0`；这说明 phase3b 成果仍全部停留在未提交工作区，尚未形成可合入提交，因此流程上还不能进入 `phase4a` 代码开发
+- 剩余步骤：基于最新 `integration/backend-modular-monolith-refactor` 创建 `a/phase4a-knowledge-intelligence` 新 worktree / 分支，并先更新 `phase4a` progress 后再进入 Task 1
+- 阻塞项：无；`phase3b` 已完成提交、合入与合并后验证
 - 执行工作区：`E:\java_study\Mul-agnet\.worktrees\a-phase3b-collection-evidence`
 - 执行分支：`a/phase3b-collection-evidence`
 - 结构化执行计划：
@@ -99,4 +99,9 @@
   - Step 2：在 `a/phase3b-collection-evidence` 提交当前全部 phase3b 变更，不回退任何既有修改。
   - Step 3：将 phase3b 提交合入 `integration/backend-modular-monolith-refactor`，并在合并结果上重复关键验证。
   - Step 4：若 integration 合并成功，则基于最新 integration 准备 `a/phase4a-knowledge-intelligence` 新 worktree / 分支，但仍不启动 phase4a 代码开发。
-- 最后更新：2026-06-10 20:12
+- 2026-06-10 提交与合入完成记录：
+  - 已在 `a/phase3b-collection-evidence` 创建提交：`4c74ce8 feat(collection): complete phase3b evidence boundary`。
+  - 已在 `integration/backend-modular-monolith-refactor` 执行 `git merge --ff-only a/phase3b-collection-evidence`，完成 fast-forward 合入。
+  - 合入后已执行 `mvn "-Dtest=SearchExecutionCoordinatorTest,CandidateVerifierTest,SourceCandidateRankerTest,BrowserSearchRuntimeServiceTest,CollectorAgentTest,EvidenceQueryServiceTest,CollectionArtifactCleanupPortTest,CollectionEvidenceFacadeImplTest,BackendModuleDependencyTest,ArchitectureWhitelistTest" test`，结果 `Tests run: 57, Failures: 0, Errors: 0`。
+  - 当前串行门禁状态：`phase3b` 已满足“完成并合入 integration”的前置条件，允许进入 `phase4a`，但仍需先创建新 worktree / 分支并更新 `phase4a progress`。
+- 最后更新：2026-06-10 20:35
