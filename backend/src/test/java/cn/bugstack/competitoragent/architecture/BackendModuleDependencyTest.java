@@ -1,11 +1,17 @@
 package cn.bugstack.competitoragent.architecture;
 
+import cn.bugstack.competitoragent.agent.Agent;
+import cn.bugstack.competitoragent.agent.AgentContext;
+import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.agent.BaseAgent;
 import cn.bugstack.competitoragent.agent.analyzer.CompetitorAnalysisAgent;
+import cn.bugstack.competitoragent.agent.capability.AgentCapabilityRegistry;
 import cn.bugstack.competitoragent.agent.collector.CollectorAgent;
 import cn.bugstack.competitoragent.agent.extractor.SchemaExtractorAgent;
 import cn.bugstack.competitoragent.agent.reviewer.QualityReviewAgent;
 import cn.bugstack.competitoragent.agent.writer.ReportWriterAgent;
+import cn.bugstack.competitoragent.agent.capability.SpringAgentCapabilityRegistry;
+import cn.bugstack.competitoragent.workflow.WorkflowFactory;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -36,6 +42,40 @@ class BackendModuleDependencyTest {
                     + ", " + SchemaExtractorAgent.class.getSimpleName()
                     + ", " + QualityReviewAgent.class.getSimpleName()
                     + ", " + ReportWriterAgent.class.getSimpleName();
+
+    /**
+     * WorkflowFactory 仍然承担“把搜索规划翻译成 Collector 节点配置”的历史职责，
+     * 因此当前阶段会直接引用 CollectorNodeConfig。
+     * Task 3 只允许做具名类级豁免，明确记录这处历史耦合，后续在 collection facade 稳定后回收。
+     */
+    private static final String LEGACY_WORKFLOW_AGENT_PACKAGE_EXEMPTIONS =
+            WorkflowFactory.class.getSimpleName();
+
+    @ArchTest
+    static final ArchRule runtime_baseline_should_not_depend_on_repositories_or_entities =
+            noClasses()
+                    .that().haveFullyQualifiedName(Agent.class.getName())
+                    .or().haveFullyQualifiedName(AgentContext.class.getName())
+                    .or().haveFullyQualifiedName(AgentResult.class.getName())
+                    .or().haveFullyQualifiedName(AgentCapabilityRegistry.class.getName())
+                    .or().haveFullyQualifiedName(SpringAgentCapabilityRegistry.class.getName())
+                    .should().dependOnClassesThat().resideInAnyPackage("..repository..", "..model.entity..")
+                    .because("Phase 1 freezes a minimal runtime baseline. Runtime contracts and registry must stay free of repositories and entities.");
+
+    @ArchTest
+    static final ArchRule workflow_should_not_depend_on_business_agent_implementations =
+            noClasses()
+                    .that().resideInAPackage("..workflow..")
+                    .and().doNotHaveFullyQualifiedName(WorkflowFactory.class.getName())
+                    .should().dependOnClassesThat().resideInAnyPackage(
+                            "..agent.collector..",
+                            "..agent.analyzer..",
+                            "..agent.extractor..",
+                            "..agent.reviewer..",
+                            "..agent.writer..",
+                            "..agent.conversation..")
+                    .because("workflow should trigger runtime capabilities instead of directly coupling to concrete business Agent implementations. "
+                            + "Legacy class-level exemption: " + LEGACY_WORKFLOW_AGENT_PACKAGE_EXEMPTIONS);
 
     @ArchTest
     static final ArchRule agent_classes_should_not_access_task_repositories =

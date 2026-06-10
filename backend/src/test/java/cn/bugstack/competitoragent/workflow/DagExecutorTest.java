@@ -432,6 +432,76 @@ class DagExecutorTest {
     }
 
     @Test
+    void should_fail_node_when_capability_is_missing() {
+        Long taskId = 909L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode collectNode = TaskNode.builder()
+                .id(61L)
+                .taskId(taskId)
+                .nodeName("collect_sources")
+                .displayName("collect_sources")
+                .agentType(AgentType.COLLECTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .maxRetries(0)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        TaskSnapshotCacheService snapshotCacheService = mock(TaskSnapshotCacheService.class);
+        TaskExecutionLockService lockService = allowingNodeLockService();
+        TaskEventPublisher taskEventPublisher = mock(TaskEventPublisher.class);
+        WorkflowEventPublisher workflowEventPublisher = mock(WorkflowEventPublisher.class);
+        AnalysisTaskRepository refresherTaskRepository = taskRepository;
+        TaskNodeRepository refresherNodeRepository = nodeRepository;
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(collectNode));
+        when(nodeRepository.findById(61L)).thenReturn(Optional.of(collectNode));
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = new DagExecutor(
+                nodeRepository,
+                taskRepository,
+                agentType -> null,
+                new ObjectMapper(),
+                snapshotCacheService,
+                lockService,
+                taskEventPublisher,
+                mock(AgentLogService.class),
+                workflowEventPublisher,
+                mock(TaskNodeExecutionAttemptRepository.class),
+                mock(WorkflowDeadLetterRecordRepository.class),
+                new RuntimeStateRefresher(refresherTaskRepository, refresherNodeRepository, snapshotCacheService, taskEventPublisher),
+                new RuntimeEventEmitter(taskEventPublisher, mock(AgentLogService.class), new ObjectMapper()),
+                new DynamicPlanAppender(
+                        taskRepository,
+                        nodeRepository,
+                        mock(DynamicTaskGraphService.class),
+                        mock(TaskPlanRepository.class),
+                        new ObjectMapper()),
+                mock(TaskQuotaCoordinator.class)
+        );
+
+        executor.execute(taskId, AgentContext.builder()
+                .taskId(taskId)
+                .taskName("missing-capability-test")
+                .build());
+
+        assertEquals(TaskNodeStatus.FAILED, collectNode.getStatus());
+        assertTrue(collectNode.getErrorMessage().contains("Missing agent implementation"));
+        verify(nodeRepository, atLeastOnce()).save(collectNode);
+    }
+
+    @Test
     void shouldPersistSnapshotAndCacheNodeOutputDuringExecution() {
         Long taskId = 606L;
         AnalysisTask task = AnalysisTask.builder()

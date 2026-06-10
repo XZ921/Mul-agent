@@ -6,7 +6,8 @@ import lombok.Data;
 
 /**
  * Agent 执行结果。
- * 每次 Agent.execute() 完成后都通过它向执行器汇报状态、输出、耗时和模型调用信息。
+ * Phase 1 先冻结编排层真正依赖的最小结果合同，
+ * 让执行器只消费标准化状态、输出和观测信息，而不反向耦合具体业务 Agent 内部对象。
  */
 @Data
 @Builder

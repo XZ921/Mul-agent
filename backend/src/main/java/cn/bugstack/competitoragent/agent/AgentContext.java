@@ -10,7 +10,8 @@ import cn.bugstack.competitoragent.context.TaskRagContextBundle;
 
 /**
  * Agent 运行上下文。
- * 它是任务实体向运行态的投影，既包含稳定的任务参数，也包含节点之间共享的中间输出。
+ * Phase 1 将它冻结为最小运行时边界，只承载任务执行所需的稳定字段与节点共享输出，
+ * 不允许继续膨胀为承载业务实体、Repository 或临时视图对象的大容器。
  */
 @Data
 @Builder(toBuilder = true)
@@ -34,7 +35,7 @@ public class AgentContext {
 
     /**
      * sharedState 以 nodeName 为键保存节点输出，供下游节点继续消费。
-     * 使用并发容器是为了兼容异步执行和恢复执行场景。
+     * 这里只保留字符串级共享结果，避免 runtime 基线重新耦合复杂业务对象。
      */
     @Builder.Default
     private Map<String, String> sharedState = new ConcurrentHashMap<>();
@@ -57,8 +58,8 @@ public class AgentContext {
     }
 
     /**
-     * 统一获取当前节点已经装配好的任务级 RAG 文本，
-     * 让各类 Agent 都从同一个入口消费检索摘要，而不是各自重新拼接。
+     * 统一获取当前节点已经装配好的任务级 RAG 文本。
+     * 这样各类 Agent 都从同一个入口消费检索摘要，避免在业务 Agent 中重复拼装上下文。
      */
     public String getTaskRagPromptContext() {
         if (taskRagContextBundle == null) {
