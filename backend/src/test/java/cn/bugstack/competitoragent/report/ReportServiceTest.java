@@ -23,6 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ReportServiceTest {
@@ -45,6 +47,55 @@ class ReportServiceTest {
             reportDiagnosisAssembler,
             new ObjectMapper()
     );
+
+    @Test
+    void report_service_should_rely_on_evidence_projection_not_collection_runtime() {
+        Report report = Report.builder()
+                .id(7L)
+                .taskId(700L)
+                .title("证据投影视图")
+                .content("# Report")
+                .summary("summary")
+                .qualityPassed(true)
+                .evidenceCount(1)
+                .build();
+        ReportResponse.EvidenceInfo evidence = new ReportResponse.EvidenceInfo(
+                "E700",
+                "Docs",
+                "https://docs.example.com/report",
+                "snippet",
+                "Notion AI",
+                null,
+                "DOCS",
+                "SEARCH",
+                "docs.example.com",
+                "reason",
+                null,
+                0.91,
+                true,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                java.util.Map.of()
+        );
+
+        when(reportRepository.findByTaskId(700L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(700L)).thenReturn(List.of(evidence));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(700L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(700L)).thenReturn(List.of());
+
+        ReportResponse response = reportService.getReport(700L);
+
+        assertNotNull(response);
+        assertEquals(1, response.getEvidences().size());
+        verify(evidenceQueryService).listTaskEvidence(700L);
+        verify(evidenceRepository, never()).findByTaskIdOrderByEvidenceIdAsc(700L);
+    }
 
     @Test
     void shouldAggregateCollectorSearchAuditOverview() {
@@ -91,7 +142,7 @@ class ReportServiceTest {
                 .build();
 
         when(reportRepository.findByTaskId(100L)).thenReturn(Optional.of(report));
-        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(100L)).thenReturn(List.of());
+        when(evidenceQueryService.listTaskEvidence(100L)).thenReturn(List.of());
         when(knowledgeRepository.findByTaskIdOrderByIdAsc(100L)).thenReturn(List.of());
         when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(100L)).thenReturn(List.of(collectorNode));
 
@@ -141,7 +192,7 @@ class ReportServiceTest {
                 .build();
 
         when(reportRepository.findByTaskId(200L)).thenReturn(Optional.of(report));
-        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(200L)).thenReturn(List.of());
+        when(evidenceQueryService.listTaskEvidence(200L)).thenReturn(List.of());
         when(knowledgeRepository.findByTaskIdOrderByIdAsc(200L)).thenReturn(List.of());
         when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(200L)).thenReturn(List.of(collectorNode));
 
@@ -189,7 +240,7 @@ class ReportServiceTest {
                 .build();
 
         when(reportRepository.findByTaskId(300L)).thenReturn(Optional.of(report));
-        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(300L)).thenReturn(List.of());
+        when(evidenceQueryService.listTaskEvidence(300L)).thenReturn(List.of());
         when(knowledgeRepository.findByTaskIdOrderByIdAsc(300L)).thenReturn(List.of(knowledge));
         when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(300L)).thenReturn(List.of());
 
@@ -233,7 +284,7 @@ class ReportServiceTest {
                 .build();
 
         when(reportRepository.findByTaskId(3100L)).thenReturn(Optional.of(report));
-        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(3100L)).thenReturn(List.of());
+        when(evidenceQueryService.listTaskEvidence(3100L)).thenReturn(List.of());
         when(knowledgeRepository.findByTaskIdOrderByIdAsc(3100L)).thenReturn(List.of());
         when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(3100L)).thenReturn(List.of(analyzerNode));
 
@@ -274,7 +325,7 @@ class ReportServiceTest {
                 .build();
 
         when(reportRepository.findByTaskId(3200L)).thenReturn(Optional.of(report));
-        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(3200L)).thenReturn(List.of());
+        when(evidenceQueryService.listTaskEvidence(3200L)).thenReturn(List.of());
         when(knowledgeRepository.findByTaskIdOrderByIdAsc(3200L)).thenReturn(List.of());
         when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(3200L)).thenReturn(List.of(analyzerNode));
 
@@ -319,7 +370,7 @@ class ReportServiceTest {
                 .build();
 
         when(reportRepository.findByTaskId(3300L)).thenReturn(Optional.of(report));
-        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(3300L)).thenReturn(List.of());
+        when(evidenceQueryService.listTaskEvidence(3300L)).thenReturn(List.of());
         when(knowledgeRepository.findByTaskIdOrderByIdAsc(3300L)).thenReturn(List.of());
         when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(3300L)).thenReturn(List.of(writerNode));
 
@@ -487,8 +538,7 @@ class ReportServiceTest {
                 .build();
 
         when(reportRepository.findByTaskId(400L)).thenReturn(Optional.of(report));
-        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(400L)).thenReturn(List.of(evidenceSource));
-        when(evidenceQueryService.toEvidenceInfo(evidenceSource)).thenReturn(evidenceInfo);
+        when(evidenceQueryService.listTaskEvidence(400L)).thenReturn(List.of(evidenceInfo));
         when(evidenceQueryService.toSectionEvidenceBundleInfo(anyList(), any()))
                 .thenAnswer(invocation -> projectionEvidenceQueryService.toSectionEvidenceBundleInfo(
                         invocation.getArgument(0),
@@ -615,8 +665,7 @@ class ReportServiceTest {
                 .build();
 
         when(reportRepository.findByTaskId(500L)).thenReturn(Optional.of(report));
-        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(500L)).thenReturn(List.of(evidenceSource));
-        when(evidenceQueryService.toEvidenceInfo(evidenceSource)).thenReturn(evidenceInfo);
+        when(evidenceQueryService.listTaskEvidence(500L)).thenReturn(List.of(evidenceInfo));
         when(evidenceQueryService.toSectionEvidenceBundleInfo(anyList(), any()))
                 .thenAnswer(invocation -> projectionEvidenceQueryService.toSectionEvidenceBundleInfo(
                         invocation.getArgument(0),
@@ -699,7 +748,7 @@ class ReportServiceTest {
                 .build();
 
         when(reportRepository.findByTaskId(600L)).thenReturn(Optional.of(report));
-        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(600L)).thenReturn(List.of());
+        when(evidenceQueryService.listTaskEvidence(600L)).thenReturn(List.of());
         when(knowledgeRepository.findByTaskIdOrderByIdAsc(600L)).thenReturn(List.of());
         when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(600L)).thenReturn(List.of(reviewNode));
 

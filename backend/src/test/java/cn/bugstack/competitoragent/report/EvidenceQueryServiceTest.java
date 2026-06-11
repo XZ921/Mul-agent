@@ -13,6 +13,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -232,6 +236,21 @@ class EvidenceQueryServiceTest {
         assertEquals("E001", info.getFields().get(0).getEvidence().getEvidenceId());
         assertEquals("MISSING_EVIDENCE", info.getFields().get(1).getCoverageStatus());
         assertTrue(info.getGapSummary().contains("recommendations"));
+    }
+
+    @Test
+    void shouldDeclareEvidenceProjectionBoundaryInClassComment() throws IOException {
+        // phase4b Task 2 需要把 EvidenceQueryService 的边界显式写死，
+        // 防止 report 线后续又把它当成 collection 运行时入口继续扩写。
+        String source = Files.readString(
+                Path.of("src/main/java/cn/bugstack/competitoragent/report/EvidenceQueryService.java"),
+                StandardCharsets.UTF_8
+        );
+
+        assertTrue(source.contains("稳定投影视图服务"));
+        assertTrue(source.contains("collection"));
+        assertTrue(source.contains("运行时入口"));
+        assertTrue(source.contains("EvidenceQueryService"));
     }
 
     @SuppressWarnings("unchecked")

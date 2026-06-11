@@ -4,7 +4,7 @@ import cn.bugstack.competitoragent.common.ApiResponse;
 import cn.bugstack.competitoragent.model.dto.ReportResponse;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.EvidenceInfo;
 import cn.bugstack.competitoragent.report.EvidenceQueryService;
-import cn.bugstack.competitoragent.report.ReportService;
+import cn.bugstack.competitoragent.report.application.ReportQueryFacade;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -28,7 +28,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ReportController {
 
-    private final ReportService reportService;
+    private final ReportQueryFacade reportQueryFacade;
     private final EvidenceQueryService evidenceQueryService;
 
     /**
@@ -40,7 +40,7 @@ public class ReportController {
     public ApiResponse<ReportResponse> getReport(
             @Parameter(description = "Task ID", example = "1")
             @PathVariable Long taskId) {
-        return ApiResponse.success(reportService.getReport(taskId));
+        return ApiResponse.success(reportQueryFacade.getReport(taskId));
     }
 
     @GetMapping("/{taskId}/evidences")
@@ -64,7 +64,7 @@ public class ReportController {
     public ResponseEntity<byte[]> exportMarkdown(
             @Parameter(description = "Task ID", example = "1")
             @PathVariable Long taskId) {
-        byte[] markdown = reportService.exportMarkdown(taskId);
+        byte[] markdown = reportQueryFacade.exportMarkdown(taskId);
         String filename = URLEncoder.encode("competitor-analysis-report.md", StandardCharsets.UTF_8);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
@@ -78,7 +78,7 @@ public class ReportController {
     public ResponseEntity<byte[]> exportHtml(
             @Parameter(description = "Task ID", example = "1")
             @PathVariable Long taskId) {
-        byte[] html = reportService.exportHtml(taskId);
+        byte[] html = reportQueryFacade.exportHtml(taskId);
         String filename = URLEncoder.encode("competitor-analysis-report.html", StandardCharsets.UTF_8);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,

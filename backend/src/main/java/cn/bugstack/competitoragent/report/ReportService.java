@@ -78,10 +78,7 @@ public class ReportService {
         Report report = reportRepository.findByTaskId(taskId)
                 .orElseThrow(() -> new BusinessException(ResultCode.REPORT_NOT_FOUND, "taskId=" + taskId));
 
-        List<EvidenceSource> evidences = evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(taskId);
-        List<ReportResponse.EvidenceInfo> evidenceInfos = evidences.stream()
-                .map(evidenceQueryService::toEvidenceInfo)
-                .toList();
+        List<ReportResponse.EvidenceInfo> evidenceInfos = evidenceQueryService.listTaskEvidence(taskId);
 
         List<CompetitorKnowledge> knowledges = knowledgeRepository.findByTaskIdOrderByIdAsc(taskId);
         List<CompetitorKnowledgeInfo> knowledgeInfos = knowledges.stream()

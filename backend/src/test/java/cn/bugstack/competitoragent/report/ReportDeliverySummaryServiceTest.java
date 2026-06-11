@@ -193,11 +193,10 @@ class ReportDeliverySummaryServiceTest {
                 .build();
 
         when(reportRepository.findByTaskId(700L)).thenReturn(Optional.of(report));
-        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(700L)).thenReturn(List.of(evidence));
+        when(evidenceQueryService.listTaskEvidence(700L)).thenReturn(List.of(evidenceInfo));
         when(knowledgeRepository.findByTaskIdOrderByIdAsc(700L)).thenReturn(List.of());
         when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(700L))
                 .thenReturn(List.of(collectorNode, analyzerNode, finalReviewNode));
-        when(evidenceQueryService.toEvidenceInfo(evidence)).thenReturn(evidenceInfo);
         when(reportDiagnosisAssembler.assemble(anyList(), anyList(), any(), any(), any(), anyList()))
                 .thenReturn(reportDiagnosis);
 

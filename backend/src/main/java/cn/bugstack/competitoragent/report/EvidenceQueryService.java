@@ -27,8 +27,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 证据来源查询服务。
- * V2 第二阶段把来源元数据结构化后，统一从这里承接报告页筛选与后续质量看板查询。
+ * EvidenceQueryService 是 report 线对外暴露的稳定投影视图服务。
+ * <p>
+ * V2 第二阶段把来源元数据结构化后，统一从这里承接报告页筛选、
+ * section bundle 投影与交付主路径证据入口组装。
+ * phase4b 要求显式锁定它的边界：这里负责稳定查询与投影视图，不是 collection 的运行时入口，
+ * 后续 report / conversation 只能消费这里的视图结果，不能再把 collection 内部执行语义反向耦合回来。
  */
 @Service
 @RequiredArgsConstructor

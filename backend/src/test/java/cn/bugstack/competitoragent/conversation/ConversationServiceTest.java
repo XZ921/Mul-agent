@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.conversation;
 
 import cn.bugstack.competitoragent.agent.conversation.ConversationAgent;
+import cn.bugstack.competitoragent.knowledge.application.KnowledgeRetrievalFacade;
 import cn.bugstack.competitoragent.model.dto.ConversationActionConfirmationRequest;
 import cn.bugstack.competitoragent.model.dto.ConversationMessageRequest;
 import cn.bugstack.competitoragent.model.dto.ConversationResponse;
@@ -10,11 +11,12 @@ import cn.bugstack.competitoragent.model.entity.ConversationSession;
 import cn.bugstack.competitoragent.model.entity.IntentDecision;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
-import cn.bugstack.competitoragent.rag.TaskRetrievalService;
+import cn.bugstack.competitoragent.report.application.ReportQueryFacade;
 import cn.bugstack.competitoragent.repository.ConversationSessionRepository;
 import cn.bugstack.competitoragent.repository.FormDraftRepository;
 import cn.bugstack.competitoragent.repository.IntentDecisionRepository;
-import cn.bugstack.competitoragent.task.AnalysisTaskService;
+import cn.bugstack.competitoragent.task.application.TaskQueryFacade;
+import cn.bugstack.competitoragent.task.application.TaskRuntimeFacade;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -76,10 +78,16 @@ class ConversationServiceTest {
     private ConversationAgent conversationAgent;
 
     @Mock
-    private AnalysisTaskService analysisTaskService;
+    private TaskQueryFacade taskQueryFacade;
 
     @Mock
-    private TaskRetrievalService taskRetrievalService;
+    private TaskRuntimeFacade taskRuntimeFacade;
+
+    @Mock
+    private KnowledgeRetrievalFacade knowledgeRetrievalFacade;
+
+    @Mock
+    private ReportQueryFacade reportQueryFacade;
 
     private ConversationService conversationService;
 
@@ -99,8 +107,10 @@ class ConversationServiceTest {
                 formDraftBuilder,
                 taskActionTranslator,
                 conversationAgent,
-                analysisTaskService,
-                taskRetrievalService,
+                taskQueryFacade,
+                taskRuntimeFacade,
+                knowledgeRetrievalFacade,
+                reportQueryFacade,
                 new ObjectMapper()
         );
     }
@@ -137,8 +147,8 @@ class ConversationServiceTest {
         when(formDraftRepository.findTopByConversationSessionIdOrderByUpdatedAtDesc(101L)).thenReturn(Optional.empty());
         when(intentRecognitionService.recognize(eq(request), any(ConversationSession.class), eq(false))).thenReturn(recognitionResult);
         when(modeRouter.route(recognitionResult, 88L)).thenReturn(ConversationMode.EXPLAIN);
-        when(analysisTaskService.getTask(88L)).thenReturn(taskResponse);
-        when(analysisTaskService.getTaskNodes(88L)).thenReturn(List.of());
+        when(taskQueryFacade.getTask(88L)).thenReturn(taskResponse);
+        when(taskQueryFacade.getTaskNodes(88L)).thenReturn(List.of());
         when(conversationAgent.composeExplainAnswer(request.getMessage(), taskResponse, null)).thenReturn("当前任务停在报告撰写。");
         when(intentDecisionRepository.save(any(IntentDecision.class))).thenAnswer(invocation -> {
             IntentDecision decision = invocation.getArgument(0);
@@ -162,6 +172,53 @@ class ConversationServiceTest {
         assertEquals(101L, savedSession.getId());
         assertEquals("EXPLAIN", savedSession.getCurrentMode());
         assertEquals("这个任务为什么停在这里了？", savedSession.getLatestUserMessage());
+    }
+
+    @Test
+    void should_read_task_views_through_task_query_facade() {
+        ConversationMessageRequest request = new ConversationMessageRequest();
+        request.setTaskId(88L);
+        request.setPageType("TASK_DETAIL");
+        request.setMessage("这个任务卡在哪里？");
+
+        IntentRecognitionService.RecognitionResult recognitionResult = IntentRecognitionService.RecognitionResult.builder()
+                .mode(ConversationMode.EXPLAIN)
+                .intentType("TASK_STATUS_EXPLANATION")
+                .decisionReason("命中了任务解释语义")
+                .highRiskAction(false)
+                .requiresConfirmation(false)
+                .build();
+        TaskResponse taskResponse = TaskResponse.builder()
+                .id(88L)
+                .taskName("统一对话任务")
+                .currentStage("报告撰写")
+                .statusSummary("当前等待系统解释任务卡点")
+                .build();
+
+        when(conversationSessionRepository.save(any(ConversationSession.class))).thenAnswer(invocation -> {
+            ConversationSession session = invocation.getArgument(0);
+            if (session.getId() == null) {
+                session.setId(1888L);
+            }
+            return session;
+        });
+        when(formDraftRepository.findTopByConversationSessionIdOrderByUpdatedAtDesc(1888L)).thenReturn(Optional.empty());
+        when(intentRecognitionService.recognize(eq(request), any(ConversationSession.class), eq(false))).thenReturn(recognitionResult);
+        when(modeRouter.route(recognitionResult, 88L)).thenReturn(ConversationMode.EXPLAIN);
+        when(taskQueryFacade.getTask(88L)).thenReturn(taskResponse);
+        when(taskQueryFacade.getTaskNodes(88L)).thenReturn(List.of());
+        when(conversationAgent.composeExplainAnswer(request.getMessage(), taskResponse, null)).thenReturn("当前任务停在报告撰写。");
+        when(intentDecisionRepository.save(any(IntentDecision.class))).thenAnswer(invocation -> {
+            IntentDecision decision = invocation.getArgument(0);
+            decision.setId(1889L);
+            return decision;
+        });
+
+        ConversationResponse response = conversationService.handleMessage(request);
+
+        assertNotNull(response);
+        verify(taskQueryFacade).getTask(88L);
+        verify(taskQueryFacade).getTaskNodes(88L);
     }
 
     @Test
@@ -195,8 +252,8 @@ class ConversationServiceTest {
         when(formDraftRepository.findTopByConversationSessionIdOrderByUpdatedAtDesc(55L)).thenReturn(Optional.empty());
         when(intentRecognitionService.recognize(eq(request), eq(existingSession), eq(false))).thenReturn(recognitionResult);
         when(modeRouter.route(recognitionResult, 88L)).thenReturn(ConversationMode.EXPLAIN);
-        when(analysisTaskService.getTask(88L)).thenReturn(taskResponse);
-        when(analysisTaskService.getTaskNodes(88L)).thenReturn(List.of());
+        when(taskQueryFacade.getTask(88L)).thenReturn(taskResponse);
+        when(taskQueryFacade.getTaskNodes(88L)).thenReturn(List.of());
         when(conversationAgent.composeExplainAnswer(request.getMessage(), taskResponse, null)).thenReturn("继续沿用任务详情上下文解释。");
         when(intentDecisionRepository.save(any(IntentDecision.class))).thenAnswer(invocation -> {
             IntentDecision decision = invocation.getArgument(0);
@@ -270,8 +327,8 @@ class ConversationServiceTest {
         when(formDraftRepository.findTopByConversationSessionIdOrderByUpdatedAtDesc(1880L)).thenReturn(Optional.empty());
         when(intentRecognitionService.recognize(eq(request), any(ConversationSession.class), eq(false))).thenReturn(recognitionResult);
         when(modeRouter.route(recognitionResult, 188L)).thenReturn(ConversationMode.EXPLAIN);
-        when(analysisTaskService.getTask(188L)).thenReturn(taskResponse);
-        when(analysisTaskService.getTaskNodes(188L)).thenReturn(List.of(nodeResponse));
+        when(taskQueryFacade.getTask(188L)).thenReturn(taskResponse);
+        when(taskQueryFacade.getTaskNodes(188L)).thenReturn(List.of(nodeResponse));
         when(conversationAgent.composeExplainAnswer(request.getMessage(), taskResponse, nodeResponse)).thenReturn("我会先解释当前任务的结论边界。");
         when(intentDecisionRepository.save(any(IntentDecision.class))).thenAnswer(invocation -> {
             IntentDecision decision = invocation.getArgument(0);
@@ -342,8 +399,8 @@ class ConversationServiceTest {
         when(formDraftRepository.findTopByConversationSessionIdOrderByUpdatedAtDesc(2050L)).thenReturn(Optional.empty());
         when(intentRecognitionService.recognize(eq(request), any(ConversationSession.class), eq(false))).thenReturn(recognitionResult);
         when(modeRouter.route(recognitionResult, 205L)).thenReturn(ConversationMode.TASK_ACTION);
-        when(analysisTaskService.getTask(205L)).thenReturn(taskResponse);
-        when(analysisTaskService.getTaskNodes(205L)).thenReturn(List.of());
+        when(taskQueryFacade.getTask(205L)).thenReturn(taskResponse);
+        when(taskQueryFacade.getTaskNodes(205L)).thenReturn(List.of());
         when(taskActionTranslator.buildTaskActionPreview(request.getMessage(), 205L, taskResponse, List.of())).thenReturn(preview);
         when(conversationAgent.composeActionPreviewAnswer(request.getMessage(), preview)).thenReturn("请先确认本次重跑影响范围。");
         when(intentDecisionRepository.save(any(IntentDecision.class))).thenAnswer(invocation -> {
@@ -438,8 +495,8 @@ class ConversationServiceTest {
         when(clarificationOrchestrator.resolve(any(), any(), any(), any(), any())).thenReturn(
                 ClarificationOrchestrator.ClarificationDecision.none());
         when(modeRouter.route(previewRecognitionResult, 305L)).thenReturn(ConversationMode.TASK_ACTION);
-        when(analysisTaskService.getTask(305L)).thenReturn(taskResponse);
-        when(analysisTaskService.getTaskNodes(305L)).thenReturn(List.of());
+        when(taskQueryFacade.getTask(305L)).thenReturn(taskResponse);
+        when(taskQueryFacade.getTaskNodes(305L)).thenReturn(List.of());
         when(taskActionTranslator.buildTaskActionPreview(previewRequest.getMessage(), 305L, taskResponse, List.of())).thenReturn(preview);
         when(taskActionTranslator.buildExecutionPlan(any(ConversationActionConfirmationRequest.class), eq(305L))).thenReturn(
                 TaskActionTranslator.TaskActionExecutionPlan.builder()
@@ -456,7 +513,7 @@ class ConversationServiceTest {
             }
             return decision;
         });
-        doNothing().when(analysisTaskService).rerunFromNode(305L, "rewrite_report");
+        doNothing().when(taskRuntimeFacade).rerunFromNode(305L, "rewrite_report");
 
         ConversationResponse previewResponse = conversationService.handleMessage(previewRequest);
 
@@ -498,7 +555,7 @@ class ConversationServiceTest {
         assertEquals("SUBMITTED", executionResult.get("executionStatus"));
         assertTrue(String.valueOf(executionResult.get("executionMessage")).contains("提交"));
 
-        verify(analysisTaskService).rerunFromNode(305L, "rewrite_report");
+        verify(taskRuntimeFacade).rerunFromNode(305L, "rewrite_report");
 
         /**
          * 第二次意图决策必须把执行结果一起写入审计 payload，
@@ -511,5 +568,82 @@ class ConversationServiceTest {
         assertEquals("CONFIRMED_RERUN_NODE", executionDecision.getIntentType());
         assertTrue(executionDecision.getDecisionPayload().contains("taskActionExecution"));
         assertTrue(executionDecision.getDecisionPayload().contains("SUBMITTED"));
+    }
+
+    @Test
+    void should_build_research_response_through_knowledge_facade() {
+        ConversationMessageRequest request = new ConversationMessageRequest();
+        request.setTaskId(288L);
+        request.setPageType("TASK_DETAIL");
+        request.setMessage("这个任务有哪些公开证据？");
+
+        IntentRecognitionService.RecognitionResult recognitionResult = IntentRecognitionService.RecognitionResult.builder()
+                .mode(ConversationMode.RESEARCH)
+                .intentType("TASK_RESEARCH")
+                .decisionReason("命中了 research 语义")
+                .highRiskAction(false)
+                .requiresConfirmation(false)
+                .build();
+
+        TaskResponse taskResponse = TaskResponse.builder()
+                .id(288L)
+                .taskName("统一对话任务")
+                .currentStage("信息采集")
+                .statusSummary("当前需要补充公开证据")
+                .build();
+
+        when(conversationSessionRepository.save(any(ConversationSession.class))).thenAnswer(invocation -> {
+            ConversationSession session = invocation.getArgument(0);
+            if (session.getId() == null) {
+                session.setId(2880L);
+            }
+            return session;
+        });
+        when(formDraftRepository.findTopByConversationSessionIdOrderByUpdatedAtDesc(2880L)).thenReturn(Optional.empty());
+        when(intentRecognitionService.recognize(eq(request), any(ConversationSession.class), eq(false))).thenReturn(recognitionResult);
+        when(modeRouter.route(recognitionResult, 288L)).thenReturn(ConversationMode.RESEARCH);
+        when(taskQueryFacade.getTask(288L)).thenReturn(taskResponse);
+        when(taskQueryFacade.getTaskNodes(288L)).thenReturn(List.of());
+        when(knowledgeRetrievalFacade.retrieveForTask(288L, "这个任务有哪些公开证据？", "conversation"))
+                .thenReturn(new KnowledgeRetrievalFacade.RetrievalResultView(
+                        List.of("https://docs.example.com"),
+                        "仍缺少定价证据",
+                        "已检索到公开文档",
+                        List.of("TASK-DOC-001")
+                ));
+        when(taskActionTranslator.buildResearchPreview(
+                request.getMessage(),
+                288L,
+                List.of(),
+                List.of("https://docs.example.com")
+        )).thenReturn(ConversationResponse.TaskActionPreview.builder()
+                .title("研究模式")
+                .sourceUrls(List.of("https://docs.example.com"))
+                .build());
+        when(conversationAgent.composeResearchAnswer(
+                request.getMessage(),
+                ConversationResponse.TaskActionPreview.builder()
+                        .title("研究模式")
+                        .sourceUrls(List.of("https://docs.example.com"))
+                        .build(),
+                List.of(ConversationResponse.RetrievalEvidence.builder()
+                        .evidenceId("TASK-DOC-001")
+                        .title("知识检索 / SOURCE_URL")
+                        .snippet("已检索到公开文档")
+                        .sourceCategory("KNOWLEDGE_FACADE")
+                        .sourceUrl("https://docs.example.com")
+                        .build()),
+                "仍缺少定价证据"
+        )).thenReturn("已检索到公开文档");
+        when(intentDecisionRepository.save(any(IntentDecision.class))).thenAnswer(invocation -> {
+            IntentDecision decision = invocation.getArgument(0);
+            decision.setId(2881L);
+            return decision;
+        });
+
+        ConversationResponse response = conversationService.handleMessage(request);
+
+        assertNotNull(response);
+        verify(knowledgeRetrievalFacade).retrieveForTask(288L, "这个任务有哪些公开证据？", "conversation");
     }
 }

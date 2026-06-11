@@ -4,6 +4,7 @@ import cn.bugstack.competitoragent.agent.conversation.ConversationAgent;
 import cn.bugstack.competitoragent.common.BusinessException;
 import cn.bugstack.competitoragent.common.ResultCode;
 import cn.bugstack.competitoragent.context.TaskRagContextSummaryFormatter;
+import cn.bugstack.competitoragent.knowledge.application.KnowledgeRetrievalFacade;
 import cn.bugstack.competitoragent.model.dto.ConversationActionConfirmationRequest;
 import cn.bugstack.competitoragent.model.dto.ConversationMessageRequest;
 import cn.bugstack.competitoragent.model.dto.ConversationResponse;
@@ -12,11 +13,12 @@ import cn.bugstack.competitoragent.model.dto.TaskResponse;
 import cn.bugstack.competitoragent.model.entity.ConversationSession;
 import cn.bugstack.competitoragent.model.entity.FormDraft;
 import cn.bugstack.competitoragent.model.entity.IntentDecision;
-import cn.bugstack.competitoragent.rag.TaskRetrievalService;
+import cn.bugstack.competitoragent.report.application.ReportQueryFacade;
 import cn.bugstack.competitoragent.repository.ConversationSessionRepository;
 import cn.bugstack.competitoragent.repository.FormDraftRepository;
 import cn.bugstack.competitoragent.repository.IntentDecisionRepository;
-import cn.bugstack.competitoragent.task.AnalysisTaskService;
+import cn.bugstack.competitoragent.task.application.TaskQueryFacade;
+import cn.bugstack.competitoragent.task.application.TaskRuntimeFacade;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -46,8 +48,10 @@ public class ConversationService {
     private final FormDraftBuilder formDraftBuilder;
     private final TaskActionTranslator taskActionTranslator;
     private final ConversationAgent conversationAgent;
-    private final AnalysisTaskService analysisTaskService;
-    private final TaskRetrievalService taskRetrievalService;
+    private final TaskQueryFacade taskQueryFacade;
+    private final TaskRuntimeFacade taskRuntimeFacade;
+    private final KnowledgeRetrievalFacade knowledgeRetrievalFacade;
+    private final ReportQueryFacade reportQueryFacade;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -60,8 +64,8 @@ public class ConversationService {
         List<TaskNodeResponse> nodeResponses = List.of();
         Long effectiveTaskId = resolveTaskId(request, session);
         if (effectiveTaskId != null) {
-            taskResponse = analysisTaskService.getTask(effectiveTaskId);
-            nodeResponses = analysisTaskService.getTaskNodes(effectiveTaskId);
+            taskResponse = taskQueryFacade.getTask(effectiveTaskId);
+            nodeResponses = taskQueryFacade.getTaskNodes(effectiveTaskId);
         }
         ConversationResponse.FormDraftSummary existingDraft = loadDraftSummary(session);
 
@@ -188,13 +192,13 @@ public class ConversationService {
                                                        Long taskId,
                                                        List<TaskNodeResponse> nodeResponses,
                                                        IntentRecognitionService.RecognitionResult recognitionResult) {
-        TaskRetrievalService.RetrievalResult retrievalResult = retrieveSafely(taskId, request.getMessage());
+        KnowledgeRetrievalFacade.RetrievalResultView retrievalResult = retrieveSafely(taskId, request.getMessage());
         List<ConversationResponse.RetrievalEvidence> evidences = toRetrievalEvidences(retrievalResult);
         ConversationResponse.TaskActionPreview preview = taskActionTranslator.buildResearchPreview(
                 request.getMessage(),
                 taskId,
                 nodeResponses,
-                retrievalResult.getSourceUrls()
+                retrievalResult.sourceUrls()
         );
         String taskRagContextSummary = resolveTaskRagContextSummary(selectFocusNode(nodeResponses), nodeResponses);
         return ConversationResponse.builder()
@@ -203,9 +207,9 @@ public class ConversationService {
                         request.getMessage(),
                         preview,
                         evidences,
-                        retrievalResult.getGapSummary()))
+                        retrievalResult.gapSummary()))
                 .taskRagContextSummary(taskRagContextSummary)
-                .sourceUrls(retrievalResult.getSourceUrls())
+                .sourceUrls(retrievalResult.sourceUrls())
                 .taskActionPreview(preview)
                 .retrievalEvidences(evidences)
                 .intentDecision(toIntentSummary(ConversationMode.RESEARCH, recognitionResult, preview))
@@ -299,13 +303,13 @@ public class ConversationService {
                     if (executionPlan.getTargetNodeName() == null || executionPlan.getTargetNodeName().isBlank()) {
                         return TaskActionExecutionOutcome.failed("FAILED", "当前确认对象缺少目标节点，无法提交执行。");
                     }
-                    analysisTaskService.rerunFromNode(executionPlan.getTaskId(), executionPlan.getTargetNodeName());
+                    taskRuntimeFacade.rerunFromNode(executionPlan.getTaskId(), executionPlan.getTargetNodeName());
                     return TaskActionExecutionOutcome.succeeded(firstNonBlank(
                             executionPlan.getExecutionMessage(),
                             "系统已提交节点级执行请求。"));
                 }
                 case "RESUME_TASK" -> {
-                    analysisTaskService.resumeTask(executionPlan.getTaskId());
+                    taskRuntimeFacade.resumeTask(executionPlan.getTaskId());
                     return TaskActionExecutionOutcome.succeeded(firstNonBlank(
                             executionPlan.getExecutionMessage(),
                             "系统已提交任务恢复执行请求。"));
@@ -331,37 +335,34 @@ public class ConversationService {
      * 研究模式是增强链路，不允许把检索失败误写成“已经给出可靠建议”。
      * 因此这里一旦异常，就降级成空证据 + 明确缺口说明。
      */
-    private TaskRetrievalService.RetrievalResult retrieveSafely(Long taskId, String message) {
+    private KnowledgeRetrievalFacade.RetrievalResultView retrieveSafely(Long taskId, String message) {
         try {
-            return taskRetrievalService.retrieve(taskId, message, "conversation_research");
+            return knowledgeRetrievalFacade.retrieveForTask(taskId, message, "conversation");
         } catch (Exception e) {
             log.warn("conversation research retrieval degraded, taskId={}", taskId, e);
-            return TaskRetrievalService.RetrievalResult.builder()
-                    .query(message)
-                    .gapSummary("当前检索链路暂时不可用，因此本次只返回安全补证提示。")
-                    .sourceUrls(List.of())
-                    .issueFlags(List.of("RESEARCH_DEGRADED"))
-                    .build();
+            return new KnowledgeRetrievalFacade.RetrievalResultView(
+                    List.of(),
+                    "当前检索链路暂时不可用，因此本次只返回安全补证提示。",
+                    "",
+                    List.of()
+            );
         }
     }
 
-    private List<ConversationResponse.RetrievalEvidence> toRetrievalEvidences(TaskRetrievalService.RetrievalResult result) {
-        if (result == null || result.getChunks() == null || result.getChunks().isEmpty()) {
+    private List<ConversationResponse.RetrievalEvidence> toRetrievalEvidences(KnowledgeRetrievalFacade.RetrievalResultView result) {
+        if (result == null || result.sourceUrls() == null || result.sourceUrls().isEmpty()) {
             return List.of();
         }
         List<ConversationResponse.RetrievalEvidence> evidences = new ArrayList<>();
-        for (TaskRetrievalService.RetrievedChunk chunk : result.getChunks()) {
-            if (chunk == null) {
+        for (String sourceUrl : result.sourceUrls()) {
+            if (sourceUrl == null || sourceUrl.isBlank()) {
                 continue;
             }
-            String sourceUrl = chunk.getSourceUrls() == null || chunk.getSourceUrls().isEmpty()
-                    ? null
-                    : chunk.getSourceUrls().get(0);
             evidences.add(ConversationResponse.RetrievalEvidence.builder()
-                    .evidenceId(chunk.getEvidenceId())
-                    .title((chunk.getCompetitorName() == null ? "证据片段" : chunk.getCompetitorName()) + " / " + firstNonBlank(chunk.getSourceCategory(), "UNKNOWN"))
-                    .snippet(firstNonBlank(chunk.getSnippet(), chunk.getContent()))
-                    .sourceCategory(chunk.getSourceCategory())
+                    .evidenceId(result.hitDocumentIds().isEmpty() ? null : result.hitDocumentIds().get(0))
+                    .title("知识检索 / SOURCE_URL")
+                    .snippet(firstNonBlank(result.answer(), result.gapSummary()))
+                    .sourceCategory("KNOWLEDGE_FACADE")
                     .sourceUrl(sourceUrl)
                     .build());
         }

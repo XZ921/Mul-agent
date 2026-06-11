@@ -6,7 +6,7 @@ import cn.bugstack.competitoragent.model.dto.ReportResponse.DiagnosisSection;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.EvidenceReference;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.ReportDiagnosisInfo;
 import cn.bugstack.competitoragent.report.EvidenceQueryService;
-import cn.bugstack.competitoragent.report.ReportService;
+import cn.bugstack.competitoragent.report.application.ReportQueryFacade;
 import cn.bugstack.competitoragent.workflow.contract.QualityDiagnosis;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,13 +23,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class ReportControllerTest {
 
-    private final ReportService reportService = mock(ReportService.class);
+    private final ReportQueryFacade reportQueryFacade = mock(ReportQueryFacade.class);
     private final EvidenceQueryService evidenceQueryService = mock(EvidenceQueryService.class);
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new ReportController(reportService, evidenceQueryService)).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(new ReportController(reportQueryFacade, evidenceQueryService)).build();
     }
 
     @Test
@@ -68,7 +68,7 @@ class ReportControllerTest {
                                 .build()))
                         .build())
                 .build();
-        when(reportService.getReport(99L)).thenReturn(response);
+        when(reportQueryFacade.getReport(99L)).thenReturn(response);
 
         mockMvc.perform(get("/api/report/99"))
                 .andExpect(status().isOk())

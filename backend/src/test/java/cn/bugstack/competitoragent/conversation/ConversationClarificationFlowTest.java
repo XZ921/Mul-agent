@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.conversation;
 
 import cn.bugstack.competitoragent.agent.conversation.ConversationAgent;
+import cn.bugstack.competitoragent.knowledge.application.KnowledgeRetrievalFacade;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.model.dto.ConversationMessageRequest;
 import cn.bugstack.competitoragent.model.dto.ConversationResponse;
@@ -10,11 +11,12 @@ import cn.bugstack.competitoragent.model.entity.ConversationSession;
 import cn.bugstack.competitoragent.model.entity.IntentDecision;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
-import cn.bugstack.competitoragent.rag.TaskRetrievalService;
+import cn.bugstack.competitoragent.report.application.ReportQueryFacade;
 import cn.bugstack.competitoragent.repository.ConversationSessionRepository;
 import cn.bugstack.competitoragent.repository.FormDraftRepository;
 import cn.bugstack.competitoragent.repository.IntentDecisionRepository;
-import cn.bugstack.competitoragent.task.AnalysisTaskService;
+import cn.bugstack.competitoragent.task.application.TaskQueryFacade;
+import cn.bugstack.competitoragent.task.application.TaskRuntimeFacade;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,10 +61,16 @@ class ConversationClarificationFlowTest {
     private PromptTemplateService promptTemplateService;
 
     @Mock
-    private AnalysisTaskService analysisTaskService;
+    private TaskQueryFacade taskQueryFacade;
 
     @Mock
-    private TaskRetrievalService taskRetrievalService;
+    private TaskRuntimeFacade taskRuntimeFacade;
+
+    @Mock
+    private KnowledgeRetrievalFacade knowledgeRetrievalFacade;
+
+    @Mock
+    private ReportQueryFacade reportQueryFacade;
 
     private ConversationService conversationService;
 
@@ -98,8 +106,10 @@ class ConversationClarificationFlowTest {
                 new FormDraftBuilder(),
                 new TaskActionTranslator(promptTemplateService),
                 new ConversationAgent(promptTemplateService),
-                analysisTaskService,
-                taskRetrievalService,
+                taskQueryFacade,
+                taskRuntimeFacade,
+                knowledgeRetrievalFacade,
+                reportQueryFacade,
                 new ObjectMapper()
         );
     }
@@ -134,8 +144,8 @@ class ConversationClarificationFlowTest {
                 .rerunActionSummary("适合在证据充分但报告表述需要调整时使用。")
                 .build();
 
-        when(analysisTaskService.getTask(305L)).thenReturn(taskResponse);
-        when(analysisTaskService.getTaskNodes(305L)).thenReturn(List.of(collectorNode, rewriteNode));
+        when(taskQueryFacade.getTask(305L)).thenReturn(taskResponse);
+        when(taskQueryFacade.getTaskNodes(305L)).thenReturn(List.of(collectorNode, rewriteNode));
 
         ConversationMessageRequest ambiguousRequest = new ConversationMessageRequest();
         ambiguousRequest.setTaskId(305L);
