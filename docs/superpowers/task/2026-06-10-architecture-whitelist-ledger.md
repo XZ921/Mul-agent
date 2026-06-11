@@ -27,3 +27,9 @@
 | agent_classes_should_not_access_task_repositories | cn.bugstack.competitoragent.agent.reviewer.QualityReviewAgent | report 质量复核 Agent 仍在 legacy 结构中直接读取持久化对象，需等待 report facade 与消费视图稳定后再评估回收。 | phase5-modularization-evaluation-task | B |
 | agent_classes_should_not_access_task_repositories | cn.bugstack.competitoragent.agent.writer.ReportWriterAgent | report 生成 Agent 当前仍直接读取证据与报告持久化对象，phase4b 之前不在本阶段提前修改其历史实现。 | phase5-modularization-evaluation-task | B |
 | workflow_should_not_depend_on_business_agent_implementations | cn.bugstack.competitoragent.workflow.WorkflowFactory | WorkflowFactory 仍承担把搜索规划翻译成 Collector 节点配置的历史职责，需等待 phase3b 的 collection facade 稳定后再回收。 | phase3b-collection-evidence-task | B |
+
+## Phase 5 Evaluation Notes
+
+- 截至 `2026-06-11`，当前白名单总数为 `7`，其中 `6` 条集中在 `agent_classes_should_not_access_task_repositories`。
+- `WorkflowFactory` 这条豁免的 `Remove By Phase` 仍停留在 `phase3b-collection-evidence-task`，说明 phase3b 完成后该热点并未自然消失，已转入 phase5 作为“不能直接物理拆分”的客观阻塞项。
+- phase5 结论不是立即拆 Maven 多模块，而是先继续清理 Agent 执行层 repository 直连和 `WorkflowFactory` / `workflow.contract` 共享热点，再进入下一次复评。
