@@ -4,6 +4,9 @@ import cn.bugstack.competitoragent.model.dto.CreateTaskRequest;
 import cn.bugstack.competitoragent.model.dto.TaskListPageResponse;
 import cn.bugstack.competitoragent.model.dto.TaskListSummaryResponse;
 import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
+import cn.bugstack.competitoragent.model.dto.TaskPlanPreviewNodeResponse;
+import cn.bugstack.competitoragent.model.dto.TaskPlanPreviewResponse;
+import cn.bugstack.competitoragent.model.dto.TaskPlanPreviewStageResponse;
 import cn.bugstack.competitoragent.model.dto.TaskResponse;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
@@ -42,20 +45,20 @@ class TaskControllerTest {
     void shouldReturnTaskDetailAndNodeInterventionCapabilities() throws Exception {
         when(taskService.getTask(88L)).thenReturn(TaskResponse.builder()
                 .id(88L)
-                .taskName("Phase 1 回归任务")
+                .taskName("Phase 1 鍥炲綊浠诲姟")
                 .status(AnalysisTaskStatus.STOPPED)
                 .canResume(true)
                 .canRetry(false)
                 .canViewReport(false)
                 .eventStreamPath("/api/task/88/events")
-                .interventionSummary("当前支持基于已有检查点恢复执行。")
-                .resumeAdvice("适合你主动停止任务后想沿用已有成果继续时使用。系统会保留已完成节点，只恢复中断链路。")
-                .replayEntrySummary("需要回看失败原因、检查点和原始输入输出时，请先进入节点追踪，再展开高级诊断。")
+                .interventionSummary("褰撳墠鏀寔鍩轰簬宸叉湁妫€鏌ョ偣鎭㈠鎵ц銆?")
+                .resumeAdvice("閫傚悎浣犱富鍔ㄥ仠姝换鍔″悗鎯虫部鐢ㄥ凡鏈夋垚鏋滅户缁椂浣跨敤銆傜郴缁熶細淇濈暀宸插畬鎴愯妭鐐癸紝鍙仮澶嶄腑鏂摼璺€?")
+                .replayEntrySummary("闇€瑕佸洖鐪嬪け璐ュ師鍥犮€佹鏌ョ偣鍜屽師濮嬭緭鍏ヨ緭鍑烘椂锛岃鍏堣繘鍏ヨ妭鐐硅拷韪紝鍐嶅睍寮€楂樼骇璇婃柇銆?")
                 .build());
         when(taskService.getTaskNodes(88L)).thenReturn(List.of(TaskNodeResponse.builder()
                 .id(1001L)
                 .nodeName("extract_schema")
-                .displayName("竞品结构化抽取")
+                .displayName("绔炲搧缁撴瀯鍖栨娊鍙?")
                 .agentType(AgentType.EXTRACTOR)
                 .status(TaskNodeStatus.PAUSED)
                 .controlState(TaskNodeControlState.NONE)
@@ -63,11 +66,11 @@ class TaskControllerTest {
                 .canSkip(true)
                 .affectedNodeCount(3)
                 .affectedNodeNames(List.of("extract_schema", "analyze_competitors", "write_report"))
-                .impactSummary("恢复后会继续当前节点及其后续待执行链路，不会清空无关已完成节点。")
-                .checkpointSummary("该节点不提供独立检查点，主要复用的是未受影响上游结果。")
-                .replayEntrySummary("如需确认暂停前发生了什么，请先打开节点追踪，再进入高级诊断查看回放。")
+                .impactSummary("鎭㈠鍚庝細缁х画褰撳墠鑺傜偣鍙婂叾鍚庣画寰呮墽琛岄摼璺紝涓嶄細娓呯┖鏃犲叧宸插畬鎴愯妭鐐广€?")
+                .checkpointSummary("璇ヨ妭鐐逛笉鎻愪緵鐙珛妫€鏌ョ偣锛屼富瑕佸鐢ㄧ殑鏄湭鍙楀奖鍝嶄笂娓哥粨鏋溿€?")
+                .replayEntrySummary("濡傞渶纭鏆傚仠鍓嶅彂鐢熶簡浠€涔堬紝璇峰厛鎵撳紑鑺傜偣杩借釜锛屽啀杩涘叆楂樼骇璇婃柇鏌ョ湅鍥炴斁銆?")
                 .eventKey("extract_schema")
-                .interventionSummary("节点已暂停，可恢复后继续执行。")
+                .interventionSummary("鑺傜偣宸叉殏鍋滐紝鍙仮澶嶅悗缁х画鎵ц銆?")
                 .build()));
 
         mockMvc.perform(get("/api/task/88"))
@@ -76,9 +79,9 @@ class TaskControllerTest {
                 .andExpect(jsonPath("$.data.status").value("STOPPED"))
                 .andExpect(jsonPath("$.data.canResume").value(true))
                 .andExpect(jsonPath("$.data.eventStreamPath").value("/api/task/88/events"))
-                .andExpect(jsonPath("$.data.interventionSummary").value("当前支持基于已有检查点恢复执行。"))
-                .andExpect(jsonPath("$.data.resumeAdvice").value("适合你主动停止任务后想沿用已有成果继续时使用。系统会保留已完成节点，只恢复中断链路。"))
-                .andExpect(jsonPath("$.data.replayEntrySummary").value("需要回看失败原因、检查点和原始输入输出时，请先进入节点追踪，再展开高级诊断。"));
+                .andExpect(jsonPath("$.data.interventionSummary").value("褰撳墠鏀寔鍩轰簬宸叉湁妫€鏌ョ偣鎭㈠鎵ц銆?"))
+                .andExpect(jsonPath("$.data.resumeAdvice").value("閫傚悎浣犱富鍔ㄥ仠姝换鍔″悗鎯虫部鐢ㄥ凡鏈夋垚鏋滅户缁椂浣跨敤銆傜郴缁熶細淇濈暀宸插畬鎴愯妭鐐癸紝鍙仮澶嶄腑鏂摼璺€?"))
+                .andExpect(jsonPath("$.data.replayEntrySummary").value("闇€瑕佸洖鐪嬪け璐ュ師鍥犮€佹鏌ョ偣鍜屽師濮嬭緭鍏ヨ緭鍑烘椂锛岃鍏堣繘鍏ヨ妭鐐硅拷韪紝鍐嶅睍寮€楂樼骇璇婃柇銆?"));
 
         mockMvc.perform(get("/api/task/88/nodes"))
                 .andExpect(status().isOk())
@@ -87,35 +90,50 @@ class TaskControllerTest {
                 .andExpect(jsonPath("$.data[0].canResumeNode").value(true))
                 .andExpect(jsonPath("$.data[0].eventKey").value("extract_schema"))
                 .andExpect(jsonPath("$.data[0].affectedNodeCount").value(3))
-                .andExpect(jsonPath("$.data[0].impactSummary").value("恢复后会继续当前节点及其后续待执行链路，不会清空无关已完成节点。"))
-                .andExpect(jsonPath("$.data[0].checkpointSummary").value("该节点不提供独立检查点，主要复用的是未受影响上游结果。"))
-                .andExpect(jsonPath("$.data[0].replayEntrySummary").value("如需确认暂停前发生了什么，请先打开节点追踪，再进入高级诊断查看回放。"));
+                .andExpect(jsonPath("$.data[0].impactSummary").value("鎭㈠鍚庝細缁х画褰撳墠鑺傜偣鍙婂叾鍚庣画寰呮墽琛岄摼璺紝涓嶄細娓呯┖鏃犲叧宸插畬鎴愯妭鐐广€?"))
+                .andExpect(jsonPath("$.data[0].checkpointSummary").value("璇ヨ妭鐐逛笉鎻愪緵鐙珛妫€鏌ョ偣锛屼富瑕佸鐢ㄧ殑鏄湭鍙楀奖鍝嶄笂娓哥粨鏋溿€?"))
+                .andExpect(jsonPath("$.data[0].replayEntrySummary").value("濡傞渶纭鏆傚仠鍓嶅彂鐢熶簡浠€涔堬紝璇峰厛鎵撳紑鑺傜偣杩借釜锛屽啀杩涘叆楂樼骇璇婃柇鏌ョ湅鍥炴斁銆?"));
     }
 
     @Test
-    void shouldCreateTaskAndExposeWorkflowPreviewContract() throws Exception {
+    void shouldCreateTaskAndExposeFormalPreviewContract() throws Exception {
         when(taskService.createTask(any(CreateTaskRequest.class))).thenReturn(TaskResponse.builder()
                 .id(9L)
-                .taskName("AI 知识库竞品分析")
+                .taskName("AI 鐭ヨ瘑搴撶珵鍝佸垎鏋?")
                 .status(AnalysisTaskStatus.PENDING)
                 .build());
-        when(taskService.previewWorkflow(any(CreateTaskRequest.class))).thenReturn(List.of(TaskNodeResponse.builder()
-                .nodeName("collect_sources_01_01")
-                .displayName("Notion AI - DOCS采集")
-                .agentType(AgentType.COLLECTOR)
-                .status(TaskNodeStatus.PENDING)
-                .configSummary("Notion AI · 文档采集 · 搜索模式：混合 · 候选 1 条")
-                .interventionSummary("预览阶段仅展示规划结果，任务创建后才可执行节点级暂停、跳过、终止或重跑。")
-                .build()));
+        when(taskService.previewWorkflow(any(CreateTaskRequest.class))).thenReturn(TaskPlanPreviewResponse.builder()
+                .contractType("TASK_PLAN_PREVIEW_V1")
+                .goal("围绕企业级 RAG 平台展开竞品研究")
+                .competitorCount(1)
+                .collectorCount(1)
+                .pipelineCount(4)
+                .stages(List.of(TaskPlanPreviewStageResponse.builder()
+                        .stageCode("SOURCE_STRATEGY")
+                        .title("规划来源策略")
+                        .summary("优先覆盖官网、产品文档")
+                        .sourceUrls(List.of())
+                        .build()))
+                .nodes(List.of(TaskPlanPreviewNodeResponse.builder()
+                        .nodeName("collect_sources_01_01")
+                        .displayName("Notion AI - DOCS采集")
+                        .stageCode("SOURCE_STRATEGY")
+                        .goal("优先覆盖官网与产品文档")
+                        .summary("必要时再补充公网搜索")
+                        .fallbackOrder(List.of("PLANNED", "BROWSER", "HEURISTIC", "HTTP"))
+                        .sourceUrls(List.of())
+                        .build()))
+                .sourceUrls(List.of())
+                .build());
 
         String payload = """
                 {
-                  "taskName": "AI 知识库竞品分析",
-                  "subjectProduct": "企业级知识库",
+                  "taskName": "AI 鐭ヨ瘑搴撶珵鍝佸垎鏋?",
+                  "subjectProduct": "浼佷笟绾х煡璇嗗簱",
                   "competitorNames": ["Notion AI"],
                   "competitorUrls": ["https://www.notion.so/product/ai"],
-                  "analysisDimensions": ["产品功能", "价格策略"],
-                  "sourceScope": ["官网", "产品文档"]
+                  "analysisDimensions": ["浜у搧鍔熻兘", "浠锋牸绛栫暐"],
+                  "sourceScope": ["瀹樼綉", "浜у搧鏂囨。"]
                 }
                 """;
 
@@ -130,8 +148,10 @@ class TaskControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].nodeName").value("collect_sources_01_01"))
-                .andExpect(jsonPath("$.data[0].configSummary").value("Notion AI · 文档采集 · 搜索模式：混合 · 候选 1 条"));
+                .andExpect(jsonPath("$.data.contractType").value("TASK_PLAN_PREVIEW_V1"))
+                .andExpect(jsonPath("$.data.goal").value("围绕企业级 RAG 平台展开竞品研究"))
+                .andExpect(jsonPath("$.data.nodes[0].stageCode").value("SOURCE_STRATEGY"))
+                .andExpect(jsonPath("$.data.nodes[0].fallbackOrder[0]").value("PLANNED"));
     }
 
     @Test

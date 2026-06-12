@@ -3,7 +3,7 @@ package cn.bugstack.competitoragent.task.command;
 import cn.bugstack.competitoragent.governance.OrganizationQuotaPolicy;
 import cn.bugstack.competitoragent.governance.QuotaDecision;
 import cn.bugstack.competitoragent.model.dto.CreateTaskRequest;
-import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
+import cn.bugstack.competitoragent.model.dto.TaskPlanPreviewResponse;
 import cn.bugstack.competitoragent.model.dto.TaskResponse;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
@@ -187,25 +187,31 @@ class TaskDefinitionAppServiceTest {
     }
 
     @Test
-    void shouldUsePreviewPlanInsteadOfLiveWorkflowBuildWhenPreviewingTask() {
+    void shouldReturnFormalPreviewContractInsteadOfRuntimeNodeList() {
         WorkflowPlan previewPlan = WorkflowPlan.builder()
+                .contractType("TASK_PLAN_PREVIEW_V1")
+                .goal("围绕企业级 RAG 平台展开竞品研究")
                 .nodes(List.of(WorkflowPlan.WorkflowPlanNode.builder()
                         .nodeName("collect_sources_01_01")
                         .displayName("Notion AI - DOCS采集")
                         .agentType(AgentType.COLLECTOR.name())
                         .dependsOn(List.of())
+                        .stageCode("SOURCE_STRATEGY")
+                        .goal("优先覆盖官网与产品文档")
+                        .fallbackOrder(List.of("PLANNED", "BROWSER", "HEURISTIC", "HTTP"))
                         .nodeConfig("{\"competitorName\":\"Notion AI\",\"sourceType\":\"DOCS\"}")
                         .executionOrder(0)
                         .build()))
                 .build();
         when(workflowFactory.buildPreviewPlan(any(AnalysisTask.class))).thenReturn(previewPlan);
 
-        List<TaskNodeResponse> responses = taskDefinitionAppService.previewWorkflow(buildRequest());
+        TaskPlanPreviewResponse response = taskDefinitionAppService.previewWorkflow(buildRequest());
 
-        assertEquals(1, responses.size());
-        assertEquals("collect_sources_01_01", responses.get(0).getNodeName());
-        assertEquals(TaskNodeStatus.PENDING, responses.get(0).getStatus());
-        assertFalse(Boolean.TRUE.equals(responses.get(0).getCanPause()));
+        assertEquals("TASK_PLAN_PREVIEW_V1", response.getContractType());
+        assertEquals("围绕企业级 RAG 平台展开竞品研究", response.getGoal());
+        assertEquals("SOURCE_STRATEGY", response.getNodes().get(0).getStageCode());
+        assertEquals(List.of("PLANNED", "BROWSER", "HEURISTIC", "HTTP"),
+                response.getNodes().get(0).getFallbackOrder());
         verify(workflowFactory, times(1)).buildPreviewPlan(any(AnalysisTask.class));
         verify(workflowFactory, never()).buildPlan(any(AnalysisTask.class));
     }

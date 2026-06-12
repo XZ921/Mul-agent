@@ -15,6 +15,7 @@ import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.repository.AiCallAuditRecordRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
+import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
 import cn.bugstack.competitoragent.search.SearchExecutionPlan;
 import cn.bugstack.competitoragent.search.SearchExecutionTrace;
 import cn.bugstack.competitoragent.search.SearchProgressSnapshot;
@@ -129,6 +130,7 @@ public class TaskNodeViewAssembler {
         CollectorNodeInsightResponse collectorInsight = buildCollectorNodeInsight(node);
 
         return TaskNodeResponse.builder()
+                .contractType("TASK_NODE_RUNTIME_V1")
                 .id(node.getId())
                 .nodeName(node.getNodeName())
                 .displayName(node.getDisplayName())
@@ -684,6 +686,12 @@ public class TaskNodeViewAssembler {
                 output == null ? null : output.get("selectedTargets"),
                 new TypeReference<List<CollectorSelectedTargetSummary>>() {
                 });
+        SearchAuditSnapshot searchAudit = convertValue(output == null ? null : output.get("searchAudit"), SearchAuditSnapshot.class);
+        if (searchAudit != null && (searchAudit.getSourceUrls() == null || searchAudit.getSourceUrls().isEmpty())) {
+            // 历史 output 里可能只有顶层 sourceUrls，没有回填进正式 searchAudit。
+            // 这里在详情组装阶段兜底一次，保证前端拿到的正式契约可直接消费。
+            searchAudit.setSourceUrls(readStringList(output == null ? null : output.get("sourceUrls")));
+        }
 
         return CollectorNodeInsightResponse.builder()
                 .competitorName(competitorName)
@@ -713,6 +721,7 @@ public class TaskNodeViewAssembler {
                 .searchExecutionTrace(convertValue(
                         output == null ? null : output.get("searchExecutionTrace"),
                         SearchExecutionTrace.class))
+                .searchAudit(searchAudit)
                 .searchProgressSnapshots(convertList(
                         output == null ? null : output.get("searchProgressSnapshots"),
                         new TypeReference<List<SearchProgressSnapshot>>() {

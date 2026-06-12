@@ -98,6 +98,7 @@ type NodeTraceDrawerProps = {
   sourceCandidateStageSummary: Array<{ stage: string; count: number }>
   sourceCandidateGroups: Array<{ stage: string; candidates: SourceCandidateInfo[] }>
   selectedTargets: SelectedTargetInfo[]
+  selectedSearchSourceUrls: string[]
   selectedReviewPayload: ReviewPayload | null
   selectedNodeDependencies: TaskNodeInfo[]
   selectedNodeEvidenceIds: string[]
@@ -129,6 +130,7 @@ export default function NodeTraceDrawer({
   sourceCandidateStageSummary,
   sourceCandidateGroups,
   selectedTargets,
+  selectedSearchSourceUrls,
   selectedReviewPayload,
   selectedNodeDependencies,
   selectedNodeEvidenceIds,
@@ -358,6 +360,11 @@ export default function NodeTraceDrawer({
                     <Descriptions.Item label="阻断信号">{displayValue(selectedSearchExecutionTrace.browserBlockedReason)}</Descriptions.Item>
                     <Descriptions.Item label="阻断次数">{displayValue(selectedSearchExecutionTrace.browserBlockedCount)}</Descriptions.Item>
                     <Descriptions.Item label="恢复检查点">{displayValue(selectedSearchExecutionTrace.recoveryCheckpoint)}</Descriptions.Item>
+                    {selectedSearchSourceUrls.length > 0 && (
+                      <Descriptions.Item label="审计来源">
+                        {selectedSearchSourceUrls.join('\n')}
+                      </Descriptions.Item>
+                    )}
                     <Descriptions.Item label="检查点恢复">
                       <Space wrap>
                         {selectedSearchExecutionTrace.resumedFromCheckpoint ? (

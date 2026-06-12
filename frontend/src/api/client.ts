@@ -17,6 +17,7 @@ import type {
   TaskInfo,
   TaskListPageData,
   TaskNodeInfo,
+  TaskPlanPreviewContract,
 } from '../types'
 
 const api = axios.create({
@@ -39,7 +40,7 @@ export async function createTask(data: CreateTaskRequest) {
 }
 
 export async function previewWorkflow(data: CreateTaskRequest) {
-  return api.post('/task/preview', data) as Promise<ApiResponse<TaskNodeInfo[]>>
+  return api.post('/task/preview', data) as Promise<ApiResponse<TaskPlanPreviewContract>>
 }
 
 export async function listTasks(status?: string, pageNum = 1, pageSize = 10) {

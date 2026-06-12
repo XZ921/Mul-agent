@@ -9,6 +9,7 @@ import cn.bugstack.competitoragent.model.dto.CreateTaskRequest;
 import cn.bugstack.competitoragent.model.dto.TaskListPageResponse;
 import cn.bugstack.competitoragent.model.dto.TaskResponse;
 import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
+import cn.bugstack.competitoragent.model.dto.TaskPlanPreviewResponse;
 import cn.bugstack.competitoragent.model.dto.UpdateNodeConfigRequest;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.AiCallAuditRecord;
@@ -288,6 +289,7 @@ class AnalysisTaskServiceTest {
         assertEquals(21L, nodeResponses.get(0).getPlanVersionId());
         assertEquals(3, nodeResponses.get(0).getPlanVersion());
         assertEquals("root/review-2/review-3", nodeResponses.get(0).getBranchKey());
+        assertEquals("TASK_NODE_RUNTIME_V1", nodeResponses.get(0).getContractType());
     }
 
     @Test
@@ -312,9 +314,9 @@ class AnalysisTaskServiceTest {
         request.setAnalysisDimensions(List.of("产品功能"));
         request.setSourceScope(List.of("官网", "产品文档"));
 
-        List<TaskNodeResponse> responses = taskService.previewWorkflow(request);
+        TaskPlanPreviewResponse response = taskService.previewWorkflow(request);
 
-        assertEquals(1, responses.size());
+        assertEquals(1, response.getNodes().size());
         verify(workflowFactory, times(1)).buildPreviewPlan(any(AnalysisTask.class));
         verify(workflowFactory, never()).buildPlan(any(AnalysisTask.class));
     }

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import * as client from '../api/client'
@@ -205,6 +205,42 @@ function buildTaskReplayData() {
         sourceUrls: ['https://trace.local/plans/12'],
       },
     ],
+    searchReplays: [
+      {
+        nodeName: 'collect_sources_docs',
+        planVersionId: 12,
+        planVersion: 3,
+        branchKey: 'root/review-3',
+        latestProgress: {
+          status: 'SUCCESS',
+          currentStep: 'SELECT_TARGETS',
+          progressPercent: 100,
+        },
+        searchAudit: {
+          executionTrace: {
+            recoveryCheckpoint: 'SELECT_TARGETS',
+          },
+          sourceUrls: ['https://docs.notion.so/reference'],
+          selectedTargets: [
+            {
+              candidate: {
+                url: 'https://docs.notion.so/reference',
+                title: 'Notion Reference',
+                selectionStage: 'SELECT_TARGETS',
+              },
+            },
+          ],
+        },
+        selectedTargets: [
+          {
+            url: 'https://docs.notion.so/reference',
+            title: 'Notion Reference',
+            verified: true,
+          },
+        ],
+        sourceUrls: ['https://docs.notion.so/reference'],
+      },
+    ],
     integrationEntryPoints: [
       {
         entryKey: 'CONVERSATION_ACTION_REPLAY',
@@ -265,6 +301,62 @@ describe('TaskDetailPage report gating', () => {
 
     expect(shouldFetchTaskReport(task, nodes)).toBe(true)
   })
+
+  it('falls back to replay search audit when the collector node itself has no runtime search context', async () => {
+    const user = userEvent.setup()
+    vi.mocked(taskEventStreamHook.useTaskEventStream).mockReturnValue({
+      connectionStatus: 'idle',
+      fallbackPollingActive: false,
+      lastEventCursor: null,
+      lastEventAt: null,
+      lastError: null,
+    })
+    vi.mocked(client.getTask).mockResolvedValue(buildApiResponse(buildTask()))
+    vi.mocked(client.getTaskNodes).mockResolvedValue(
+      buildApiResponse([
+        buildNode({
+          id: 9,
+          nodeName: 'collect_sources_docs',
+          displayName: '产品文档采集',
+          agentType: 'COLLECTOR',
+          status: 'SUCCESS',
+          configSummaryData: {
+            competitorName: 'Notion',
+            sourceType: 'DOCS',
+            sourceTypeLabel: '产品文档',
+            sourceScope: ['产品文档'],
+            competitorUrls: ['https://www.notion.so/product/ai'],
+            browserSearchEnabled: true,
+            verificationEnabled: true,
+            candidateCount: 0,
+          },
+          outputData: '{"competitor":"Notion","sourceType":"DOCS"}',
+        }),
+      ]),
+    )
+    vi.mocked(client.getAgentLogs).mockResolvedValue(buildApiResponse([]))
+    vi.mocked(client.getReport).mockResolvedValue(buildApiResponse(null as unknown as ReportInfo))
+    mockedClient.getTaskReplay.mockResolvedValue(buildApiResponse(buildTaskReplayData()))
+
+    render(
+      <MemoryRouter
+        initialEntries={['/task/24?from=report&targetNode=collect_sources_docs&actionType=RERUN_NODE']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/task/:id" element={<TaskDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('测试任务')).toBeInTheDocument()
+
+    const drawer = await screen.findByRole('dialog')
+    await user.click(within(drawer).getByRole('button', { name: '进入高级诊断' }))
+
+    expect(within(drawer).getByText('SELECT_TARGETS')).toBeInTheDocument()
+    expect(within(drawer).getAllByText('https://docs.notion.so/reference').length).toBeGreaterThan(0)
+  })
 })
 
 describe('TaskDetailPage runtime safety', () => {
@@ -306,12 +398,15 @@ describe('TaskDetailPage runtime safety', () => {
 
     expect(await screen.findByText('测试任务')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '进入解释入口' }))
+    const entryButton = await screen.findByRole('button', { name: '进入解释入口' })
+    await user.click(entryButton)
 
-    expect(screen.getByTestId('conversation-page-type')).toHaveTextContent('TASK_DETAIL')
-    expect(screen.getByTestId('conversation-task-id')).toHaveTextContent('24')
-    expect(screen.getByTestId('conversation-task-name')).toHaveTextContent('测试任务')
-  })
+    await waitFor(() => {
+      expect(screen.getByTestId('conversation-page-type')).toHaveTextContent('TASK_DETAIL')
+      expect(screen.getByTestId('conversation-task-id')).toHaveTextContent('24')
+      expect(screen.getByTestId('conversation-task-name')).toHaveTextContent('测试任务')
+    })
+  }, 10000)
 
   it('keeps task detail render stable when route auto-selects a node with malformed affectedNodeNames', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined)

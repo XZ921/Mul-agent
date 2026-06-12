@@ -1,0 +1,117 @@
+﻿<h2>AI 竞品分析 Agent 协作系统：三层不对称业务母图</h2>
+<p class="subtitle">目标：让业务链路成为主角，执行引擎承接业务语义，平台底座退回支撑位</p>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">第一层：主业务链路（主战场）</div>
+    <div class="mockup-body">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px;">
+        <div class="option" data-choice="biz-01" onclick="toggleSelect(this)">
+          <div class="content"><div class="label">01</div><h3>任务定义与编排</h3><p>任务目标、研究对象、资料策略、输出要求、计划生成、阶段规划、回退策略</p></div>
+        </div>
+        <div class="option" data-choice="biz-02" onclick="toggleSelect(this)">
+          <div class="content"><div class="label">02</div><h3>搜索与采集</h3><p>搜索补源、候选验证、动态抓取、反爬、正式采集、来源去噪</p></div>
+        </div>
+        <div class="option" data-choice="biz-03" onclick="toggleSelect(this)">
+          <div class="content"><div class="label">03</div><h3>提取结构化</h3><p>Schema 抽取、字段对齐、sourceUrls 回指、证据覆盖计算</p></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px;">
+        <div class="option" data-choice="biz-04" onclick="toggleSelect(this)">
+          <div class="content"><div class="label">04</div><h3>分析推理</h3><p>竞品对比、优劣判断、风险洞察、结论与证据绑定</p></div>
+        </div>
+        <div class="option" data-choice="biz-05" onclick="toggleSelect(this)">
+          <div class="content"><div class="label">05</div><h3>报告写作</h3><p>章节组织、正式成稿、结论表达、引用落稿、结构一致性</p></div>
+        </div>
+        <div class="option" data-choice="biz-06" onclick="toggleSelect(this)">
+          <div class="content"><div class="label">06</div><h3>质量审查</h3><p>质量 checkpoint、问题分级、缺证据识别、动作建议</p></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+        <div class="option" data-choice="biz-07" onclick="toggleSelect(this)">
+          <div class="content"><div class="label">07</div><h3>修订与重写</h3><p>补证、重写、局部重跑、回流修复、人工接管后的链路收口</p></div>
+        </div>
+        <div class="option" data-choice="biz-08" onclick="toggleSelect(this)">
+          <div class="content"><div class="label">08</div><h3>对话协同</h3><p>统一入口、解释、填表、动作预览、任务控制、上下文问答</p></div>
+        </div>
+        <div class="option" data-choice="biz-09" onclick="toggleSelect(this)">
+          <div class="content"><div class="label">09</div><h3>交付与审计</h3><p>报告交付、导出、结论追溯、全过程审计、复盘与回放入口</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">第二层：业务执行引擎（承接业务语义，不再伪装成纯平台）</div>
+    <div class="mockup-body">
+      <div class="split">
+        <div class="mockup">
+          <div class="mockup-header">任务执行引擎</div>
+          <div class="mockup-body">
+            <p>承接 DAG、动态补图、节点状态推进、恢复、重跑、人工接管，但必须理解业务阶段而不是只理解技术节点。</p>
+          </div>
+        </div>
+        <div class="mockup">
+          <div class="mockup-header">搜索执行引擎</div>
+          <div class="mockup-body">
+            <p>承接 SearchExecutionPlan、补源顺序、候选裁剪、验证门槛、正式选源，这些都属于搜索业务规则，不是底座杂项。</p>
+          </div>
+        </div>
+      </div>
+      <div class="split" style="margin-top:14px;">
+        <div class="mockup">
+          <div class="mockup-header">质量回流引擎</div>
+          <div class="mockup-body">
+            <p>承接补证 / 重写 / 复核的回流决策，决定问题如何变成下一步动作。</p>
+          </div>
+        </div>
+        <div class="mockup">
+          <div class="mockup-header">对话动作引擎</div>
+          <div class="mockup-body">
+            <p>承接意图到动作的翻译、安全确认、任务控制动作提交，不只是聊天 UI。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">第三层：平台底座（退回支撑位）</div>
+    <div class="mockup-body">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+        <div class="card" data-choice="plat-knowledge" onclick="toggleSelect(this)"><div class="card-body"><div class="label">A</div><h3>知识摄取 / RAG / 记忆</h3><p>给业务链路提供资料底座、召回与复用能力</p></div></div>
+        <div class="card" data-choice="plat-ai" onclick="toggleSelect(this)"><div class="card-body"><div class="label">B</div><h3>AI 与工具治理</h3><p>提供模型路由、工具权限、容错、调用审计</p></div></div>
+        <div class="card" data-choice="plat-observe" onclick="toggleSelect(this)"><div class="card-body"><div class="label">C</div><h3>可观测</h3><p>SSE、日志、任务事件、搜索现场观察</p></div></div>
+        <div class="card" data-choice="plat-replay" onclick="toggleSelect(this)"><div class="card-body"><div class="label">D</div><h3>恢复与回放</h3><p>断线恢复、节点恢复、历史回放、跨重启现场保存</p></div></div>
+        <div class="card" data-choice="plat-governance" onclick="toggleSelect(this)"><div class="card-body"><div class="label">E</div><h3>质量 / 配额 / 安全治理</h3><p>证据规则、预算上限、来源可信度、URL 安全控制</p></div></div>
+        <div class="card" data-choice="plat-ingestion" onclick="toggleSelect(this)"><div class="card-body"><div class="label">F</div><h3>多渠道资料接入</h3><p>上传资料、API 源、认证源、未来连接器统一入口</p></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>这次修正后的三个核心判断</h3>
+  <div class="options" data-multiselect>
+    <div class="option" data-choice="judgement-1" onclick="toggleSelect(this)">
+      <div class="letter">1</div>
+      <div class="content"><h3>业务链路 > 执行引擎 > 平台底座</h3><p>复杂度和优化深度不对称，母图必须反映这一点。</p></div>
+    </div>
+    <div class="option" data-choice="judgement-2" onclick="toggleSelect(this)">
+      <div class="letter">2</div>
+      <div class="content"><h3>Workflow / Search Plan 不再被误判为纯平台</h3><p>只要它承载候选裁剪、回退顺序、阶段规划，就已经是业务引擎的一部分。</p></div>
+    </div>
+    <div class="option" data-choice="judgement-3" onclick="toggleSelect(this)">
+      <div class="letter">3</div>
+      <div class="content"><h3>每条主链路后续都值得拥有自己的专题文档</h3><p>CollectorAgent.md 只是第一个样板，Extractor / Writer / Reviewer / Conversation 也应该各自展开。</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <p class="subtitle">请重点判断：这次三层结构是否已经更接近你心里的“总控母图”？如果接近，我下一步就按这张图正式写出你要的《业务与功能全景图》与《分模块优化路线图》。</p>
+</div>

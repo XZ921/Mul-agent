@@ -1,9 +1,11 @@
 package cn.bugstack.competitoragent.task;
 
 import cn.bugstack.competitoragent.model.dto.RecoveryCheckpointResponse;
+import cn.bugstack.competitoragent.model.dto.CollectorSelectedTargetSummary;
 import cn.bugstack.competitoragent.model.dto.ReplayNodeSummary;
 import cn.bugstack.competitoragent.model.dto.ReplayPlanVersionSummary;
 import cn.bugstack.competitoragent.model.dto.ReplayTimelineEvent;
+import cn.bugstack.competitoragent.model.dto.SearchReplaySnapshotResponse;
 import cn.bugstack.competitoragent.model.dto.TaskRecoveryAdvice;
 import cn.bugstack.competitoragent.model.dto.TaskReplayResponse;
 import cn.bugstack.competitoragent.model.entity.AgentExecutionLog;
@@ -12,12 +14,15 @@ import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.entity.TaskNodeExecutionAttempt;
 import cn.bugstack.competitoragent.model.entity.TaskPlan;
 import cn.bugstack.competitoragent.model.entity.TaskWorkflowEvent;
+import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.MemorySnapshotRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeExecutionAttemptRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository;
+import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
+import cn.bugstack.competitoragent.search.SearchProgressSnapshot;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -116,7 +121,13 @@ public class TaskReplayProjectionService {
         List<ReplayPlanVersionSummary> replayPlanVersions = buildPlanVersionSummaries(planVersions, timeline, checkpoints);
         List<ReplayNodeSummary> nodeSummaries = buildNodeSummaries(taskNodes, executionAttempts, memorySnapshots, checkpoints);
         TaskRecoveryAdvice recoveryAdvice = taskRecoveryService.buildRecoveryAdvice(taskId);
-        List<String> aggregatedSourceUrls = aggregateReplaySourceUrls(timeline, nodeSummaries, recoveryAdvice, checkpoints);
+        List<SearchReplaySnapshotResponse> searchReplays = buildSearchReplays(taskNodes, taskPlanMap);
+        List<String> aggregatedSourceUrls = aggregateReplaySourceUrls(
+                timeline,
+                nodeSummaries,
+                recoveryAdvice,
+                checkpoints,
+                searchReplays);
 
         return TaskReplayResponse.builder()
                 .taskId(taskId)
@@ -126,6 +137,7 @@ public class TaskReplayProjectionService {
                 .recoveryAdvice(recoveryAdvice)
                 .recoveryCheckpoints(checkpoints)
                 .planVersions(replayPlanVersions)
+                .searchReplays(searchReplays)
                 .integrationEntryPoints(buildIntegrationEntryPoints(aggregatedSourceUrls))
                 .sourceUrls(aggregatedSourceUrls)
                 .build();
@@ -372,7 +384,8 @@ public class TaskReplayProjectionService {
     private List<String> aggregateReplaySourceUrls(List<ReplayTimelineEvent> timeline,
                                                    List<ReplayNodeSummary> nodeSummaries,
                                                    TaskRecoveryAdvice recoveryAdvice,
-                                                   List<RecoveryCheckpointResponse> checkpoints) {
+                                                   List<RecoveryCheckpointResponse> checkpoints,
+                                                   List<SearchReplaySnapshotResponse> searchReplays) {
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
         for (ReplayTimelineEvent timelineEvent : timeline) {
             sourceUrls.addAll(normalizeSourceUrls(timelineEvent.getSourceUrls()));
@@ -386,6 +399,9 @@ public class TaskReplayProjectionService {
         for (RecoveryCheckpointResponse checkpoint : checkpoints) {
             sourceUrls.addAll(normalizeSourceUrls(checkpoint.getSourceUrls()));
         }
+        for (SearchReplaySnapshotResponse searchReplay : searchReplays) {
+            sourceUrls.addAll(normalizeSourceUrls(searchReplay.getSourceUrls()));
+        }
         return new ArrayList<>(sourceUrls);
     }
 
@@ -393,6 +409,49 @@ public class TaskReplayProjectionService {
      * 对话确认与正式导出都还会在后续任务中落地真实回放对象，
      * 这里先把接入点边界正式化，避免未来能力接入时再次改动主响应协议。
      */
+    private List<SearchReplaySnapshotResponse> buildSearchReplays(List<TaskNode> taskNodes,
+                                                                  Map<Long, TaskPlan> taskPlanMap) {
+        List<SearchReplaySnapshotResponse> searchReplays = new ArrayList<>();
+        for (TaskNode taskNode : taskNodes) {
+            if (taskNode == null || taskNode.getAgentType() != AgentType.COLLECTOR) {
+                continue;
+            }
+            JsonNode output = readJson(taskNode.getOutputData());
+            if (output == null) {
+                continue;
+            }
+
+            SearchAuditSnapshot searchAudit = convertValue(output.get("searchAudit"), SearchAuditSnapshot.class);
+            List<CollectorSelectedTargetSummary> selectedTargets = convertList(
+                    output.get("selectedTargets"),
+                    new TypeReference<List<CollectorSelectedTargetSummary>>() {
+                    });
+            SearchProgressSnapshot latestProgress = convertValue(output.get("searchProgress"), SearchProgressSnapshot.class);
+            List<String> sourceUrls = normalizeSourceUrls(readStringList(output.get("sourceUrls")));
+            if (searchAudit != null && (searchAudit.getSourceUrls() == null || searchAudit.getSourceUrls().isEmpty())) {
+                searchAudit.setSourceUrls(sourceUrls);
+            }
+            if (sourceUrls.isEmpty() && searchAudit != null) {
+                sourceUrls = normalizeSourceUrls(searchAudit.getSourceUrls());
+            }
+            if (searchAudit == null && selectedTargets.isEmpty() && sourceUrls.isEmpty()) {
+                continue;
+            }
+
+            searchReplays.add(SearchReplaySnapshotResponse.builder()
+                    .nodeName(taskNode.getNodeName())
+                    .planVersionId(taskNode.getPlanVersionId())
+                    .planVersion(resolvePlanVersion(taskPlanMap, taskNode.getPlanVersionId()))
+                    .branchKey(taskNode.getBranchKey())
+                    .latestProgress(latestProgress)
+                    .searchAudit(searchAudit)
+                    .selectedTargets(selectedTargets)
+                    .sourceUrls(sourceUrls)
+                    .build());
+        }
+        return searchReplays;
+    }
+
     private List<cn.bugstack.competitoragent.model.dto.ReplayIntegrationEntryPoint> buildIntegrationEntryPoints(List<String> sourceUrls) {
         List<String> stableSourceUrls = sourceUrls == null ? List.of() : List.copyOf(sourceUrls);
         return List.of(
@@ -526,6 +585,44 @@ public class TaskReplayProjectionService {
         } catch (Exception ignored) {
             return List.of(rawJson);
         }
+    }
+
+    private JsonNode readJson(String rawJson) {
+        if (rawJson == null || rawJson.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(rawJson);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private List<String> readStringList(JsonNode node) {
+        if (node == null || node.isNull() || !node.isArray()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        for (JsonNode item : node) {
+            if (item != null && item.isTextual() && !item.asText().isBlank()) {
+                values.add(item.asText().trim());
+            }
+        }
+        return values;
+    }
+
+    private <T> T convertValue(JsonNode node, Class<T> type) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        return objectMapper.convertValue(node, type);
+    }
+
+    private <T> List<T> convertList(JsonNode node, TypeReference<List<T>> typeReference) {
+        if (node == null || node.isNull() || !node.isArray()) {
+            return List.of();
+        }
+        return objectMapper.convertValue(node, typeReference);
     }
 
     private List<String> normalizeSourceUrls(List<String> sourceUrls) {

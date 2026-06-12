@@ -6,11 +6,14 @@ import { createTask, executeTask, listSchemas, previewWorkflow } from '../api/cl
 import KnowledgeSourceIntakeCard from '../components/task-create/KnowledgeSourceIntakeCard'
 import SourceStrategySummary from '../components/task-create/SourceStrategySummary'
 import TaskPlanPreviewBoard from '../components/task-create/TaskPlanPreviewBoard'
-import type { AnalysisSchema, CreateTaskRequest, TaskNodeInfo } from '../types'
+import type { AnalysisSchema, CreateTaskRequest, TaskPlanPreviewContract } from '../types'
 import { appMessage } from '../utils/appMessage'
 import { buildConversationEntryUrl } from '../utils/conversationPresentation'
 import { buildGovernanceActionFailureMessage } from '../utils/governancePresentation'
-import { buildSourceStrategyOverview, buildTaskPlanPreview } from '../utils/taskNodeInsights'
+import {
+  buildSourceStrategyOverviewFromPreview,
+  buildTaskPlanPreviewFromContract,
+} from '../utils/taskNodeInsights'
 
 const { Text } = Typography
 
@@ -89,7 +92,7 @@ export default function TaskCreatePage() {
   const [loading, setLoading] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [schemas, setSchemas] = useState<AnalysisSchema[]>([])
-  const [workflowPreview, setWorkflowPreview] = useState<TaskNodeInfo[]>([])
+  const [previewContract, setPreviewContract] = useState<TaskPlanPreviewContract | null>(null)
   const [previewVersion, setPreviewVersion] = useState(0)
   const [draftRequest, setDraftRequest] = useState<CreateTaskRequest>(() => buildCreateTaskRequest(INITIAL_FORM_VALUES))
 
@@ -113,19 +116,12 @@ export default function TaskCreatePage() {
     [schemas],
   )
 
-  const sourceStrategyOverview = useMemo(() => buildSourceStrategyOverview(workflowPreview), [workflowPreview])
-
-  const taskPlanPreview = useMemo(
-    () =>
-      buildTaskPlanPreview(
-        {
-          taskName: draftRequest.taskName,
-          subjectProduct: draftRequest.subjectProduct,
-        },
-        workflowPreview,
-      ),
-    [draftRequest.subjectProduct, draftRequest.taskName, workflowPreview],
+  const sourceStrategyOverview = useMemo(
+    () => buildSourceStrategyOverviewFromPreview(previewContract),
+    [previewContract],
   )
+
+  const taskPlanPreview = useMemo(() => buildTaskPlanPreviewFromContract(previewContract), [previewContract])
 
   /**
    * 创建页还没有正式 taskId，这里只携带草稿阶段稳定存在的最小上下文，
@@ -145,14 +141,14 @@ export default function TaskCreatePage() {
     try {
       const request = buildCreateTaskRequest(values)
       if (!request.taskName || !request.subjectProduct || !request.competitorNames?.length) {
-        setWorkflowPreview([])
+        setPreviewContract(null)
         return
       }
       setPreviewLoading(true)
       const res = await previewWorkflow(request)
-      setWorkflowPreview(res.data || [])
+      setPreviewContract(res.data || null)
     } catch {
-      setWorkflowPreview([])
+      setPreviewContract(null)
     } finally {
       setPreviewLoading(false)
     }
@@ -192,7 +188,7 @@ export default function TaskCreatePage() {
 
   const handleReset = () => {
     form.resetFields()
-    setWorkflowPreview([])
+    setPreviewContract(null)
     setDraftRequest(buildCreateTaskRequest(INITIAL_FORM_VALUES))
     setPreviewVersion((current) => current + 1)
   }
@@ -401,7 +397,7 @@ export default function TaskCreatePage() {
           <Card title="来源策略" className="work-card">
             <SourceStrategySummary
               overview={sourceStrategyOverview}
-              hasReadyPreview={workflowPreview.length > 0}
+              hasReadyPreview={previewContract !== null}
             />
             {previewLoading && <Text type="secondary">正在刷新预览...</Text>}
           </Card>
@@ -409,7 +405,7 @@ export default function TaskCreatePage() {
           <Card title="执行计划预览" className="work-card" style={{ marginTop: 16 }}>
             <TaskPlanPreviewBoard
               plan={taskPlanPreview}
-              hasReadyPreview={workflowPreview.length > 0}
+              hasReadyPreview={previewContract !== null}
             />
           </Card>
 
@@ -426,7 +422,7 @@ export default function TaskCreatePage() {
             <KnowledgeSourceIntakeCard />
           </div>
 
-          {workflowPreview.length === 0 && (
+          {previewContract === null && (
             <Alert
               style={{ marginTop: 16 }}
               type="info"

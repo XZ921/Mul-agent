@@ -8,7 +8,7 @@ import cn.bugstack.competitoragent.governance.GovernanceDefaults;
 import cn.bugstack.competitoragent.governance.OrganizationQuotaPolicy;
 import cn.bugstack.competitoragent.governance.QuotaDecision;
 import cn.bugstack.competitoragent.model.dto.CreateTaskRequest;
-import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
+import cn.bugstack.competitoragent.model.dto.TaskPlanPreviewResponse;
 import cn.bugstack.competitoragent.model.dto.TaskResponse;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
@@ -20,14 +20,19 @@ import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
 import cn.bugstack.competitoragent.task.application.cleanup.TaskArtifactCleanupCoordinator;
 import cn.bugstack.competitoragent.task.assembler.TaskNodeViewAssembler;
+import cn.bugstack.competitoragent.task.assembler.TaskPlanPreviewAssembler;
+import cn.bugstack.competitoragent.task.definition.TaskDefinition;
+import cn.bugstack.competitoragent.task.definition.TaskDefinitionMapper;
+import cn.bugstack.competitoragent.task.definition.TaskDefinitionValidator;
+import cn.bugstack.competitoragent.task.definition.TaskDraft;
 import cn.bugstack.competitoragent.workflow.NodeExecutionRecoveryPolicy;
 import cn.bugstack.competitoragent.workflow.WorkflowFactory;
 import cn.bugstack.competitoragent.workflow.WorkflowPlan;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,13 +40,11 @@ import java.util.List;
 
 /**
  * 任务定义命令应用服务。
- * <p>
  * 这一层负责“创建任务 / 预览工作流 / 删除任务”这类偏任务定义期的命令，
  * 避免 AnalysisTaskService 同时承载查询、定义和运行时控制三类职责。
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class TaskDefinitionAppService {
 
     private final AnalysisTaskRepository taskRepository;
@@ -55,27 +58,91 @@ public class TaskDefinitionAppService {
     private final OrganizationQuotaPolicy organizationQuotaPolicy;
     private final TaskArtifactCleanupCoordinator taskArtifactCleanupCoordinator;
     private final TaskQuotaCoordinator taskQuotaCoordinator;
+    private final TaskDefinitionMapper taskDefinitionMapper;
+    private final TaskDefinitionValidator taskDefinitionValidator;
+    private final TaskPlanPreviewAssembler taskPlanPreviewAssembler;
+
+    /**
+     * Spring 正式装配路径会显式注入任务定义相关协作者，
+     * 让 create / preview 两条链路统一经过 mapper + validator + preview assembler。
+     */
+    @Autowired
+    public TaskDefinitionAppService(AnalysisTaskRepository taskRepository,
+                                    TaskNodeRepository nodeRepository,
+                                    WorkflowFactory workflowFactory,
+                                    TaskSnapshotCacheService taskSnapshotCacheService,
+                                    TaskEventPublisher taskEventPublisher,
+                                    WorkflowEventPublisher workflowEventPublisher,
+                                    TaskNodeViewAssembler assembler,
+                                    ObjectMapper objectMapper,
+                                    OrganizationQuotaPolicy organizationQuotaPolicy,
+                                    TaskArtifactCleanupCoordinator taskArtifactCleanupCoordinator,
+                                    TaskQuotaCoordinator taskQuotaCoordinator,
+                                    TaskDefinitionMapper taskDefinitionMapper,
+                                    TaskDefinitionValidator taskDefinitionValidator,
+                                    TaskPlanPreviewAssembler taskPlanPreviewAssembler) {
+        this.taskRepository = taskRepository;
+        this.nodeRepository = nodeRepository;
+        this.workflowFactory = workflowFactory;
+        this.taskSnapshotCacheService = taskSnapshotCacheService;
+        this.taskEventPublisher = taskEventPublisher;
+        this.workflowEventPublisher = workflowEventPublisher;
+        this.assembler = assembler;
+        this.objectMapper = objectMapper;
+        this.organizationQuotaPolicy = organizationQuotaPolicy;
+        this.taskArtifactCleanupCoordinator = taskArtifactCleanupCoordinator;
+        this.taskQuotaCoordinator = taskQuotaCoordinator;
+        this.taskDefinitionMapper = taskDefinitionMapper;
+        this.taskDefinitionValidator = taskDefinitionValidator;
+        this.taskPlanPreviewAssembler = taskPlanPreviewAssembler;
+    }
+
+    /**
+     * 兼容当前测试与旧构造路径。
+     * 这里用 ObjectMapper 派生默认 mapper / assembler，避免因为新增协作者导致大量测试先被构造器噪声打断。
+     */
+    public TaskDefinitionAppService(AnalysisTaskRepository taskRepository,
+                                    TaskNodeRepository nodeRepository,
+                                    WorkflowFactory workflowFactory,
+                                    TaskSnapshotCacheService taskSnapshotCacheService,
+                                    TaskEventPublisher taskEventPublisher,
+                                    WorkflowEventPublisher workflowEventPublisher,
+                                    TaskNodeViewAssembler assembler,
+                                    ObjectMapper objectMapper,
+                                    OrganizationQuotaPolicy organizationQuotaPolicy,
+                                    TaskArtifactCleanupCoordinator taskArtifactCleanupCoordinator,
+                                    TaskQuotaCoordinator taskQuotaCoordinator) {
+        this(
+                taskRepository,
+                nodeRepository,
+                workflowFactory,
+                taskSnapshotCacheService,
+                taskEventPublisher,
+                workflowEventPublisher,
+                assembler,
+                objectMapper,
+                organizationQuotaPolicy,
+                taskArtifactCleanupCoordinator,
+                taskQuotaCoordinator,
+                new TaskDefinitionMapper(objectMapper),
+                new TaskDefinitionValidator(),
+                new TaskPlanPreviewAssembler(objectMapper)
+        );
+    }
 
     @Transactional
     public TaskResponse createTask(CreateTaskRequest request) {
         ensureTaskCreationAllowed(request);
 
+        TaskDraft draft = taskDefinitionMapper.toDraft(request);
+        TaskDefinition definition = taskDefinitionMapper.toDefinition(draft);
+        taskDefinitionValidator.validate(definition);
+
         /*
          * 创建阶段只固化任务输入与初始 DAG，
          * 不在这里直接触发执行，保证“创建”和“运行”两个命令边界清晰。
          */
-        AnalysisTask task = AnalysisTask.builder()
-                .taskName(request.getTaskName())
-                .subjectProduct(request.getSubjectProduct())
-                .competitorNames(toJson(request.getCompetitorNames()))
-                .competitorUrls(toJson(request.getCompetitorUrls()))
-                .analysisDimensions(toJson(request.getAnalysisDimensions()))
-                .sourceScope(toJson(request.getSourceScope()))
-                .reportLanguage(defaultIfBlank(request.getReportLanguage(), "中文"))
-                .reportTemplate(defaultIfBlank(request.getReportTemplate(), "标准模板"))
-                .schemaId(request.getSchemaId())
-                .status(AnalysisTaskStatus.PENDING)
-                .build();
+        AnalysisTask task = toAnalysisTask(definition);
         taskQuotaCoordinator.markTaskQuotaReserved(task);
 
         task = taskRepository.save(task);
@@ -88,23 +155,17 @@ public class TaskDefinitionAppService {
         return toTaskResponse(task);
     }
 
-    public List<TaskNodeResponse> previewWorkflow(CreateTaskRequest request) {
-        AnalysisTask draftTask = AnalysisTask.builder()
-                .taskName(request.getTaskName())
-                .subjectProduct(request.getSubjectProduct())
-                .competitorNames(toJson(request.getCompetitorNames()))
-                .competitorUrls(toJson(request.getCompetitorUrls()))
-                .analysisDimensions(toJson(request.getAnalysisDimensions()))
-                .sourceScope(toJson(request.getSourceScope()))
-                .reportLanguage(defaultIfBlank(request.getReportLanguage(), "中文"))
-                .reportTemplate(defaultIfBlank(request.getReportTemplate(), "标准模板"))
-                .schemaId(request.getSchemaId())
-                .build();
+    /**
+     * 预览链路不再复用运行态节点 DTO，
+     * 而是统一输出正式的 TASK_PLAN_PREVIEW_V1 合同，明确区分“计划值”和“运行值”。
+     */
+    public TaskPlanPreviewResponse previewWorkflow(CreateTaskRequest request) {
+        TaskDraft draft = taskDefinitionMapper.toDraft(request);
+        TaskDefinition definition = taskDefinitionMapper.toDefinition(draft);
+        taskDefinitionValidator.validate(definition);
 
-        WorkflowPlan previewPlan = workflowFactory.buildPreviewPlan(draftTask);
-        return previewPlan.getNodes().stream()
-                .map(assembler::toPreviewNodeResponse)
-                .toList();
+        WorkflowPlan previewPlan = workflowFactory.buildPreviewPlan(toAnalysisTask(definition));
+        return taskPlanPreviewAssembler.toPreviewResponse(definition, previewPlan);
     }
 
     @Transactional
@@ -133,6 +194,30 @@ public class TaskDefinitionAppService {
         if (decision != null && !decision.isAllowed()) {
             throw new GovernanceBlockException(decision);
         }
+    }
+
+    /**
+     * 任务定义层到持久化层的投影目前仍复用 AnalysisTask 作为落库载体，
+     * 但字段来源统一收口到 TaskDefinition，避免后续继续从 request 上各自取值。
+     */
+    private AnalysisTask toAnalysisTask(TaskDefinition definition) {
+        return AnalysisTask.builder()
+                .taskName(definition.getTaskName())
+                .subjectProduct(definition.getSubjectProduct())
+                .competitorNames(toJson(definition.getCompetitors().stream()
+                        .map(TaskDefinition.CompetitorDefinition::getCompetitorName)
+                        .toList()))
+                .competitorUrls(toJson(definition.getCompetitors().stream()
+                        .map(TaskDefinition.CompetitorDefinition::getOfficialUrl)
+                        .filter(url -> url != null && !url.isBlank())
+                        .toList()))
+                .analysisDimensions(toJson(definition.getAnalysisDimensions()))
+                .sourceScope(toJson(definition.getSourceScope()))
+                .reportLanguage(defaultIfBlank(definition.getReportLanguage(), "中文"))
+                .reportTemplate(defaultIfBlank(definition.getReportTemplate(), "标准版"))
+                .schemaId(definition.getSchemaId())
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
     }
 
     /**

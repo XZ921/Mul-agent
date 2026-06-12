@@ -1,6 +1,6 @@
 import { Card, Empty, Space, Typography } from 'antd'
 import dayjs from 'dayjs'
-import type { ReplayPlanVersionSummary, ReplayTimelineEvent, TaskReplayResponse } from '../../types'
+import type { ReplayPlanVersionSummary, ReplayTimelineEvent, SearchReplaySnapshotInfo, TaskReplayResponse } from '../../types'
 
 const { Paragraph, Text } = Typography
 
@@ -31,8 +31,8 @@ function resolvePlanVersionNumber(replay: TaskReplayResponse, planVersionId?: nu
 }
 
 /**
- * 正式回放入口需要把恢复窗口压缩成一行可读摘要，
- * 让操作者先看清“当前建议基于哪一段计划分支与版本”。
+ * 恢复窗口摘要要把“当前建议基于哪条计划分支与哪个版本”压缩成一行，
+ * 让用户不用翻底层回放事件也能先判断这次恢复会落在哪个执行上下文里。
  */
 function buildRecoveryWindowSummary(replay: TaskReplayResponse) {
   const recoveryWindow = replay.recoveryAdvice?.recoveryWindow
@@ -45,11 +45,17 @@ function buildRecoveryWindowSummary(replay: TaskReplayResponse) {
 }
 
 /**
- * 计划版本摘要用于把 replay 里的版本、分支和类型并排展示，
- * 避免操作者还要反查底层事件或节点元数据才能确认当前上下文。
+ * 计划版本摘要把 replay 中的版本、分支和计划类型并排展示，
+ * 这样页面首屏就能说明当前回放到底属于主链、恢复链还是动态回流链。
  */
 function buildPlanVersionSummary(planVersion: ReplayPlanVersionSummary) {
   return `${formatPlanVersion(planVersion.planVersion)} · ${planVersion.branchKey || '未记录分支'} · ${planVersion.planType || '未记录类型'}`
+}
+
+function buildSearchReplaySummary(replay: SearchReplaySnapshotInfo) {
+  const sourceUrls = Array.isArray(replay.sourceUrls) ? replay.sourceUrls : []
+  const checkpoint = replay.searchAudit?.executionTrace?.recoveryCheckpoint ?? 'UNKNOWN'
+  return `${replay.nodeName} · 检查点 ${checkpoint} · 来源 ${sourceUrls.length} 条`
 }
 
 type TaskReplayTimelineProps = {
@@ -60,6 +66,7 @@ export default function TaskReplayTimeline({ replay }: TaskReplayTimelineProps) 
   const primaryCheckpoint = replay.recoveryCheckpoints[0] || null
   const primaryPlanVersion = replay.planVersions.find((planVersion) => planVersion.active) || replay.planVersions[0] || null
   const recoveryWindowSummary = buildRecoveryWindowSummary(replay)
+  const searchReplays = Array.isArray(replay.searchReplays) ? replay.searchReplays : []
 
   return (
     <Card className="work-card" title="正式回放与恢复">
@@ -89,6 +96,19 @@ export default function TaskReplayTimeline({ replay }: TaskReplayTimelineProps) 
         ) : (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前没有可展示的回放事件" />
         )}
+
+        {searchReplays.length > 0 ? (
+          <div>
+            <Text strong>搜索现场回放</Text>
+            <Space direction="vertical" size={8} style={{ display: 'flex', marginTop: 8 }}>
+              {searchReplays.slice(0, 3).map((item) => (
+                <Paragraph key={item.nodeName} style={{ marginBottom: 0 }}>
+                  {buildSearchReplaySummary(item)}
+                </Paragraph>
+              ))}
+            </Space>
+          </div>
+        ) : null}
 
         {primaryCheckpoint ? (
           <div>

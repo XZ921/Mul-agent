@@ -33,13 +33,14 @@ public class KnowledgeRetrievalFacadeImpl implements KnowledgeRetrievalFacade {
     public RetrievalResultView retrieveForTask(Long taskId, String query, String nodeName) {
         TaskRetrievalService.RetrievalResult retrievalResult = taskRetrievalService.retrieve(taskId, query, nodeName);
         if (retrievalResult == null) {
-            return new RetrievalResultView(List.of(), null, "", List.of());
+            return new RetrievalResultView(List.of(), null, "", List.of(), List.of());
         }
         return new RetrievalResultView(
                 retrievalResult.getSourceUrls() == null ? List.of() : retrievalResult.getSourceUrls(),
                 retrievalResult.getGapSummary(),
                 buildAnswer(retrievalResult),
-                collectHitDocumentIds(retrievalResult)
+                collectHitDocumentIds(retrievalResult),
+                collectHitEvidenceIds(retrievalResult)
         );
     }
 
@@ -94,6 +95,23 @@ public class KnowledgeRetrievalFacadeImpl implements KnowledgeRetrievalFacade {
             }
         }
         return new ArrayList<>(hitDocumentIds);
+    }
+
+    /**
+     * 对话和审计链路都需要稳定回指 evidenceId，
+     * 因此 facade 要把命中文档对应的 evidenceId 一并投影出来，而不是只暴露 documentKey。
+     */
+    private List<String> collectHitEvidenceIds(TaskRetrievalService.RetrievalResult retrievalResult) {
+        LinkedHashSet<String> hitEvidenceIds = new LinkedHashSet<>();
+        if (retrievalResult.getChunks() == null) {
+            return List.of();
+        }
+        for (TaskRetrievalService.RetrievedChunk chunk : retrievalResult.getChunks()) {
+            if (chunk != null && StringUtils.hasText(chunk.getEvidenceId())) {
+                hitEvidenceIds.add(chunk.getEvidenceId().trim());
+            }
+        }
+        return new ArrayList<>(hitEvidenceIds);
     }
 
     private String firstNonBlank(String primary, String fallback) {

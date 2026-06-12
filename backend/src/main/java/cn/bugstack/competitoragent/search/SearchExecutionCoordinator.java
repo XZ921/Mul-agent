@@ -32,6 +32,7 @@ public class SearchExecutionCoordinator {
     private final SearchSourceProvider searchSourceProvider;
     private final SourceCandidateRanker sourceCandidateRanker;
     private final CollectionTargetSelector collectionTargetSelector;
+    private final SearchPolicyResolver searchPolicyResolver;
 
     public SearchExecutionResult execute(CollectorNodeConfig config) {
         return execute(config, null);
@@ -41,7 +42,10 @@ public class SearchExecutionCoordinator {
                                          Consumer<SearchExecutionUpdate> progressListener) {
         long searchStartedAt = System.currentTimeMillis();
         SearchExecutionPlan executionPlan = initializePlan(config.getSearchExecutionPlan());
-        long searchTimeoutMillis = resolveSearchTimeoutMillis(config, executionPlan);
+        long searchTimeoutMillis = searchPolicyResolver.resolveSearchTimeoutMillis(
+                config.getSearchTimeoutMillis(),
+                executionPlan
+        );
         List<SearchProgressSnapshot> progressSnapshots = new ArrayList<>();
         Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
         SearchAuditSnapshot checkpoint = config.getSearchAuditCheckpoint();
@@ -57,8 +61,17 @@ public class SearchExecutionCoordinator {
         if (resumedFromCheckpoint) {
             attemptedTargets.putAll(resolveAttemptedTargetsFromCheckpoint(checkpoint));
         }
-        int targetCount = resolveTargetCount(config, allCandidates);
-        int minVerifiedCount = resolveMinVerifiedCount(config, targetCount);
+        int targetCount = searchPolicyResolver.resolveTargetCount(
+                config.getMaxSearchResults(),
+                config.getCompetitorUrls(),
+                allCandidates.size()
+        );
+        int plannedUrlCount = config.getCompetitorUrls() == null ? 0 : config.getCompetitorUrls().size();
+        int minVerifiedCount = searchPolicyResolver.resolveMinVerifiedCandidates(
+                config.getMinVerifiedCandidates(),
+                plannedUrlCount,
+                targetCount
+        );
         executionPlan = enrichExecutionPlan(executionPlan, config, targetCount, minVerifiedCount);
         boolean circuitBroken = false;
         String degradationReason = null;
@@ -215,13 +228,17 @@ public class SearchExecutionCoordinator {
         appendSnapshotAndPublish(progressSnapshots, executionPlan, "SELECT_TARGETS",
                 "正在汇总候选并选择最终采集目标", circuitBroken, degradationReason,
                 progressListener, allCandidates, List.of(), null);
-        List<SearchCollectionTarget> selectedTargets = collectionTargetSelector.selectTargets(
+        SearchSelectionDecision selectionDecision = collectionTargetSelector.selectTargets(
                 allCandidates,
                 attemptedTargets,
                 targetCount
         );
-        allCandidates = collectionTargetSelector.markSelectedCandidates(allCandidates, selectedTargets);
-        selectedTargets = collectionTargetSelector.refreshSelectedTargets(selectedTargets, allCandidates);
+        List<SearchCollectionTarget> selectedTargets = selectionDecision.getSelectedTargets() == null
+                ? List.of()
+                : selectionDecision.getSelectedTargets();
+        allCandidates = selectionDecision.getUpdatedCandidates() == null
+                ? allCandidates
+                : selectionDecision.getUpdatedCandidates();
         markStepSuccess(executionPlan, "SELECT_TARGETS",
                 "已选出 " + selectedTargets.size() + " 条正式采集目标");
         appendSnapshotAndPublish(progressSnapshots, executionPlan, "SELECT_TARGETS",
@@ -256,10 +273,7 @@ public class SearchExecutionCoordinator {
                 .resumedFromCheckpoint(resumedFromCheckpoint)
                 .checkpointSource(checkpointSource)
                 .runtimePolicy(resolveRuntimePolicy(config))
-                .selectedUrls(selectedTargets.stream()
-                        .map(target -> target.getCandidate() == null ? null : target.getCandidate().getUrl())
-                        .filter(StringUtils::hasText)
-                        .toList())
+                .selectedUrls(selectionDecision.getSourceUrls() == null ? List.of() : selectionDecision.getSourceUrls())
                 .generatedAt(LocalDateTime.now())
                 .build();
         publishProgress(progressListener, executionPlan, progressSnapshots, allCandidates, selectedTargets, executionTrace);
@@ -294,6 +308,7 @@ public class SearchExecutionCoordinator {
                         .progressHistory(progressSnapshots)
                         .sourceCandidates(allCandidates)
                         .selectedTargets(selectedTargets)
+                        .sourceUrls(executionTrace.getSelectedUrls())
                         .build())
                 .build();
     }
@@ -532,7 +547,10 @@ public class SearchExecutionCoordinator {
     private List<String> resolveSearchFallbackOrder(CollectorNodeConfig config) {
         List<String> configuredOrder = config.getSearchFallbackOrder();
         if (configuredOrder == null || configuredOrder.isEmpty()) {
-            return defaultSearchFallbackOrder(config.getSearchMode());
+            return searchPolicyResolver.resolveFallbackOrder(
+                    config.getSearchMode(),
+                    Boolean.TRUE.equals(config.getBrowserSearchEnabled())
+            );
         }
         LinkedHashSet<String> normalizedOrder = new LinkedHashSet<>();
         for (String stage : configuredOrder) {
@@ -541,22 +559,12 @@ public class SearchExecutionCoordinator {
             }
         }
         if (normalizedOrder.isEmpty()) {
-            return defaultSearchFallbackOrder(config.getSearchMode());
+            return searchPolicyResolver.resolveFallbackOrder(
+                    config.getSearchMode(),
+                    Boolean.TRUE.equals(config.getBrowserSearchEnabled())
+            );
         }
         return new ArrayList<>(normalizedOrder);
-    }
-
-    private List<String> defaultSearchFallbackOrder(String searchMode) {
-        if ("BROWSER_ONLY".equalsIgnoreCase(searchMode)) {
-            return List.of("PLANNED", "BROWSER");
-        }
-        if ("HTTP_ONLY".equalsIgnoreCase(searchMode)) {
-            return List.of("PLANNED", "HTTP");
-        }
-        if ("HEURISTIC_ONLY".equalsIgnoreCase(searchMode)) {
-            return List.of("PLANNED", "HEURISTIC");
-        }
-        return List.of("PLANNED", "BROWSER", "HEURISTIC", "HTTP");
     }
 
     private BrowserSearchRuntimeResult defaultBrowserSupplementResult(CollectorNodeConfig config) {
@@ -631,23 +639,6 @@ public class SearchExecutionCoordinator {
         }
     }
 
-    private int resolveTargetCount(CollectorNodeConfig config, List<SourceCandidate> allCandidates) {
-        if (config.getMaxSearchResults() != null && config.getMaxSearchResults() > 0) {
-            return config.getMaxSearchResults();
-        }
-        if (config.getCompetitorUrls() != null && !config.getCompetitorUrls().isEmpty()) {
-            return config.getCompetitorUrls().size();
-        }
-        return Math.max(1, allCandidates.size());
-    }
-
-    private int resolveMinVerifiedCount(CollectorNodeConfig config, int targetCount) {
-        if (config.getMinVerifiedCandidates() != null && config.getMinVerifiedCandidates() > 0) {
-            return Math.min(config.getMinVerifiedCandidates(), targetCount);
-        }
-        return Math.min(1, targetCount);
-    }
-
     private boolean shouldSupplement(CollectorNodeConfig config,
                                      int verifiedCount,
                                      int minVerifiedCount,
@@ -674,19 +665,6 @@ public class SearchExecutionCoordinator {
             return Boolean.TRUE.equals(config.getSearchRuntimePolicy().getVerifyResultPage());
         }
         return true;
-    }
-
-    private long resolveSearchTimeoutMillis(CollectorNodeConfig config, SearchExecutionPlan executionPlan) {
-        if (config.getSearchTimeoutMillis() != null && config.getSearchTimeoutMillis() >= 0) {
-            return config.getSearchTimeoutMillis();
-        }
-        long expectedNodeDuration = executionPlan == null || executionPlan.getSteps() == null
-                ? 0L
-                : executionPlan.getSteps().stream().mapToLong(SearchExecutionStep::getExpectedDurationMs).sum();
-        if (expectedNodeDuration <= 0L) {
-            return 15000L;
-        }
-        return Math.max(1000L, Math.round(expectedNodeDuration * 0.6D));
     }
 
     private boolean isTimedOut(long startedAt, long timeoutMillis) {

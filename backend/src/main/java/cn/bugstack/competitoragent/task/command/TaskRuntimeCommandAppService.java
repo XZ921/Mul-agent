@@ -381,7 +381,7 @@ public class TaskRuntimeCommandAppService {
 
         List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
         for (TaskNode node : nodes) {
-            recoveryPolicy().resetNodeForRerun(node, true);
+            resetNodeExecutionState(node, true);
         }
         nodeRepository.saveAll(nodes);
     }
@@ -406,8 +406,10 @@ public class TaskRuntimeCommandAppService {
         boolean hasWorkToResume = false;
 
         for (TaskNode node : nodes) {
-            if (node.getStatus() == TaskNodeStatus.SUCCESS) {
-                hasSuccessfulCheckpoint = true;
+            if (node.getStatus() == TaskNodeStatus.SUCCESS || node.getStatus() == TaskNodeStatus.COMPENSATED) {
+                if (node.getStatus() == TaskNodeStatus.SUCCESS) {
+                    hasSuccessfulCheckpoint = true;
+                }
                 continue;
             }
 
@@ -418,9 +420,8 @@ public class TaskRuntimeCommandAppService {
             hasWorkToResume = true;
             reuseSearchCheckpointIfPresent(node);
             markManualResumeApprovalIfNecessary(node);
+            resetNodeExecutionState(node, true);
         }
-
-        recoveryPolicy().resetNodesForResume(nodes, true);
 
         if (!hasWorkToResume && hasSuccessfulCheckpoint) {
             throw new BusinessException(ResultCode.TASK_STATUS_INVALID, "Task already completed successfully");
@@ -429,8 +430,20 @@ public class TaskRuntimeCommandAppService {
         nodeRepository.saveAll(nodes);
     }
 
+    /**
+     * 第一阶段先把 rerun / resume 的重置边界锁定在既有 planVersion 快照内。
+     * 这里允许清空执行态字段，但不允许顺手抹掉节点已经绑定的计划版本与 nodeConfig 语义，
+     * 避免后续恢复、审计或回放时把原本的 fallbackOrder / stageCode / 搜索计划误当成需要重新发明。
+     */
     private void resetNodeExecutionState(TaskNode node, boolean clearOutput) {
+        if (node == null) {
+            return;
+        }
+        Long preservedPlanVersionId = node.getPlanVersionId();
+        String preservedNodeConfig = node.getNodeConfig();
         recoveryPolicy().resetNodeForRerun(node, clearOutput);
+        node.setPlanVersionId(preservedPlanVersionId);
+        node.setNodeConfig(preservedNodeConfig);
     }
 
     private void resetNodeForManualContinue(TaskNode node) {

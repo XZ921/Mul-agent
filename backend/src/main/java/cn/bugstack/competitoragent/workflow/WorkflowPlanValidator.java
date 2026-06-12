@@ -24,6 +24,30 @@ public class WorkflowPlanValidator {
      * 校验动态生成的工作流计划。
      */
     public void validate(WorkflowPlan plan) {
+        validateForCreation(plan);
+    }
+
+    /**
+     * create / preview 新链路要求正式阶段契约完整存在，
+     * 这样才能让首屏预览、落库快照和后续审计共用同一份计划语义。
+     */
+    public void validateForCreation(WorkflowPlan plan) {
+        validateGraphBasics(plan);
+        validateStageContract(plan, true);
+    }
+
+    /**
+     * 历史快照复用允许继续读取旧格式，
+     * 但一旦快照自己声明了正式阶段契约，就必须继续保证 node -> stage 对应关系成立。
+     */
+    public void validateForSnapshotReuse(WorkflowPlan plan) {
+        validateGraphBasics(plan);
+        if (plan != null && plan.hasFormalStageContract()) {
+            validateStageContract(plan, false);
+        }
+    }
+
+    private void validateGraphBasics(WorkflowPlan plan) {
         if (plan == null || plan.getNodes() == null || plan.getNodes().isEmpty()) {
             throw new BusinessException(ResultCode.TASK_CREATE_FAILED, "Workflow plan must contain at least one node");
         }
@@ -147,6 +171,37 @@ public class WorkflowPlanValidator {
 
         if (visited != nodeByName.size()) {
             throw new BusinessException(ResultCode.TASK_CREATE_FAILED, "Workflow plan contains cyclic dependencies");
+        }
+    }
+
+    /**
+     * 新链路一旦声明正式阶段合同，就要求所有节点显式挂到已声明阶段上。
+     * 这样 preview/create/runtime 才能围绕同一份计划快照进行解释与审计。
+     */
+    private void validateStageContract(WorkflowPlan plan, boolean requireStages) {
+        if (plan == null) {
+            return;
+        }
+        if (requireStages && !plan.hasFormalStageContract()) {
+            throw new BusinessException(ResultCode.TASK_CREATE_FAILED,
+                    "workflow stages must not be empty when creating a formal plan");
+        }
+        if (!plan.hasFormalStageContract()) {
+            return;
+        }
+
+        Set<String> stageCodes = new HashSet<>();
+        for (WorkflowPlan.WorkflowPlanStage stage : plan.getStages()) {
+            if (stage != null && StringUtils.hasText(stage.getStageCode())) {
+                stageCodes.add(stage.getStageCode());
+            }
+        }
+
+        for (WorkflowPlan.WorkflowPlanNode node : plan.getNodes()) {
+            if (!StringUtils.hasText(node.getStageCode()) || !stageCodes.contains(node.getStageCode())) {
+                throw new BusinessException(ResultCode.TASK_CREATE_FAILED,
+                        "workflow node stageCode is missing or unknown: " + node.getNodeName());
+            }
         }
     }
 }

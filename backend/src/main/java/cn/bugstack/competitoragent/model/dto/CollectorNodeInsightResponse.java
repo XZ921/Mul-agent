@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.model.dto;
 
+import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
 import cn.bugstack.competitoragent.search.SearchExecutionPlan;
 import cn.bugstack.competitoragent.search.SearchExecutionTrace;
 import cn.bugstack.competitoragent.search.SearchProgressSnapshot;
@@ -78,6 +79,13 @@ public class CollectorNodeInsightResponse {
 
     @Schema(description = "Search execution trace")
     private SearchExecutionTrace searchExecutionTrace;
+
+    /**
+     * 详情视图优先消费正式 searchAudit，而不是再从 outputData 大对象里反推。
+     * 这样可以把回放、恢复和前端展示统一锚定到同一份正式契约上。
+     */
+    @Schema(description = "Formal search audit snapshot")
+    private SearchAuditSnapshot searchAudit;
 
     @Schema(description = "Search progress snapshots")
     private List<SearchProgressSnapshot> searchProgressSnapshots;

@@ -82,7 +82,13 @@ import {
 } from '../utils/taskEventReducer'
 import { buildConversationEntryUrl } from '../utils/conversationPresentation'
 import { buildGovernanceActionFailureMessage } from '../utils/governancePresentation'
-import { getCollectorNodeInsight, getDependencyNames } from '../utils/taskNodeInsights'
+import {
+  getCollectorNodeInsight,
+  getDependencyNames,
+  getNormalizedSearchReplay,
+  getSelectedTargetsFromSearchAudit,
+  getSourceCandidatesFromSearchAudit,
+} from '../utils/taskNodeInsights'
 
 const { Text } = Typography
 const { TextArea } = Input
@@ -692,29 +698,65 @@ export default function TaskDetailPage() {
     () => (selectedNode?.agentType === 'COLLECTOR' ? getCollectorNodeInsight(selectedNode) : null),
     [selectedNode],
   )
+  const selectedCollectorReplay = useMemo(() => {
+    if (!selectedNode?.nodeName || !Array.isArray(taskReplay?.searchReplays)) {
+      return null
+    }
+    // 共享快照会裁剪 collector 原始输出，详情页需要在节点快照缺字段时
+    // 从正式 replay.searchReplays 回退补齐 searchAudit，避免用户只能翻原始 outputData 排查问题。
+    return getNormalizedSearchReplay(
+      taskReplay.searchReplays.find((item) => item.nodeName === selectedNode.nodeName) ?? null,
+    )
+  }, [selectedNode?.nodeName, taskReplay])
+  const selectedSearchAudit = useMemo(
+    () => selectedCollectorInsight?.searchAudit ?? selectedCollectorReplay?.searchAudit ?? null,
+    [selectedCollectorInsight, selectedCollectorReplay],
+  )
   const selectedSourceCandidates = useMemo(
-    () => selectedCollectorInsight?.sourceCandidates || [],
-    [selectedCollectorInsight],
+    () => selectedCollectorInsight?.sourceCandidates.length
+      ? selectedCollectorInsight.sourceCandidates
+      : getSourceCandidatesFromSearchAudit(selectedSearchAudit),
+    [selectedCollectorInsight, selectedSearchAudit],
   )
   const selectedSearchExecutionPlan = useMemo(
-    () => selectedCollectorInsight?.searchExecutionPlan || null,
-    [selectedCollectorInsight],
+    () => selectedCollectorInsight?.searchExecutionPlan ?? selectedSearchAudit?.executionPlan ?? null,
+    [selectedCollectorInsight, selectedSearchAudit],
   )
   const selectedSearchExecutionTrace = useMemo(
-    () => selectedCollectorInsight?.searchExecutionTrace || null,
-    [selectedCollectorInsight],
+    () => selectedCollectorInsight?.searchExecutionTrace ?? selectedSearchAudit?.executionTrace ?? null,
+    [selectedCollectorInsight, selectedSearchAudit],
   )
   const selectedSearchProgress = useMemo(
-    () => selectedCollectorInsight?.searchProgress || null,
-    [selectedCollectorInsight],
+    () =>
+      selectedCollectorInsight?.searchProgress
+      ?? selectedCollectorReplay?.searchAudit?.latestProgress
+      ?? null,
+    [selectedCollectorInsight, selectedCollectorReplay],
   )
   const selectedSearchProgressSnapshots = useMemo(
-    () => selectedCollectorInsight?.searchProgressSnapshots || [],
-    [selectedCollectorInsight],
+    () =>
+      selectedCollectorInsight?.searchProgressSnapshots?.length
+        ? selectedCollectorInsight.searchProgressSnapshots
+        : (selectedSearchAudit?.progressHistory || []),
+    [selectedCollectorInsight, selectedSearchAudit],
   )
   const selectedTargets = useMemo(
-    () => selectedCollectorInsight?.selectedTargets || [],
-    [selectedCollectorInsight],
+    () => {
+      if (selectedCollectorInsight?.selectedTargets.length) {
+        return selectedCollectorInsight.selectedTargets
+      }
+      if (selectedCollectorReplay?.selectedTargets.length) {
+        return selectedCollectorReplay.selectedTargets
+      }
+      return getSelectedTargetsFromSearchAudit(selectedSearchAudit)
+    },
+    [selectedCollectorInsight, selectedCollectorReplay, selectedSearchAudit],
+  )
+  const selectedSearchSourceUrls = useMemo(
+    () => selectedCollectorInsight?.sourceUrls.length
+      ? selectedCollectorInsight.sourceUrls
+      : selectedCollectorReplay?.sourceUrls || [],
+    [selectedCollectorInsight, selectedCollectorReplay],
   )
   const sourceCandidateGroups = useMemo(() => {
     const groups = new Map<string, SourceCandidateInfo[]>()
@@ -1342,6 +1384,7 @@ export default function TaskDetailPage() {
         sourceCandidateStageSummary={sourceCandidateStageSummary}
         sourceCandidateGroups={sourceCandidateGroups}
         selectedTargets={selectedTargets}
+        selectedSearchSourceUrls={selectedSearchSourceUrls}
         selectedReviewPayload={selectedReviewPayload}
         selectedNodeDependencies={selectedNodeDependencies}
         selectedNodeEvidenceIds={selectedNodeEvidenceIds}

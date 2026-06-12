@@ -20,6 +20,9 @@ import java.util.List;
 @Schema(description = "DAG node info")
 public class TaskNodeResponse {
 
+    @Schema(description = "Runtime node contract type", example = "TASK_NODE_RUNTIME_V1")
+    private String contractType;
+
     @Schema(description = "Node ID", example = "10")
     private Long id;
 

@@ -14,8 +14,16 @@ class TaskPlanVersionerTest {
     @Test
     void shouldCreateInitialPlanVersionSnapshot() {
         WorkflowPlan workflowPlan = WorkflowPlan.builder()
+                .contractType("TASK_PLAN_PREVIEW_V1")
+                .goal("围绕企业知识库展开竞品研究")
                 .planVersion(1)
                 .branchKey("root")
+                .stages(List.of(WorkflowPlan.WorkflowPlanStage.builder()
+                        .stageCode("GOAL")
+                        .title("明确任务目标")
+                        .summary("围绕企业知识库展开竞品研究")
+                        .detail("正式任务目标")
+                        .build()))
                 .nodes(List.of(WorkflowPlan.WorkflowPlanNode.builder()
                         .nodeName("collect")
                         .displayName("Collect")
@@ -33,6 +41,8 @@ class TaskPlanVersionerTest {
         assertThat(initialPlan.getParentPlanId()).isNull();
         assertThat(initialPlan.getBranchKey()).isEqualTo("root");
         assertThat(initialPlan.getPlanType()).isEqualTo("INITIAL");
+        assertThat(initialPlan.getPlanSnapshot()).contains("\"contractType\":\"TASK_PLAN_PREVIEW_V1\"");
+        assertThat(initialPlan.getPlanSnapshot()).contains("\"stageCode\":\"GOAL\"");
         assertThat(initialPlan.getPlanSnapshot()).contains("\"nodeName\":\"collect\"");
     }
 

@@ -11,8 +11,7 @@ import java.util.List;
 /**
  * 任务回放平台正式响应 DTO。
  * <p>
- * Task 5.6.a 先只定义稳定承载对象，不在这里提前耦合具体投影算法；
- * 这样 5.6.b 可以直接围绕该 DTO 继续补齐查询与控制接口。
+ * 收口时间线、节点摘要、恢复建议和 Collector 搜索现场回放视图。
  */
 @Data
 @Builder
@@ -42,7 +41,10 @@ public class TaskReplayResponse {
     @Schema(description = "计划版本摘要列表")
     private List<ReplayPlanVersionSummary> planVersions;
 
-    @Schema(description = "涓哄璇濆姩浣滃洖鏀句笌姝ｅ紡瀵煎嚭棰勭暀鐨勭ǔ瀹氭帴鍏ョ偣")
+    @Schema(description = "Collector 搜索现场回放")
+    private List<SearchReplaySnapshotResponse> searchReplays;
+
+    @Schema(description = "回放集成入口")
     private List<ReplayIntegrationEntryPoint> integrationEntryPoints;
 
     @Schema(description = "回放整体证据 / 追溯来源地址")

@@ -1,5 +1,7 @@
 package cn.bugstack.competitoragent.search;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -10,12 +12,15 @@ import java.util.List;
 
 /**
  * 搜索执行轨迹。
+ * <p>
  * 用强类型模型收口规划、动作、降级与恢复线索，替代零散 Map 字段。
  */
 @Data
 @Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class SearchExecutionTrace {
 
     private String traceVersion;

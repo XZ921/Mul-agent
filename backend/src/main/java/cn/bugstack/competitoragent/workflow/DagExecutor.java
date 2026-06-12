@@ -23,6 +23,7 @@ import cn.bugstack.competitoragent.task.TaskExecutionLockService;
 import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
+import cn.bugstack.competitoragent.search.SearchSharedProjection;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
 import cn.bugstack.competitoragent.workflow.runtime.DynamicPlanAppender;
 import cn.bugstack.competitoragent.workflow.runtime.RuntimeEventEmitter;
@@ -150,6 +151,9 @@ public class DagExecutor {
 
                 if (runningCount == 0) {
                     if (!dispatchResult.isProgressed()) {
+                        if (waitForNextRetryWindow(nodes)) {
+                            continue;
+                        }
                         break;
                     }
                     continue;
@@ -181,8 +185,33 @@ public class DagExecutor {
             if (node.getStatus() == TaskNodeStatus.SUCCESS
                     && node.getOutputData() != null
                     && !node.getOutputData().isBlank()) {
-                context.putSharedOutput(node.getNodeName(), node.getOutputData());
+                context.putSharedOutput(node.getNodeName(), toSharedProjection(node));
             }
+        }
+    }
+
+    /**
+     * Collector 成功输出会同时服务于两类消费者：
+     * 1. 节点详情/replay 读取原始 outputData；
+     * 2. 下游共享上下文与恢复链路只读取稳定投影。
+     * 因此这里只裁剪 shared output，不动节点落库原文。
+     */
+    private String toSharedProjection(TaskNode node) {
+        if (node == null
+                || node.getAgentType() != AgentType.COLLECTOR
+                || node.getOutputData() == null
+                || node.getOutputData().isBlank()
+                || !SearchSharedProjection.supportsCollectorOutput(objectMapper, node.getOutputData())) {
+            return node == null ? null : node.getOutputData();
+        }
+        try {
+            return objectMapper.writeValueAsString(
+                    SearchSharedProjection.fromCollectorOutput(objectMapper, node.getOutputData())
+            );
+        } catch (Exception e) {
+            log.warn("serialize collector shared projection failed, nodeName={}",
+                    node.getNodeName(), e);
+            return node.getOutputData();
         }
     }
 
@@ -286,6 +315,38 @@ public class DagExecutor {
         }
     }
 
+    /**
+     * 当当前轮次没有任何节点被派发，但仍存在 WAITING_RETRY 节点时，
+     * 不能直接把整个 DAG 判定为“无事可做”并收口。
+     * 这里统一等待到最近一个重试窗口打开，再进入下一轮调度，
+     * 避免因时钟粒度或极短 backoff 让节点永久卡在 WAITING_RETRY。
+     */
+    private boolean waitForNextRetryWindow(List<TaskNode> nodes) {
+        if (nodes == null || nodes.isEmpty()) {
+            return false;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        Optional<LocalDateTime> nextRetryWindow = nodes.stream()
+                .filter(node -> node.getStatus() == TaskNodeStatus.WAITING_RETRY)
+                .map(TaskNode::getNextRetryAt)
+                .filter(java.util.Objects::nonNull)
+                .min(LocalDateTime::compareTo);
+        if (nextRetryWindow.isEmpty()) {
+            return false;
+        }
+        if (!nextRetryWindow.get().isAfter(now)) {
+            return true;
+        }
+        long waitMillis = Math.max(1L, Duration.between(now, nextRetryWindow.get()).toMillis());
+        try {
+            Thread.sleep(waitMillis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting next retry window", e);
+        }
+        return true;
+    }
+
     private NodeExecutionResult executeRunningNode(Long taskId,
                                                    AgentContext sharedContext,
                                                    TaskNode node,
@@ -373,8 +434,9 @@ public class DagExecutor {
             node.setNextRetryAt(null);
             TaskNode savedNode = nodeRepository.save(node);
             recordExecutionAttempt(savedNode, attemptNo, TaskNodeStatus.SUCCESS, null, null);
-            sharedContext.putSharedOutput(savedNode.getNodeName(), result.getOutputData());
-            taskSnapshotCacheService.cacheNodeOutput(taskId, node.getNodeName(), result.getOutputData());
+            String sharedProjection = toSharedProjection(savedNode);
+            sharedContext.putSharedOutput(savedNode.getNodeName(), sharedProjection);
+            taskSnapshotCacheService.cacheNodeOutput(taskId, node.getNodeName(), sharedProjection);
             return savedNode;
         }
 

@@ -143,9 +143,11 @@ export interface CollectorNodeInsightData {
   searchProgress: SearchProgressInfo | null
   searchExecutionPlan: SearchExecutionPlanInfo | null
   searchExecutionTrace?: SearchExecutionTraceInfo | null
+  searchAudit?: SearchAuditSnapshotInfo | null
   searchProgressSnapshots?: SearchProgressInfo[] | null
   sourceCandidates: SourceCandidateInfo[]
   selectedTargets: CollectorSelectedTargetSummary[]
+  sourceUrls?: string[] | null
 }
 
 export interface TaskNodeInfo {
@@ -329,6 +331,7 @@ export interface TaskReplayResponse {
   recoveryAdvice?: TaskRecoveryAdvice | null
   recoveryCheckpoints: RecoveryCheckpointResponse[]
   planVersions: ReplayPlanVersionSummary[]
+  searchReplays?: SearchReplaySnapshotInfo[] | null
   integrationEntryPoints?: ReplayIntegrationEntryPoint[]
   sourceUrls: string[]
 }
@@ -482,10 +485,14 @@ export interface ConversationResponse {
 }
 
 export interface SearchProgressEventPayload {
+  contractType?: string | null
   nodeName?: string | null
   searchProgress?: SearchProgressInfo | null
   searchExecutionTrace?: SearchExecutionTraceInfo | null
   searchProgressSnapshots?: SearchProgressInfo[] | null
+  searchAudit?: SearchAuditSnapshotInfo | null
+  selectedTargets?: CollectorSelectedTargetSummary[] | null
+  sourceUrls?: string[] | null
 }
 
 export interface AgentOutputEventPayload {
@@ -608,6 +615,29 @@ export interface SearchExecutionTraceInfo {
   generatedAt?: string
 }
 
+export interface SearchAuditTargetInfo {
+  candidate?: SourceCandidateInfo | null
+  collectedPage?: {
+    url?: string | null
+    title?: string | null
+    content?: string | null
+    snippet?: string | null
+    competitorName?: string | null
+    sourceType?: string | null
+    success?: boolean | null
+  } | null
+}
+
+export interface SearchAuditSnapshotInfo {
+  executionTrace?: SearchExecutionTraceInfo | null
+  executionPlan?: SearchExecutionPlanInfo | null
+  latestProgress?: SearchProgressInfo | null
+  progressHistory?: SearchProgressInfo[] | null
+  sourceCandidates?: SourceCandidateInfo[] | null
+  selectedTargets?: SearchAuditTargetInfo[] | null
+  sourceUrls?: string[] | null
+}
+
 export interface SelectedTargetInfo {
   url: string
   title?: string
@@ -622,6 +652,17 @@ export interface SelectedTargetInfo {
   rankingReasons?: string[]
   rankingSummary?: string
   hasPrefetchedPage?: boolean
+}
+
+export interface SearchReplaySnapshotInfo {
+  nodeName: string
+  planVersionId?: number | null
+  planVersion?: number | null
+  branchKey?: string | null
+  latestProgress?: SearchProgressInfo | null
+  searchAudit?: SearchAuditSnapshotInfo | null
+  selectedTargets?: SelectedTargetInfo[] | null
+  sourceUrls?: string[] | null
 }
 
 export interface AgentLog {
@@ -1136,4 +1177,36 @@ export interface TaskPlanPreviewInfo {
   collectorCount: number
   pipelineCount: number
   stages: TaskPlanStageInfo[]
+}
+
+export interface TaskPlanPreviewStageContract extends TaskPlanStageInfo {
+  stageCode: string
+  sourceUrls: string[]
+}
+
+export interface TaskPlanPreviewNodeInfo {
+  nodeName: string
+  displayName: string
+  agentType: AgentType
+  stageCode: string
+  goal: string
+  summary: string
+  configSummaryData?: TaskNodeConfigSummary | null
+  dependsOn: string[]
+  required: boolean
+  executionOrder: number
+  fallbackOrder: string[]
+  sourceUrls: string[]
+}
+
+export interface TaskPlanPreviewContract {
+  contractType: string
+  goal: string
+  competitorCount: number
+  collectorCount: number
+  pipelineCount: number
+  lanes: SourceStrategyOverviewInfo['lanes']
+  stages: TaskPlanPreviewStageContract[]
+  nodes: TaskPlanPreviewNodeInfo[]
+  sourceUrls: string[]
 }

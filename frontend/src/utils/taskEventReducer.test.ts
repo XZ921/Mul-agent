@@ -83,6 +83,47 @@ describe('taskEventReducer', () => {
     expect(diagnosisUpdated.report?.reportDiagnosis?.sections[0].section).toBe('结论')
   })
 
+  it('merges formal search audit fields from search progress events', () => {
+    const hydrated = taskEventReducer(createInitialTaskEventRuntimeState(), {
+      type: 'hydrate',
+      task: buildFixtureTask(),
+      nodes: [buildFixtureNode()],
+      logs: [],
+      report: null,
+    })
+
+    const updated = taskEventReducer(hydrated, {
+      type: 'apply-event',
+      event: buildFixtureEvent({
+        cursor: '24-search-audit',
+        eventType: 'SEARCH_PROGRESS',
+        nodeName: 'collect_sources_01_01',
+        payload: {
+          contractType: 'SEARCH_PROGRESS_V1',
+          nodeName: 'collect_sources_01_01',
+          searchAudit: {
+            executionTrace: {
+              recoveryCheckpoint: 'SELECT_TARGETS',
+            },
+            sourceUrls: ['https://www.notion.so/product/ai'],
+          },
+          selectedTargets: [
+            {
+              url: 'https://www.notion.so/product/ai',
+              title: 'Notion AI',
+            },
+          ],
+          sourceUrls: ['https://www.notion.so/product/ai'],
+        },
+      }),
+    })
+
+    expect(updated.nodes[0].collectorInsight?.searchAudit?.executionTrace?.recoveryCheckpoint).toBe('SELECT_TARGETS')
+    expect(updated.nodes[0].collectorInsight?.selectedTargets[0]?.url).toBe('https://www.notion.so/product/ai')
+    expect(updated.nodes[0].collectorInsight?.selectedCount).toBe(1)
+    expect(updated.nodes[0].collectorInsight?.sourceUrls).toEqual(['https://www.notion.so/product/ai'])
+  })
+
   it('keeps reducer stable when existing report diagnosis contains malformed arrays', () => {
     const initial = createInitialTaskEventRuntimeState()
     const hydrated = taskEventReducer(initial, {

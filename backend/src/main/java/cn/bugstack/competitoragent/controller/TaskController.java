@@ -4,6 +4,7 @@ import cn.bugstack.competitoragent.common.ApiResponse;
 import cn.bugstack.competitoragent.model.dto.CreateTaskRequest;
 import cn.bugstack.competitoragent.model.dto.TaskListPageResponse;
 import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
+import cn.bugstack.competitoragent.model.dto.TaskPlanPreviewResponse;
 import cn.bugstack.competitoragent.model.dto.TaskResponse;
 import cn.bugstack.competitoragent.model.dto.UpdateNodeConfigRequest;
 import cn.bugstack.competitoragent.task.AnalysisTaskService;
@@ -39,7 +40,7 @@ public class TaskController {
 
     @PostMapping("/preview")
     @Operation(summary = "Preview workflow")
-    public ApiResponse<List<TaskNodeResponse>> previewWorkflow(@Valid @RequestBody CreateTaskRequest request) {
+    public ApiResponse<TaskPlanPreviewResponse> previewWorkflow(@Valid @RequestBody CreateTaskRequest request) {
         return ApiResponse.success(taskService.previewWorkflow(request));
     }
 

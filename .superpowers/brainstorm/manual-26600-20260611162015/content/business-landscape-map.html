@@ -1,0 +1,153 @@
+﻿<h2>AI 竞品分析 Agent 协作系统：业务全景母图</h2>
+<p class="subtitle">双轨定位：短期主航道 = 竞品分析平台；长期演进 = 通用研究任务操作系统</p>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">第一层：主业务链路</div>
+    <div class="mockup-body">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px;">
+        <div class="option" data-choice="task-definition" onclick="toggleSelect(this)">
+          <div class="content">
+            <div class="label">01</div>
+            <h3>任务定义</h3>
+            <p>任务目标、研究对象、资料策略、输出要求、计划预览</p>
+          </div>
+        </div>
+        <div class="option" data-choice="search-collection" onclick="toggleSelect(this)">
+          <div class="content">
+            <div class="label">02</div>
+            <h3>搜索与采集</h3>
+            <p>搜索补源、动态抓取、反爬、候选验证、正式采集</p>
+          </div>
+        </div>
+        <div class="option" data-choice="extraction" onclick="toggleSelect(this)">
+          <div class="content">
+            <div class="label">03</div>
+            <h3>提取结构化</h3>
+            <p>字段抽取、Schema 对齐、sourceUrls 回指、证据覆盖</p>
+          </div>
+        </div>
+        <div class="option" data-choice="analysis" onclick="toggleSelect(this)">
+          <div class="content">
+            <div class="label">04</div>
+            <h3>分析推理</h3>
+            <p>竞品比较、优劣判断、洞察生成、结论与证据绑定</p>
+          </div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">
+        <div class="option" data-choice="writing" onclick="toggleSelect(this)">
+          <div class="content">
+            <div class="label">05</div>
+            <h3>报告写作</h3>
+            <p>正式报告、章节组织、结论呈现、证据引用落稿</p>
+          </div>
+        </div>
+        <div class="option" data-choice="review" onclick="toggleSelect(this)">
+          <div class="content">
+            <div class="label">06</div>
+            <h3>质量审查</h3>
+            <p>质量 checkpoint、问题分级、修订计划、补证/重写决策</p>
+          </div>
+        </div>
+        <div class="option" data-choice="conversation" onclick="toggleSelect(this)">
+          <div class="content">
+            <div class="label">07</div>
+            <h3>对话协同</h3>
+            <p>统一入口、解释、填表、动作预览、任务控制</p>
+          </div>
+        </div>
+        <div class="option" data-choice="delivery" onclick="toggleSelect(this)">
+          <div class="content">
+            <div class="label">08</div>
+            <h3>交付与审计</h3>
+            <p>报告交付、导出、证据追溯、过程审计、回放</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">第二层：平台底座</div>
+    <div class="mockup-body">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+        <div class="card" data-choice="runtime" onclick="toggleSelect(this)">
+          <div class="card-body">
+            <div class="label">A</div>
+            <h3>Agent Runtime 与工作流编排</h3>
+            <p>DAG、动态补图、恢复、重跑、人工接管、任务状态推进</p>
+          </div>
+        </div>
+        <div class="card" data-choice="knowledge" onclick="toggleSelect(this)">
+          <div class="card-body">
+            <div class="label">B</div>
+            <h3>知识摄取 / RAG / 记忆</h3>
+            <p>资料接入、索引、召回、重排、上下文装配、跨任务复用</p>
+          </div>
+        </div>
+        <div class="card" data-choice="infra-ai" onclick="toggleSelect(this)">
+          <div class="card-body">
+            <div class="label">C</div>
+            <h3>AI 与工具治理</h3>
+            <p>模型路由、重试熔断、工具权限、调用审计、容错边界</p>
+          </div>
+        </div>
+        <div class="card" data-choice="observability" onclick="toggleSelect(this)">
+          <div class="card-body">
+            <div class="label">D</div>
+            <h3>可观测与事件回放</h3>
+            <p>SSE、任务事件、搜索现场、日志、断线恢复、回放底座</p>
+          </div>
+        </div>
+        <div class="card" data-choice="governance" onclick="toggleSelect(this)">
+          <div class="card-body">
+            <div class="label">E</div>
+            <h3>质量 / 配额 / 安全治理</h3>
+            <p>证据规则、预算约束、来源可信度、URL 安全、组织配额</p>
+          </div>
+        </div>
+        <div class="card" data-choice="connectors" onclick="toggleSelect(this)">
+          <div class="card-body">
+            <div class="label">F</div>
+            <h3>连接器与资料入口</h3>
+            <p>上传资料、认证源、未来 Notion/飞书/Confluence 等入口</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>我建议的主次矛盾排序</h3>
+  <div class="options" data-multiselect>
+    <div class="option" data-choice="priority-1" onclick="toggleSelect(this)">
+      <div class="letter">1</div>
+      <div class="content">
+        <h3>主矛盾：主业务链路逐段失真</h3>
+        <p>搜索、提取、分析、写作、质检各段都在演进，但还没有一张统一业务母图收口。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="priority-2" onclick="toggleSelect(this)">
+      <div class="letter">2</div>
+      <div class="content">
+        <h3>第二矛盾：平台底座与业务协议没有完全对齐</h3>
+        <p>恢复、上下文、事件、审计都在做，但很多还是按技术对象流转，不是按正式业务事实流转。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="priority-3" onclick="toggleSelect(this)">
+      <div class="letter">3</div>
+      <div class="content">
+        <h3>第三矛盾：工作台和产品主路径仍被诊断视角压制</h3>
+        <p>能力很多，但用户主路径还没完全被“目标-问题-动作-追溯”组织起来。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <p class="subtitle">请重点看两件事：1）这 8 条主业务链路是否完整；2）右侧 6 个平台底座是否需要增删。你也可以直接点击你觉得最该优先展开的链路或底座。</p>
+</div>

@@ -1,0 +1,20 @@
+{"type":"server-started","port":63522,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:63522","screen_dir":"E:\\java_study\\Mul-agnet\\.superpowers\\brainstorm\\manual-26600-20260611162015\\content","state_dir":"E:\\java_study\\Mul-agnet\\.superpowers\\brainstorm\\manual-26600-20260611162015\\state"}
+{"type":"screen-added","file":"E:\\java_study\\Mul-agnet\\.superpowers\\brainstorm\\manual-26600-20260611162015\\content\\business-landscape-map.html"}
+{"source":"user-event","type":"click","text":"1\n      \n        主矛盾：主业务链路逐段失真\n        搜索、提取、分析、写作、质检各段都在演进，但还没有一张统一业务母图收口。","choice":"priority-1","id":null,"timestamp":1781166181718}
+{"source":"user-event","type":"click","text":"1\n      \n        主矛盾：主业务链路逐段失真\n        搜索、提取、分析、写作、质检各段都在演进，但还没有一张统一业务母图收口。","choice":"priority-1","id":null,"timestamp":1781166182598}
+{"source":"user-event","type":"click","text":"01\n            任务定义\n            任务目标、研究对象、资料策略、输出要求、计划预览","choice":"task-definition","id":null,"timestamp":1781166199594}
+{"source":"user-event","type":"click","text":"01\n            任务定义\n            任务目标、研究对象、资料策略、输出要求、计划预览","choice":"task-definition","id":null,"timestamp":1781166200443}
+{"source":"user-event","type":"click","text":"02\n            搜索与采集\n            搜索补源、动态抓取、反爬、候选验证、正式采集","choice":"search-collection","id":null,"timestamp":1781166564092}
+{"source":"user-event","type":"click","text":"02\n            搜索与采集\n            搜索补源、动态抓取、反爬、候选验证、正式采集","choice":"search-collection","id":null,"timestamp":1781166564859}
+{"source":"user-event","type":"click","text":"02\n            搜索与采集\n            搜索补源、动态抓取、反爬、候选验证、正式采集","choice":"search-collection","id":null,"timestamp":1781166566455}
+{"type":"screen-added","file":"E:\\java_study\\Mul-agnet\\.superpowers\\brainstorm\\manual-26600-20260611162015\\content\\business-landscape-map-v2.html"}
+{"source":"user-event","type":"click","text":"A知识摄取 / RAG / 记忆给业务链路提供资料底座、召回与复用能力","choice":"plat-knowledge","id":null,"timestamp":1781167543999}
+{"source":"user-event","type":"click","text":"1\n      业务链路 > 执行引擎 > 平台底座复杂度和优化深度不对称，母图必须反映这一点。","choice":"judgement-1","id":null,"timestamp":1781167578752}
+{"source":"user-event","type":"click","text":"2\n      Workflow / Search Plan 不再被误判为纯平台只要它承载候选裁剪、回退顺序、阶段规划，就已经是业务引擎的一部分。","choice":"judgement-2","id":null,"timestamp":1781167579989}
+{"source":"user-event","type":"click","text":"3\n      每条主链路后续都值得拥有自己的专题文档CollectorAgent.md 只是第一个样板，Extractor / Writer / Reviewer / Conversation 也应该各自展开。","choice":"judgement-3","id":null,"timestamp":1781167580656}
+{"source":"user-event","type":"click","text":"2\n      Workflow / Search Plan 不再被误判为纯平台只要它承载候选裁剪、回退顺序、阶段规划，就已经是业务引擎的一部分。","choice":"judgement-2","id":null,"timestamp":1781167581653}
+{"source":"user-event","type":"click","text":"1\n      业务链路 > 执行引擎 > 平台底座复杂度和优化深度不对称，母图必须反映这一点。","choice":"judgement-1","id":null,"timestamp":1781167582225}
+{"source":"user-event","type":"click","text":"3\n      每条主链路后续都值得拥有自己的专题文档CollectorAgent.md 只是第一个样板，Extractor / Writer / Reviewer / Conversation 也应该各自展开。","choice":"judgement-3","id":null,"timestamp":1781167582947}
+{"source":"user-event","type":"click","text":"02搜索与采集搜索补源、候选验证、动态抓取、反爬、正式采集、来源去噪","choice":"biz-02","id":null,"timestamp":1781167609919}
+{"type":"screen-added","file":"E:\\java_study\\Mul-agnet\\.superpowers\\brainstorm\\manual-26600-20260611162015\\content\\waiting-terminal.html"}
+{"type":"server-stopped","reason":"idle timeout"}

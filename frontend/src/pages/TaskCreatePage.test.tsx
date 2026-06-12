@@ -2,164 +2,65 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import TaskCreatePage, { buildCreateTaskRequest } from './TaskCreatePage'
-import type { TaskNodeInfo } from '../types'
+import type { TaskPlanPreviewContract } from '../types'
 
 const navigateMock = vi.fn()
+const createTaskMock = vi.fn()
+const executeTaskMock = vi.fn()
 const listSchemasMock = vi.fn()
 const previewWorkflowMock = vi.fn()
 const listKnowledgeDomainsMock = vi.fn()
 const listKnowledgeDomainDocumentsMock = vi.fn()
 
-function buildPreviewNode(overrides: Partial<TaskNodeInfo>): TaskNodeInfo {
+function buildFormalPreviewContract(): TaskPlanPreviewContract {
   return {
-    id: 1,
-    nodeName: 'collect_sources_01_01',
-    displayName: 'Notion AI - 官网采集',
-    nodeConfig: '{}',
-    configSummary: null,
-    configSummaryData: null,
-    collectorInsight: null,
-    nodeNotes: null,
-    allowFailedDependency: false,
-    agentType: 'COLLECTOR',
-    dependsOn: '[]',
-    required: true,
-    retryable: true,
-    maxRetries: 3,
-    retryCount: 0,
-    status: 'PENDING',
-    controlState: 'NONE',
-    errorMessage: null,
-    interventionReason: null,
-    executionOrder: 1,
-    inputSummary: null,
-    outputSummary: null,
-    inputData: null,
-    outputData: null,
-    startedAt: null,
-    completedAt: null,
-    ...overrides,
-  }
-}
-
-function buildPreviewWorkflow(): TaskNodeInfo[] {
-  return [
-    buildPreviewNode({
-      id: 11,
-      nodeName: 'collect_sources_01_01',
-      displayName: 'Notion AI - 官网采集',
-      agentType: 'COLLECTOR',
-      configSummaryData: {
-        competitorName: 'Notion AI',
-        sourceType: 'OFFICIAL',
-        sourceTypeLabel: '官网',
-        searchMode: 'HYBRID',
-        searchModeLabel: '混合',
-        candidateCount: 4,
-        queryCount: 2,
-        browserSearchEnabled: true,
-        verificationEnabled: true,
-        minVerifiedCandidates: 1,
-        sourceScope: ['官网', '产品文档'],
-        preferredDomains: ['notion.so'],
-        competitorUrls: ['https://www.notion.so/product/ai'],
-        discoveryNotes: '会优先从官网入口开始，再补充文档资料。',
+    contractType: 'TASK_PLAN_PREVIEW_V1',
+    goal: '围绕企业级 RAG 平台开展竞品研究',
+    competitorCount: 1,
+    collectorCount: 1,
+    pipelineCount: 4,
+    lanes: [],
+    stages: [
+      {
+        key: 'source-strategy',
+        stageCode: 'SOURCE_STRATEGY',
+        title: '规划来源策略',
+        summary: '优先覆盖官网、产品文档',
+        detail: '不足时再补充公网搜索',
+        sourceUrls: [],
       },
-      collectorInsight: {
-        competitorName: 'Notion AI',
-        sourceType: 'OFFICIAL',
-        sourceTypeLabel: '官网',
-        sourceScope: ['官网', '产品文档'],
-        competitorUrls: ['https://www.notion.so/product/ai'],
-        searchMode: 'HYBRID',
-        searchModeLabel: '混合',
-        searchQueries: ['Notion AI official site', 'Notion AI docs'],
-        browserSearchEnabled: true,
-        verifyResultPage: true,
-        minVerifiedCandidates: 1,
-        preferredDomains: ['notion.so'],
-        candidateCount: 4,
-        selectedCount: 0,
-        successCollected: 0,
-        totalCollected: 0,
-        discoveryNotes: '会优先从官网入口开始，再补充文档资料。',
-        searchProgress: null,
-        searchExecutionPlan: {
-          stage: 'COLLECT',
-          steps: [
-            {
-              stepCode: 'PLAN',
-              goal: '规划资料入口',
-              expectedDurationMs: 1000,
-              dependency: '',
-            },
-          ],
+    ],
+    nodes: [
+      {
+        nodeName: 'collect_sources_01_01',
+        displayName: 'Notion AI - DOCS采集',
+        agentType: 'COLLECTOR',
+        stageCode: 'SOURCE_STRATEGY',
+        goal: '优先覆盖官网与产品文档',
+        summary: '不足时再补充公网搜索',
+        configSummaryData: {
+          competitorName: 'Notion AI',
+          sourceType: 'DOCS',
+          sourceTypeLabel: '产品文档',
+          sourceScope: ['官网', '产品文档'],
+          competitorUrls: ['https://www.notion.so/product/ai'],
+          candidateCount: 4,
+          queryCount: 2,
+          browserSearchEnabled: true,
+          verificationEnabled: true,
+          minVerifiedCandidates: 1,
+          preferredDomains: ['notion.so'],
+          discoveryNotes: '优先官网，不足时再补充公网搜索',
         },
-        searchExecutionTrace: null,
-        searchProgressSnapshots: [],
-        sourceCandidates: [
-          {
-            url: 'https://www.notion.so/help',
-            title: 'Notion Help Center',
-            domain: 'notion.so',
-          },
-        ],
-        selectedTargets: [],
+        dependsOn: [],
+        required: true,
+        executionOrder: 0,
+        fallbackOrder: ['PLANNED', 'BROWSER', 'HEURISTIC', 'HTTP'],
+        sourceUrls: [],
       },
-    }),
-    buildPreviewNode({
-      id: 12,
-      nodeName: 'extract_schema',
-      displayName: '结构化提炼',
-      agentType: 'EXTRACTOR',
-      executionOrder: 2,
-      dependsOn: '["collect_sources_01_01"]',
-      configSummaryData: {
-        summaryText: '将按产品功能、目标用户进行结构化抽取',
-        dimensions: ['产品功能', '目标用户'],
-      },
-    }),
-    buildPreviewNode({
-      id: 13,
-      nodeName: 'analyze_competitors',
-      displayName: '竞品分析',
-      agentType: 'ANALYZER',
-      executionOrder: 3,
-      dependsOn: '["extract_schema"]',
-      configSummaryData: {
-        summaryText: '汇总 1 个竞品，分析 2 个维度',
-        competitorCount: 1,
-        dimensionCount: 2,
-      },
-    }),
-    buildPreviewNode({
-      id: 14,
-      nodeName: 'write_report',
-      displayName: '报告撰写',
-      agentType: 'WRITER',
-      executionOrder: 4,
-      dependsOn: '["analyze_competitors"]',
-      configSummaryData: {
-        summaryText: '输出中文 / 标准版报告',
-        mode: 'initial',
-        reportLanguage: '中文',
-        reportTemplate: '标准版',
-      },
-    }),
-    buildPreviewNode({
-      id: 15,
-      nodeName: 'quality_review',
-      displayName: '质量复核',
-      agentType: 'REVIEWER',
-      executionOrder: 5,
-      dependsOn: '["write_report"]',
-      configSummaryData: {
-        summaryText: '按标准质量评审复核 write_report',
-        qualityPolicy: '标准质量评审',
-        sourceNode: 'write_report',
-      },
-    }),
-  ]
+    ],
+    sourceUrls: [],
+  }
 }
 
 vi.mock('react-router-dom', async () => {
@@ -171,8 +72,8 @@ vi.mock('react-router-dom', async () => {
 })
 
 vi.mock('../api/client', () => ({
-  createTask: vi.fn(),
-  executeTask: vi.fn(),
+  createTask: (...args: unknown[]) => createTaskMock(...args),
+  executeTask: (...args: unknown[]) => executeTaskMock(...args),
   listSchemas: (...args: unknown[]) => listSchemasMock(...args),
   previewWorkflow: (...args: unknown[]) => previewWorkflowMock(...args),
   listKnowledgeDomains: (...args: unknown[]) => listKnowledgeDomainsMock(...args),
@@ -183,8 +84,10 @@ vi.mock('../api/client', () => ({
 describe('TaskCreatePage', () => {
   beforeEach(() => {
     navigateMock.mockReset()
+    createTaskMock.mockReset()
+    executeTaskMock.mockReset()
     listSchemasMock.mockResolvedValue({ data: [] })
-    previewWorkflowMock.mockResolvedValue({ data: [] })
+    previewWorkflowMock.mockResolvedValue({ data: null })
     listKnowledgeDomainsMock.mockResolvedValue({
       data: [
         {
@@ -275,7 +178,7 @@ describe('TaskCreatePage', () => {
       await Promise.resolve()
     })
 
-    expect(previewWorkflowMock).toHaveBeenCalled()
+    expect(previewWorkflowMock).toHaveBeenCalledTimes(1)
   })
 
   it('organizes the first screen around task goal, source strategy, plan preview, and adjustable inputs', async () => {
@@ -318,9 +221,9 @@ describe('TaskCreatePage', () => {
     expect(navigateMock).toHaveBeenCalledWith('/conversation?pageType=TASK_CREATE')
   })
 
-  it('keeps raw queries, candidate previews, and technical tags out of the default preview path', async () => {
+  it('renders preview board from formal preview contract instead of raw runtime node list', async () => {
     vi.useFakeTimers()
-    previewWorkflowMock.mockResolvedValue({ data: buildPreviewWorkflow() })
+    previewWorkflowMock.mockResolvedValue({ data: buildFormalPreviewContract() })
 
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -342,7 +245,7 @@ describe('TaskCreatePage', () => {
     })
 
     expect(previewWorkflowMock).toHaveBeenCalled()
-    expect(screen.getAllByText('Notion AI').length).toBeGreaterThan(0)
+    expect(screen.getByText(/^1\. 规划来源策略$/)).toBeInTheDocument()
     expect(screen.getByText('来源策略')).toBeInTheDocument()
     expect(screen.getByText('执行计划预览')).toBeInTheDocument()
     expect(screen.queryByText(/搜索 Query/)).not.toBeInTheDocument()

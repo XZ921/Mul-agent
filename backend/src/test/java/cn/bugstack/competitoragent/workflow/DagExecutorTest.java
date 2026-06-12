@@ -27,6 +27,7 @@ import cn.bugstack.competitoragent.workflow.runtime.DynamicPlanAppender;
 import cn.bugstack.competitoragent.workflow.runtime.RuntimeEventEmitter;
 import cn.bugstack.competitoragent.workflow.runtime.RuntimeStateRefresher;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -39,8 +40,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
@@ -432,6 +434,77 @@ class DagExecutorTest {
     }
 
     @Test
+    void shouldSeedTrimmedCollectorProjectionInsteadOfWholeCollectorOutput() throws Exception {
+        Long taskId = 506L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode completedCollector = TaskNode.builder()
+                .id(41L)
+                .taskId(taskId)
+                .nodeName("collect_a")
+                .displayName("collect_a")
+                .agentType(AgentType.COLLECTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .maxRetries(0)
+                .status(TaskNodeStatus.SUCCESS)
+                .outputData("""
+                        {
+                          "sourceUrls":["https://docs.example.com/reference"],
+                          "issueFlags":["SOURCE_URLS_BACKFILLED"],
+                          "selectedTargets":[{"url":"https://docs.example.com/reference"}],
+                          "searchExecutionTrace":{"fallbackDecision":"USE_BROWSER_SUPPLEMENT","degradationReason":"SEARCH_TIMEOUT_AFTER_SUPPLEMENT"},
+                          "results":[{"url":"https://docs.example.com/reference","fullContent":"very large body"}]
+                        }
+                        """)
+                .executionOrder(0)
+                .build();
+
+        TaskNode analyzer = TaskNode.builder()
+                .id(42L)
+                .taskId(taskId)
+                .nodeName("analyze_competitors")
+                .displayName("analyze_competitors")
+                .agentType(AgentType.ANALYZER)
+                .dependsOn("[\"collect_a\"]")
+                .required(true)
+                .retryable(false)
+                .maxRetries(0)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId))
+                .thenReturn(List.of(completedCollector, analyzer));
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new AlwaysSuccessAnalyzerAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        AgentContext context = AgentContext.builder().taskId(taskId).taskName("projection-test").build();
+        executor.execute(taskId, context);
+
+        JsonNode projection = new ObjectMapper().readTree(context.getSharedOutput("collect_a"));
+        assertTrue(projection.has("sourceUrls"));
+        assertTrue(projection.has("selectedUrls"));
+        assertFalse(projection.has("results"));
+        assertFalse(projection.toString().contains("fullContent"));
+    }
+
+    @Test
     void should_fail_node_when_capability_is_missing() {
         Long taskId = 909L;
         AnalysisTask task = AnalysisTask.builder()
@@ -472,7 +545,7 @@ class DagExecutorTest {
                 nodeRepository,
                 taskRepository,
                 agentType -> null,
-                new ObjectMapper(),
+                new ObjectMapper().findAndRegisterModules(),
                 snapshotCacheService,
                 lockService,
                 taskEventPublisher,
@@ -481,13 +554,14 @@ class DagExecutorTest {
                 mock(TaskNodeExecutionAttemptRepository.class),
                 mock(WorkflowDeadLetterRecordRepository.class),
                 new RuntimeStateRefresher(refresherTaskRepository, refresherNodeRepository, snapshotCacheService, taskEventPublisher),
-                new RuntimeEventEmitter(taskEventPublisher, mock(AgentLogService.class), new ObjectMapper()),
+                new RuntimeEventEmitter(taskEventPublisher, mock(AgentLogService.class),
+                        new ObjectMapper().findAndRegisterModules()),
                 new DynamicPlanAppender(
                         taskRepository,
                         nodeRepository,
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
-                        new ObjectMapper()),
+                        new ObjectMapper().findAndRegisterModules()),
                 mock(TaskQuotaCoordinator.class)
         );
 
@@ -588,7 +662,7 @@ class DagExecutorTest {
                 nodeRepository,
                 taskRepository,
                 registryOf(List.of(new ResumeCollectorAgent())),
-                new ObjectMapper(),
+                new ObjectMapper().findAndRegisterModules(),
                 snapshotCacheService,
                 lockService,
                 taskEventPublisher,
@@ -597,13 +671,14 @@ class DagExecutorTest {
                 mock(TaskNodeExecutionAttemptRepository.class),
                 mock(WorkflowDeadLetterRecordRepository.class),
                 new RuntimeStateRefresher(taskRepository, nodeRepository, snapshotCacheService, taskEventPublisher),
-                new RuntimeEventEmitter(taskEventPublisher, agentLogService, new ObjectMapper()),
+                new RuntimeEventEmitter(taskEventPublisher, agentLogService,
+                        new ObjectMapper().findAndRegisterModules()),
                 new DynamicPlanAppender(
                         taskRepository,
                         nodeRepository,
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
-                        new ObjectMapper()),
+                        new ObjectMapper().findAndRegisterModules()),
                 mock(TaskQuotaCoordinator.class)
         );
 
@@ -670,7 +745,7 @@ class DagExecutorTest {
                 nodeRepository,
                 taskRepository,
                 registryOf(List.of(new AlwaysTimeoutCollectorAgent())),
-                new ObjectMapper(),
+                new ObjectMapper().findAndRegisterModules(),
                 snapshotCacheService,
                 lockService,
                 mock(TaskEventPublisher.class),
@@ -679,13 +754,14 @@ class DagExecutorTest {
                 attemptRepository,
                 deadLetterRepository,
                 new RuntimeStateRefresher(taskRepository, nodeRepository, snapshotCacheService, mock(TaskEventPublisher.class)),
-                new RuntimeEventEmitter(mock(TaskEventPublisher.class), mock(AgentLogService.class), new ObjectMapper()),
+                new RuntimeEventEmitter(mock(TaskEventPublisher.class), mock(AgentLogService.class),
+                        new ObjectMapper().findAndRegisterModules()),
                 new DynamicPlanAppender(
                         taskRepository,
                         nodeRepository,
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
-                        new ObjectMapper()),
+                        new ObjectMapper().findAndRegisterModules()),
                 mock(TaskQuotaCoordinator.class)
         );
 
@@ -703,6 +779,57 @@ class DagExecutorTest {
         assertEquals(NodeFailureCategory.TRANSIENT_INFRASTRUCTURE, savedDeadLetters.get(0).getFailureCategory());
         assertTrue(savedDeadLetters.get(0).getRetryHistory().contains("\"attemptNo\":1"));
         assertTrue(savedDeadLetters.get(0).getRetryHistory().contains("\"attemptNo\":2"));
+    }
+
+    @Test
+    void shouldWaitForScheduledRetryWindowBeforeStoppingExecution() {
+        Long taskId = 910L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode collector = TaskNode.builder()
+                .id(92L)
+                .taskId(taskId)
+                .nodeName("collect_sources_web")
+                .displayName("collect_sources_web")
+                .agentType(AgentType.COLLECTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(true)
+                .maxRetries(2)
+                .retryCount(1)
+                .status(TaskNodeStatus.WAITING_RETRY)
+                .executionOrder(0)
+                .build();
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        AtomicLong nodeListReadCount = new AtomicLong();
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenAnswer(invocation -> {
+            if (nodeListReadCount.incrementAndGet() == 1) {
+                collector.setNextRetryAt(java.time.LocalDateTime.now().plus(java.time.Duration.ofSeconds(1)));
+            }
+            return List.of(collector);
+        });
+        when(nodeRepository.findById(92L)).thenReturn(Optional.of(collector));
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new AlwaysSuccessCollectorAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("scheduled-retry-test").build());
+
+        assertEquals(TaskNodeStatus.SUCCESS, collector.getStatus());
+        assertEquals(AnalysisTaskStatus.SUCCESS, task.getStatus());
     }
 
     @Test
@@ -741,7 +868,7 @@ class DagExecutorTest {
         TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
         TaskSnapshotCacheService snapshotCacheService = mock(TaskSnapshotCacheService.class);
         TaskExecutionLockService lockService = allowingNodeLockService();
-        ObjectMapper mapper = new ObjectMapper();
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
         String rootPlanSnapshot = mapper.writeValueAsString(WorkflowPlan.builder()
                 .planVersionId(1L)
                 .planVersion(1)
@@ -871,7 +998,7 @@ class DagExecutorTest {
                                               TaskExecutionLockService lockService) {
         TaskEventPublisher taskEventPublisher = mock(TaskEventPublisher.class);
         AgentLogService agentLogService = mock(AgentLogService.class);
-        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
         return new DagExecutor(
                 nodeRepository,
                 taskRepository,

@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.task;
 
 import cn.bugstack.competitoragent.config.RedisConfig;
+import cn.bugstack.competitoragent.search.SearchSharedProjection;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -91,7 +92,7 @@ public class TaskSnapshotCacheService {
         }
         try {
             String runtimeKey = buildRuntimeKey(taskId);
-            stringRedisTemplate.opsForHash().put(runtimeKey, nodeName, outputData);
+            stringRedisTemplate.opsForHash().put(runtimeKey, nodeName, normalizeCachedNodeOutput(nodeName, outputData));
             stringRedisTemplate.expire(runtimeKey, redisProperties.getRuntimeTtl());
         } catch (Exception e) {
             log.warn("cache node output to redis failed, taskId={}, nodeName={}", taskId, nodeName, e);
@@ -146,5 +147,31 @@ public class TaskSnapshotCacheService {
 
     private String buildRuntimeKey(Long taskId) {
         return "competitor-agent:task:runtime:" + taskId;
+    }
+
+    /**
+     * Redis 里的共享输出只保留稳定投影，
+     * 这样恢复执行和任务上下文组装都不会继续背着 collector 大 JSON 前进。
+     */
+    private String normalizeCachedNodeOutput(String nodeName, String outputData) {
+        if (!looksLikeCollectorNode(nodeName)
+                || !SearchSharedProjection.supportsCollectorOutput(objectMapper, outputData)) {
+            return outputData;
+        }
+        try {
+            return objectMapper.writeValueAsString(
+                    SearchSharedProjection.fromCollectorOutput(objectMapper, outputData)
+            );
+        } catch (Exception e) {
+            log.warn("serialize collector shared projection failed, nodeName={}", nodeName, e);
+            return outputData;
+        }
+    }
+
+    private boolean looksLikeCollectorNode(String nodeName) {
+        if (nodeName == null || nodeName.isBlank()) {
+            return false;
+        }
+        return nodeName.startsWith("collect");
     }
 }

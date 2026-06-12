@@ -36,7 +36,8 @@ class SearchExecutionCoordinatorTest {
             browserSearchRuntimeService,
             searchSourceProvider,
             new SourceCandidateRanker(),
-            new CollectionTargetSelector()
+            new CollectionTargetSelector(),
+            new SearchPolicyResolver()
     );
 
     @Test
@@ -176,7 +177,8 @@ class SearchExecutionCoordinatorTest {
                 browserRuntimeService,
                 sourceProvider,
                 new SourceCandidateRanker(),
-                targetSelector
+                targetSelector,
+                new SearchPolicyResolver()
         );
         SourceCandidate plannedCandidate = SourceCandidate.builder()
                 .url("https://planned.example.com/docs")

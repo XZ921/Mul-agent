@@ -3,10 +3,12 @@ package cn.bugstack.competitoragent.workflow;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
+import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.Builder;
 import lombok.Data;
 
@@ -212,11 +214,13 @@ public class NodeExecutionRecoveryPolicy {
         boolean changed = false;
         for (TaskNode node : nodes) {
             if (node.getStatus() == TaskNodeStatus.RUNNING || node.getStatus() == TaskNodeStatus.DISPATCHED) {
+                preserveCollectorSearchCheckpoint(node);
                 resetNodeForInterruptedRestart(node);
                 changed = true;
                 continue;
             }
             if (node.getStatus() == TaskNodeStatus.PENDING || node.getStatus() == TaskNodeStatus.READY) {
+                preserveCollectorSearchCheckpoint(node);
                 node.setControlState(TaskNodeControlState.NONE);
                 node.setInputData(null);
                 node.setStartedAt(null);
@@ -318,6 +322,37 @@ public class NodeExecutionRecoveryPolicy {
         node.setLastAttemptAt(null);
         node.setNextRetryAt(null);
         node.setRetryCount(0);
+    }
+
+    /**
+     * Collector 中断恢复时优先保留正式 searchAudit，
+     * 让 resume/rerun 可以直接从最新一次已确认的搜索现场继续，而不是退回到更旧的 checkpoint。
+     */
+    private void preserveCollectorSearchCheckpoint(TaskNode node) {
+        if (node == null
+                || node.getAgentType() != AgentType.COLLECTOR
+                || node.getOutputData() == null
+                || node.getOutputData().isBlank()) {
+            return;
+        }
+        JsonNode outputNode = readJson(node.getOutputData());
+        if (outputNode == null) {
+            return;
+        }
+        JsonNode auditNode = outputNode.get("searchAudit");
+        if (auditNode == null || auditNode.isNull() || auditNode.isMissingNode()) {
+            return;
+        }
+        try {
+            JsonNode configNode = readJson(node.getNodeConfig());
+            ObjectNode configObject = configNode != null && configNode.isObject()
+                    ? (ObjectNode) configNode.deepCopy()
+                    : objectMapper.createObjectNode();
+            configObject.set("searchAuditCheckpoint", auditNode.deepCopy());
+            node.setNodeConfig(objectMapper.writeValueAsString(configObject));
+        } catch (Exception ignored) {
+            // 检查点保留属于恢复优化，失败时不要反向阻断节点状态回滚。
+        }
     }
 
     private boolean hasRevisionFlowSucceeded(List<TaskNode> nodes) {

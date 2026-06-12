@@ -6,20 +6,22 @@ import cn.bugstack.competitoragent.agent.collector.CollectorAgent;
 import cn.bugstack.competitoragent.agent.extractor.SchemaExtractorAgent;
 import cn.bugstack.competitoragent.agent.reviewer.QualityReviewAgent;
 import cn.bugstack.competitoragent.agent.writer.ReportWriterAgent;
+import cn.bugstack.competitoragent.workflow.CollectorPlanTemplateFactory;
+import cn.bugstack.competitoragent.workflow.ExecutionPlanDefinitionBuilder;
 import cn.bugstack.competitoragent.workflow.WorkflowFactory;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Phase 2 Task 1 先把历史耦合登记成具名白名单模型。
- * 当前阶段只负责“把事实记清楚”，不在这里承载规则判断，真正生效的边界仍由 BackendModuleDependencyTest 接手。
+ * 架构白名单台账。
+ * 当前阶段只负责把历史耦合显式登记出来，真正的边界约束仍由 ArchUnit 规则本身执行。
  */
 final class ArchitectureWhitelist {
 
     /**
-     * 当前已有的历史豁免全部要求显式写出规则名、类名、原因与计划回收阶段。
-     * 这样后续阶段不论是否真正完成回收，至少都能在 progress / ledger 中追踪“为什么还留着”。
+     * 所有历史豁免都必须记录规则名、类名、原因和预计回收阶段，
+     * 这样后续回看时能够知道“为什么还留着”和“准备在哪个阶段清理”。
      */
     static final List<Exemption> EXEMPTIONS = List.of(
             new Exemption(
@@ -46,28 +48,42 @@ final class ArchitectureWhitelist {
             new Exemption(
                     "agent_classes_should_not_access_task_repositories",
                     SchemaExtractorAgent.class.getName(),
-                    "knowledge 抽取 Agent 当前仍沿用历史 repository 访问方式，phase4a 先收口知识读接口与 contract 归属。",
+                    "knowledge 抽取 Agent 当前仍沿用历史 repository 访问方式，phase4a 先收口知识读取 contract 再评估回收。",
                     "phase5-modularization-evaluation-task",
                     "A"
             ),
             new Exemption(
                     "agent_classes_should_not_access_task_repositories",
                     QualityReviewAgent.class.getName(),
-                    "report 质量复核 Agent 仍在 legacy 结构中直接读取持久化对象，需等待 report facade 与消费视图稳定后再评估回收。",
+                    "report 质量复核 Agent 仍在 legacy 结构里直接读取持久化对象，需等待 report facade 与消费视图稳定后再回收。",
                     "phase5-modularization-evaluation-task",
                     "B"
             ),
             new Exemption(
                     "agent_classes_should_not_access_task_repositories",
                     ReportWriterAgent.class.getName(),
-                    "report 生成 Agent 当前仍直接读取证据与报告持久化对象，phase4b 之前不在本阶段提前修改其历史实现。",
+                    "report 生成 Agent 当前仍直接读取证据与报告持久化对象，phase4b 之前不在本阶段提前改造其历史实现。",
                     "phase5-modularization-evaluation-task",
                     "B"
             ),
             new Exemption(
                     "workflow_should_not_depend_on_business_agent_implementations",
                     WorkflowFactory.class.getName(),
-                    "WorkflowFactory 仍承担把搜索规划翻译成 Collector 节点配置的历史职责，需等待 phase3b 的 collection facade 稳定后再回收。",
+                    "WorkflowFactory 仍承担把搜索规划翻译成 Collector 节点配置的历史职责，需等待 phase3b collection facade 稳定后统一回收。",
+                    "phase3b-collection-evidence-task",
+                    "B"
+            ),
+            new Exemption(
+                    "workflow_should_not_depend_on_business_agent_implementations",
+                    CollectorPlanTemplateFactory.class.getName(),
+                    "2.1.1/2.1.2 将 WorkflowFactory 的 collector 节点配置拼装拆到模板工厂，但底层仍复用同一份 CollectorNodeConfig 契约，后续随 collection facade 一并降耦。",
+                    "phase3b-collection-evidence-task",
+                    "B"
+            ),
+            new Exemption(
+                    "workflow_should_not_depend_on_business_agent_implementations",
+                    ExecutionPlanDefinitionBuilder.class.getName(),
+                    "ExecutionPlanDefinitionBuilder 当前只是承接 WorkflowFactory 拆出的规划装配职责，仍需要读取 Collector 节点契约；后续与 collection facade 一起回收。",
                     "phase3b-collection-evidence-task",
                     "B"
             )
@@ -77,8 +93,7 @@ final class ArchitectureWhitelist {
     }
 
     /**
-     * BackendModuleDependencyTest 只允许通过规则名读取具名豁免，
-     * 避免再次把类名硬编码回测试入口。
+     * ArchUnit 规则只通过规则名读取对应白名单，避免把类名再次硬编码回规则入口。
      */
     static List<String> classNamesForRule(String ruleName) {
         return EXEMPTIONS.stream()
@@ -88,7 +103,7 @@ final class ArchitectureWhitelist {
     }
 
     /**
-     * 统一生成规则级白名单摘要，便于失败时快速看出当前有哪些历史豁免仍未回收。
+     * 统一生成规则级白名单摘要，便于失败时快速看到当前还有哪些历史豁免未回收。
      */
     static String summaryForRule(String ruleName) {
         List<String> simpleNames = EXEMPTIONS.stream()
@@ -105,7 +120,7 @@ final class ArchitectureWhitelist {
     }
 
     /**
-     * 白名单记录本身只表达“谁、因为什么、预计何时回收”，不在这里加入规则执行逻辑。
+     * 白名单记录本身只表达“谁、为什么、预计何时回收”，不在这里加入规则执行逻辑。
      */
     record Exemption(
             String ruleName,

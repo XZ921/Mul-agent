@@ -41,6 +41,7 @@ import cn.bugstack.competitoragent.workflow.event.WorkflowEventConsumer;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventType;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.playwright.Playwright;
 import org.junit.jupiter.api.BeforeEach;
@@ -240,6 +241,25 @@ class Phase2WorkflowIntegrationTest {
         assertTrue(recentEvents.stream().anyMatch(event -> event.getEventType() == TaskEventType.AGENT_OUTPUT),
                 () -> "最近事件类型=" + recentEventTypes + "，详情=" + recentEventDetails);
 
+        TaskNode collectorNode = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId).stream()
+                .filter(node -> node.getNodeName().startsWith("collect_sources_"))
+                .findFirst()
+                .orElseThrow();
+        JsonNode collectorOutput = objectMapper.readTree(collectorNode.getOutputData());
+        assertTrue(collectorOutput.hasNonNull("searchAudit"));
+        assertEquals("SELECT_TARGETS",
+                collectorOutput.path("searchAudit").path("executionTrace").path("recoveryCheckpoint").asText());
+        assertTrue(collectorOutput.path("searchAudit").path("sourceUrls").isArray());
+
+        TaskStreamEvent searchEvent = recentEvents.stream()
+                .filter(event -> event.getEventType() == TaskEventType.SEARCH_PROGRESS)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("SEARCH_PROGRESS_V1", searchEvent.getPayload().get("contractType"));
+        assertTrue(searchEvent.getPayload().containsKey("searchAudit"));
+        assertTrue(searchEvent.getPayload().containsKey("selectedTargets"));
+        assertTrue(searchEvent.getPayload().containsKey("sourceUrls"));
+
         String replayCursor = recentEvents.stream()
                 .filter(event -> event.getCursor() != null && event.getEventType() != TaskEventType.DIAGNOSIS)
                 .findFirst()
@@ -274,6 +294,27 @@ class Phase2WorkflowIntegrationTest {
         assertTrue(successReplayFrame.getReplayEvents().stream()
                 .anyMatch(event -> event.getEventType() == TaskEventType.TASK_SNAPSHOT
                         || event.getEventType() == TaskEventType.NODE_STATUS));
+
+        ResponseEntity<ApiResponse> replayEntity = restTemplate.getForEntity(
+                taskUrl("/" + taskId + "/replay"),
+                ApiResponse.class
+        );
+        assertEquals(200, replayEntity.getStatusCode().value());
+        Map<?, ?> replayPayload = (Map<?, ?>) replayEntity.getBody().getData();
+        List<?> searchReplays = (List<?>) replayPayload.get("searchReplays");
+        assertFalse(searchReplays.isEmpty());
+
+        String collectorNodeName = collectorNode.getNodeName();
+        restTemplate.postForEntity(taskUrl("/" + taskId + "/nodes/" + collectorNodeName + "/rerun"), null, ApiResponse.class);
+        consumeLatestTaskExecutionRequested(taskId);
+        waitForTaskDetailStatus(taskId, AnalysisTaskStatus.SUCCESS);
+
+        TaskNode rerunCollector = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId).stream()
+                .filter(node -> collectorNodeName.equals(node.getNodeName()))
+                .findFirst()
+                .orElseThrow();
+        assertTrue(rerunCollector.getNodeConfig().contains("searchAuditCheckpoint"));
+        assertTrue(rerunCollector.getNodeConfig().contains("SELECT_TARGETS"));
 
         List<Report> reports = reportRepository.findAll();
         assertFalse(reports.isEmpty());
@@ -397,13 +438,14 @@ class Phase2WorkflowIntegrationTest {
             String url = "PRICING".equalsIgnoreCase(sourceType)
                     ? "https://www.notion.so/pricing"
                     : "https://www.notion.so/help";
+            String pageTitle = "PRICING".equalsIgnoreCase(sourceType) ? "Notion Pricing" : "Notion AI Help";
             String evidenceId = "T%04d-%s-001".formatted(context.getTaskId(), sourceType);
 
             evidenceSourceRepository.save(EvidenceSource.builder()
                     .taskId(context.getTaskId())
                     .competitorName(competitorName)
                     .evidenceId(evidenceId)
-                    .title("PRICING".equalsIgnoreCase(sourceType) ? "Notion Pricing" : "Notion AI Help")
+                    .title(pageTitle)
                     .url(url)
                     .contentSnippet("Phase 2 集成测试固定来源")
                     .fullContent("Phase 2 集成测试固定来源，用于验证多源补源与实时观察闭环。")
@@ -426,6 +468,56 @@ class Phase2WorkflowIntegrationTest {
                       "sourceCandidates": [{"url":"%s","title":"%s","sourceType":"%s","discoveryMethod":"SEARCH","domain":"www.notion.so","verified":true}],
                       "successCollected": 1,
                       "totalCollected": 1,
+                      "searchAudit": {
+                        "executionTrace": {
+                          "traceVersion":"v1",
+                          "searchMode":"HYBRID",
+                          "fallbackDecision":"USE_PLANNED_CANDIDATES",
+                          "recoveryCheckpoint":"SELECT_TARGETS",
+                          "resumedFromCheckpoint": false,
+                          "degraded": false,
+                          "providerFallbackUsed": false,
+                          "plannedCandidateCount": 1,
+                          "verifiedCandidateCount": 1,
+                          "supplementedCandidateCount": 0,
+                          "selectedCandidateCount": 1,
+                          "selectedUrls": ["%s"]
+                        },
+                        "latestProgress": {
+                          "status":"SUCCESS",
+                          "currentStep":"瀹屾垚琛ยู簮",
+                          "completedSteps":3,
+                          "totalSteps":3,
+                          "progressPercent":100
+                        },
+                        "progressHistory": [
+                          {"currentStep":"鎼滅储鍊欓€夋潵婧?","completedSteps":1,"totalSteps":3,"progressPercent":33,"status":"RUNNING"},
+                          {"currentStep":"楠岃瘉鐩爣","completedSteps":2,"totalSteps":3,"progressPercent":66,"status":"RUNNING"},
+                          {"currentStep":"瀹屾垚琛ユ簮","completedSteps":3,"totalSteps":3,"progressPercent":100,"status":"SUCCESS"}
+                        ],
+                        "selectedTargets": [
+                          {
+                            "candidate":{
+                              "url":"%s",
+                              "title":"%s",
+                              "sourceType":"%s",
+                              "discoveryMethod":"SEARCH",
+                              "domain":"www.notion.so",
+                              "verified":true
+                            },
+                            "collectedPage":{
+                              "url":"%s",
+                              "competitorName":"%s",
+                              "sourceType":"%s",
+                              "title":"%s",
+                              "snippet":"Phase 2 闆嗘垚娴嬭瘯鍥哄畾鏉ยู簮",
+                              "content":"Phase 2 闆嗘垚娴嬭瘯鍥哄畾鏉ยู簮锛岀敤浜庨獙璇佸婧愯ˉ婧愪笌瀹炴椂瑙傚療闂幆銆?",
+                              "success":true
+                            }
+                          }
+                        ],
+                        "sourceUrls": ["%s"]
+                      },
                       "discoveryNotes": "Phase 2 固定候选来源",
                       "searchProgress": {
                         "status":"SUCCESS",
@@ -448,14 +540,31 @@ class Phase2WorkflowIntegrationTest {
                         "verifiedCandidateCount": 1,
                         "supplementedCandidateCount": 0,
                         "selectedCandidateCount": 1,
+                        "fallbackDecision":"USE_PLANNED_CANDIDATES",
+                        "recoveryCheckpoint":"SELECT_TARGETS",
                         "selectedUrls": ["%s"]
                       }
                     }
-                    """.formatted(competitorName, sourceType, url, competitorName, competitorName, url,
-                    "PRICING".equalsIgnoreCase(sourceType) ? "Notion Pricing" : "Notion AI Help",
-                    url,
-                    "PRICING".equalsIgnoreCase(sourceType) ? "Notion Pricing" : "Notion AI Help",
+                    """.formatted(
+                    competitorName,
                     sourceType,
+                    url,
+                    competitorName,
+                    competitorName,
+                    url,
+                    pageTitle,
+                    url,
+                    pageTitle,
+                    sourceType,
+                    url,
+                    url,
+                    pageTitle,
+                    sourceType,
+                    url,
+                    competitorName,
+                    sourceType,
+                    pageTitle,
+                    url,
                     url);
             return AgentResult.success(output, "采集完成");
         }).when(collectorAgent).execute(any(AgentContext.class));

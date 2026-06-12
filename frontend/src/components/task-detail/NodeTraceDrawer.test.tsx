@@ -87,6 +87,7 @@ describe('NodeTraceDrawer', () => {
         sourceCandidateStageSummary={[]}
         sourceCandidateGroups={[]}
         selectedTargets={[]}
+        selectedSearchSourceUrls={[]}
         selectedReviewPayload={null}
         selectedNodeDependencies={[]}
         selectedNodeEvidenceIds={[]}

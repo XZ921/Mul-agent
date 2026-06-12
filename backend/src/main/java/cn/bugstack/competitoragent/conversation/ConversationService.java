@@ -344,6 +344,7 @@ public class ConversationService {
                     List.of(),
                     "当前检索链路暂时不可用，因此本次只返回安全补证提示。",
                     "",
+                    List.of(),
                     List.of()
             );
         }
@@ -359,7 +360,7 @@ public class ConversationService {
                 continue;
             }
             evidences.add(ConversationResponse.RetrievalEvidence.builder()
-                    .evidenceId(result.hitDocumentIds().isEmpty() ? null : result.hitDocumentIds().get(0))
+                    .evidenceId(result.hitEvidenceIds().isEmpty() ? null : result.hitEvidenceIds().get(0))
                     .title("知识检索 / SOURCE_URL")
                     .snippet(firstNonBlank(result.answer(), result.gapSummary()))
                     .sourceCategory("KNOWLEDGE_FACADE")

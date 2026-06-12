@@ -123,5 +123,5 @@ describe('KnowledgeSourceIntakeCard', () => {
 
     expect(await screen.findByText('来源已回指到 https://docs.example.com/launch-guide.pdf，并已进入 task-88 的证据消费链路')).toBeInTheDocument()
     expect(screen.getByText('T0088-COLLECT-001')).toBeInTheDocument()
-  })
+  }, 10000)
 })

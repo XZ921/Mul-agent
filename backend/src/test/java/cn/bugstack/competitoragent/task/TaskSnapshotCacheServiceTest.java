@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -105,5 +106,27 @@ class TaskSnapshotCacheServiceTest {
 
         verify(stringRedisTemplate).delete("competitor-agent:task:snapshot:19");
         verify(stringRedisTemplate).delete("competitor-agent:task:runtime:19");
+    }
+
+    @Test
+    void shouldCacheStableCollectorProjectionInsteadOfWholeCollectorOutput() {
+        cacheService.cacheNodeOutput(19L, "collect_sources_web", """
+                {
+                  "searchExecutionTrace":{"fallbackDecision":"USE_BROWSER_SUPPLEMENT"},
+                  "searchAudit":{"executionTrace":{"recoveryCheckpoint":"SELECT_TARGETS"}},
+                  "selectedTargets":[{"url":"https://docs.example.com"}],
+                  "sourceUrls":["https://docs.example.com"],
+                  "results":[{"url":"https://docs.example.com","fullContent":"very large body"}]
+                }
+                """);
+
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(hashOperations).put(eq("competitor-agent:task:runtime:19"), eq("collect_sources_web"), payloadCaptor.capture());
+
+        String cachedPayload = String.valueOf(payloadCaptor.getValue());
+        assertTrue(cachedPayload.contains("\"sourceUrls\""));
+        assertTrue(cachedPayload.contains("https://docs.example.com"));
+        assertTrue(!cachedPayload.contains("fullContent"));
+        assertTrue(!cachedPayload.contains("\"results\""));
     }
 }

@@ -89,11 +89,7 @@ export default function ConversationPage() {
       appendAssistantMessage(setMessages, assistantPayload)
       return true
     } catch (error) {
-      const readableMessage = buildGovernanceActionFailureMessage(
-        error,
-        '统一对话入口暂时不可用',
-        '请稍后重试或返回原页面继续处理。',
-      )
+      const readableMessage = buildConversationUnavailableMessage(error)
       appMessage.error(readableMessage)
       appendAssistantMessage(setMessages, {
         answer: readableMessage,
@@ -133,6 +129,22 @@ export default function ConversationPage() {
       </div>
     </div>
   )
+}
+
+/**
+ * 统一对话入口的降级说明必须优先可读、可继续操作，
+ * 不能把 gateway timeout 之类的底层报错直接灌到首屏解释里。
+ */
+function buildConversationUnavailableMessage(error: unknown) {
+  const responseData = (error as { response?: { data?: unknown } } | null | undefined)?.response?.data
+  if (responseData && typeof responseData === 'object') {
+    return buildGovernanceActionFailureMessage(
+      error,
+      '当前解释入口暂时不可用',
+      '请稍后重试或返回原页面继续处理。',
+    )
+  }
+  return '当前解释入口暂时不可用，请稍后重试或返回原页面继续处理。'
 }
 
 function appendAssistantMessage(

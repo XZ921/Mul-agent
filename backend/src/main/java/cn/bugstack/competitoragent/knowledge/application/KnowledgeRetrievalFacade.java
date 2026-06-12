@@ -22,7 +22,8 @@ public interface KnowledgeRetrievalFacade {
             List<String> sourceUrls,
             String gapSummary,
             String answer,
-            List<String> hitDocumentIds
+            List<String> hitDocumentIds,
+            List<String> hitEvidenceIds
     ) {
     }
 }

@@ -468,6 +468,82 @@ class TaskRuntimeCommandAppServiceTest {
     }
 
     @Test
+    void shouldPreservePlanVersionSemanticsWhenRerunningCollectorNode() throws Exception {
+        Long taskId = 1205L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.FAILED)
+                .currentPlanVersionId(31L)
+                .currentPlanVersion(2)
+                .build();
+        TaskNode collectorNode = successfulNode(taskId, "collect_sources_web", AgentType.COLLECTOR, "[]", 0);
+        collectorNode.setPlanVersionId(31L);
+        collectorNode.setNodeConfig("""
+                {
+                  "competitorName":"Notion AI",
+                  "searchFallbackOrder":["PLANNED","BROWSER","HEURISTIC","HTTP"],
+                  "searchExecutionPlan":{
+                    "stage":"COLLECTOR_SEARCH_AND_COLLECT",
+                    "fallbackOrder":["PLANNED","BROWSER","HEURISTIC","HTTP"],
+                    "steps":[]
+                  }
+                }
+                """);
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(collectorNode));
+
+        taskRuntimeCommandAppService.rerunFromNode(taskId, "collect_sources_web");
+
+        assertEquals(31L, task.getCurrentPlanVersionId());
+        assertEquals(2, task.getCurrentPlanVersion());
+        assertEquals(31L, collectorNode.getPlanVersionId());
+        JsonNode nodeConfig = objectMapper.readTree(collectorNode.getNodeConfig());
+        assertEquals("COLLECTOR_SEARCH_AND_COLLECT",
+                nodeConfig.path("searchExecutionPlan").path("stage").asText());
+        assertEquals("PLANNED",
+                nodeConfig.path("searchExecutionPlan").path("fallbackOrder").get(0).asText());
+    }
+
+    @Test
+    void shouldPreservePlanVersionSemanticsWhenResumingTask() throws Exception {
+        Long taskId = 1206L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.FAILED)
+                .currentPlanVersionId(41L)
+                .currentPlanVersion(4)
+                .build();
+        TaskNode collectorNode = failedNode(taskId, "collect_sources_web", AgentType.COLLECTOR, "[]", 0);
+        collectorNode.setPlanVersionId(41L);
+        collectorNode.setNodeConfig("""
+                {
+                  "competitorName":"Notion AI",
+                  "searchFallbackOrder":["PLANNED","BROWSER","HEURISTIC","HTTP"],
+                  "searchExecutionPlan":{
+                    "stage":"COLLECTOR_SEARCH_AND_COLLECT",
+                    "fallbackOrder":["PLANNED","BROWSER","HEURISTIC","HTTP"],
+                    "steps":[]
+                  }
+                }
+                """);
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(collectorNode));
+
+        taskRuntimeCommandAppService.resumeTask(taskId);
+
+        assertEquals(41L, task.getCurrentPlanVersionId());
+        assertEquals(4, task.getCurrentPlanVersion());
+        assertEquals(41L, collectorNode.getPlanVersionId());
+        JsonNode nodeConfig = objectMapper.readTree(collectorNode.getNodeConfig());
+        assertEquals("COLLECTOR_SEARCH_AND_COLLECT",
+                nodeConfig.path("searchExecutionPlan").path("stage").asText());
+        assertEquals("PLANNED",
+                nodeConfig.path("searchExecutionPlan").path("fallbackOrder").get(0).asText());
+    }
+
+    @Test
     void shouldWriteSearchAuditCheckpointBackToCollectorConfigWhenRerunningCollectorNode() throws Exception {
         Long taskId = 105L;
         AnalysisTask task = AnalysisTask.builder()

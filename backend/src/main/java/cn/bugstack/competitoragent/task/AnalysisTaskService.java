@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.task;
 import cn.bugstack.competitoragent.model.dto.CreateTaskRequest;
 import cn.bugstack.competitoragent.model.dto.TaskListPageResponse;
 import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
+import cn.bugstack.competitoragent.model.dto.TaskPlanPreviewResponse;
 import cn.bugstack.competitoragent.model.dto.TaskResponse;
 import cn.bugstack.competitoragent.model.dto.UpdateNodeConfigRequest;
 import cn.bugstack.competitoragent.task.application.TaskQueryFacade;
@@ -46,7 +47,7 @@ public class AnalysisTaskService {
         return taskQueryFacade.getTaskNodes(taskId);
     }
 
-    public List<TaskNodeResponse> previewWorkflow(CreateTaskRequest request) {
+    public TaskPlanPreviewResponse previewWorkflow(CreateTaskRequest request) {
         return taskDefinitionAppService.previewWorkflow(request);
     }
 

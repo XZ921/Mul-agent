@@ -118,4 +118,35 @@ class NodeExecutionRecoveryPolicyTest {
         assertNull(failedAnalyzer.getErrorMessage());
         assertEquals(0, failedAnalyzer.getRetryCount());
     }
+
+    @Test
+    void shouldKeepCollectorSearchAuditCheckpointWhenResettingInterruptedNodes() {
+        TaskNode runningCollector = TaskNode.builder()
+                .taskId(2L)
+                .nodeName("collect_sources_docs")
+                .displayName("collect_sources_docs")
+                .agentType(AgentType.COLLECTOR)
+                .status(TaskNodeStatus.RUNNING)
+                .nodeConfig("""
+                        {
+                          "searchAuditCheckpoint":{
+                            "executionTrace":{"recoveryCheckpoint":"VERIFY_TOP_CANDIDATES"}
+                          }
+                        }
+                        """)
+                .outputData("""
+                        {
+                          "searchAudit":{
+                            "executionTrace":{"recoveryCheckpoint":"SELECT_TARGETS","degraded":true}
+                          }
+                        }
+                        """)
+                .build();
+
+        recoveryPolicy.resetInterruptedNodes(List.of(runningCollector));
+
+        assertEquals(TaskNodeStatus.PENDING, runningCollector.getStatus());
+        assertTrue(runningCollector.getNodeConfig().contains("searchAuditCheckpoint"));
+        assertTrue(runningCollector.getNodeConfig().contains("SELECT_TARGETS"));
+    }
 }

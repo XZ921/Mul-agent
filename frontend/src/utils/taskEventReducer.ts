@@ -327,12 +327,22 @@ function applySearchProgressEvent(
       const nextSearchProgress = payload.searchProgress ?? collectorInsight.searchProgress ?? null
       const nextSearchExecutionTrace =
         payload.searchExecutionTrace ?? collectorInsight.searchExecutionTrace ?? null
+      const nextSearchAudit = payload.searchAudit ?? collectorInsight.searchAudit ?? null
       const nextSearchProgressSnapshots =
         payload.searchProgressSnapshots ?? collectorInsight.searchProgressSnapshots ?? []
+      const nextSelectedTargets = payload.selectedTargets ?? collectorInsight.selectedTargets ?? []
+      const nextSourceUrls = payload.sourceUrls ?? collectorInsight.sourceUrls ?? []
+      const nextSelectedCount = nextSelectedTargets.length > 0
+        ? nextSelectedTargets.length
+        : collectorInsight.selectedCount
 
       if (nextSearchProgress === collectorInsight.searchProgress
         && nextSearchExecutionTrace === collectorInsight.searchExecutionTrace
-        && nextSearchProgressSnapshots === collectorInsight.searchProgressSnapshots) {
+        && nextSearchAudit === collectorInsight.searchAudit
+        && nextSearchProgressSnapshots === collectorInsight.searchProgressSnapshots
+        && nextSelectedTargets === collectorInsight.selectedTargets
+        && nextSourceUrls === collectorInsight.sourceUrls
+        && nextSelectedCount === collectorInsight.selectedCount) {
         return node
       }
 
@@ -342,7 +352,11 @@ function applySearchProgressEvent(
           ...collectorInsight,
           searchProgress: nextSearchProgress,
           searchExecutionTrace: nextSearchExecutionTrace,
+          searchAudit: nextSearchAudit,
           searchProgressSnapshots: nextSearchProgressSnapshots,
+          selectedTargets: nextSelectedTargets,
+          sourceUrls: nextSourceUrls,
+          selectedCount: nextSelectedCount,
         },
       }
     }),
@@ -694,10 +708,15 @@ function mergeCollectorOutputIntoNode(node: TaskNodeInfo, outputData?: string | 
         (output.searchExecutionPlan as CollectorNodeInsightData['searchExecutionPlan']) ?? collectorInsight.searchExecutionPlan ?? null,
       searchExecutionTrace:
         (output.searchExecutionTrace as CollectorNodeInsightData['searchExecutionTrace']) ?? collectorInsight.searchExecutionTrace ?? null,
+      searchAudit:
+        (output.searchAudit as CollectorNodeInsightData['searchAudit']) ?? collectorInsight.searchAudit ?? null,
       searchProgressSnapshots:
         (output.searchProgressSnapshots as CollectorNodeInsightData['searchProgressSnapshots'])
         ?? collectorInsight.searchProgressSnapshots
         ?? [],
+      sourceUrls: Array.isArray(output.sourceUrls)
+        ? normalizeArray(output.sourceUrls, collectorInsight.sourceUrls ?? [])
+        : collectorInsight.sourceUrls,
     },
   }
 }
@@ -711,15 +730,15 @@ function ensureCollectorInsight(node: TaskNodeInfo): CollectorNodeInsightData {
     competitorName: existing?.competitorName || node.configSummaryData?.competitorName || '未命名竞品',
     sourceType: existing?.sourceType || node.configSummaryData?.sourceType || 'OFFICIAL',
     sourceTypeLabel: existing?.sourceTypeLabel || node.configSummaryData?.sourceTypeLabel || null,
-    sourceScope: existing?.sourceScope || node.configSummaryData?.sourceScope || [],
-    competitorUrls: existing?.competitorUrls || node.configSummaryData?.competitorUrls || [],
+    sourceScope: existing?.sourceScope ?? node.configSummaryData?.sourceScope ?? [],
+    competitorUrls: existing?.competitorUrls ?? node.configSummaryData?.competitorUrls ?? [],
     searchMode: existing?.searchMode || node.configSummaryData?.searchMode || undefined,
     searchModeLabel: existing?.searchModeLabel || node.configSummaryData?.searchModeLabel || null,
-    searchQueries: existing?.searchQueries || [],
+    searchQueries: existing?.searchQueries ?? [],
     browserSearchEnabled: existing?.browserSearchEnabled ?? Boolean(node.configSummaryData?.browserSearchEnabled),
     verifyResultPage: existing?.verifyResultPage ?? Boolean(node.configSummaryData?.verificationEnabled),
     minVerifiedCandidates: existing?.minVerifiedCandidates ?? node.configSummaryData?.minVerifiedCandidates ?? null,
-    preferredDomains: existing?.preferredDomains || node.configSummaryData?.preferredDomains || [],
+    preferredDomains: existing?.preferredDomains ?? node.configSummaryData?.preferredDomains ?? [],
     candidateCount: existing?.candidateCount ?? node.configSummaryData?.candidateCount ?? 0,
     selectedCount: existing?.selectedCount ?? 0,
     successCollected: existing?.successCollected ?? 0,
@@ -728,9 +747,11 @@ function ensureCollectorInsight(node: TaskNodeInfo): CollectorNodeInsightData {
     searchProgress: existing?.searchProgress ?? null,
     searchExecutionPlan: existing?.searchExecutionPlan ?? null,
     searchExecutionTrace: existing?.searchExecutionTrace ?? null,
+    searchAudit: existing?.searchAudit ?? null,
     searchProgressSnapshots: existing?.searchProgressSnapshots ?? [],
     sourceCandidates: existing?.sourceCandidates ?? [],
     selectedTargets: existing?.selectedTargets ?? [],
+    sourceUrls: existing?.sourceUrls ?? [],
   }
 }
 

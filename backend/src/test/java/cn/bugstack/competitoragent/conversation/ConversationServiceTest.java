@@ -609,6 +609,7 @@ class ConversationServiceTest {
                         List.of("https://docs.example.com"),
                         "仍缺少定价证据",
                         "已检索到公开文档",
+                        List.of("DOC-TASK-001"),
                         List.of("TASK-DOC-001")
                 ));
         when(taskActionTranslator.buildResearchPreview(

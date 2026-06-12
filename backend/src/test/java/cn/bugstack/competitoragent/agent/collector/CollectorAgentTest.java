@@ -16,6 +16,7 @@ import cn.bugstack.competitoragent.search.BrowserSearchRuntimeResult;
 import cn.bugstack.competitoragent.search.BrowserSearchRuntimeService;
 import cn.bugstack.competitoragent.search.CandidateVerifier;
 import cn.bugstack.competitoragent.search.CollectionTargetSelector;
+import cn.bugstack.competitoragent.search.SearchPolicyResolver;
 import cn.bugstack.competitoragent.search.SearchExecutionCoordinator;
 import cn.bugstack.competitoragent.source.SearchSourceProvider;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
@@ -55,7 +56,8 @@ class CollectorAgentTest {
             browserSearchRuntimeService,
             searchSourceProvider,
             new SourceCandidateRanker(),
-            new CollectionTargetSelector()
+            new CollectionTargetSelector(),
+            new SearchPolicyResolver()
     );
     private final CollectorAgent collectorAgent = new CollectorAgent(
             logRepository,

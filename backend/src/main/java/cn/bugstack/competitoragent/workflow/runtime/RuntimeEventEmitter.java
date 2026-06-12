@@ -3,9 +3,14 @@ package cn.bugstack.competitoragent.workflow.runtime;
 import cn.bugstack.competitoragent.event.TaskEventPublisher;
 import cn.bugstack.competitoragent.log.AgentLogService;
 import cn.bugstack.competitoragent.model.dto.AgentLogResponse;
+import cn.bugstack.competitoragent.model.dto.CollectorSelectedTargetSummary;
+import cn.bugstack.competitoragent.model.dto.SearchProgressEventPayload;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
+import cn.bugstack.competitoragent.search.SearchExecutionTrace;
+import cn.bugstack.competitoragent.search.SearchProgressSnapshot;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +28,6 @@ import java.util.Map;
  * 运行时事件发布协作者。
  * <p>
  * 节点完成后既要发布节点状态事件，又要补发搜索进度、诊断和日志兜底事件。
- * 抽出后 DagExecutor 只需要声明“节点执行完成，需要发一组运行时事件”，不再自己拼装所有 payload。
  */
 @Slf4j
 @Component
@@ -112,42 +117,44 @@ public class RuntimeEventEmitter {
     }
 
     /**
-     * Collector 事件优先透传结构化搜索过程；如果缺失，再退化为最小可恢复事件。
+     * Collector 事件优先透传正式的搜索契约；
+     * 如果历史输出里缺少结构化字段，再退化成最小可恢复事件。
      */
     private Map<String, Object> buildSearchProgressEventPayload(TaskNode node) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("nodeName", node.getNodeName());
+        SearchProgressEventPayload payload = SearchProgressEventPayload.builder()
+                .contractType("SEARCH_PROGRESS_V1")
+                .nodeName(node.getNodeName())
+                .build();
         JsonNode output = readJson(node.getOutputData());
         if (output != null) {
-            JsonNode searchProgress = output.get("searchProgress");
-            JsonNode executionTrace = output.get("searchExecutionTrace");
-            JsonNode progressSnapshots = output.get("searchProgressSnapshots");
-            if (searchProgress != null && !searchProgress.isNull()) {
-                payload.put("searchProgress", objectMapper.convertValue(searchProgress, new TypeReference<Map<String, Object>>() {
-                }));
-            }
-            if (executionTrace != null && !executionTrace.isNull()) {
-                payload.put("searchExecutionTrace", objectMapper.convertValue(executionTrace, new TypeReference<Map<String, Object>>() {
-                }));
-            }
-            if (progressSnapshots != null && progressSnapshots.isArray()) {
-                payload.put("searchProgressSnapshots", objectMapper.convertValue(progressSnapshots, new TypeReference<List<Map<String, Object>>>() {
-                }));
-            }
+            payload.setSearchProgress(convertValue(output.get("searchProgress"), SearchProgressSnapshot.class));
+            payload.setSearchExecutionTrace(convertValue(output.get("searchExecutionTrace"), SearchExecutionTrace.class));
+            payload.setSearchProgressSnapshots(convertList(
+                    output.get("searchProgressSnapshots"),
+                    new TypeReference<List<SearchProgressSnapshot>>() {
+                    }));
+            payload.setSearchAudit(convertValue(output.get("searchAudit"), SearchAuditSnapshot.class));
+            payload.setSelectedTargets(convertList(
+                    output.get("selectedTargets"),
+                    new TypeReference<List<CollectorSelectedTargetSummary>>() {
+                    }));
+            payload.setSourceUrls(readStringList(output.get("sourceUrls")));
         }
 
-        if (payload.size() > 1) {
-            return payload;
+        if (hasStructuredSearchPayload(payload)) {
+            return objectMapper.convertValue(payload, new TypeReference<Map<String, Object>>() {
+            });
         }
 
-        payload.put("searchProgress", Map.of(
-                "status", node.getStatus() == TaskNodeStatus.SUCCESS ? "SUCCESS" : "FAILED",
-                "currentStep", node.getStatus() == TaskNodeStatus.SUCCESS ? "完成补源" : "补源失败",
-                "message", defaultIfBlank(node.getErrorMessage(),
-                        node.getStatus() == TaskNodeStatus.SUCCESS ? "采集节点已完成，使用最小事件留痕兜底。" : "采集节点执行失败，请查看节点详情。"),
-                "updatedAt", node.getCompletedAt() == null ? LocalDateTime.now() : node.getCompletedAt()
-        ));
-        return payload;
+        payload.setSearchProgress(SearchProgressSnapshot.builder()
+                .status(node.getStatus() == TaskNodeStatus.SUCCESS ? "SUCCESS" : "FAILED")
+                .currentStep(node.getStatus() == TaskNodeStatus.SUCCESS ? "完成补源" : "补源失败")
+                .message(defaultIfBlank(node.getErrorMessage(),
+                        node.getStatus() == TaskNodeStatus.SUCCESS ? "采集节点已完成，使用最小事件兜底留痕。" : "采集节点执行失败，请查看节点详情。"))
+                .updatedAt(node.getCompletedAt() == null ? LocalDateTime.now() : node.getCompletedAt())
+                .build());
+        return objectMapper.convertValue(payload, new TypeReference<Map<String, Object>>() {
+        });
     }
 
     private JsonNode readJson(String raw) {
@@ -164,5 +171,41 @@ public class RuntimeEventEmitter {
 
     private String defaultIfBlank(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value;
+    }
+
+    private boolean hasStructuredSearchPayload(SearchProgressEventPayload payload) {
+        return payload.getSearchProgress() != null
+                || payload.getSearchExecutionTrace() != null
+                || (payload.getSearchProgressSnapshots() != null && !payload.getSearchProgressSnapshots().isEmpty())
+                || payload.getSearchAudit() != null
+                || (payload.getSelectedTargets() != null && !payload.getSelectedTargets().isEmpty())
+                || (payload.getSourceUrls() != null && !payload.getSourceUrls().isEmpty());
+    }
+
+    private <T> T convertValue(JsonNode node, Class<T> targetType) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        return objectMapper.convertValue(node, targetType);
+    }
+
+    private <T> List<T> convertList(JsonNode node, TypeReference<List<T>> typeReference) {
+        if (node == null || node.isNull() || !node.isArray()) {
+            return List.of();
+        }
+        return objectMapper.convertValue(node, typeReference);
+    }
+
+    private List<String> readStringList(JsonNode node) {
+        if (node == null || node.isNull() || !node.isArray()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        for (JsonNode item : node) {
+            if (item != null && item.isTextual() && !item.asText().isBlank()) {
+                values.add(item.asText().trim());
+            }
+        }
+        return values;
     }
 }

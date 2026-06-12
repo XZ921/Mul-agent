@@ -9,6 +9,7 @@ import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.search.SearchBrowserProperties;
 import cn.bugstack.competitoragent.search.SearchExecutionPlan;
+import cn.bugstack.competitoragent.search.SearchPolicyResolver;
 import cn.bugstack.competitoragent.search.SearchProperties;
 import cn.bugstack.competitoragent.source.HeuristicSourceDiscoveryService;
 import cn.bugstack.competitoragent.source.SearchSourceProvider;
@@ -21,6 +22,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,6 +38,26 @@ class WorkflowFactoryTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final PromptTemplateService promptTemplateService = new PromptTemplateService(objectMapper);
+
+    @Test
+    void shouldDelegatePlanConstructionToDedicatedCollaborators() {
+        List<String> fieldTypeNames = Arrays.stream(WorkflowFactory.class.getDeclaredFields())
+                .map(field -> field.getType().getSimpleName())
+                .toList();
+        List<String> builderFieldTypeNames = Arrays.stream(ExecutionPlanDefinitionBuilder.class.getDeclaredFields())
+                .map(field -> field.getType().getSimpleName())
+                .toList();
+        List<String> methodNames = Arrays.stream(WorkflowFactory.class.getDeclaredMethods())
+                .map(Method::getName)
+                .toList();
+
+        assertTrue(fieldTypeNames.contains(ExecutionPlanDefinitionBuilder.class.getSimpleName()));
+        assertTrue(fieldTypeNames.contains(WorkflowPlanAssembler.class.getSimpleName()));
+        assertTrue(builderFieldTypeNames.contains(CollectorPlanTemplateFactory.class.getSimpleName()));
+        assertFalse(methodNames.contains("buildCollectorNodeConfig"));
+        assertFalse(methodNames.contains("buildPlanInternal"));
+        assertFalse(methodNames.contains("buildFormalStages"));
+    }
 
     @Test
     void shouldEmbedSourceCandidatesIntoCollectorNodeConfig() throws Exception {
@@ -259,18 +282,27 @@ class WorkflowFactoryTest {
         searchProperties.setMode("HYBRID");
         CollectorProperties collectorProperties = new CollectorProperties();
         collectorProperties.setMaxPagesPerCompetitor(5);
-        return new WorkflowFactory(
-                nodeRepository,
-                Mockito.mock(AnalysisSchemaRepository.class),
-                sourceDiscoveryService,
-                new SourceCandidateRanker(),
-                new WorkflowPlanValidator(),
-                objectMapper,
+        CollectorPlanTemplateFactory collectorPlanTemplateFactory = new CollectorPlanTemplateFactory(
                 promptTemplateService,
                 searchBrowserProperties,
                 searchProperties,
                 collectorProperties,
-                dynamicTaskGraphService
+                new SearchPolicyResolver()
+        );
+        ExecutionPlanDefinitionBuilder executionPlanDefinitionBuilder = new ExecutionPlanDefinitionBuilder(
+                Mockito.mock(AnalysisSchemaRepository.class),
+                sourceDiscoveryService,
+                new SourceCandidateRanker(),
+                objectMapper,
+                collectorPlanTemplateFactory
+        );
+        return new WorkflowFactory(
+                nodeRepository,
+                new WorkflowPlanValidator(),
+                objectMapper,
+                dynamicTaskGraphService,
+                executionPlanDefinitionBuilder,
+                new WorkflowPlanAssembler()
         );
     }
 
