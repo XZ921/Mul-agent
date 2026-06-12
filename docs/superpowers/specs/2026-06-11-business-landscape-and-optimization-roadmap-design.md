@@ -51,7 +51,7 @@
 | --- | --- | --- | --- |
 | 任务定义与编排 | `CreateTaskRequest`、`TaskDefinitionAppService`、`WorkflowFactory`、`WorkflowPlan`、`SearchExecutionPlan`、计划预览 | `🟡` 历史存量问题已在现有方案与实现中部分显化，待正式诊断文档收口 | `任务执行引擎` |
 | 搜索与采集 | `CollectorAgent`、`SearchExecutionCoordinator`、`CandidateVerifier`、`CollectionTargetSelector`、`BrowserSearchRuntimeService`、`SourceDiscoveryService`、`SourceCollector` | 搜索补源质量波动大；动态抓取与反爬对业务结果影响极大；候选验证、正式采集、搜索现场审计和恢复语义存在断层 | `搜索执行引擎` |
-| 提取结构化 | `SchemaExtractorAgent`、`SchemaService`、`EvidenceFragment`、`SectionEvidenceBundle`、字段覆盖模型 | `⬜` 待诊断，当前描述不作为正式结论 | `任务执行引擎` |
+| 提取结构化 | `SchemaExtractorAgent`、`CompetitorKnowledge`、`ExtractResult`、`CompetitorKnowledgeDraft`、共享追溯契约（`EvidenceFragment` / `SectionEvidenceBundle`） | 运行时输出契约与持久化知识快照两套世界并存；任务抽取结果与领域记忆实体混层；字段级与章节级追溯契约属于跨链路共享对象，owner 尚未收口 | `任务执行引擎` + `知识摄取 / RAG / 记忆` |
 | 分析推理 | `CompetitorAnalysisAgent`、`AnalysisResult`、分析覆盖对象、知识草稿 | `⬜` 待诊断，当前描述不作为正式结论 | `任务执行引擎` |
 | 报告写作 | `ReportWriterAgent`、`Report`、章节证据束、报告正文和摘要 | `⬜` 待诊断，当前描述不作为正式结论 | `任务执行引擎` |
 | 质量审查 | `QualityReviewAgent`、`QualityCheckpoint`、`QualityDiagnosis`、`RevisionPlan`、`ReportDiagnosisAssembler` | `⬜` 待诊断，当前描述不作为正式结论 | `质量回流引擎` |
@@ -81,17 +81,17 @@
 
 ### 1.5 跨链路约束层
 
-| 共享契约 / 红线 | 统一规则 | 落地载体 |
-| --- | --- | --- |
-| Facade 互调规则 | Controller 只依赖 Facade / AppService；跨链路正式调用优先走 Facade，不直接越过边界直连底层服务或仓储 | `TaskRuntimeFacade`、`TaskQueryFacade`、`ReportQueryFacade`、未来各链路 Facade |
-| Agent 持久化红线 | Agent 只负责结构化业务结果，不直接承担正式持久化职责；历史白名单只能收缩不能扩散 | `BackendModuleDependencyTest`、`ArchitectureWhitelist` |
-| `sourceUrls` 可追溯红线 | 所有关键结构化对象、诊断对象、导出对象都必须可回指来源；缺少来源只能显式标记缺口，不能静默省略 | `EvidenceFragment`、`QualityDiagnosis`、`RevisionDirective`、`ReportResponse` |
-| 预览态 / 运行态分离 | 计划预览、运行快照、节点详情、搜索现场不能共用“看起来一样但语义不同”的弱契约 | `TaskNodeResponse`、计划预览 DTO、运行态 DTO |
-| 共享上下文裁剪规则 | 共享上下文只注入稳定业务事实，不回灌整包节点原始 JSON；恢复复用字段和调试字段必须分层 | `AgentContext`、`TaskSnapshotCacheService`、`DagExecutor` |
-| Golden Master 命名规范 | 对抽取、分析、写作、质检、交付等结构化输出，统一使用 `*GoldenMasterTest` 或 `*SnapshotContractTest` 命名，避免快照测试随意散落 | 后续各链路专题测试资产 |
-| ArchUnit 边界规则 | 新增专题时必须先决定边界规则，再决定白名单；白名单必须记录原因、回收阶段和 owner | `BackendModuleDependencyTest`、`ArchitectureWhitelist` |
-| PR 合并顺序 | 统一按 `契约 -> 引擎 -> Agent / Service -> 查询投影 / UI` 顺序合并，避免先改页面再倒推底层语义 | 研发流程约束 |
-| 专题文档命名规范 | 每条主业务链路都应最终形成一份独立专题文档，建议沿用 `docs/problem/<ChainName>Agent.md` 或等价统一命名 | 当前基线：`CollectorAgent.md` |
+| 共享契约 / 红线 | 统一规则 | 落地载体 | 当前违规状态 |
+| --- | --- | --- | --- |
+| Facade 互调规则 | Controller 只依赖 Facade / AppService；跨链路正式调用优先走 Facade，不直接越过边界直连底层服务或仓储 | `TaskRuntimeFacade`、`TaskQueryFacade`、`ReportQueryFacade`、未来各链路 Facade | `🟡` 历史存量仍需按专题逐步收口，未确认全面执行 |
+| Agent 持久化红线 | Agent 只负责结构化业务结果，不直接承担正式持久化职责；历史白名单只能收缩不能扩散 | `BackendModuleDependencyTest`、`ArchitectureWhitelist` | `🟡` 已有边界规则，但仍依赖历史白名单约束 |
+| `sourceUrls` 可追溯红线 | 所有关键结构化对象、诊断对象、导出对象都必须可回指来源；缺少来源只能显式标记缺口，不能静默省略 | `EvidenceFragment`、`QualityDiagnosis`、`RevisionDirective`、`ReportResponse` | `🟡` 已知 Collector 历史输出与部分存量对象仍未做到全覆盖 |
+| 预览态 / 运行态分离 | 计划预览、运行快照、节点详情、搜索现场不能共用“看起来一样但语义不同”的弱契约 | `TaskNodeResponse`、计划预览 DTO、运行态 DTO | `🟡` 任务定义与编排链路已推进，但真实链路尚未完成全面验收 |
+| 共享上下文裁剪规则 | 共享上下文只注入稳定业务事实，不回灌整包节点原始 JSON；恢复复用字段和调试字段必须分层 | `AgentContext`、`TaskSnapshotCacheService`、`DagExecutor` | `🟡` 搜索链路仍有大对象回灌与恢复字段混层的历史负担 |
+| Golden Master 命名规范 | 对抽取、分析、写作、质检、交付等结构化输出，统一使用 `*GoldenMasterTest` 或 `*SnapshotContractTest` 命名，避免快照测试随意散落 | 后续各链路专题测试资产 | `⬜` 多数链路尚未建立正式快照测试资产 |
+| ArchUnit 边界规则 | 新增专题时必须先决定边界规则，再决定白名单；白名单必须记录原因、回收阶段和 owner | `BackendModuleDependencyTest`、`ArchitectureWhitelist` | `🟡` 边界规则已存在，但 owner / 回收阶段记录仍待逐步补齐 |
+| PR 合并顺序 | 统一按 `契约 -> 引擎 -> Agent / Service -> 查询投影 / UI` 顺序合并，避免先改页面再倒推底层语义 | 研发流程约束 | `🟡` 当前作为流程纪律存在，后续需在专题实施中持续执行 |
+| 专题文档命名规范 | 每条主业务链路都应最终形成一份独立专题文档，建议沿用 `docs/problem/<ChainName>Agent.md` 或等价统一命名 | 当前基线：`CollectorAgent.md` | `🟡` 当前仅搜索链路具备正式基线，其余链路待补齐 |
 
 ### 1.6 流程纪律
 
@@ -144,9 +144,9 @@
 
 | 链路 | 诊断 | 方案 | 实施 | 实链验证 |
 | --- | --- | --- | --- | --- |
-| 任务定义与编排 | 🟡 历史存量，待补正式诊断文档 | ✅ [2026-06-11-task-definition-and-orchestration-contract.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-11-task-definition-and-orchestration-contract.md) | 🟡 待满足 3.1 实施封板条件 | ⬜ |
-| 搜索与采集 | ✅ [CollectorAgent.md](/E:/java_study/Mul-agnet/docs/problem/CollectorAgent.md) | 🟡 [2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md) 需裁剪为最小 blocking 方案 | 🟡 待满足 3.2 实施封板条件 | ⬜ |
-| 提取结构化 | ⬜ | ⬜ | ⬜ | ⬜ |
+| 任务定义与编排 | 🟡 历史存量，待补正式诊断文档 | ✅ [2026-06-11-task-definition-and-orchestration-contract.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-11-task-definition-and-orchestration-contract.md) | ✅ 2026-06-12 已按 3.1 实施封板条件复核 | 🟡 dev live 已验证 rerun / resume 入口可调度，完整任务仍受下游提取链路阻塞 |
+| 搜索与采集 | ✅ [CollectorAgent.md](/E:/java_study/Mul-agnet/docs/problem/CollectorAgent.md) | ✅ [2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md) 已按诊断继承、阻塞分级、优化波次重写，旧 Task 轴方案不再作为正式依据 | ✅ 2026-06-12 已完成首轮 blocking 实施复核，统一测试口径与 backend 全量测试通过 | ✅ 2026-06-12 dev live 已完成真实补源、正式采集、回放、rerun / resume 验收 |
+| 提取结构化 | ✅ [ExtractionStructured.md](/E:/java_study/Mul-agnet/docs/problem/ExtractionStructured.md) | ⬜ | ⬜ | ⬜ |
 | 分析推理 | ⬜ | ⬜ | ⬜ | ⬜ |
 | 报告写作 | ⬜ | ⬜ | ⬜ | ⬜ |
 | 质量审查 | ⬜ | ⬜ | ⬜ | ⬜ |
@@ -164,23 +164,36 @@
 
 - 诊断：`🟡` 当前属于历史存量，待补正式诊断文档。
 - 方案：`✅` 已有方案文档 [2026-06-11-task-definition-and-orchestration-contract.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-11-task-definition-and-orchestration-contract.md)。
-- 实施：`🟡` 当前分支已有契约与实现资产，但仍需按本看板通过条件复核。
-  实施封板条件：`TaskDraft -> TaskDefinition -> ExecutionPlanDefinition -> WorkflowPlan` 正式链路已落地；预览态返回 `TASK_PLAN_PREVIEW_V1`，运行态节点返回 `TASK_NODE_RUNTIME_V1`；创建任务时已写入 `currentPlanVersionId/currentPlanVersion`，且 `rerun / resume` 继续沿用同一计划版本语义；相关单元测试、集成测试、架构测试全部 PASS 后，实施列才可改为 `✅`。
-- 实链验证：`⬜` 待以真实任务创建、计划预览、正式创建、重跑、恢复场景完成验收。
+- 实施：`✅` 已按本看板封板条件复核。
+  复核证据：`TaskDraft -> TaskDefinition -> ExecutionPlanDefinition -> WorkflowPlan` 正式链路已落地；预览态返回 `TASK_PLAN_PREVIEW_V1`，运行态节点返回 `TASK_NODE_RUNTIME_V1`；创建任务时写入 `currentPlanVersionId/currentPlanVersion`，`rerun / resume` 继续沿用同一计划版本语义；`TaskDefinitionContractTest`、`TaskDefinitionAppServiceTest`、`TaskControllerTest`、`WorkflowFactoryTest`、`WorkflowPlanValidatorTest`、`TaskRuntimeCommandAppServiceTest`、`AnalysisTaskServiceTest`、`TaskPlanVersionerTest`、`BackendModuleDependencyTest`、`TaskDefinitionVerificationIntegrationTest`、`Phase1WorkflowIntegrationTest`，以及前端 `TaskCreatePage.test.tsx`、`taskNodeInsights.test.ts` 已于 2026-06-12 本地 PASS。
+- 实链验证：`🟡` 已完成 dev live app 验收，rerun / resume 入口已不再被本地异步编排阻塞，但完整任务仍未闭环。
+  当前证据：2026-06-12 以真实 Spring Boot 应用（`dev` profile，PostgreSQL / Redis / RocketMQ 端口可用）完成 `POST /api/task/preview`、`POST /api/task/create`、`POST /api/task/{id}/execute`、`POST /api/task/{id}/resume`、`POST /api/task/{id}/nodes/{nodeName}/rerun`、`GET /api/task/{id}`、`GET /api/task/{id}/nodes` 验收，确认正式异步编排入口可调度，`rerun / resume` 返回 200。
+  当前阻塞：完整任务在 `extract_schema` 停为 `WAITING_INTERVENTION`，日志显示下游 LLM provider token 无效，属于提取结构化链路的实链闭环问题，不再是 `WORKFLOW_DISPATCH_UNAVAILABLE (10008)`。
 
 ### 3.2 搜索与采集
 
 - 诊断：`✅` 已有诊断文档 [CollectorAgent.md](/E:/java_study/Mul-agnet/docs/problem/CollectorAgent.md)。
-- 方案：`🟡` 已有计划文档 [2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md)，但当前应先裁剪为最小 blocking 范围。
-- 实施：`🟡` 当前阶段只应优先收掉 `SearchPolicyResolver`、`OFFICIAL` 免检移除、中文词库、`searchAudit` 最小正式 DTO 形状。
-  实施封板条件：`SearchPolicyResolver` 已统一策略入口、`OFFICIAL` 免检已移除、中文词库已补齐、`searchAudit` 已进入正式 DTO 最小形状。以上四项全部落地且相关单元测试、集成测试、架构测试 PASS 后，实施列才可改为 `✅`。
-- 实链验证：`⬜` 待以真实补源、验证、正式采集、回放 / 重跑场景完成验收。
+- 方案：`✅` 方案文档已重写完成，[2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md) 已明确废止旧 Task 轴结构，改为按 `诊断继承 -> 阻塞分级 -> 优化波次 -> 首轮实施裁剪` 推进，并显式继承“私域垂直 API 主力、公网搜索辅助”的业务优化原则，同时把官网、新闻、GitHub 等纳入 `Source Family Catalog` 配置架构。旧稿不再作为正式方案依据。
+- 实施：`✅` 2026-06-12 已完成首轮 blocking 实施复核。
+  复核证据：`SearchExecutionTruthContractTest, SearchKeywordPolicyTest, SearchEnginePropertiesTest, SearchSourceCatalogPropertiesTest, SearchPolicyResolverTest, SearchPropertiesBindingTest, SearchExecutionCoordinatorTest, CandidateVerifierTest, SearchAndCollectionGoldenMasterTest, PromptTemplateServiceTest, WorkflowFactoryTest, BrowserPreviewSearchSourceProviderTest, RuntimeEventEmitterTest, TaskReplayProjectionServiceTest, TaskEventReplayServiceTest, TaskRuntimeCommandAppServiceTest, AnalysisTaskServiceTest, Phase2WorkflowIntegrationTest` 全部通过，且 `mvn -pl backend test` 已通过。
+- 实链验证：`✅` 2026-06-12 dev live 已完成搜索与采集段验收。
+  验收证据：真实任务 `33` 使用 `/api/task/preview`、`/api/task/create`、`/api/task/{id}/execute` 跑出 4 个成功的 `COLLECTOR` 节点，累计 14 个 `sourceUrls`，每个采集节点均包含 `searchAudit`，回放接口返回 4 条 `searchReplays`；随后 `/api/task/{id}/resume` 与 `/api/task/{id}/nodes/collect_sources_01_01/rerun` 均返回 200，重跑后的采集节点仍保持 `searchAuditCheckpoint=SELECT_TARGETS`。完整任务停在 `extract_schema`，该下游阻塞不回退搜索与采集段验收结论。
 
-### 3.3 其他链路专题索引
+### 3.3 提取结构化
+
+- 诊断：`✅` 已有诊断文档 [ExtractionStructured.md](/E:/java_study/Mul-agnet/docs/problem/ExtractionStructured.md)。
+- 方案：`⬜` 待写。当前不应直接沿着“拆 `SchemaExtractorAgent` 类”展开伪方案，必须先回答正式边界到底是 `ExtractResult`、知识读取 Facade，还是其它稳定投影。
+- 实施：`⬜` 待开始。当前尚未形成被确认的改造范围，不应提前落实现。
+- 实链验证：`⬜` 待在真实采集 -> 真提取 -> 真分析 -> 真报告链路上完成闭环验收。
+- 当前 blocking：
+  1. `extract_schema` 节点输出了 `ExtractResult`，但 `CompetitorAnalysisAgent` 实际按 `taskId` 重新读取 `CompetitorKnowledge`，说明运行时契约与正式消费边界并不一致。
+  2. `CompetitorKnowledge` 既承担任务现场抽取结果，又承担领域记忆载体；`SchemaExtractorAgent` 落库时未显式声明记忆边界，实体默认值会把记录补成 `DOMAIN + UNSPECIFIED`，存在跨任务复用污染风险。
+  3. `EvidenceFragment` / `SectionEvidenceBundle` 已被采集、分析、写作、交付共同消费，不属于提取链路私有契约；后续方案若不先收口 owner，会把跨链路影响误写成单链路重构。
+
+### 3.4 其他链路专题索引
 
 | 链路 | 诊断文档 | 方案文档 | 备注 |
 | --- | --- | --- | --- |
-| 提取结构化 | ⬜ 待写 `docs/problem/ExtractionStructured.md` 或等价专题文档 | ⬜ | 先诊断，后方案 |
 | 分析推理 | ⬜ 待写 `docs/problem/AnalysisReasoning.md` 或等价专题文档 | ⬜ | 先诊断，后方案 |
 | 报告写作 | ⬜ 待写 `docs/problem/ReportWriting.md` 或等价专题文档 | ⬜ | 先诊断，后方案 |
 | 质量审查 | ⬜ 待写 `docs/problem/QualityReview.md` 或等价专题文档 | ⬜ | 先诊断，后方案 |
@@ -211,6 +224,13 @@
 | 质量回流引擎 | ⬜ 隐式存在 | 系统中已存在“质量问题 -> 补证 / 重写 / 重跑 / 人工接管”的隐含转换，但仍待质量审查与修订重写两条链路共同诊断后再收口为独立引擎边界 | 当前总控层映射与现有运行时实现 |
 | 对话动作引擎 | ⬜ 隐式存在 | 统一入口已经形成，但动作预览、确认、正式执行的边界尚未通过正式链路诊断固化为独立引擎语义 | 当前总控层映射与现有会话实现 |
 
+执行引擎升 `✅` 的硬条件：
+
+1. `任务执行引擎`：计划生成、运行调度、事件投递、快照裁剪、动态补图已从混合服务中拆清；存在独立契约与独立测试，不再由 `WorkflowFactory` / `DagExecutor` / `TaskRuntimeCommandAppService` 交叉承载。
+2. `搜索执行引擎`：`SearchPolicyResolver` 成为唯一策略入口，`SearchExecutionCoordinator` 不再自行推导 fallback 顺序，搜索审计快照与恢复检查点契约稳定，搜索相关协作者已形成独立子域边界。
+3. `质量回流引擎`：质量问题分类、回流动作协议、受影响范围分析、动态补图模板已经独立成正式协作者，并由质量审查与修订重写两条链路共同消费。
+4. `对话动作引擎`：模式识别、动作预览、确认执行、正式命令桥接已形成独立契约与独立测试，不再散落在会话服务内部字符串判断。
+
 ---
 
 ## 5. 平台底座基线看板
@@ -232,6 +252,12 @@
 | 知识摄取 / RAG / 记忆 | 🟡 已有基础能力但缺乏统一入口 / 契约 | 资料接入、检索、记忆、复用能力已经存在，但任务级 / 领域级 / 组织级边界仍未收口为统一基线 | 尚未成为所有链路共享的正式事实层 |
 | AI 与工具治理 | 🟡 已有基础能力但缺乏统一入口 / 契约 | `ModelGateway` 与 Provider 配置能力已存在，但策略治理、预算门槛、工具权限和降级语义仍未统一 | 仍偏“网关雏形”，不是完整治理底座 |
 | 可观测 | 🟡 已有基础能力但缺乏统一入口 / 契约 | 任务快照、SSE、Agent 日志、搜索进度事件均已存在，但任务级、节点级、搜索现场级观察口径尚未统一 | 仍缺统一观察视图 |
-| 恢复与回放 | 🟡 已有基础能力但缺乏统一入口 / 契约 | 恢复语义与回放能力已存在，但“恢复现场可解释”与“跨重启可回放”仍未形成统一基线 | 仍偏能力存在，不是正式平台 |
+| 恢复与回放 | 🟡 已有基础能力但缺乏统一入口 / 契约 | 恢复语义与回放能力已存在，但“恢复现场可解释”与“跨重启可回放”仍未形成统一基线；本地异步编排入口也尚未形成统一验证基线 | 仍偏能力存在，不是正式平台 |
 | 质量 / 配额 / 安全治理 | 🟡 已有基础能力但缺乏统一入口 / 契约 | 质量规则、预算协调、安全校验均已存在，但三类治理对象仍未形成统一治理面 | 不应继续散落到各链路硬编码 |
 | 多渠道资料接入 | 🟡 已有基础能力但缺乏统一入口 / 契约 | 上传资料、认证资料与未来连接器入口已显露，但尚未形成统一资料接入语义 | 仍不是正式产品能力线 |
+
+### 5.3 当前阻塞型底座任务
+
+| 底座任务 | 关联底座 | 状态 | 阻塞范围 | 说明 |
+| --- | --- | --- | --- | --- |
+| 本地异步编排 / 消息基础设施验证基线 | 恢复与回放 | 🟡 已有 dev live 验证证据，待沉淀统一脚本 | 不再阻塞搜索与采集段实链验证；仍需沉淀为跨链路可复用验收基线 | 2026-06-12 dev live 验收中，`POST /api/task/{id}/nodes/{nodeName}/rerun` 与 `POST /api/task/{id}/resume` 已返回 200，说明本地 RocketMQ / outbox 调度入口在 dev 环境可用。完整任务后续停在 `extract_schema` 的 LLM token 问题，不属于异步编排入口不可用。 |

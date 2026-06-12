@@ -77,4 +77,31 @@ class SearchAndCollectionGoldenMasterTest {
         assertTrue(Boolean.TRUE.equals(result.getUpdatedCandidates().get(0).getVerified()));
         assertFalse(result.getUpdatedCandidates().get(0).getMatchedSignals().isEmpty());
     }
+
+    @Test
+    void shouldAcceptChineseDocsSignals() {
+        when(sourceCollector.collect("https://cloud.tencent.com/document/product/1000/2000", "腾讯云", "DOCS"))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://cloud.tencent.com/document/product/1000/2000")
+                        .title("对象存储开发指引")
+                        .content("本页提供开发指引、API 参考与接入说明。")
+                        .snippet("开发指引与 API 参考")
+                        .competitorName("腾讯云")
+                        .sourceType("DOCS")
+                        .success(true)
+                        .build());
+
+        CandidateVerificationResult result = candidateVerifier.verify(
+                "腾讯云",
+                "DOCS",
+                List.of(SourceCandidate.builder()
+                        .url("https://cloud.tencent.com/document/product/1000/2000")
+                        .title("对象存储开发指引")
+                        .sourceType("DOCS")
+                        .domain("cloud.tencent.com")
+                        .build())
+        );
+
+        assertEquals(1, result.getVerifiedTargets().size());
+    }
 }

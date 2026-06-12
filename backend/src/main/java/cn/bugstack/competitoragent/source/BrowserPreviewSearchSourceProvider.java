@@ -5,6 +5,7 @@ import cn.bugstack.competitoragent.config.CollectorProperties;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.search.BrowserSearchRuntimeResult;
 import cn.bugstack.competitoragent.search.BrowserSearchRuntimeService;
+import cn.bugstack.competitoragent.search.SearchPolicyResolver;
 import cn.bugstack.competitoragent.search.SearchRuntimePolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,7 @@ public class BrowserPreviewSearchSourceProvider implements SearchSourceProvider 
 
     private static final List<String> DEFAULT_SCOPES = List.of("OFFICIAL", "DOCS", "PRICING", "NEWS", "REVIEW");
 
+    private final SearchPolicyResolver searchPolicyResolver = new SearchPolicyResolver();
     private final BrowserSearchRuntimeService browserSearchRuntimeService;
     private final SearchProviderProperties properties;
     private final PromptTemplateService promptTemplateService;
@@ -78,6 +80,7 @@ public class BrowserPreviewSearchSourceProvider implements SearchSourceProvider 
                 .searchMode("BROWSER_ONLY")
                 // 规划期预览的职责就是复用浏览器搜索能力做候选预览，因此这里显式强制开启。
                 .browserSearchEnabled(Boolean.TRUE)
+                .searchFallbackOrder(searchPolicyResolver.resolveFallbackOrder("BROWSER_ONLY", true))
                 .verifyResultPage(Boolean.FALSE)
                 .searchQueries(buildQueries(competitorName, scope))
                 .maxSearchResults(Math.max(1, properties.getResultsPerScope()))

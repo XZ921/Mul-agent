@@ -17,6 +17,7 @@ import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
 import cn.bugstack.competitoragent.source.SourceDiscoveryService;
 import cn.bugstack.competitoragent.source.SourcePlan;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -85,12 +86,16 @@ class WorkflowFactoryTest {
         assertTrue(config.path("browserSearchEnabled").asBoolean());
         assertEquals("HYBRID", config.path("searchMode").asText());
         assertEquals(1, config.path("maxSearchResults").asInt());
+        assertEquals(List.of("PLANNED", "BROWSER", "HTTP"),
+                objectMapper.convertValue(config.path("searchFallbackOrder"), new TypeReference<List<String>>() {
+                }));
         assertTrue(config.path("verifyResultPage").asBoolean());
         assertTrue(config.path("searchRuntimePolicy").path("verifyResultPage").asBoolean());
         assertEquals(3, config.path("searchRuntimePolicy").path("maxOpenResultPages").asInt());
         SearchExecutionPlan executionPlan = objectMapper.treeToValue(config.get("searchExecutionPlan"), SearchExecutionPlan.class);
         assertNotNull(executionPlan);
         assertFalse(executionPlan.getSteps().isEmpty());
+        assertEquals(List.of("PLANNED", "BROWSER", "HTTP"), executionPlan.getFallbackOrder());
     }
 
     @Test

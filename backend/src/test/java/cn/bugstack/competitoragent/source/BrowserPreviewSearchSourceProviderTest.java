@@ -76,6 +76,7 @@ class BrowserPreviewSearchSourceProviderTest {
         assertEquals("BROWSER_ONLY", previewConfig.getSearchMode());
         assertTrue(Boolean.TRUE.equals(previewConfig.getBrowserSearchEnabled()));
         assertTrue(Boolean.FALSE.equals(previewConfig.getVerifyResultPage()));
+        assertEquals(List.of("PLANNED", "BROWSER"), previewConfig.getSearchFallbackOrder());
         assertEquals(3, previewConfig.getMaxSearchResults());
         assertEquals(1, previewConfig.getSearchRuntimePolicy().getMaxRetries());
         assertTrue(Boolean.FALSE.equals(previewConfig.getSearchRuntimePolicy().getVerifyResultPage()));

@@ -163,6 +163,72 @@ source-discovery:
 
 search:
   mode: HYBRID
+  source-catalog:
+    families:
+      official:
+        enabled: true
+        role: PRIMARY_VERTICAL
+        source-types:
+          - OFFICIAL
+          - PRICING
+          - DOCS
+        content-scopes:
+          - PRODUCT_PAGE
+          - PRICING
+          - DOCUMENTATION
+        primary-tools:
+          - WEB_SCRAPER
+          - JINA_READER
+        auxiliary-tools:
+          - PUBLIC_SEARCH
+        update-policy:
+          mode: DAILY_INCREMENTAL
+          interval: PT24H
+        query-templates:
+          - search-official
+          - search-official-domain
+          - search-pricing-primary
+          - search-docs-primary
+      news:
+        enabled: true
+        role: PRIMARY_VERTICAL
+        source-types:
+          - NEWS
+        content-scopes:
+          - PRODUCT_RELEASE
+          - FUNDING
+          - PARTNERSHIP
+        primary-tools:
+          - NEWS_API
+          - RSS
+        auxiliary-tools:
+          - PUBLIC_SEARCH
+        update-policy:
+          mode: REALTIME_RSS_AND_SCHEDULED_SWEEP
+          interval: PT1H
+        query-templates:
+          - search-news-primary
+          - search-news-secondary
+      github:
+        enabled: true
+        role: PRIMARY_VERTICAL
+        source-types:
+          - GITHUB
+          - OPEN_SOURCE
+        content-scopes:
+          - REPOSITORY
+          - STAR_TREND
+          - RELEASE
+        primary-tools:
+          - GITHUB_API
+        auxiliary-tools:
+          - PUBLIC_SEARCH
+        update-policy:
+          mode: DAILY_API_POLLING
+          interval: PT24H
+        query-templates:
+          - search-github-repository
+          - search-github-release
   engines:
     bing:
       name: Bing

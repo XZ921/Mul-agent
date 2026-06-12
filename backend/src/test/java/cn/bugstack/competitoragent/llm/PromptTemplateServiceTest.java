@@ -85,4 +85,16 @@ class PromptTemplateServiceTest {
         assertTrue(taskActionTranslatorPrompt.contains("\"confirmationRequest\""));
         assertTrue(taskActionTranslatorPrompt.contains("\"sourceUrls\""));
     }
+
+    @Test
+    void shouldKeepEnglishSearchTemplatesAfterLoadingYamlQueries() {
+        String rendered = String.join(" | ", promptTemplateService.buildSearchQueries(
+                "Notion AI",
+                "DOCS",
+                "docs.notion.so"
+        ));
+
+        assertTrue(rendered.contains("Notion AI"));
+        assertTrue(rendered.toLowerCase().contains("documentation"));
+    }
 }

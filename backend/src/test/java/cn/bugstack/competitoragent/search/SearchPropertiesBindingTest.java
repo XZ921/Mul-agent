@@ -35,6 +35,12 @@ class SearchPropertiesBindingTest {
                     "search.browser.continue-on-search-timeout=true",
                     "search.browser.continue-on-page-collect-failure=false",
                     "search.browser.recover-partial-content-on-timeout=true",
+                    "search.source-catalog.families.official.role=PRIMARY_VERTICAL",
+                    "search.source-catalog.families.official.primary-tools[0]=WEB_SCRAPER",
+                    "search.source-catalog.families.official.primary-tools[1]=JINA_READER",
+                    "search.source-catalog.families.news.update-policy.mode=REALTIME_RSS_AND_SCHEDULED_SWEEP",
+                    "search.source-catalog.families.github.query-templates[0]=search-github-repository",
+                    "search.source-catalog.families.github.query-templates[1]=search-github-release",
                     "serpapi.api-key=test-serp-key",
                     "serpapi.endpoint=https://serpapi.com/search",
                     "serpapi.default-engine=google",
@@ -51,6 +57,7 @@ class SearchPropertiesBindingTest {
             SearchBrowserProperties searchBrowserProperties = context.getBean(SearchBrowserProperties.class);
             SerpApiProperties serpApiProperties = context.getBean(SerpApiProperties.class);
             QianfanSearchProperties qianfanSearchProperties = context.getBean(QianfanSearchProperties.class);
+            SearchProperties searchProperties = context.getBean(SearchProperties.class);
 
             assertThat(searchProviderProperties.getProviderOrder()).containsExactly("serpapi", "qianfan");
             assertThat(searchProviderProperties.getProviders().get("serpapi").getEnabled()).isTrue();
@@ -75,6 +82,15 @@ class SearchPropertiesBindingTest {
             assertThat(qianfanSearchProperties.getApiKey()).isEqualTo("test-qianfan-key");
             assertThat(qianfanSearchProperties.getDefaultEngine()).isEqualTo("baidu");
             assertThat(qianfanSearchProperties.resolveDefaultEngineKey(searchEngineProperties)).isEqualTo("baidu");
+            assertThat(searchProperties.getSourceCatalog().getFamilies()).containsKeys("official", "news", "github");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getRole())
+                    .isEqualTo("PRIMARY_VERTICAL");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getPrimaryTools())
+                    .containsExactly("WEB_SCRAPER", "JINA_READER");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("news").getUpdatePolicy().getMode())
+                    .isEqualTo("REALTIME_RSS_AND_SCHEDULED_SWEEP");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("github").getQueryTemplates())
+                    .containsExactly("search-github-repository", "search-github-release");
         });
     }
 
@@ -101,6 +117,7 @@ class SearchPropertiesBindingTest {
             SearchProviderProperties.class,
             SearchEngineProperties.class,
             SearchBrowserProperties.class,
+            SearchProperties.class,
             SerpApiProperties.class,
             QianfanSearchProperties.class
     })

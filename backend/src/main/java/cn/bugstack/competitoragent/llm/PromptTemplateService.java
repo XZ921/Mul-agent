@@ -108,7 +108,7 @@ public class PromptTemplateService {
                     {competitorData}
                     """),
             new AbstractMap.SimpleEntry<>("search-official", "{competitorName} official website"),
-            new AbstractMap.SimpleEntry<>("search-official-domain", "site:{domainHint} {competitorName}"),
+            new AbstractMap.SimpleEntry<>("search-official-domain", "site:{domainHint} {competitorName} official website product overview"),
             new AbstractMap.SimpleEntry<>("search-docs-primary", "{competitorName} documentation api reference"),
             new AbstractMap.SimpleEntry<>("search-docs-secondary", "{competitorName} developer docs guide"),
             new AbstractMap.SimpleEntry<>("search-pricing-primary", "{competitorName} pricing plans"),
@@ -117,13 +117,21 @@ public class PromptTemplateService {
             new AbstractMap.SimpleEntry<>("search-news-secondary", "{competitorName} release notes blog"),
             new AbstractMap.SimpleEntry<>("search-review-primary", "{competitorName} reviews g2 capterra"),
             new AbstractMap.SimpleEntry<>("search-review-secondary", "{competitorName} alternatives comparison g2 capterra"),
-            new AbstractMap.SimpleEntry<>("search-review-zhihu", "site:zhihu.com {competitorName} 评测 对比")
+            new AbstractMap.SimpleEntry<>("search-review-zhihu", "site:zhihu.com {competitorName} 评测 对比"),
+            new AbstractMap.SimpleEntry<>("search-github-repository", "site:github.com {competitorName} repository open source"),
+            new AbstractMap.SimpleEntry<>("search-github-release", "site:github.com {competitorName} releases changelog")
     );
 
     private final Map<String, String> templates = new ConcurrentHashMap<>();
     private final Map<String, String> englishSearchTemplates = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper;
     private final YAMLMapper yamlMapper = new YAMLMapper();
+    /**
+     * PromptTemplateService 既会被 Spring 容器托管，也会在单元测试里被直接 new 出来。
+     * 这里使用惰性初始化标记，保证两种入口最终都落到同一套模板装载流程上，
+     * 避免英文检索 query 在测试场景下回退到被 YAML 覆盖后的中文模板链路。
+     */
+    private volatile boolean initialized;
 
     @Autowired
     public PromptTemplateService(ObjectMapper objectMapper) {
@@ -131,18 +139,20 @@ public class PromptTemplateService {
     }
 
     @PostConstruct
-    public void init() {
+    public synchronized void init() {
+        if (initialized) {
+            return;
+        }
         DEFAULT_TEMPLATES.forEach(this::registerTemplate);
         loadConversationPromptTemplates();
         loadTaskRagContextTemplate();
         loadEnglishSearchTemplates();
         loadSearchQueryTemplates();
+        initialized = true;
     }
 
     public String getTemplate(String templateName) {
-        if (templates.isEmpty()) {
-            init();
-        }
+        ensureInitialized();
         String template = templates.get(templateName);
         if (template == null) {
             throw new IllegalArgumentException("Unknown template name: " + templateName);
@@ -277,10 +287,21 @@ public class PromptTemplateService {
     public List<String> buildSearchQueries(String competitorName,
                                            String sourceType,
                                            String domainHint) {
+        ensureInitialized();
         if (containsChinese(competitorName)) {
             return buildChineseSearchQueries(competitorName, sourceType, domainHint);
         }
         return buildEnglishSearchQueries(competitorName, sourceType, domainHint);
+    }
+
+    /**
+     * 单元测试会直接调用公开方法而不会触发 @PostConstruct，
+     * 因此所有对外入口都要先收口到统一初始化流程。
+     */
+    private void ensureInitialized() {
+        if (!initialized) {
+            init();
+        }
     }
 
     private List<String> buildChineseSearchQueries(String competitorName,
@@ -309,6 +330,10 @@ public class PromptTemplateService {
                 queries.add(buildSearchQuery("search-review-primary", variables));
                 queries.add(buildSearchQuery("search-review-secondary", variables));
                 queries.add(buildSearchQuery("search-review-zhihu", variables));
+            }
+            case "GITHUB", "OPEN_SOURCE" -> {
+                queries.add(buildSearchQuery("search-github-repository", variables));
+                queries.add(buildSearchQuery("search-github-release", variables));
             }
             default -> queries.add(buildSearchQuery("search-official", variables));
         }
@@ -348,6 +373,10 @@ public class PromptTemplateService {
                 queries.add(renderEnglishSearchQuery("search-review-secondary", variables));
                 queries.add(renderEnglishSearchQuery("search-review-zhihu", variables));
             }
+            case "GITHUB", "OPEN_SOURCE" -> {
+                queries.add(renderEnglishSearchQuery("search-github-repository", variables));
+                queries.add(renderEnglishSearchQuery("search-github-release", variables));
+            }
             default -> queries.add(renderEnglishSearchQuery("search-official", variables));
         }
         if (!safe(domainHint).isBlank()) {
@@ -378,7 +407,8 @@ public class PromptTemplateService {
             templates.putAll(queryTemplates);
             queryTemplates.forEach((key, value) -> {
                 if (key.startsWith("search-")) {
-                    englishSearchTemplates.put(key, value);
+                    // 英文模板链路保留默认英文表达，避免中文 YAML 覆盖后影响国际化 query 召回。
+                    englishSearchTemplates.putIfAbsent(key, value);
                 }
             });
         } catch (IOException e) {

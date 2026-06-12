@@ -13,7 +13,7 @@ class SearchPolicyResolverTest {
     @Test
     void shouldDropBrowserFallbackWhenBrowserSearchDisabled() {
         assertEquals(
-                List.of("PLANNED", "HEURISTIC", "HTTP"),
+                List.of("PLANNED", "HTTP"),
                 resolver.resolveFallbackOrder("HYBRID", false)
         );
     }
@@ -38,5 +38,19 @@ class SearchPolicyResolverTest {
 
         assertEquals(3000L, resolver.resolveSearchTimeoutMillis(null, executionPlan));
         assertEquals(12000L, resolver.resolveSearchTimeoutMillis(12000L, executionPlan));
+    }
+
+    @Test
+    void shouldKeepPrimaryVerticalAndAuxiliaryPublicRolesDistinct() {
+        SearchPolicyResolver resolver = new SearchPolicyResolver();
+        resolver.setSearchProperties(new SearchProperties());
+
+        assertEquals(SearchProviderRole.AUXILIARY_PUBLIC, resolver.resolveProviderRole("qianfan"));
+        assertEquals(SearchProviderRole.AUXILIARY_PUBLIC, resolver.resolveProviderRole("serpapi"));
+        assertEquals(SearchProviderRole.AUXILIARY_PUBLIC, resolver.resolveProviderRole("browser"));
+        assertEquals(SearchProviderRole.AUXILIARY_PUBLIC, resolver.resolveProviderRole("http"));
+        assertEquals(SearchProviderRole.PRIMARY_VERTICAL, resolver.resolveSourceFamilyRole("official"));
+        assertEquals(SearchProviderRole.PRIMARY_VERTICAL, resolver.resolveSourceFamilyRole("news"));
+        assertEquals(SearchProviderRole.PRIMARY_VERTICAL, resolver.resolveSourceFamilyRole("github"));
     }
 }

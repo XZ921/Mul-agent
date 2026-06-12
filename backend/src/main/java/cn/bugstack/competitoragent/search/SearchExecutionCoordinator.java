@@ -545,26 +545,11 @@ public class SearchExecutionCoordinator {
     }
 
     private List<String> resolveSearchFallbackOrder(CollectorNodeConfig config) {
-        List<String> configuredOrder = config.getSearchFallbackOrder();
-        if (configuredOrder == null || configuredOrder.isEmpty()) {
-            return searchPolicyResolver.resolveFallbackOrder(
-                    config.getSearchMode(),
-                    Boolean.TRUE.equals(config.getBrowserSearchEnabled())
-            );
-        }
-        LinkedHashSet<String> normalizedOrder = new LinkedHashSet<>();
-        for (String stage : configuredOrder) {
-            if (StringUtils.hasText(stage)) {
-                normalizedOrder.add(stage.trim().toUpperCase(Locale.ROOT));
-            }
-        }
-        if (normalizedOrder.isEmpty()) {
-            return searchPolicyResolver.resolveFallbackOrder(
-                    config.getSearchMode(),
-                    Boolean.TRUE.equals(config.getBrowserSearchEnabled())
-            );
-        }
-        return new ArrayList<>(normalizedOrder);
+        return searchPolicyResolver.resolveFallbackOrder(
+                config.getSearchMode(),
+                Boolean.TRUE.equals(config.getBrowserSearchEnabled()),
+                config.getSearchFallbackOrder()
+        );
     }
 
     private BrowserSearchRuntimeResult defaultBrowserSupplementResult(CollectorNodeConfig config) {
