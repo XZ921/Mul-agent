@@ -16,9 +16,11 @@ import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.repository.AiCallAuditRecordRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
+import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
 import cn.bugstack.competitoragent.search.SearchExecutionPlan;
 import cn.bugstack.competitoragent.search.SearchExecutionTrace;
 import cn.bugstack.competitoragent.search.SearchProgressSnapshot;
+import cn.bugstack.competitoragent.search.SearchSelectedTargetSummary;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
 import cn.bugstack.competitoragent.task.TaskRecoveryService;
@@ -722,6 +724,7 @@ public class TaskNodeViewAssembler {
                         output == null ? null : output.get("searchExecutionTrace"),
                         SearchExecutionTrace.class))
                 .searchAudit(searchAudit)
+                .searchAuditSummary(searchAudit == null ? null : SearchAuditSummary.from(searchAudit))
                 .attemptedTargets(searchAudit == null || searchAudit.getAttemptedTargets() == null
                         ? List.of()
                         : searchAudit.getAttemptedTargets())
@@ -738,6 +741,13 @@ public class TaskNodeViewAssembler {
                 .taskRagContext(textOrNull(output, "taskRagContext"))
                 .sourceCandidates(sourceCandidates)
                 .selectedTargets(selectedTargets)
+                .selectedTargetSummaries(selectedTargets.stream()
+                        .map(target -> SearchSelectedTargetSummary.builder()
+                                .url(target.getUrl())
+                                .title(target.getTitle())
+                                .sourceUrls(target.getUrl() == null ? List.of() : List.of(target.getUrl()))
+                                .build())
+                        .toList())
                 .build();
     }
 

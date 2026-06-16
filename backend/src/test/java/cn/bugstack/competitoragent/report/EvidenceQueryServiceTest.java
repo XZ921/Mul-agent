@@ -251,6 +251,8 @@ class EvidenceQueryServiceTest {
         assertTrue(source.contains("collection"));
         assertTrue(source.contains("运行时入口"));
         assertTrue(source.contains("EvidenceQueryService"));
+        assertTrue(source.contains("瘦身后的共享投影"));
+        assertTrue(source.contains("不能重新解析 collector 大 JSON 中的 results/content 正文"));
     }
 
     @SuppressWarnings("unchecked")

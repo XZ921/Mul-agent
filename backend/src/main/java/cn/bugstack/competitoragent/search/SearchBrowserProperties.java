@@ -30,6 +30,14 @@ public class SearchBrowserProperties {
     private boolean continueOnSearchTimeout = true;
     private boolean continueOnPageCollectFailure = true;
     private boolean recoverPartialContentOnTimeout = true;
+    private boolean stealthEnabled = true;
+    private String locale = "zh-CN";
+    private String timezoneId = "Asia/Shanghai";
+    private int viewportWidth = 1440;
+    private int viewportHeight = 900;
+    private int shortBodyThreshold = 120;
+    private int minimumPrimaryResultCount = 1;
+    private int suspectBlockedBodyThreshold = 40;
     private List<String> userAgents = List.of(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
@@ -42,6 +50,14 @@ public class SearchBrowserProperties {
             "unusual traffic",
             "verify you are human",
             "access denied",
-            "robot check"
+            "robot check",
+            "security check"
+    );
+    private List<String> blockedUrlKeywords = List.of(
+            "/login",
+            "/signin",
+            "/verify",
+            "/captcha",
+            "/challenge"
     );
 }

@@ -64,6 +64,18 @@ public class SearchProviderProperties {
     /** 单次 scope 搜索最大重试次数。 */
     private int maxRetries = 2;
 
+    /**
+     * 主力 provider 至少返回多少候选后，辅助公网搜索才允许默认跳过。
+     * 该字段属于路由运行策略，不表达任何业务 source family 语义。
+     */
+    private int primaryCandidateThreshold = 1;
+
+    /**
+     * 当主力 provider 已满足候选阈值时，是否仍继续执行辅助公网搜索。
+     * 该字段只描述路由编排行为。
+     */
+    private boolean runAuxiliaryWhenPrimarySatisfied = false;
+
     /** JSON 结果数组路径，支持 dot path，例如 results 或 data.items。 */
     private String resultsPath = "results";
 

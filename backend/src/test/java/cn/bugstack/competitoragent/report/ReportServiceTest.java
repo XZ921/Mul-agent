@@ -161,6 +161,7 @@ class ReportServiceTest {
         assertEquals(2, response.getSearchAuditOverview().getSelectedCandidateCount());
         assertEquals(1, response.getSearchAuditOverview().getCollectors().size());
         assertTrue(response.getSearchAuditOverview().getCollectors().get(0).getSelectedUrls().contains("https://docs.notion.so"));
+        assertNotNull(response.getSearchAuditOverview().getSearchAuditSummary());
     }
 
     @Test

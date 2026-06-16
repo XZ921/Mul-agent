@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.model.dto;
 
+import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.workflow.contract.QualityDiagnosis;
 import cn.bugstack.competitoragent.workflow.contract.QualityDimension;
@@ -442,6 +443,7 @@ public class ReportResponse {
         private Integer verifiedCandidateCount;
         private Integer supplementedCandidateCount;
         private Integer selectedCandidateCount;
+        private SearchAuditSummary searchAuditSummary;
         private List<CollectorSearchAudit> collectors;
     }
 

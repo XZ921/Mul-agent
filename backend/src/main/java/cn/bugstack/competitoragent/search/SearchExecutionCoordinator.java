@@ -4,7 +4,7 @@ import cn.bugstack.competitoragent.agent.collector.CollectorNodeConfig;
 import cn.bugstack.competitoragent.source.SearchSourceProvider;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -24,7 +24,6 @@ import java.util.function.Consumer;
  * 在正式采集前统一完成“读取候选 -> 验证高优先级候选 -> 不足时增补 -> 最终选源”。
  */
 @Component
-@RequiredArgsConstructor
 public class SearchExecutionCoordinator {
 
     private final CandidateVerifier candidateVerifier;
@@ -33,6 +32,39 @@ public class SearchExecutionCoordinator {
     private final SourceCandidateRanker sourceCandidateRanker;
     private final CollectionTargetSelector collectionTargetSelector;
     private final SearchPolicyResolver searchPolicyResolver;
+    private final CanonicalUrlResolver canonicalUrlResolver;
+
+    public SearchExecutionCoordinator(CandidateVerifier candidateVerifier,
+                                      BrowserSearchRuntimeService browserSearchRuntimeService,
+                                      SearchSourceProvider searchSourceProvider,
+                                      SourceCandidateRanker sourceCandidateRanker,
+                                      CollectionTargetSelector collectionTargetSelector,
+                                      SearchPolicyResolver searchPolicyResolver) {
+        this(candidateVerifier,
+                browserSearchRuntimeService,
+                searchSourceProvider,
+                sourceCandidateRanker,
+                collectionTargetSelector,
+                searchPolicyResolver,
+                new CanonicalUrlResolver());
+    }
+
+    @Autowired
+    public SearchExecutionCoordinator(CandidateVerifier candidateVerifier,
+                                      BrowserSearchRuntimeService browserSearchRuntimeService,
+                                      SearchSourceProvider searchSourceProvider,
+                                      SourceCandidateRanker sourceCandidateRanker,
+                                      CollectionTargetSelector collectionTargetSelector,
+                                      SearchPolicyResolver searchPolicyResolver,
+                                      CanonicalUrlResolver canonicalUrlResolver) {
+        this.candidateVerifier = candidateVerifier;
+        this.browserSearchRuntimeService = browserSearchRuntimeService;
+        this.searchSourceProvider = searchSourceProvider;
+        this.sourceCandidateRanker = sourceCandidateRanker;
+        this.collectionTargetSelector = collectionTargetSelector;
+        this.searchPolicyResolver = searchPolicyResolver;
+        this.canonicalUrlResolver = canonicalUrlResolver;
+    }
 
     public SearchExecutionResult execute(CollectorNodeConfig config) {
         return execute(config, null);
@@ -264,6 +296,10 @@ public class SearchExecutionCoordinator {
                 .browserTraceId(browserSearchResult.getBrowserTraceId())
                 .browserExecutedQueries(browserSearchResult.getExecutedQueries() == null ? List.of() : browserSearchResult.getExecutedQueries())
                 .browserSearchSummary(browserSearchResult.getSummary())
+                .browserFailureKind(browserSearchResult.getFailureKind())
+                .browserRestartScope(browserSearchResult.getRestartScope())
+                .browserFallbackAction(browserSearchResult.getFallbackAction())
+                .browserMatchedSignals(browserSearchResult.getMatchedSignals() == null ? List.of() : browserSearchResult.getMatchedSignals())
                 .providerFallbackUsed(providerFallbackUsed)
                 .selectedCandidateCount(selectedTargets.size())
                 .searchTimeoutMillis(searchTimeoutMillis)
@@ -542,7 +578,10 @@ public class SearchExecutionCoordinator {
         List<SourceCandidate> normalized = candidates.stream()
                 .filter(candidate -> candidate != null && StringUtils.hasText(candidate.getUrl()))
                 .map(candidate -> {
-                    SourceCandidate base = sourceCandidateRanker.ensureScores(candidate);
+                    SourceCandidate base = normalizeCandidateCanonicalUrl(sourceCandidateRanker.ensureScores(candidate));
+                    if (base == null) {
+                        return null;
+                    }
                     String effectiveStage = StringUtils.hasText(base.getSelectionStage()) ? base.getSelectionStage() : stage;
                     String effectiveReason = StringUtils.hasText(base.getSelectionReason())
                             ? base.getSelectionReason()
@@ -552,6 +591,7 @@ public class SearchExecutionCoordinator {
                             .selectionReason(effectiveReason)
                             .build();
                 })
+                .filter(java.util.Objects::nonNull)
                 .filter(candidate -> !isBlockedDomain(candidate, config.getBlockedDomains()))
                 .toList();
         return sourceCandidateRanker.rankAndDeduplicate(normalized);
@@ -640,11 +680,7 @@ public class SearchExecutionCoordinator {
     }
 
     private String extractDomain(String url) {
-        try {
-            return java.net.URI.create(url).getHost();
-        } catch (Exception e) {
-            return null;
-        }
+        return canonicalUrlResolver.canonicalDomain(url);
     }
 
     private boolean shouldSupplement(CollectorNodeConfig config,
@@ -686,10 +722,16 @@ public class SearchExecutionCoordinator {
         }
         Map<String, SourceCandidate> merged = new LinkedHashMap<>();
         for (SourceCandidate candidate : currentCandidates) {
-            merged.put(candidate.getUrl(), candidate);
+            SourceCandidate normalizedCandidate = normalizeCandidateCanonicalUrl(candidate);
+            if (normalizedCandidate != null) {
+                merged.put(normalizedCandidate.getUrl(), normalizedCandidate);
+            }
         }
         for (SourceCandidate candidate : updatedCandidates) {
-            merged.put(candidate.getUrl(), sourceCandidateRanker.ensureScores(candidate));
+            SourceCandidate normalizedCandidate = normalizeCandidateCanonicalUrl(candidate);
+            if (normalizedCandidate != null) {
+                merged.put(normalizedCandidate.getUrl(), sourceCandidateRanker.ensureScores(normalizedCandidate));
+            }
         }
         return new ArrayList<>(merged.values());
     }
@@ -703,7 +745,13 @@ public class SearchExecutionCoordinator {
             if (target == null || target.getCandidate() == null || !StringUtils.hasText(target.getCandidate().getUrl())) {
                 continue;
             }
-            attemptedTargets.put(target.getCandidate().getUrl(), target);
+            SourceCandidate normalizedCandidate = normalizeCandidateCanonicalUrl(target.getCandidate());
+            if (normalizedCandidate == null) {
+                continue;
+            }
+            attemptedTargets.put(normalizedCandidate.getUrl(), target.toBuilder()
+                    .candidate(normalizedCandidate)
+                    .build());
         }
     }
 
@@ -711,13 +759,33 @@ public class SearchExecutionCoordinator {
                                                            List<SourceCandidate> existingCandidates) {
         Set<String> existingUrls = new LinkedHashSet<>();
         for (SourceCandidate candidate : existingCandidates) {
-            if (candidate != null && StringUtils.hasText(candidate.getUrl())) {
-                existingUrls.add(candidate.getUrl());
+            SourceCandidate normalizedCandidate = normalizeCandidateCanonicalUrl(candidate);
+            if (normalizedCandidate != null) {
+                existingUrls.add(normalizedCandidate.getUrl());
             }
         }
         return supplementedCandidates.stream()
-                .filter(candidate -> !existingUrls.contains(candidate.getUrl()))
+                .map(this::normalizeCandidateCanonicalUrl)
+                .filter(candidate -> candidate != null && !existingUrls.contains(candidate.getUrl()))
                 .toList();
+    }
+
+    /**
+     * Task 5 要求在候选合并、尝试目标复用和补源去重三个阶段共享同一 canonical URL，
+     * 这里统一把候选 URL 收敛为稳定形式，避免同一页面的不同协议或追踪参数占满目标池。
+     */
+    private SourceCandidate normalizeCandidateCanonicalUrl(SourceCandidate candidate) {
+        if (candidate == null || !StringUtils.hasText(candidate.getUrl())) {
+            return null;
+        }
+        String canonicalUrl = canonicalUrlResolver.canonicalize(candidate.getUrl());
+        if (!StringUtils.hasText(canonicalUrl)) {
+            return null;
+        }
+        return candidate.toBuilder()
+                .url(canonicalUrl)
+                .domain(extractDomain(canonicalUrl))
+                .build();
     }
 
     private List<SourceCandidate> concat(List<SourceCandidate> current, List<SourceCandidate> appended) {

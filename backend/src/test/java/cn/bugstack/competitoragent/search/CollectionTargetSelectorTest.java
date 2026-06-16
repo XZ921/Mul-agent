@@ -121,4 +121,47 @@ class CollectionTargetSelectorTest {
         assertEquals(List.of("https://www.example.com/login"),
                 decision.getDiscardedCandidates().stream().map(SourceCandidate::getUrl).toList());
     }
+
+    @Test
+    void shouldCollapseCanonicalUrlVariantsIntoSingleSelectedTarget() {
+        SourceCandidate insecureVariant = SourceCandidate.builder()
+                .url("http://www.example.com/docs?utm_source=campaign&gclid=test")
+                .title("Docs Landing")
+                .selectionStage("VERIFIED")
+                .verified(Boolean.TRUE)
+                .totalScore(0.98)
+                .build();
+        SourceCandidate canonicalVariant = SourceCandidate.builder()
+                .url("https://example.com/docs")
+                .title("Canonical Docs")
+                .selectionStage("VERIFIED")
+                .verified(Boolean.TRUE)
+                .totalScore(0.80)
+                .build();
+
+        Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
+        attemptedTargets.put(canonicalVariant.getUrl(), SearchCollectionTarget.builder()
+                .candidate(canonicalVariant)
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url("https://example.com/docs")
+                        .title("Canonical Docs")
+                        .content("official docs content")
+                        .success(true)
+                        .build())
+                .build());
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                List.of(insecureVariant, canonicalVariant),
+                attemptedTargets,
+                2
+        );
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        assertEquals("https://example.com/docs", decision.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertNotNull(decision.getSelectedTargets().get(0).getCollectedPage());
+        assertEquals(List.of("https://example.com/docs"), decision.getSourceUrls());
+        assertEquals(1, decision.getUpdatedCandidates().stream()
+                .filter(candidate -> "SELECTED".equals(candidate.getSelectionStage()))
+                .count());
+    }
 }

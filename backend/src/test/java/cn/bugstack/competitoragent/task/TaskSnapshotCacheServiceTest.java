@@ -129,4 +129,43 @@ class TaskSnapshotCacheServiceTest {
         assertTrue(!cachedPayload.contains("fullContent"));
         assertTrue(!cachedPayload.contains("\"results\""));
     }
+
+    @Test
+    void shouldCacheAndReloadSharedOutputEnvelopes() {
+        SharedNodeOutputEnvelope envelope = SharedNodeOutputEnvelope.builder()
+                .taskId(19L)
+                .nodeName("collect_sources_web")
+                .planVersionId(7L)
+                .projectionType("SEARCH_SHARED_PROJECTION_V1")
+                .payloadJson("{\"sourceUrls\":[\"https://docs.example.com\"]}")
+                .sourceUrls(java.util.List.of("https://docs.example.com"))
+                .build();
+
+        cacheService.cacheSharedOutputEnvelope(19L, envelope);
+
+        verify(hashOperations).put(eq("competitor-agent:task:runtime:19"), eq("collect_sources_web"), any(String.class));
+        verify(stringRedisTemplate).expire(eq("competitor-agent:task:runtime:19"), any(Duration.class));
+
+        when(hashOperations.entries("competitor-agent:task:runtime:19"))
+                .thenReturn(Map.of(
+                        "collect_sources_web",
+                        """
+                        {
+                          "taskId":19,
+                          "nodeName":"collect_sources_web",
+                          "planVersionId":7,
+                          "projectionType":"SEARCH_SHARED_PROJECTION_V1",
+                          "payloadJson":"{\\"sourceUrls\\":[\\"https://docs.example.com\\"]}",
+                          "sourceUrls":["https://docs.example.com"]
+                        }
+                        """
+                ));
+
+        Map<String, SharedNodeOutputEnvelope> cachedEnvelopes = cacheService.getCachedSharedOutputEnvelopes(19L);
+
+        assertEquals(1, cachedEnvelopes.size());
+        assertEquals("SEARCH_SHARED_PROJECTION_V1", cachedEnvelopes.get("collect_sources_web").getProjectionType());
+        assertEquals("{\"sourceUrls\":[\"https://docs.example.com\"]}",
+                cachedEnvelopes.get("collect_sources_web").getPayloadJson());
+    }
 }

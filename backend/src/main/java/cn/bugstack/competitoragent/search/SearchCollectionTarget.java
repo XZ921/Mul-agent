@@ -18,5 +18,10 @@ import lombok.NoArgsConstructor;
 public class SearchCollectionTarget {
 
     private SourceCandidate candidate;
+    /**
+     * selectedSummary 是正式共享与下游投影入口。
+     * collectedPage 仅服务当前 Collector 节点内部复用，不进入共享上下文主路径。
+     */
+    private SearchSelectedTargetSummary selectedSummary;
     private SourceCollector.CollectedPage collectedPage;
 }

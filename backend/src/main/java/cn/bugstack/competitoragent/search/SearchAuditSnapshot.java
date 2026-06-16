@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.search;
 
+import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
@@ -22,6 +23,11 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class SearchAuditSnapshot {
 
+    /**
+     * 轻量审计摘要，供 insight / report / replay 主路径优先消费。
+     * 完整候选、计划和 trace 继续保留为兼容字段。
+     */
+    private SearchAuditSummary summary;
     private SearchExecutionTrace executionTrace;
     private SearchExecutionPlan executionPlan;
     private SearchProgressSnapshot latestProgress;
@@ -32,16 +38,8 @@ public class SearchAuditSnapshot {
      */
     private List<SearchReplayTimelineItem> replayTimeline;
     private List<cn.bugstack.competitoragent.source.SourceCandidate> sourceCandidates;
-    /**
-     * 验证阶段实际尝试过的采集目标。
-     * 用于恢复和回放说明“系统曾经尝试过哪些页面”，避免只看到最终选中结果。
-     */
     private List<SearchCollectionTarget> attemptedTargets;
     private List<SearchCollectionTarget> selectedTargets;
-    /**
-     * 已被正式规则丢弃的候选。
-     * 未选中不等于已丢弃，只有带 DISCARDED 语义的候选才进入此字段。
-     */
     private List<cn.bugstack.competitoragent.source.SourceCandidate> discardedCandidates;
     private List<String> sourceUrls;
 }

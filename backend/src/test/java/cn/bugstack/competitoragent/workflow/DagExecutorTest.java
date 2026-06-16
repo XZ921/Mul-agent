@@ -21,6 +21,8 @@ import cn.bugstack.competitoragent.repository.TaskNodeExecutionAttemptRepository
 import cn.bugstack.competitoragent.repository.WorkflowDeadLetterRecordRepository;
 import cn.bugstack.competitoragent.task.TaskExecutionLockService;
 import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
+import cn.bugstack.competitoragent.task.SharedNodeOutputEnvelope;
+import cn.bugstack.competitoragent.task.SharedNodeOutputProjector;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
 import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
 import cn.bugstack.competitoragent.workflow.runtime.DynamicPlanAppender;
@@ -33,6 +35,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.CompletableFuture;
@@ -491,7 +494,33 @@ class DagExecutorTest {
                 taskRepository,
                 List.of(new AlwaysSuccessAnalyzerAgent()),
                 mock(TaskSnapshotCacheService.class),
-                allowingNodeLockService()
+                allowingNodeLockService(),
+                List.of(new SharedNodeOutputProjector() {
+                    @Override
+                    public boolean supports(String outputData) {
+                        return outputData != null && outputData.contains("\"sourceUrls\"");
+                    }
+
+                    @Override
+                    public SharedNodeOutputEnvelope project(Long taskId,
+                                                            String nodeName,
+                                                            Long planVersionId,
+                                                            String outputData) {
+                        return SharedNodeOutputEnvelope.builder()
+                                .taskId(taskId)
+                                .nodeName(nodeName)
+                                .planVersionId(planVersionId)
+                                .projectionType("SEARCH_SHARED_PROJECTION_V1")
+                                .payloadJson("""
+                                        {
+                                          "sourceUrls":["https://docs.example.com/reference"],
+                                          "selectedUrls":["https://docs.example.com/reference"]
+                                        }
+                                        """)
+                                .sourceUrls(List.of("https://docs.example.com/reference"))
+                                .build();
+                    }
+                })
         );
 
         AgentContext context = AgentContext.builder().taskId(taskId).taskName("projection-test").build();
@@ -621,6 +650,80 @@ class DagExecutorTest {
         verify(snapshotCacheService, atLeastOnce()).saveTaskSnapshot(any());
         verify(snapshotCacheService).cacheNodeOutput(taskId, "collect_sources_web", "{\"node\":\"collect_sources_web\"}");
         verify(lockService).releaseNodeExecutionLock(any(), any(), any());
+    }
+
+    @Test
+    void shouldCacheSharedOutputEnvelopeWhenProjectorSupportsCollectorOutput() {
+        Long taskId = 1606L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode collector = TaskNode.builder()
+                .id(151L)
+                .taskId(taskId)
+                .nodeName("collect_sources_web")
+                .displayName("collect_sources_web")
+                .agentType(AgentType.COLLECTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .maxRetries(0)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        TaskSnapshotCacheService snapshotCacheService = mock(TaskSnapshotCacheService.class);
+        TaskExecutionLockService lockService = mock(TaskExecutionLockService.class);
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(collector));
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(lockService.tryAcquireNodeExecutionLock(any(), any(), any(), any())).thenReturn(Boolean.TRUE);
+        when(snapshotCacheService.getCachedSharedOutputEnvelopes(taskId)).thenReturn(Map.of());
+
+        SharedNodeOutputProjector projector = new SharedNodeOutputProjector() {
+            @Override
+            public boolean supports(String outputData) {
+                return outputData != null && outputData.contains("\"sourceUrls\"");
+            }
+
+            @Override
+            public SharedNodeOutputEnvelope project(Long taskId,
+                                                    String nodeName,
+                                                    Long planVersionId,
+                                                    String outputData) {
+                return SharedNodeOutputEnvelope.builder()
+                        .taskId(taskId)
+                        .nodeName(nodeName)
+                        .planVersionId(planVersionId)
+                        .projectionType("SEARCH_SHARED_PROJECTION_V1")
+                        .payloadJson("{\"sourceUrls\":[\"https://docs.example.com\"]}")
+                        .sourceUrls(List.of("https://docs.example.com"))
+                        .build();
+            }
+        };
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new CollectorWithStructuredOutputAgent()),
+                snapshotCacheService,
+                lockService,
+                List.of(projector)
+        );
+
+        AgentContext context = AgentContext.builder().taskId(taskId).taskName("envelope-cache-test").build();
+        executor.execute(taskId, context);
+
+        verify(snapshotCacheService).cacheSharedOutputEnvelope(eq(taskId), any(SharedNodeOutputEnvelope.class));
+        assertEquals("SEARCH_SHARED_PROJECTION_V1",
+                context.getSharedOutputEnvelope("collect_sources_web").getProjectionType());
+        assertTrue(context.getSharedOutput("collect_sources_web").contains("sourceUrls"));
     }
 
     @Test
@@ -996,6 +1099,15 @@ class DagExecutorTest {
                                               List<Agent> agents,
                                               TaskSnapshotCacheService snapshotCacheService,
                                               TaskExecutionLockService lockService) {
+        return newDagExecutor(nodeRepository, taskRepository, agents, snapshotCacheService, lockService, List.of());
+    }
+
+    private static DagExecutor newDagExecutor(TaskNodeRepository nodeRepository,
+                                              AnalysisTaskRepository taskRepository,
+                                              List<Agent> agents,
+                                              TaskSnapshotCacheService snapshotCacheService,
+                                              TaskExecutionLockService lockService,
+                                              List<SharedNodeOutputProjector> sharedNodeOutputProjectors) {
         TaskEventPublisher taskEventPublisher = mock(TaskEventPublisher.class);
         AgentLogService agentLogService = mock(AgentLogService.class);
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
@@ -1019,7 +1131,8 @@ class DagExecutorTest {
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
                         objectMapper),
-                mock(TaskQuotaCoordinator.class)
+                mock(TaskQuotaCoordinator.class),
+                sharedNodeOutputProjectors
         );
     }
 
@@ -1335,6 +1448,32 @@ class DagExecutorTest {
             return AgentResult.builder()
                     .status(TaskNodeStatus.SUCCESS)
                     .outputData("{\"rewritten\":true}")
+                    .build();
+        }
+    }
+
+    private static final class CollectorWithStructuredOutputAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.COLLECTOR;
+        }
+
+        @Override
+        public String getName() {
+            return "collector-with-structured-output";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("""
+                            {
+                              "sourceUrls":["https://docs.example.com"],
+                              "selectedTargets":[{"url":"https://docs.example.com"}]
+                            }
+                            """)
                     .build();
         }
     }

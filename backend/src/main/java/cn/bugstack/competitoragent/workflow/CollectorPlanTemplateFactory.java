@@ -114,14 +114,17 @@ public class CollectorPlanTemplateFactory {
                 .maxOpenResultPages(searchBrowserProperties.getMaxOpenResultPages())
                 .resultPageTimeoutMillis(searchBrowserProperties.getResultPageTimeoutMillis())
                 .maxContentLengthPerPage(searchBrowserProperties.getMaxContentLengthPerPage())
+                .stealthEnabled(searchBrowserProperties.isStealthEnabled())
+                .locale(searchBrowserProperties.getLocale())
+                .timezoneId(searchBrowserProperties.getTimezoneId())
+                .viewportWidth(searchBrowserProperties.getViewportWidth())
+                .viewportHeight(searchBrowserProperties.getViewportHeight())
+                .shortBodyThreshold(searchBrowserProperties.getShortBodyThreshold())
+                .minimumPrimaryResultCount(searchBrowserProperties.getMinimumPrimaryResultCount())
+                .suspectBlockedBodyThreshold(searchBrowserProperties.getSuspectBlockedBodyThreshold())
                 .userAgents(defaultUserAgents)
-                .blockedSignals(List.of(
-                        "captcha",
-                        "unusual traffic",
-                        "verify you are human",
-                        "access denied",
-                        "robot check"
-                ))
+                .blockedSignals(searchBrowserProperties.getBlockedSignals())
+                .blockedUrlKeywords(searchBrowserProperties.getBlockedUrlKeywords())
                 .recoveryHint("如搜索中断，优先从 VERIFY_TOP_CANDIDATES 或 BROWSER_SUPPLEMENT_SEARCH 继续排查。")
                 .build();
     }

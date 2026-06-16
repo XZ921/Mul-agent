@@ -1,5 +1,7 @@
 package cn.bugstack.competitoragent.config;
 
+import cn.bugstack.competitoragent.search.BrowserRuntimeDiagnosticLog;
+import cn.bugstack.competitoragent.search.BrowserRuntimeDiagnosticLogger;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Playwright;
@@ -26,16 +28,26 @@ public class PlaywrightBrowserManager {
     private final Playwright initialPlaywright;
     private final PlaywrightRuntimeFactory runtimeFactory;
     private final PlaywrightConfig.PlaywrightProperties props;
+    private final BrowserRuntimeDiagnosticLogger diagnosticLogger;
     private final AtomicReference<Playwright> playwrightRef = new AtomicReference<>();
     private final AtomicReference<Browser> browserRef = new AtomicReference<>();
     private final Object monitor = new Object();
 
+    @org.springframework.beans.factory.annotation.Autowired
     public PlaywrightBrowserManager(Playwright initialPlaywright,
                                     PlaywrightRuntimeFactory runtimeFactory,
-                                    PlaywrightConfig.PlaywrightProperties props) {
+                                    PlaywrightConfig.PlaywrightProperties props,
+                                    BrowserRuntimeDiagnosticLogger diagnosticLogger) {
         this.initialPlaywright = initialPlaywright;
         this.runtimeFactory = runtimeFactory;
         this.props = props;
+        this.diagnosticLogger = diagnosticLogger;
+    }
+
+    public PlaywrightBrowserManager(Playwright initialPlaywright,
+                                    PlaywrightRuntimeFactory runtimeFactory,
+                                    PlaywrightConfig.PlaywrightProperties props) {
+        this(initialPlaywright, runtimeFactory, props, new BrowserRuntimeDiagnosticLogger());
     }
 
     @PostConstruct
@@ -90,6 +102,17 @@ public class PlaywrightBrowserManager {
                 browserRef.set(relaunched);
             }
             return relaunched;
+        }
+    }
+
+    /**
+     * 对外暴露 runtime 重建入口。
+     * 搜索运行时和页面采集在命中“管道断开”类故障时必须先重建 runtime，
+     * 不能只做 browser 级重启，否则后续 launch/newPage 仍会继续失败。
+     */
+    public boolean recreateRuntimeForFailure(String reason, Exception cause) {
+        synchronized (monitor) {
+            return recreatePlaywrightRuntime(reason, cause);
         }
     }
 
@@ -168,6 +191,15 @@ public class PlaywrightBrowserManager {
                     return browser;
                 } catch (Exception e) {
                     boolean runtimeRecreated = shouldRecreateRuntime(e) && recreatePlaywrightRuntime(reason, e);
+                    logLaunchDiagnostic(
+                            "playwright_launch_failure",
+                            browserType,
+                            attempt,
+                            reason,
+                            e,
+                            runtimeRecreated ? "RUNTIME_AND_BROWSER" : (index < attempts.size() - 1 ? "BROWSER" : "NONE"),
+                            (runtimeRecreated || index < attempts.size() - 1) ? "RETRY_LAUNCH" : "FAIL_LAUNCH"
+                    );
                     if (runtimeRecreated && !retriedCurrentAttemptAfterRuntimeRecreate) {
                         retriedCurrentAttemptAfterRuntimeRecreate = true;
                         continue;
@@ -266,6 +298,7 @@ public class PlaywrightBrowserManager {
         try {
             Playwright recreated = runtimeFactory.create();
             if (recreated == null) {
+                logRuntimeRecreateDiagnostic(reason, cause, "FAIL_RECREATE");
                 log.error("重建 Playwright runtime 失败, reason={}, triggerError={}, recreateError={}",
                         reason,
                         cause == null ? null : cause.getMessage(),
@@ -275,10 +308,12 @@ public class PlaywrightBrowserManager {
             Playwright previous = playwrightRef.getAndSet(recreated);
             closePlaywrightQuietly(previous, "recreate runtime before relaunch: " + reason);
             playwrightRef.set(recreated);
+            logRuntimeRecreateDiagnostic(reason, cause, "RETRY_LAUNCH");
             log.warn("检测到 Playwright runtime 连接已断开，已重建运行时后重试, reason={}, error={}",
                     reason, cause == null ? null : cause.getMessage());
             return true;
         } catch (Exception recreateError) {
+            logRuntimeRecreateDiagnostic(reason, cause, "FAIL_RECREATE");
             log.error("重建 Playwright runtime 失败, reason={}, triggerError={}, recreateError={}",
                     reason,
                     cause == null ? null : cause.getMessage(),
@@ -362,6 +397,48 @@ public class PlaywrightBrowserManager {
                 || message.contains("connection closed")
                 || message.contains("transport closed")
                 || message.contains("pipe closed");
+    }
+
+    /**
+     * 浏览器启动与 runtime 重建属于基础设施层关键观察点，
+     * 这里统一补齐失败类型、重启范围和当前策略，便于日志平台按固定口径聚合。
+     */
+    private void logLaunchDiagnostic(String event,
+                                     String browserType,
+                                     LaunchAttempt attempt,
+                                     String reason,
+                                     Exception error,
+                                     String restartScope,
+                                     String fallbackAction) {
+        diagnosticLogger.log(event, BrowserRuntimeDiagnosticLog.builder()
+                .sourceType("PLAYWRIGHT_RUNTIME")
+                .query(reason)
+                .targetUrl(attempt == null || attempt.executablePath() == null ? null : attempt.executablePath().toString())
+                .engineKey(browserType)
+                .failureKind(shouldRecreateRuntime(error) ? "RUNTIME_PIPE_BROKEN" : "RUNTIME_FAILURE")
+                .restartScope(restartScope)
+                .fallbackAction(fallbackAction)
+                .blockedReasonCode(error == null ? null : error.getMessage())
+                .matchedSignals(List.of(
+                        "strategy:" + (attempt == null ? "unknown" : attempt.label()),
+                        "channel:" + (attempt == null ? "" : String.valueOf(attempt.channel()))
+                ))
+                .build());
+    }
+
+    private void logRuntimeRecreateDiagnostic(String reason, Exception cause, String fallbackAction) {
+        diagnosticLogger.log("playwright_runtime_recreate", BrowserRuntimeDiagnosticLog.builder()
+                .sourceType("PLAYWRIGHT_RUNTIME")
+                .query(reason)
+                .engineKey(normalizeBrowserType(props.getBrowser()))
+                .failureKind("RUNTIME_PIPE_BROKEN")
+                .restartScope("RUNTIME_AND_BROWSER")
+                .fallbackAction(fallbackAction)
+                .blockedReasonCode(cause == null ? null : cause.getMessage())
+                .matchedSignals(cause == null || cause.getMessage() == null
+                        ? List.of()
+                        : List.of("error:" + cause.getMessage()))
+                .build());
     }
 
     private record LaunchAttempt(String label,

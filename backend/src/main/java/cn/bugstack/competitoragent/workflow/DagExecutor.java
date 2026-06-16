@@ -22,8 +22,9 @@ import cn.bugstack.competitoragent.repository.WorkflowDeadLetterRecordRepository
 import cn.bugstack.competitoragent.task.TaskExecutionLockService;
 import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
+import cn.bugstack.competitoragent.task.SharedNodeOutputEnvelope;
+import cn.bugstack.competitoragent.task.SharedNodeOutputProjector;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
-import cn.bugstack.competitoragent.search.SearchSharedProjection;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
 import cn.bugstack.competitoragent.workflow.runtime.DynamicPlanAppender;
 import cn.bugstack.competitoragent.workflow.runtime.RuntimeEventEmitter;
@@ -32,6 +33,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -72,6 +74,42 @@ public class DagExecutor {
     private final RuntimeEventEmitter runtimeEventEmitter;
     private final DynamicPlanAppender dynamicPlanAppender;
     private final TaskQuotaCoordinator taskQuotaCoordinator;
+    private final List<SharedNodeOutputProjector> sharedNodeOutputProjectors;
+
+    @Autowired
+    public DagExecutor(TaskNodeRepository nodeRepository,
+                       AnalysisTaskRepository taskRepository,
+                       AgentCapabilityRegistry agentCapabilityRegistry,
+                       ObjectMapper objectMapper,
+                       TaskSnapshotCacheService taskSnapshotCacheService,
+                       TaskExecutionLockService taskExecutionLockService,
+                       TaskEventPublisher taskEventPublisher,
+                       AgentLogService agentLogService,
+                       WorkflowEventPublisher workflowEventPublisher,
+                       TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository,
+                       WorkflowDeadLetterRecordRepository workflowDeadLetterRecordRepository,
+                       RuntimeStateRefresher runtimeStateRefresher,
+                       RuntimeEventEmitter runtimeEventEmitter,
+                       DynamicPlanAppender dynamicPlanAppender,
+                       TaskQuotaCoordinator taskQuotaCoordinator,
+                       List<SharedNodeOutputProjector> sharedNodeOutputProjectors) {
+        this.nodeRepository = nodeRepository;
+        this.taskRepository = taskRepository;
+        this.agentCapabilityRegistry = agentCapabilityRegistry;
+        this.objectMapper = objectMapper;
+        this.recoveryPolicy = new NodeExecutionRecoveryPolicy(objectMapper);
+        this.taskSnapshotCacheService = taskSnapshotCacheService;
+        this.taskExecutionLockService = taskExecutionLockService;
+        this.taskEventPublisher = taskEventPublisher;
+        this.workflowEventPublisher = workflowEventPublisher;
+        this.taskNodeExecutionAttemptRepository = taskNodeExecutionAttemptRepository;
+        this.workflowDeadLetterRecordRepository = workflowDeadLetterRecordRepository;
+        this.runtimeStateRefresher = runtimeStateRefresher;
+        this.runtimeEventEmitter = runtimeEventEmitter;
+        this.dynamicPlanAppender = dynamicPlanAppender;
+        this.taskQuotaCoordinator = taskQuotaCoordinator;
+        this.sharedNodeOutputProjectors = sharedNodeOutputProjectors == null ? List.of() : List.copyOf(sharedNodeOutputProjectors);
+    }
 
     public DagExecutor(TaskNodeRepository nodeRepository,
                        AnalysisTaskRepository taskRepository,
@@ -88,21 +126,22 @@ public class DagExecutor {
                        RuntimeEventEmitter runtimeEventEmitter,
                        DynamicPlanAppender dynamicPlanAppender,
                        TaskQuotaCoordinator taskQuotaCoordinator) {
-        this.nodeRepository = nodeRepository;
-        this.taskRepository = taskRepository;
-        this.agentCapabilityRegistry = agentCapabilityRegistry;
-        this.objectMapper = objectMapper;
-        this.recoveryPolicy = new NodeExecutionRecoveryPolicy(objectMapper);
-        this.taskSnapshotCacheService = taskSnapshotCacheService;
-        this.taskExecutionLockService = taskExecutionLockService;
-        this.taskEventPublisher = taskEventPublisher;
-        this.workflowEventPublisher = workflowEventPublisher;
-        this.taskNodeExecutionAttemptRepository = taskNodeExecutionAttemptRepository;
-        this.workflowDeadLetterRecordRepository = workflowDeadLetterRecordRepository;
-        this.runtimeStateRefresher = runtimeStateRefresher;
-        this.runtimeEventEmitter = runtimeEventEmitter;
-        this.dynamicPlanAppender = dynamicPlanAppender;
-        this.taskQuotaCoordinator = taskQuotaCoordinator;
+        this(nodeRepository,
+                taskRepository,
+                agentCapabilityRegistry,
+                objectMapper,
+                taskSnapshotCacheService,
+                taskExecutionLockService,
+                taskEventPublisher,
+                agentLogService,
+                workflowEventPublisher,
+                taskNodeExecutionAttemptRepository,
+                workflowDeadLetterRecordRepository,
+                runtimeStateRefresher,
+                runtimeEventEmitter,
+                dynamicPlanAppender,
+                taskQuotaCoordinator,
+                List.of());
     }
 
     public void execute(Long taskId, AgentContext context) {
@@ -179,39 +218,18 @@ public class DagExecutor {
      * 续跑时重新灌入已成功节点输出，让后续节点能像在同一条执行链中一样复用历史结果。
      */
     private void seedSharedOutputs(AgentContext context, List<TaskNode> nodes) {
-        taskSnapshotCacheService.getCachedNodeOutputs(context.getTaskId())
-                .forEach(context::putSharedOutput);
+        taskSnapshotCacheService.getCachedSharedOutputEnvelopes(context.getTaskId())
+                .forEach(context::putSharedOutputEnvelope);
         for (TaskNode node : nodes) {
             if (node.getStatus() == TaskNodeStatus.SUCCESS
                     && node.getOutputData() != null
                     && !node.getOutputData().isBlank()) {
-                context.putSharedOutput(node.getNodeName(), toSharedProjection(node));
+                projectSharedOutput(context.getTaskId(), node.getNodeName(), node.getPlanVersionId(), node.getOutputData())
+                        .ifPresentOrElse(
+                                envelope -> context.putSharedOutputEnvelope(node.getNodeName(), envelope),
+                                () -> context.putSharedOutput(node.getNodeName(), node.getOutputData())
+                        );
             }
-        }
-    }
-
-    /**
-     * Collector 成功输出会同时服务于两类消费者：
-     * 1. 节点详情/replay 读取原始 outputData；
-     * 2. 下游共享上下文与恢复链路只读取稳定投影。
-     * 因此这里只裁剪 shared output，不动节点落库原文。
-     */
-    private String toSharedProjection(TaskNode node) {
-        if (node == null
-                || node.getAgentType() != AgentType.COLLECTOR
-                || node.getOutputData() == null
-                || node.getOutputData().isBlank()
-                || !SearchSharedProjection.supportsCollectorOutput(objectMapper, node.getOutputData())) {
-            return node == null ? null : node.getOutputData();
-        }
-        try {
-            return objectMapper.writeValueAsString(
-                    SearchSharedProjection.fromCollectorOutput(objectMapper, node.getOutputData())
-            );
-        } catch (Exception e) {
-            log.warn("serialize collector shared projection failed, nodeName={}",
-                    node.getNodeName(), e);
-            return node.getOutputData();
         }
     }
 
@@ -434,9 +452,14 @@ public class DagExecutor {
             node.setNextRetryAt(null);
             TaskNode savedNode = nodeRepository.save(node);
             recordExecutionAttempt(savedNode, attemptNo, TaskNodeStatus.SUCCESS, null, null);
-            String sharedProjection = toSharedProjection(savedNode);
-            sharedContext.putSharedOutput(savedNode.getNodeName(), sharedProjection);
-            taskSnapshotCacheService.cacheNodeOutput(taskId, node.getNodeName(), sharedProjection);
+            projectSharedOutput(taskId, savedNode.getNodeName(), savedNode.getPlanVersionId(), result.getOutputData())
+                    .ifPresentOrElse(envelope -> {
+                        sharedContext.putSharedOutputEnvelope(savedNode.getNodeName(), envelope);
+                        taskSnapshotCacheService.cacheSharedOutputEnvelope(taskId, envelope);
+                    }, () -> {
+                        sharedContext.putSharedOutput(savedNode.getNodeName(), result.getOutputData());
+                        taskSnapshotCacheService.cacheNodeOutput(taskId, node.getNodeName(), result.getOutputData());
+                    });
             return savedNode;
         }
 
@@ -454,6 +477,23 @@ public class DagExecutor {
             recordDeadLetter(savedNode, result.getErrorMessage());
         }
         return savedNode;
+    }
+
+    /**
+     * 统一尝试把节点输出投影成共享信封。
+     * 没有匹配投影器时返回 empty，调用方再退回原始字符串共享。
+     */
+    private Optional<SharedNodeOutputEnvelope> projectSharedOutput(Long taskId,
+                                                                   String nodeName,
+                                                                   Long planVersionId,
+                                                                   String outputData) {
+        if (outputData == null || outputData.isBlank()) {
+            return Optional.empty();
+        }
+        return sharedNodeOutputProjectors.stream()
+                .filter(projector -> projector.supports(outputData))
+                .findFirst()
+                .map(projector -> projector.project(taskId, nodeName, planVersionId, outputData));
     }
 
     private void recordExecutionAttempt(TaskNode node,

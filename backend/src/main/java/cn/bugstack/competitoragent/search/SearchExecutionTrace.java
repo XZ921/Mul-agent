@@ -39,6 +39,10 @@ public class SearchExecutionTrace {
     private String browserTraceId;
     private List<String> browserExecutedQueries;
     private String browserSearchSummary;
+    private String browserFailureKind;
+    private String browserRestartScope;
+    private String browserFallbackAction;
+    private List<String> browserMatchedSignals;
     private Boolean providerFallbackUsed;
     private Long searchTimeoutMillis;
     private Long searchElapsedMillis;

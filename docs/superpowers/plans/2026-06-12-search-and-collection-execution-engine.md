@@ -34,7 +34,7 @@
 
 ## Current Stage
 
-当前阶段：搜索与采集首轮 blocking 实施与搜索/采集段实链验证已完成；第二轮 attempted / discarded / replay timeline / preview-runtime homology / ranking hardening 自动化收口与 dev live smoke 已完成；`Wave 5 / Wave 6` 后续独立实施待启动，下游提取/报告闭环另行验收
+当前阶段：搜索与采集首轮 blocking 实施与搜索/采集段实链验证已完成；第二轮 attempted / discarded / replay timeline / preview-runtime homology / ranking hardening 自动化收口与 dev live smoke 已完成；`Wave 5` 对象瘦身、共享投影分层与配置平台化已完成，`Wave 6` 垂直 provider 闭环待执行，下游提取/报告闭环另行验收
 
 - [x] 诊断证据归并：已完成
 - [x] 旧 Task 轴方案降级：已完成
@@ -334,19 +334,25 @@ search:
 
 这不是“以后有空再看”的尾项，而是搜索执行引擎要从“问题样板”走向“稳定子域”必须完成的收口波次。
 
-### Wave 6: 垂直 API Provider 落地与主辅路由闭环
+### Wave 6: 垂直发现 Provider 落地与主辅路由闭环
 
 目标：把 [CollectorAgent.md:56](/E:/java_study/Mul-agnet/docs/problem/CollectorAgent.md:56) 的“私域垂直 API 主力、公网搜索辅助”从配置声明推进到真实运行链路，避免前五个波次完成后 provider 路由仍只有公网搜索引擎在工作。
 
+本波次需要额外明确一条 owner 边界：
+
+1. `Wave 6` 的 vertical provider 归属搜索发现层，职责是返回候选 URL、候选资源或稳定 `resource locator`，让主辅发现路由真正成立。
+2. `Wave 6` 不承担最终结构化采集执行 owner，不得把“API 已返回结构化数据”和“collector 已完成正式证据采集”混成一件事。
+3. 若某个外部 API 同时在发现层和采集层出现，例如 `GitHub API` 或 `News API`，则 `Wave 6` 只解决 discovery owner，`Wave 10` 才解决 collection owner。
+
 本波次必须解决的内容：
 
-1. 至少实现一个真实 `PRIMARY_VERTICAL` provider，优先从 `GitHub API` 或 `News API / RSS` 中选择一个作为首个落地对象；如果生产凭证暂不可用，也必须有配置禁用态、凭证缺失告警、Mock HTTP 契约测试和可复核的重试 / 超时 / 降级行为。
+1. 至少实现一个真实 `PRIMARY_VERTICAL` discovery provider，推荐优先从 `News API / RSS` 中选择一个作为首个落地对象；如果选择 `GitHub API`，只允许把它实现为 discovery provider：返回仓库、组织、release 等候选 URL 或稳定 `resource locator`，不得在本波次把结构化 API 响应伪装成网页采集结果，更不得要求 `PlaywrightPageCollector` 成为 GitHub API 的长期主采集路径。如果生产凭证暂不可用，也必须有配置禁用态、凭证缺失告警、Mock HTTP 契约测试和可复核的重试 / 超时 / 降级行为。
 2. 新 provider 必须实现稳定 provider 身份、可用性判断、Max Retries、异常捕获、`sourceUrls` 回填和结构化审计字段，不能依赖接口默认 `providerKey`、默认 `isAvailable=true` 或 fail-open 吞错。
 3. `Source Family Catalog` 的 `primaryTools` 必须能绑定到真实 provider；`SearchProviderProperties` 负责 provider 启停、凭证、超时、重试与降级；二者通过稳定 key 关联，不能重新把业务家族硬编码进 provider 私有逻辑。
 4. `SearchPolicyResolver.resolveProviderRole(...)` 必须真正区分 `PRIMARY_VERTICAL` 与 `AUXILIARY_PUBLIC`：真实垂直 provider 返回 `PRIMARY_VERTICAL`，`qianfan / serpapi / browser / http` 等公网搜索 provider 继续返回 `AUXILIARY_PUBLIC`。
 5. `RoutingSearchSourceProvider` 或其后续路由器必须按主辅关系执行：先跑可用的垂直主力 provider；当主力 provider 不可用、候选不足、质量水位不足或预算策略允许时，才进入公网搜索辅助补漏。
 6. 审计、回放和 insight 必须能展示 provider role、source family、provider key、query/template、跳过原因、降级原因和最终候选来源，不能只展示混合后的候选列表。
-7. 测试必须覆盖配置绑定、provider 可用性、凭证缺失、重试耗尽、主辅路由顺序、`resolveProviderRole` 差异、`sourceUrls` 保留、审计字段和公网辅助降级路径。
+7. 测试必须覆盖配置绑定、provider 可用性、凭证缺失、重试耗尽、主辅路由顺序、`resolveProviderRole` 差异、`sourceUrls` 保留、审计字段和公网辅助降级路径；如果选择 `GitHub API`，还必须覆盖“discovery 输出不会偷渡成 collection 结果”的边界断言。
 
 本波次明确不要求一次完成：
 
@@ -436,10 +442,10 @@ search:
 | Phase B | 完成 `Wave 2` 质量止血 | 2-4 天 | Phase A 至少收口策略入口与模板治理 | 已完成 |
 | Phase C | 完成 `Wave 3` 预览 / 运行同骨架 | 1-3 天 | Phase A 完成 | 已完成 |
 | Phase D | 完成 `Wave 4` 连续性事实源最小贯通 | 2-4 天 | Phase A 完成，Phase B 基本止血 | 已完成 |
-| Phase E | 启动 `Wave 5` 对象瘦身、数据源家族配置平台化与底座化专题 | 1-2 个迭代 | Phase A-D 完成并复核 | 待执行 |
-| Phase F | 完成 `Wave 6` 垂直 API provider 落地与主辅路由闭环 | 1 个迭代 | Phase E 至少完成 provider / source family 职责拆分，且选定首个垂直 provider 的凭证或 Mock 契约 | 待执行 |
+| Phase E | 完成 `Wave 5` 对象瘦身、数据源家族配置平台化与底座化专题 | 1-2 个迭代 | Phase A-D 完成并复核 | 已完成 |
+| Phase F | 完成 `Wave 6` 垂直 API provider 落地与主辅路由闭环 | 1 个迭代 | Phase E 已完成，且选定首个垂直 provider 的凭证或 Mock 契约 | 待执行 |
 
-当前允许进入实施的范围，仅限 `Phase A + Phase B + Phase C + Phase D` 里的首轮 blocking 收口包；`Phase E / Phase F` 不得提前偷跑。若团队决定优先补垂直 provider，也必须先单独改写实施计划，不能把它隐式塞进首轮完成口径。
+当前允许进入实施的范围，已扩展到 `Phase E` 完成后的 `Phase F` 垂直 provider 专题；`Wave 6` 仍需单独实施计划与验收口径，不能把它隐式回填成前五个波次的既成事实。
 
 ---
 
@@ -504,3 +510,610 @@ search:
 4. 搜索链路的跨重启 replay 持久化底座。
 5. 共享上下文、热快照缓存、任务恢复服务的整体系重构。
 6. 社交媒体、财务数据、专利数据的真实外部 API 接入、凭证治理、配额治理和产品化调度面板；但 `GitHub API` 或 `News API / RSS` 中至少一个真实垂直 provider 不在本 Out Of Scope，归 `Wave 6`。
+
+---
+
+## Full-Scale Follow-Up Roadmap After Wave 6
+
+本节不是对前文 `First Iteration Cut / Out Of Scope` 的回滚，也不是把当前 `Wave 0-6` 改写成“尚未完成”。
+
+本节的定位是：
+
+1. 承接 `Wave 6` 之后，给出符合当前工程设计的完整后续路线图。
+2. 解决“搜索调度已经有骨架，但采集执行体系仍然过于单一”的中长期问题。
+3. 明确未来如果继续扩展到网页、API、订阅监控三类采集，不应该靠不断膨胀 `PlaywrightPageCollector` 或让 `CollectorAgent` 自己承担所有差异化执行。
+4. 保持现有 `TaskDefinition -> ExecutionPlanDefinition -> WorkflowPlan`、`CollectorAgent`、`SearchPolicyResolver`、`Source Family Catalog`、`searchAudit` 等正式边界不被推翻。
+
+这意味着后续演进的正确方向不是“再拆出一堆平级 Agent”，而是：
+
+1. 任务层继续保留 `CollectorAgent` 作为搜索与采集阶段的唯一工作流节点 owner。
+2. 搜索发现继续由 `SearchExecutionCoordinator` 及其协作者负责。
+3. 采集执行进入正式的“执行协调器 + 执行器注册表 + 专项执行器”体系。
+4. `PlaywrightPageCollector` 从“唯一采集实现”退回到“网页采集执行器”之一。
+5. `API` 与 `订阅监控` 进入同一采集子域，但运行模型与恢复语义不再被错误地压扁成一次性网页抓取。
+
+### Why This Roadmap Is Needed
+
+如果只完成 `Wave 6`，系统能够做到“至少一个真实垂直 provider 进入正式路由”，但仍然存在三个结构性缺口：
+
+1. `SearchExecutionCoordinator` 能把 URL 选出来，不等于系统已经具备按不同信源类型稳定采集证据的能力。
+2. `SourceCollector -> PlaywrightPageCollector` 仍然默认“所有来源最后都尽量走网页抓取”，这会把 API 型、结构化型、订阅型来源都错误降解为页面抓取问题。
+3. 下游 `提取结构化 / 分析推理 / 报告写作 / 质量审查` 真正需要的不是“抓到一个页面”，而是“拿到可追溯、可解释、可评分的证据包”。
+
+因此，`Wave 6` 不是终点，而是“主辅发现路由闭环”的完成点；其后必须继续完成“采集执行体系闭环”，否则搜索与采集链路仍然会卡在“搜得到，但拿不到；拿到了，但拿不准；拿准了，但拿不成可用证据”的阶段。
+
+### Target Architecture
+
+后续目标架构仍然遵守当前工程的执行分层，不另造第二套总线：
+
+1. `TaskDefinition` 继续表达任务意图、竞品范围、来源范围、质量要求。
+2. `ExecutionPlanDefinition` 继续表达 `COLLECTOR` 阶段目标、阶段语义和节点顺序。
+3. `WorkflowPlan` 继续作为运行时唯一计划快照，`rerun / resume` 不得绕开它重新猜测搜索或采集语义。
+4. `CollectorAgent` 继续作为工作流节点的编排入口，对上游任务执行引擎暴露一个稳定节点，对下游协作者分派“搜索发现 -> 采集执行 -> 结果汇总”。
+5. `SearchExecutionCoordinator` 继续负责 query、provider 路由、候选验证、候选排序、最终选源与 `searchAudit`。
+6. 新增 `CollectionExecutionCoordinator` 负责把 `selectedTargets` 解释成正式采集任务包、路由到合适执行器、汇总执行结果、形成采集审计和恢复检查点。
+7. `SourceCollector` 从单一抓取入口演进为采集编排 facade，其内部不再直接假设所有 target 都由 `PlaywrightPageCollector` 解决。
+8. `CollectionExecutorRegistry` 负责按数据源家族、资源定位类型、执行模式选择专项执行器。
+9. `PlaywrightPageCollector` 归位为 `WebPageCollectionExecutor`。
+10. `API Data Executor`、`RSS / Feed Executor`、未来的 `Authenticated Connector Executor` 与网页执行器并列存在，但共享统一的任务包、结果包、审计包和恢复语义。
+
+### Architecture Guardrails
+
+后续路线图必须遵守以下 guardrails：
+
+1. 不新增第二个工作流层级的 `SearchAgent` / `CollectionAgent` 节点，不把当前一个 `COLLECTOR` 节点拆成两个 DAG 节点作为默认形态。
+2. 不把网页、API、RSS 的差异继续塞进 `CollectorNodeConfig` 的零散布尔字段里，而是进入正式采集任务包与执行器协议。
+3. 不让 `PlaywrightPageCollector` 继续兼任“反爬处理器、正文提取器、表格结构化器、证据持久化协调器、订阅增量摄取器”。
+4. 不让 API 型来源再次被错误包装成“先拼 URL，再走页面抓取”的伪网页模式。
+5. `sourceUrls` 仍然是全链路红线；对于 API、RSS、Repo、Feed 等非单页面资源，必须同时保留 `resourceLocator` 与可展示的 `sourceUrls`，而不是借口“不是网页”就跳过溯源。
+6. `searchAudit` 不得与未来的 `collectionAudit` 混成一个无边界大对象；两者必须主从明确、可独立 replay、可独立定位问题。
+7. `订阅监控` 不得伪装成同步一次性执行器。它可以共享采集子域契约，但必须保留自己的增量状态模型。
+
+---
+
+## Collection Execution Problem Hierarchy
+
+`Wave 0-6` 主要解决的是“搜索真相、搜索质量、搜索审计、搜索主辅路由”。
+
+`Wave 7+` 开始，主矛盾转移为采集执行本身。其阻塞层级建议重排如下：
+
+| 阻塞级别 | 主矛盾 | 代表表现 | 若不先修会发生什么 |
+| --- | --- | --- | --- |
+| `C0` | 采集任务与执行器之间没有正式契约 | `selectedTargets` 直接喂给单一 collector，执行器自己猜目标、字段、渲染策略 | 后续一加 API / RSS / 登录态页面，就会继续把差异散落到 if/else |
+| `C0` | 网页采集链路拿不到稳定页面内容 | 反爬页、空壳页、骨架屏、`__adopt__` / iframe / shadow root、超时和 challenge 页误采集 | 搜索质量再高也无法形成真实证据 |
+| `C1` | 即使拿到页面，也拿不到正确正文与结构块 | 价格表、功能对比表、文档目录、发布说明、FAQ、JSON-LD 被遗漏或截断 | 下游提取只能消费残缺文本，最终报告证据稀薄 |
+| `C1` | API / 结构化来源没有进入统一采集执行模型 | GitHub、News、工商、应用市场等来源只能曲线走网页抓取 | 垂直 provider 价值被浪费，主辅路由闭环无法真正兑现 |
+| `C1` | 采集现场没有正式事实源 | 只有搜索 audit，没有采集审计、采集质量分、执行器决策、局部重跑语义 | 发生空内容、错内容时，系统只能“知道失败”，不能“知道为什么失败” |
+| `C2` | 订阅监控缺少正式增量摄取模型 | RSS / Feed / 公众号等只能作为临时补源，而不是长期增量来源 | 搜索与采集永远停留在一次性任务心智，无法形成持续资料池 |
+| `C2` | 采集结果和下游证据对象之间边界不稳定 | 一会儿是页面正文，一会儿是 ExtractResult，一会儿是 evidence fragment | 采集质量无法直接传导到提取和报告质量门禁 |
+
+这决定了后续顺序：
+
+1. 先正式化采集任务包与执行器边界。
+2. 再强化网页采集执行器，把“拿到内容”与“拿准内容”分开止血。
+3. 再把 API / RSS 等专项执行器并入同一执行体系。
+4. 最后把采集审计、恢复、质量门禁与下游证据闭环打通。
+
+---
+
+## Runtime Execution Model
+
+### 1. End-To-End Flow
+
+后续搜索与采集完整运行模型建议稳定为以下 8 个阶段：
+
+1. `TaskDefinition` 生成 `WorkflowPlan`，保留 collector 节点的业务目标与来源范围。
+2. `CollectorAgent` 调用 `SearchExecutionCoordinator` 完成搜索发现与正式选源。
+3. `SearchExecutionCoordinator` 产出 `selectedTargets + searchAudit + recoveryCheckpoint`。
+4. `CollectionExecutionCoordinator` 把 `selectedTargets` 转换为正式 `CollectionTaskPackage` 列表。
+5. `CollectionExecutorRegistry` 为每个任务包分配执行器，例如网页、API、Feed。
+6. 各执行器完成资源获取、正文提取、结构块提取、质量评分、失败分类与局部重试。
+7. `CollectionExecutionCoordinator` 汇总 `CollectionResultBundle`，形成 `collectionAudit`、恢复检查点与对下游可消费的证据包。
+8. `CollectorAgent` 返回统一 collector output，继续满足现有工作流与事件体系。
+
+### 2. Responsibility Split
+
+责任边界建议固定如下：
+
+1. `SearchExecutionCoordinator` 只负责发现与选择，不负责正式证据提取。
+2. `CollectionExecutionCoordinator` 只负责采集执行编排、执行器选择、采集结果汇总，不负责搜索 query、候选验证或候选排序。
+3. `WebPageCollectionExecutor` 只负责网页资源的获取与网页证据提取，不负责 API 资源读取或订阅状态维护。
+4. `ApiDataCollectionExecutor` 只负责结构化接口资源的请求、映射、审计与质量评分，不负责浏览器反爬。
+5. `SubscriptionMonitor` 只负责增量发现与投递采集任务，不直接混入同步 collector 节点的网页抓取流程。
+
+### 3. Why One CollectorAgent Still Holds
+
+这个模型下，`CollectorAgent` 仍然成立，而且是更合理的：
+
+1. 对工作流而言，搜索与采集仍然属于同一业务阶段，不必强拆成两个 runtime node。
+2. 对执行子域而言，内部协作者已经正式分层，不再是一个大类包打天下。
+3. 对恢复与回放而言，仍然可以在一个节点内区分 `searchCheckpoint` 与 `collectionCheckpoint`，不必靠多节点拼接现场。
+
+---
+
+## Formal Contracts To Be Added
+
+这部分不是“现在立刻全部实现”，而是后续工程边界必须遵守的正式契约目标。
+
+### 1. CollectionTaskPackage
+
+`CollectionTaskPackage` 是 `searchAudit.selectedTargets` 到专项执行器之间的硬交接协议，但 `Wave 7` 不再一次性把所有猜测字段强塞进去。
+
+`Wave 7` 首轮只强制落最小核心字段：
+
+1. `taskId`
+2. `nodeName`
+3. `planVersionId`
+4. `competitorName`
+5. `sourceFamilyKey`
+6. `sourceType`
+7. `primaryTool`
+8. `url`
+9. `resourceLocator`
+10. `targetFields`
+11. `priority`
+12. `sourceUrls`
+
+之所以没有进一步缩到 10 个，是因为：
+
+1. `sourceType` 在当前工程里仍然是网页采集规则、质量判断和下游显示的重要稳定语义，不能过早删掉。
+2. `sourceUrls` 是现有工程的硬追溯红线，不能等到后续波次再补。
+
+以下字段不再作为 `Wave 7` 强制字段，而是由 `Wave 8` 网页失败模式和执行器真实需求反向收口后，再作为可选扩展字段补入：
+
+1. `canonicalUrl`
+2. `renderHints`
+3. `antiBotPolicy`
+4. `retryPolicy`
+5. `contentScopes`
+6. `evidenceExpectation`
+7. `timeoutBudget`
+8. `searchAuditRef`
+
+其中有两个约束仍然必须提前定死：
+
+1. `url` 仍然保留，因为网页型资源需要它，也便于 UI 和审计展示。
+2. `resourceLocator` 必须独立存在，因为 API / Repo / Feed / 组织主页等资源并不总能被单个 URL 完整表达。
+
+### 2. CollectionExecutionResult
+
+每个执行器返回的结果必须统一至少包含：
+
+1. `packageId`
+2. `executorType`
+3. `executionStatus`
+4. `failureKind`
+5. `retryable`
+6. `httpStatusOrProviderCode`
+7. `pageTitleOrResourceName`
+8. `rawContentSummary`
+9. `structuredBlocks`
+10. `qualitySignals`
+11. `qualityScore`
+12. `artifacts`
+13. `sourceUrls`
+14. `collectedAt`
+15. `durationMillis`
+
+### 3. CollectionAuditSnapshot
+
+采集阶段必须拥有自己的正式事实源，至少记录：
+
+1. 采集任务包列表及其执行顺序。
+2. 每个任务包被分配给哪个执行器。
+3. 是否触发了反爬信号、重试、降级、回退。
+4. 正文提取策略命中情况。
+5. 表格 / JSON-LD / 文档目录 / 价格区块等结构化块命中情况。
+6. 最终成功、失败、部分成功数量。
+7. `sourceUrls`、artifact 摘要、质量分与失败原因。
+
+### 4. CollectionCheckpoint
+
+采集恢复检查点至少需要稳定到以下阶段：
+
+1. `PACKAGE_BUILT`
+2. `RESOURCE_FETCHED`
+3. `CONTENT_EXTRACTED`
+4. `STRUCTURED_BLOCKS_EXTRACTED`
+5. `EVIDENCE_PERSISTED`
+6. `INDEX_UPDATED`
+
+这使得 rerun / resume 具备明确语义：
+
+1. `rerun search` 会废弃旧 `CollectionTaskPackage` 与旧采集结果。
+2. `rerun collection` 复用同一 `selectedTargets` 与 `searchAudit`，只重跑采集执行。
+3. `resume collector` 默认从最后成功的 `collectionCheckpoint` 继续，而不是重新跑完整搜索。
+
+---
+
+## Executor Topology
+
+### 1. Executor Families
+
+后续采集执行器建议按资源获取方式和状态模型拆分，而不是按“这个类是不是 Agent”拆分：
+
+| 执行器 | 主要资源类型 | 典型来源家族 | 同步 / 异步 | 当前优先级 |
+| --- | --- | --- | --- | --- |
+| `WebPageCollectionExecutor` | 官网、文档、媒体、帮助中心、定价页 | `official / news / docs / review` | 同步 | `P0` |
+| `ApiDataCollectionExecutor` | GitHub、News API、工商、应用市场等结构化接口 | `github / news / finance / enterprise` | 同步 | `P1` |
+| `FeedCollectionExecutor` | RSS / Atom / 简单订阅源 | `news / blog / community` | 同步或准异步 | `P2` |
+| `SubscriptionMonitor` | 长期监控型增量源 | `news / social / blog / feed` | 异步常驻 | `P2` |
+
+`WebPageCollectionExecutor` 在当前工程里不应再被等同于“Playwright 单实现”。  
+后续推荐把它稳定成双路径网页执行器：
+
+1. `JinaReader` 作为公开可访问页面的主路径，优先处理官方文档页、产品介绍页、定价页、公开资讯页、普通博客和 PDF 等轻量正文采集场景。
+2. `Playwright` 作为重型兜底路径，只处理 `JinaReader` 无法稳定覆盖的页面，例如登录态页面、强动态页面、需要交互展开的页面、明确存在 challenge 或强反爬的页面。
+3. 这意味着 `PlaywrightPageCollector` 的优化目标不再是“重新成为所有网页的默认主力”，而是成为 `FULL_RENDER` 路径下可解释、可恢复、可审计的重型执行器。
+
+### 2. Source Family To Executor Matrix
+
+`Source Family Catalog` 后续不能只负责“发现阶段的模板与工具”；它还要能解释采集执行偏好：
+
+| 数据源家族 | 发现主工具 | 采集主执行器 | 采集兜底执行器 | 预期证据形态 |
+| --- | --- | --- | --- | --- |
+| 官方网站 | `WEB_SCRAPER / JINA / PUBLIC_SEARCH` | `WebPageCollectionExecutor` | `FeedCollectionExecutor` 仅限站点 feed | 正文、价格块、功能表、文档目录、更新时间 |
+| 新闻媒体 | `NEWS_API / RSS / PUBLIC_SEARCH` | `ApiDataCollectionExecutor` 或 `WebPageCollectionExecutor` | `FeedCollectionExecutor` | 标题、发布日期、事件类型、正文、出处 |
+| GitHub | `GITHUB_API / PUBLIC_SEARCH` | `ApiDataCollectionExecutor` | `WebPageCollectionExecutor` 仅作 release / repo 页兜底 | 仓库、release、star、commit、组织归属 |
+| 技术博客 | `BLOG_CRAWLER / RSS / PUBLIC_SEARCH` | `WebPageCollectionExecutor` | `FeedCollectionExecutor` | 正文、发布时间、作者、技术主题 |
+| 社交媒体 | `API / PUBLIC_SEARCH` | `SubscriptionMonitor` | `WebPageCollectionExecutor` 仅限公开页面 | 帖文、时间、互动量、情绪信号 |
+
+对网页型来源，还应额外声明默认执行策略：
+
+1. `official / docs / review / 普通 news article` 若页面公开可访问、无登录态、无强交互要求，默认优先走 `JinaReader`。
+2. 只有当页面被标记为 `FULL_RENDER`、`LOGIN_REQUIRED`、`INTERACTION_REQUIRED`、`ANTI_BOT_RISK_HIGH` 或 `JinaReader` 返回内容质量不足时，才升级到 `Playwright`。
+3. `site crawl` 不作为与上述执行器平级的第四类核心执行器，而应后置为站内批量编排模式，复用 `JinaReader / Playwright` 两条已有网页采集路径。
+
+---
+
+## Web Page Collection Hardening Program
+
+网页采集仍然是最先要打穿的主战场，因此 `PlaywrightPageCollector` 的后续演进不能只靠补几个 selector。
+
+### 1. Page Readiness Model
+
+网页执行器必须从“单次 `goto + content()`”升级为多阶段页面就绪模型：
+
+1. 导航完成判定：区分 `domcontentloaded`、`load`、`network idle`。
+2. 内容稳定判定：监测主要容器是否已出现、骨架屏是否消失、关键文本是否加载。
+3. 交互展开判定：必要时自动点击 `Accept Cookies`、`Read More`、`Expand`、价格切换页签。
+4. 资源边界判定：识别 iframe、shadow root、延迟加载区块、需要滚动触发的正文。
+
+### 2. Anti-Bot And Challenge Handling
+
+网页执行器必须把反爬当成正式执行结果，而不是异常噪声：
+
+1. 识别 challenge / captcha / access denied / waiting room / JS challenge 等典型信号。
+2. 把“被反爬拦截”与“页面正常但内容为空”分开记为不同 `failureKind`。
+3. 引入正式重试策略、等待策略、浏览器上下文重建策略。
+4. 把触发反爬的 URL、重试次数、命中信号、最终决策写入 `collectionAudit`。
+5. 对已确认高反爬来源提供显式降级路径，例如回退到 `Jina Reader`、站点 feed、搜索摘要或人工接管提示。
+
+### 3. Main Content Extraction Chain
+
+网页正文提取不能只依赖单一 DOM 裁切逻辑，而应建立分层提取链：
+
+1. 原始 DOM 抽取。
+2. 可读性正文抽取。
+3. 结构区域抽取，例如 `article / main / section / table / dl / faq`。
+4. 结构化元数据抽取，例如 `JSON-LD / OpenGraph / meta publish time`。
+5. 面向定价 / 文档 / release note 的专项 block extractor。
+6. 在以上策略全部不足时，才允许进入轻量 LLM rescue，并明确标记为降级结果。
+
+### 4. Structured Block Extraction
+
+网页执行器必须对高价值结构块建立正式抽取器，而不是希望下游 extractor 再猜：
+
+1. `PricingBlockExtractor`
+2. `FeatureComparisonTableExtractor`
+3. `DocumentationOutlineExtractor`
+4. `ReleaseNotesExtractor`
+5. `FaqBlockExtractor`
+6. `JsonLdMetadataExtractor`
+
+### 5. Quality Scoring
+
+每次网页采集必须生成正式质量信号，至少包括：
+
+1. 内容长度。
+2. 标题命中。
+3. 正文密度。
+4. 结构块命中数。
+5. 时间字段命中。
+6. 营销噪声比例。
+7. 反爬风险等级。
+8. 是否达到 `evidenceExpectation`。
+
+### 6. Artifact Retention
+
+网页执行器产物建议至少保留：
+
+1. 标准化 URL 与页面标题。
+2. 原始 HTML 摘要或 hash。
+3. 结构化正文文本。
+4. 命中的结构化区块。
+5. 可选截图或 DOM 片段摘要。
+6. `sourceUrls` 与采集时间。
+
+---
+
+## API And Structured Data Collection Program
+
+网页不是所有采集问题的中心，结构化接口必须进入正式采集子域。
+
+### 0. Discovery Owner vs Collection Owner
+
+同一外部 API 可以在两个层面出现，但 owner 不能混层：
+
+1. 搜索发现层 provider 负责返回候选 URL、候选资源或稳定 `resource locator`。
+2. 采集执行层 executor 负责返回结构化字段、证据块、质量分和审计结果。
+3. `Wave 6` 解决 discovery owner。
+4. `Wave 10` 解决 collection owner。
+
+对于 `GitHub API`，这条边界必须强制成立：  
+`Wave 6` 的 GitHub provider 允许做发现，不允许把 API 响应伪装成网页采集完成；`Wave 10` 的 `ApiDataCollectionExecutor` 才是结构化采集 owner。
+
+### 1. API Executor Responsibilities
+
+`ApiDataCollectionExecutor` 需要覆盖：
+
+1. 凭证读取与可用性校验。
+2. 限流与重试。
+3. 结构化响应映射。
+4. 字段级 `sourceUrls` / `resourceLocator` 保留。
+5. provider 特定失败分类。
+6. 统一质量评分与审计投影。
+
+### 2. First-Class API Families
+
+在现有工程语义下，API 类来源的首批正式对象建议为：
+
+1. `GitHub API`
+2. `News API`
+3. `RSS / Feed` 读取器
+
+原因不是它们最容易，而是它们和当前 `Source Family Catalog` 的 `github / news` 最直接对齐，能够最早把“垂直发现路由”兑现为“垂直采集执行”。
+
+### 3. Web Fallback Still Exists
+
+API 执行器进入后，并不意味着网页兜底消失：
+
+1. GitHub release 页、组织主页、README 展示页仍可能走网页执行器补证。
+2. News API 只给摘要或字段时，仍可能回到新闻正文网页补全文本。
+3. 关键不是取消网页，而是避免默认让网页承担全部职责。
+
+---
+
+## Subscription And Incremental Monitoring Program
+
+订阅监控应被视为采集子域中的“长期增量能力”，而不是 collector 节点内部的一次性抓取分支。
+
+### 1. Positioning
+
+`SubscriptionMonitor` 的目标不是替代搜索，而是：
+
+1. 为后续同类任务沉淀持续资料。
+2. 为热点来源提供定时或实时的更新触发。
+3. 让 `news / blog / community / social` 不必每次都从头搜索。
+
+### 2. Boundaries
+
+它应与同步 collector 流程共享：
+
+1. `Source Family Catalog`
+2. `CollectionTaskPackage`
+3. `CollectionExecutionResult`
+4. `sourceUrls`
+5. 统一审计与质量信号
+
+但它必须保留独立模型：
+
+1. 订阅状态
+2. 增量 cursor
+3. 上次拉取时间
+4. 去重窗口
+5. 新增证据投递策略
+
+### 3. Recommendation
+
+这个能力建议在 `Wave 11` 之后单独专题化，不回塞到当前 collector 的同步主链路里。
+
+---
+
+## Audit, Replay, Recovery, And Quality Gates
+
+### 1. Dual Audit Model
+
+后续 collector 节点必须稳定输出“双审计模型”：
+
+1. `searchAudit` 解释“怎么找到这些目标”。
+2. `collectionAudit` 解释“怎么拿到这些内容，以及为什么没拿到”。
+
+### 2. Replay Semantics
+
+回放模型建议细分为：
+
+1. `searchReplayTimeline`
+2. `collectionReplayTimeline`
+3. `collectorSummaryTimeline`
+
+这样前端与恢复链路才能区分：
+
+1. 搜索已经成功，但采集失败。
+2. 搜索与采集都成功，但结构块不足。
+3. API 成功，但网页补证失败。
+
+### 3. Recovery Semantics
+
+恢复语义必须从“整包 output 回灌”继续向显式检查点迁移：
+
+1. 搜索恢复以 `searchCheckpoint` 为准。
+2. 采集恢复以 `collectionCheckpoint` 为准。
+3. 单个采集任务包失败时，允许包级重跑，不强迫整个 collector 节点全量重跑。
+4. 若重新执行搜索导致 `selectedTargets` 变化，则旧采集结果必须显式失效，而不是静默复用。
+
+### 4. Quality Gate
+
+后续 collector 完成条件不能只看“采集成功条数”，还应至少引入：
+
+1. `contentAvailableRate`
+2. `mainBodyQualifiedRate`
+3. `structuredBlockHitRate`
+4. `sourceFamilyCoverage`
+5. `evidenceExpectationHitRate`
+6. `antiBotFailureRate`
+
+这些指标未来应成为 `质量审查` 与 `修订重写` 的输入，而不是只留在 collector 内部自说自话。
+
+---
+
+## Extended Waves
+
+以下波次是在现有 `Wave 0-6` 之后的完整路线图。它们不要求一次性全部进入直接实施，但后续若继续推进搜索与采集，建议按这个顺序收口。
+
+### Wave 7: Collection Seam And Minimal Contract Formalization
+
+目标：先把采集执行缝、最小任务包和协调器骨架正式化，而不是预判一整套可能没人真正使用的执行策略字段。
+
+必须覆盖：
+
+1. `CollectionTaskPackage` 最小核心字段
+2. `CollectionExecutionCoordinator`
+3. `CollectionExecutorRegistry`
+4. `CollectionExecutionResult` 最小骨架
+5. `collectionCheckpoint` 最小骨架
+6. `collectionAudit` 最小正式 DTO
+
+明确不要求一次完成：
+
+1. 所有专项执行器全量落地。
+2. `renderHints / antiBotPolicy / retryPolicy` 等扩展字段全集。
+3. 订阅监控产品化。
+4. 前端全量采集详情页切换。
+
+### Wave 8: Web Page Collection Hardening
+
+目标：把网页采集从“Playwright 单路径”升级为“JinaReader 主路径 + Playwright 重型兜底路径”，并把网页执行器暴露出的真实失败模式反向收口成正式字段与状态分类。
+
+必须覆盖：
+
+1. 正式引入 `JinaReader` 路径，作为公开文档页、产品页、定价页、公开资讯页的优先网页采集方案。
+2. 明确 `renderHints` 或等价执行提示的首轮枚举语义，至少覆盖 `LIGHTWEIGHT` 与 `FULL_RENDER`，用于把 `JinaReader` 与 `Playwright` 路由分开。
+3. `PlaywrightPageCollector` 只承接 `FULL_RENDER` 兜底场景，并补齐页面就绪判定模型。
+4. 反爬识别、重试与降级。
+5. DOM / iframe / shadow root / `__adopt__` 等异常现场治理。
+6. 分层正文提取链。
+7. 定价、文档、release note 等结构块抽取器。
+8. 网页采集质量评分。
+9. 为 `failureKind`、扩展 `CollectionTaskPackage` 字段和执行器策略对象沉淀正式失败模式词表。
+
+本波次有一条明确取舍：
+
+1. 不把 `Playwright` 再设计成公开文档页的默认主路径。
+2. 不把 `SiteCrawl` 提前抬成与 `JinaReader / Playwright / API` 平级的第四类核心执行器。
+3. 先用 `JinaReader` 解决“URL 正确但拿不到正文”的主矛盾，再让 `Playwright` 专注兜底场景。
+
+### Wave 9: Collection Audit / Replay / Recovery Closure
+
+目标：让采集段和搜索段一样具备可解释性与局部重跑能力。
+
+必须覆盖：
+
+1. `collectionAudit` 正式化。
+2. `collectionReplayTimeline` 正式化。
+3. 包级重试 / 重跑语义。
+4. 采集段 `WAITING_INTERVENTION`、`DEGRADED`、`PARTIAL_SUCCESS` 的正式状态。
+5. runtime / insight / event / replay 对齐。
+
+### Wave 10: API Collection Convergence
+
+目标：让至少两类结构化来源进入统一采集执行体系，优先兑现 `github / news`。
+
+必须覆盖：
+
+1. `ApiDataCollectionExecutor`
+2. `GitHub API` 正式采集执行闭环
+3. `News API` 或 `RSS` 正式采集执行闭环
+4. API 结果到统一 evidence bundle 的映射
+5. API / Web 互补补证路径
+
+### Wave 11: Feed And Subscription Monitoring
+
+目标：让增量来源从“一次性任务辅助来源”升级为“长期资料摄取能力”。
+
+必须覆盖：
+
+1. `FeedCollectionExecutor`
+2. `SubscriptionMonitor`
+3. cursor / 去重窗口 / 增量回放语义
+4. 与 collector 主流程共享 evidence / audit 契约
+
+### Wave 12: Downstream Evidence Closure
+
+目标：让采集质量正式传导到 `提取结构化 / 分析推理 / 报告写作 / 质量审查`。
+
+必须覆盖：
+
+1. collector 输出的 evidence bundle 与下游正式契约对齐。
+2. 下游能够感知采集质量信号，而不只看到裸正文。
+3. 最终质量门禁能够区分“搜索问题、采集问题、提取问题、分析问题、写作问题”。
+
+这部分与 [ExtractionStructured.md](/E:/java_study/Mul-agnet/docs/problem/ExtractionStructured.md) 直接相连，应在对应链路方案启动后联合推进，不建议由搜索与采集专题单边硬推。
+
+---
+
+## Extended Progress Plan
+
+| 阶段 | 核心目标 | 预期耗时 | 依赖前置条件 | 当前状态 |
+| --- | --- | --- | --- | --- |
+| Phase G | 完成 `Wave 7` 最小采集契约、执行协调器、执行器注册表与采集检查点骨架 | 1 个迭代 | `Wave 6` 至少完成一个真实垂直发现 provider | 待执行 |
+| Phase H | 完成 `Wave 8` 双路径网页采集执行器落地：`JinaReader` 主路径、`Playwright` 兜底路径，以及失败模式收口与契约扩展字段补齐 | 1-2 个迭代 | Phase G 启动后可并行推进 | 待执行 |
+| Phase I | 完成 `Wave 9` 采集审计、采集回放、包级重跑与恢复语义 | 1 个迭代 | Phase G-H 完成 | 待执行 |
+| Phase J | 完成 `Wave 10` API 型采集执行器与 `github / news` 统一 evidence 闭环 | 1-2 个迭代 | Phase G 完成，且具备目标 provider 凭证或 Mock 契约 | 待执行 |
+| Phase K | 完成 `Wave 11` feed / subscription 增量监控体系 | 1 个迭代以上 | Phase G、Phase J 至少一项完成 | 待执行 |
+| Phase L | 完成 `Wave 12` 采集结果到下游提取 / 报告质量门禁的正式联动 | 跨专题协同 | Extraction 方案正式启动 | 待执行 |
+
+---
+
+## Extended Acceptance
+
+本节用于界定“后续完整路线图”的完成口径，不改变前文对 `Wave 0-6` 的验收结论。
+
+### Wave 7-9 Collector Execution Closure
+
+只有同时满足以下条件，才能认为“采集执行体系”已经从单实现升级为正式子域：
+
+1. `CollectorAgent` 仍保持单节点编排入口，但内部已存在正式 `CollectionExecutionCoordinator`。
+2. `selectedTargets` 不再直接喂给单一 collector，而是先转成正式 `CollectionTaskPackage`。
+3. 网页采集、API 采集至少已由不同执行器承接，且共享统一结果协议。
+4. `collectionAudit`、`collectionReplayTimeline`、`collectionCheckpoint` 已进入 runtime / insight / replay / event。
+5. 包级重试、包级重跑、collector 级恢复语义已稳定。
+6. 公开网页采集默认不再只有浏览器单路径，`JinaReader` 已承担公开页面主路径，`Playwright` 已退回重型兜底路径。
+
+### Wave 10-11 Specialized Collection Closure
+
+只有同时满足以下条件，才能认为“专项采集执行器体系”已经成立：
+
+1. 至少一个网页执行器与一个 API 执行器在真实链路中同时工作。
+2. `github / news / official` 三类家族在发现与采集两个层面都已拥有正式主工具。
+3. 网页补证、API 主采集、Feed 增量采集三者的责任边界可被审计说明。
+4. `sourceUrls`、`resourceLocator`、质量分、失败原因均可回放。
+
+### Full Search-And-Collection Maturity
+
+只有同时满足以下条件，搜索与采集链路才允许从“搜索闭环 + 初级采集”升级为“完整信息获取引擎”：
+
+1. `Wave 6` 垂直 provider 已完成并进入真实路由。
+2. `Wave 7-9` 采集执行体系已完成正式化。
+3. `Wave 10-11` 专项采集执行器已至少覆盖 `web + api + feed` 三种模式中的两种以上。
+4. 最终任务质量门禁能够把失败根因区分到搜索、采集、提取、分析、写作中的至少一类，而不是统一归因为“结果不好”。
+
+---
+
+## Relationship To Current Out Of Scope
+
+为避免误读，本节最后再强调一次：
+
+1. 前文 `First Iteration Cut` 与 `Out Of Scope` 仍然只约束当前 blocking 实施阶段。
+2. 本节描述的是 `Wave 6` 之后的完整工程蓝图，不代表这些内容现在就应全部并入当前实施范围。
+3. 后续若启动 `Wave 7+`，应基于本节另写分阶段实施计划，而不是直接把本节当作一次性开发清单。

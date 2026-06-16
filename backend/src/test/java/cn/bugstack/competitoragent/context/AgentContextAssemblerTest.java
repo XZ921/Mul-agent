@@ -334,6 +334,7 @@ class AgentContextAssemblerTest {
                         "branchKey",
                         "taskRagContextBundle",
                         "sharedState",
+                        "sharedOutputEnvelopes",
                         "createdAt"
                 ),
                 Arrays.stream(AgentContext.class.getDeclaredFields())

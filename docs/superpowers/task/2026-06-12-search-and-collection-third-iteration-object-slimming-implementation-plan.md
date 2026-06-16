@@ -37,12 +37,12 @@
 
 | 阶段 | 核心目标 | 预期耗时 | 依赖前置条件 | 当前状态 |
 | --- | --- | --- | --- | --- |
-| Phase G1 | 锁定对象瘦身红灯契约 | 0.5 天 | 第二轮事实源字段已确定 | 待执行 |
-| Phase G2 | 收缩搜索领域对象职责 | 1-2 天 | Phase G1 红灯测试存在 | 待执行 |
-| Phase G3 | 分层共享上下文、Redis 缓存和恢复输入 | 1-2 天 | Phase G2 投影对象稳定 | 待执行 |
-| Phase G4 | 统一 insight / report / evidence 下游投影 | 1 天 | Phase G2/G3 完成 | 待执行 |
-| Phase G5 | 平台化 source family 与 provider 配置职责边界 | 0.5-1 天 | Phase G2 对象字段稳定 | 待执行 |
-| Phase G6 | 自动化复核与文档回链 | 0.5 天 | Phase G1-G5 完成 | 待执行 |
+| Phase G1 | 锁定对象瘦身红灯契约 | 0.5 天 | 第二轮事实源字段已确定 | 已完成 |
+| Phase G2 | 收缩搜索领域对象职责 | 1-2 天 | Phase G1 红灯测试存在 | 已完成 |
+| Phase G3 | 分层共享上下文、Redis 缓存和恢复输入 | 1-2 天 | Phase G2 投影对象稳定 | 已完成 |
+| Phase G4 | 统一 insight / report / evidence 下游投影 | 1 天 | Phase G2/G3 完成 | 已完成 |
+| Phase G5 | 平台化 source family 与 provider 配置职责边界 | 0.5-1 天 | Phase G2 对象字段稳定 | 已完成 |
+| Phase G6 | 自动化复核与文档回链 | 0.5 天 | Phase G1-G5 完成 | 已完成 |
 
 ---
 
@@ -1164,8 +1164,8 @@ Append:
 ```md
 ## Execution Status
 
-- 执行方式：待选择。
-- 当前状态：计划已写入 `docs/superpowers/task`，尚未开始代码实现。
+- 执行方式：按第三轮实施计划直接在当前工作区落地，并以定向契约测试、聚合测试和 backend 全量测试复核。
+- 当前状态：`Wave 5` 对象瘦身、共享投影分层、下游投影统一、配置职责平台化与文档回链已完成，`Wave 6` 真实垂直 provider 仍待后续专题实施。
 - 依赖前置条件：第一轮 blocking 收口包与第二轮 replay / homology / ranking 计划已经完成或先于本轮执行。
 ```
 
@@ -1215,11 +1215,3 @@ git commit -m "docs(search): plan third iteration object slimming"
 3. `SharedNodeOutputEnvelope` 始终作为共享上下文与 Redis 缓存的信封对象。
 4. `SearchSharedProjection` 始终作为 Collector 对下游共享的稳定事实投影。
 5. `sourceUrls` 在新增摘要、投影和信封对象中均为显式字段。
-
----
-
-## Execution Status
-
-- 执行方式：待选择。
-- 当前状态：计划已写入 `docs/superpowers/task`，尚未开始代码实现。
-- 依赖前置条件：第一轮 blocking 收口包与第二轮 replay / homology / ranking 计划已经完成或先于本轮执行。

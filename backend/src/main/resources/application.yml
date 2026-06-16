@@ -149,6 +149,8 @@ source-discovery:
       http:
         enabled: true
         fail-open: true
+    primary-candidate-threshold: 1
+    run-auxiliary-when-primary-satisfied: false
     browser-preview-enabled: true
     endpoint: ${SEARCH_API_ENDPOINT:}
     request-method: ${SEARCH_API_REQUEST_METHOD:GET}
@@ -228,6 +230,8 @@ search:
           - GITHUB_API
         auxiliary-tools:
           - PUBLIC_SEARCH
+        tool-provider-keys:
+          GITHUB_API: github
         update-policy:
           mode: DAILY_API_POLLING
           interval: PT24H
@@ -268,6 +272,14 @@ search:
     continue-on-search-timeout: true
     continue-on-page-collect-failure: true
     recover-partial-content-on-timeout: true
+    stealth-enabled: true
+    locale: zh-CN
+    timezone-id: Asia/Shanghai
+    viewport-width: 1440
+    viewport-height: 900
+    short-body-threshold: 120
+    minimum-primary-result-count: 1
+    suspect-blocked-body-threshold: 40
     user-agents:
       - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
       - "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
@@ -279,6 +291,13 @@ search:
       - verify you are human
       - access denied
       - robot check
+      - security check
+    blocked-url-keywords:
+      - /login
+      - /signin
+      - /verify
+      - /captcha
+      - /challenge
 
 serpapi:
   api-key: ${SERPAPI_API_KEY:}
@@ -404,6 +423,14 @@ search:
     continue-on-search-timeout: true
     continue-on-page-collect-failure: true
     recover-partial-content-on-timeout: true
+    stealth-enabled: true
+    locale: zh-CN
+    timezone-id: Asia/Shanghai
+    viewport-width: 1440
+    viewport-height: 900
+    short-body-threshold: 120
+    minimum-primary-result-count: 1
+    suspect-blocked-body-threshold: 40
 
 source-discovery:
   search:
@@ -425,6 +452,8 @@ source-discovery:
       http:
         enabled: true
         fail-open: true
+    primary-candidate-threshold: 1
+    run-auxiliary-when-primary-satisfied: false
     browser-preview-enabled: false
     results-per-scope: 5
     timeout-seconds: 15

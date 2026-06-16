@@ -101,9 +101,24 @@ public class BrowserPreviewSearchSourceProvider implements SearchSourceProvider 
                         .maxSearchesPerTask(2)
                         .pageTimeoutMillis(Math.max(1000, collectorProperties.getPageTimeoutSeconds() * 1000))
                         .maxOpenResultPages(1)
+                        .stealthEnabled(Boolean.TRUE)
+                        .locale("zh-CN")
+                        .timezoneId("Asia/Shanghai")
+                        .viewportWidth(1440)
+                        .viewportHeight(900)
+                        .shortBodyThreshold(120)
+                        .minimumPrimaryResultCount(1)
+                        .suspectBlockedBodyThreshold(40)
                         .userAgents(StringUtils.hasText(collectorProperties.getUserAgent())
                                 ? List.of(collectorProperties.getUserAgent())
                                 : List.of())
+                        .blockedUrlKeywords(List.of(
+                                "/login",
+                                "/signin",
+                                "/verify",
+                                "/captcha",
+                                "/challenge"
+                        ))
                         .recoveryHint("浏览器预览补源失败时可回退到 HTTP 或启发式候选。")
                         .build())
                 .build();

@@ -6,6 +6,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import cn.bugstack.competitoragent.task.SharedNodeOutputEnvelope;
 import cn.bugstack.competitoragent.context.TaskRagContextBundle;
 
 /**
@@ -40,6 +41,13 @@ public class AgentContext {
     @Builder.Default
     private Map<String, String> sharedState = new ConcurrentHashMap<>();
 
+    /**
+     * 共享输出信封用于承接稳定投影元数据。
+     * sharedState 继续保留 payloadJson，保证历史调用方无需立刻改造。
+     */
+    @Builder.Default
+    private Map<String, SharedNodeOutputEnvelope> sharedOutputEnvelopes = new ConcurrentHashMap<>();
+
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -55,6 +63,24 @@ public class AgentContext {
      */
     public void putSharedOutput(String nodeName, String output) {
         sharedState.put(nodeName, output);
+    }
+
+    /**
+     * 获取某个上游节点写入的共享信封。
+     */
+    public SharedNodeOutputEnvelope getSharedOutputEnvelope(String nodeName) {
+        return sharedOutputEnvelopes.get(nodeName);
+    }
+
+    /**
+     * 保存共享信封，并同步把 payloadJson 回填到 sharedState，
+     * 保证旧消费者继续读取字符串投影时仍然可用。
+     */
+    public void putSharedOutputEnvelope(String nodeName, SharedNodeOutputEnvelope envelope) {
+        if (nodeName != null && !nodeName.isBlank() && envelope != null) {
+            sharedOutputEnvelopes.put(nodeName, envelope);
+            sharedState.put(nodeName, envelope.getPayloadJson());
+        }
     }
 
     /**

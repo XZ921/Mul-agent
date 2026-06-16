@@ -41,6 +41,9 @@ class SearchPropertiesBindingTest {
                     "search.source-catalog.families.news.update-policy.mode=REALTIME_RSS_AND_SCHEDULED_SWEEP",
                     "search.source-catalog.families.github.query-templates[0]=search-github-repository",
                     "search.source-catalog.families.github.query-templates[1]=search-github-release",
+                    "search.source-catalog.families.github.tool-provider-keys.GITHUB_API=github",
+                    "source-discovery.search.primary-candidate-threshold=1",
+                    "source-discovery.search.run-auxiliary-when-primary-satisfied=false",
                     "serpapi.api-key=test-serp-key",
                     "serpapi.endpoint=https://serpapi.com/search",
                     "serpapi.default-engine=google",
@@ -64,6 +67,8 @@ class SearchPropertiesBindingTest {
             assertThat(searchProviderProperties.getProviders().get("serpapi").getFailOpen()).isTrue();
             assertThat(searchProviderProperties.getProviders().get("qianfan").getEnabled()).isFalse();
             assertThat(searchProviderProperties.getProviders().get("qianfan").getFailOpen()).isFalse();
+            assertThat(searchProviderProperties.getPrimaryCandidateThreshold()).isEqualTo(1);
+            assertThat(searchProviderProperties.isRunAuxiliaryWhenPrimarySatisfied()).isFalse();
             assertThat(searchEngineProperties.resolve("bing")).isNotNull();
             assertThat(searchEngineProperties.resolve("bing").getBaseUrl())
                     .isEqualTo("https://www.bing.com/search");
@@ -91,6 +96,8 @@ class SearchPropertiesBindingTest {
                     .isEqualTo("REALTIME_RSS_AND_SCHEDULED_SWEEP");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("github").getQueryTemplates())
                     .containsExactly("search-github-repository", "search-github-release");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("github").getToolProviderKeys())
+                    .containsEntry("GITHUB_API", "github");
         });
     }
 

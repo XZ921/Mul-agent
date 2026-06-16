@@ -3327,6 +3327,49 @@ private void persistRunningOutput(AgentContext context,
 
 **致命结果**：候选越多、页面越多、进度越细，单节点运行期间的数据库写放大就越严重。后续只要采集页数稍微变多，节点输出会迅速膨胀。
 
+#### Task 7：Playwright 反爬 smoke 回链
+
+- 当前仓库已经把浏览器侧反爬诊断字段正式透出到采集节点契约：
+  - `collectorInsight.searchExecutionTrace.browserFailureKind`
+  - `collectorInsight.searchExecutionTrace.browserRestartScope`
+  - `collectorInsight.searchExecutionTrace.browserFallbackAction`
+  - `collectorInsight.searchExecutionTrace.browserMatchedSignals`
+  - `collectorInsight.searchExecutionTrace.browserBlockedReason`
+- 同一组字段也会进入任务回放视图：
+  - `searchReplays[].searchAudit.executionTrace.*`
+- 这意味着 Task 7 之后，Collector 的浏览器补源链路不再只能靠原始 `outputData` 排障，而是可以直接在正式 DTO 上做 smoke 验收和前端消费。
+
+推荐 smoke 命令：
+
+```bash
+mvn -pl backend "-Dtest=Phase2WorkflowIntegrationTest#shouldExposeTask7SmokeContractsAcrossPreviewNodesReplayAndResume,BrowserRuntimeDiagnosticLoggerTest" test
+```
+
+推荐检查顺序：
+
+1. `POST /api/task/preview`
+   - 先确认规划契约 `TASK_PLAN_PREVIEW_V1`
+2. `POST /api/task/create`
+   - 创建任务并拿到 `taskId`
+3. `POST /api/task/{id}/execute`
+   - 推进任务进入可恢复停点
+4. `GET /api/task/{id}/nodes`
+   - 看 `collectorInsight.searchExecutionTrace.*`
+5. `GET /api/task/{id}/replay`
+   - 看 `searchAudit.executionTrace.*`
+6. `POST /api/task/{id}/resume`
+   - 确认任务能够恢复到 `SUCCESS`
+
+指标口径说明：
+
+- 当前阶段 `browser.runtime.failure.count`
+- 当前阶段 `browser.runtime.restart.count`
+- 当前阶段 `browser.antibot.blocked.count`
+- 当前阶段 `browser.fallback.count`
+- 当前阶段 `browser.waiting_intervention.count`
+
+以上 5 个指标当前先通过 `BrowserRuntimeDiagnosticLogger` 的结构化计数日志稳定输出，后续接入真实指标系统时应保持同名同口径。
+
 #### 2、输出契约里写的仍是配置态 Query/Policy，不是实际执行态 Query/Policy
 
 ```

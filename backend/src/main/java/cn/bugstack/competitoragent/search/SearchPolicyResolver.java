@@ -195,6 +195,18 @@ public class SearchPolicyResolver {
         }
     }
 
+    /**
+     * 统一从 Source Family Catalog 解析工具绑定到的 provider key。
+     * 这样后续路由器不需要自己理解家族配置内部结构。
+     */
+    public List<String> resolveProviderKeysForSourceFamily(String familyKey, SearchProviderRole role) {
+        SearchSourceCatalogProperties.SourceFamilyProperties family = resolveSourceCatalog().resolveFamily(familyKey);
+        if (family == null) {
+            return List.of();
+        }
+        return family.resolveProviderKeys(role);
+    }
+
     private String normalizeFallbackStage(String stage) {
         if (stage == null) {
             return "";

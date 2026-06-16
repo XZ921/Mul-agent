@@ -33,6 +33,8 @@ import java.util.Map;
  * section bundle 投影与交付主路径证据入口组装。
  * phase4b 要求显式锁定它的边界：这里负责稳定查询与投影视图，不是 collection 的运行时入口，
  * 后续 report / conversation 只能消费这里的视图结果，不能再把 collection 内部执行语义反向耦合回来。
+ * 即使未来需要查看 collector 输出，也只能读取瘦身后的共享投影或 sourceUrls 元数据，
+ * 不能重新解析 collector 大 JSON 中的 results/content 正文。
  */
 @Service
 @RequiredArgsConstructor

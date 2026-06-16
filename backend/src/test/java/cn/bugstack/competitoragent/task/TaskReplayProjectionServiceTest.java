@@ -27,6 +27,7 @@ import cn.bugstack.competitoragent.workflow.NodeFailureCategory;
 import cn.bugstack.competitoragent.workflow.RecoveryEngine;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventType;
+import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -117,6 +118,8 @@ class TaskReplayProjectionServiceTest {
         assertEquals("collect_sources_docs", objectMapper.valueToTree(response).at("/searchReplays/0/nodeName").asText());
         assertEquals("SELECT_TARGETS",
                 objectMapper.valueToTree(response).at("/searchReplays/0/searchAudit/executionTrace/recoveryCheckpoint").asText());
+        assertEquals(1,
+                objectMapper.valueToTree(response).at("/searchReplays/0/searchAuditSummary/selectedCount").asInt());
     }
 
     @Test

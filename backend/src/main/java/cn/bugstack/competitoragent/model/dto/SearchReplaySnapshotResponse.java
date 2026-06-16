@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.model.dto;
 
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
+import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
 import cn.bugstack.competitoragent.search.SearchCollectionTarget;
 import cn.bugstack.competitoragent.search.SearchProgressSnapshot;
 import cn.bugstack.competitoragent.search.SearchReplayTimelineItem;
@@ -33,6 +34,7 @@ public class SearchReplaySnapshotResponse {
     private SearchProgressSnapshot latestProgress;
     private List<SearchReplayTimelineItem> timeline;
     private SearchAuditSnapshot searchAudit;
+    private SearchAuditSummary searchAuditSummary;
     /**
      * 回放响应的扁平化尝试目标列表。
      * 保留 searchAudit 的完整现场，同时给调用方一个稳定的顶层消费入口。

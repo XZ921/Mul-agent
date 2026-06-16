@@ -23,6 +23,10 @@ public class BrowserSearchRuntimeResult {
     private String searchEngine;
     private String summary;
     private boolean fallbackSuggested;
+    private String failureKind;
+    private String restartScope;
+    private String fallbackAction;
+    private List<String> matchedSignals;
     private String blockedReason;
     private int blockedCount;
     private String browserTraceId;

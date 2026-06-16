@@ -25,8 +25,17 @@ public class SearchRuntimePolicy {
     private Integer maxOpenResultPages;
     private Integer resultPageTimeoutMillis;
     private Integer maxContentLengthPerPage;
+    private Boolean stealthEnabled;
+    private String locale;
+    private String timezoneId;
+    private Integer viewportWidth;
+    private Integer viewportHeight;
+    private Integer shortBodyThreshold;
+    private Integer minimumPrimaryResultCount;
+    private Integer suspectBlockedBodyThreshold;
     private List<String> userAgents;
     private List<String> blockedSignals;
+    private List<String> blockedUrlKeywords;
     private Boolean continueOnBrowserUnavailable;
     private Boolean continueOnSearchTimeout;
     private Boolean continueOnPageCollectFailure;

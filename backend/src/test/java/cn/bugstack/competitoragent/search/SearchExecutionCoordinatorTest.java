@@ -283,7 +283,7 @@ class SearchExecutionCoordinatorTest {
 
         assertEquals(1, result.getAttemptedTargets().size());
         assertEquals(1, result.getDiscardedCandidates().size());
-        assertEquals("https://www.example.com/login", result.getDiscardedCandidates().get(0).getUrl());
+        assertEquals("https://example.com/login", result.getDiscardedCandidates().get(0).getUrl());
         assertFalse(result.getReplayTimeline().isEmpty());
         assertEquals("SELECT_TARGETS", result.getReplayTimeline().get(result.getReplayTimeline().size() - 1).getStepCode());
         assertEquals(1, result.getExecutionTrace().getAttemptedCandidateCount());
@@ -444,6 +444,9 @@ class SearchExecutionCoordinatorTest {
                 .searchEngine("bing")
                 .summary("blocked by captcha")
                 .fallbackSuggested(true)
+                .failureKind("ANTI_BOT_BLOCKED")
+                .fallbackAction("HTTP_FALLBACK")
+                .matchedSignals(List.of("body:captcha", "title:access denied"))
                 .blockedReason("captcha")
                 .blockedCount(1)
                 .build());
@@ -723,5 +726,84 @@ class SearchExecutionCoordinatorTest {
         assertIterableEquals(fallbackOrder, result.getExecutionPlan().getFallbackOrder());
         assertEquals(1, result.getExecutionPlan().getTargetCount());
         assertEquals(1, result.getExecutionPlan().getMinVerifiedCount());
+    }
+
+    @Test
+    void shouldProjectBrowserDiagnosticFieldsIntoExecutionTrace() {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of("Notion AI documentation"))
+                .searchEngine("bing")
+                .summary("blocked by captcha")
+                .fallbackSuggested(true)
+                .failureKind("ANTI_BOT_BLOCKED")
+                .fallbackAction("HTTP_FALLBACK")
+                .matchedSignals(List.of("body:captcha", "title:access denied"))
+                .blockedReason("captcha")
+                .blockedCount(1)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Notion AI")
+                .sourceType("DOCS")
+                .sourceCandidates(List.of())
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.TRUE)
+                .searchMode("HYBRID")
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertEquals("ANTI_BOT_BLOCKED", result.getExecutionTrace().getBrowserFailureKind());
+        assertEquals("HTTP_FALLBACK", result.getExecutionTrace().getBrowserFallbackAction());
+        assertIterableEquals(List.of("body:captcha", "title:access denied"),
+                result.getExecutionTrace().getBrowserMatchedSignals());
+    }
+
+    @Test
+    void shouldDeduplicateCanonicalCandidatesAcrossPlannedAndSupplementSources() {
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of(
+                SourceCandidate.builder()
+                        .url("https://example.com/docs")
+                        .title("Canonical Docs")
+                        .sourceType("DOCS")
+                        .discoveryMethod("SEARCH")
+                        .reason("HTTP supplement")
+                        .domain("example.com")
+                        .relevanceScore(0.93)
+                        .freshnessScore(0.70)
+                        .qualityScore(0.90)
+                        .build()
+        ));
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Example")
+                .sourceType("DOCS")
+                .sourceCandidates(List.of(SourceCandidate.builder()
+                        .url("http://www.example.com/docs?utm_source=campaign")
+                        .title("Planned Docs")
+                        .sourceType("DOCS")
+                        .discoveryMethod("HEURISTIC")
+                        .reason("planned")
+                        .domain("www.example.com")
+                        .relevanceScore(0.89)
+                        .freshnessScore(0.60)
+                        .qualityScore(0.82)
+                        .build()))
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .maxSearchResults(2)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertEquals(1, result.getSelectedTargets().size());
+        assertEquals("https://example.com/docs", result.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertEquals(List.of("https://example.com/docs"), result.getExecutionTrace().getSelectedUrls());
+        assertEquals(1, result.getSourceCandidates().stream()
+                .map(SourceCandidate::getUrl)
+                .distinct()
+                .count());
     }
 }

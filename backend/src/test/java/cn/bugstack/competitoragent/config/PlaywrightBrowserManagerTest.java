@@ -1,5 +1,7 @@
 package cn.bugstack.competitoragent.config;
 
+import cn.bugstack.competitoragent.search.BrowserRuntimeDiagnosticLog;
+import cn.bugstack.competitoragent.search.BrowserRuntimeDiagnosticLogger;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Playwright;
@@ -15,7 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -289,6 +293,7 @@ class PlaywrightBrowserManagerTest {
         Playwright initialPlaywright = mock(Playwright.class);
         Playwright recreatedPlaywright = mock(Playwright.class);
         PlaywrightRuntimeFactory runtimeFactory = mock(PlaywrightRuntimeFactory.class);
+        BrowserRuntimeDiagnosticLogger diagnosticLogger = mock(BrowserRuntimeDiagnosticLogger.class);
         BrowserType initialChromium = mock(BrowserType.class);
         BrowserType recreatedChromium = mock(BrowserType.class);
         Browser recreatedBrowser = mock(Browser.class);
@@ -306,12 +311,36 @@ class PlaywrightBrowserManagerTest {
                 .thenThrow(new RuntimeException("Playwright connection closed"));
         when(recreatedChromium.launch(any(BrowserType.LaunchOptions.class))).thenReturn(recreatedBrowser);
 
-        PlaywrightBrowserManager manager = new PlaywrightBrowserManager(initialPlaywright, runtimeFactory, properties);
+        PlaywrightBrowserManager manager = new PlaywrightBrowserManager(
+                initialPlaywright,
+                runtimeFactory,
+                properties,
+                diagnosticLogger
+        );
 
         Browser launchedBrowser = manager.getBrowser();
 
         assertSame(recreatedBrowser, launchedBrowser);
         verify(runtimeFactory, times(1)).create();
         verify(recreatedChromium, times(1)).launch(any(BrowserType.LaunchOptions.class));
+        ArgumentCaptor<BrowserRuntimeDiagnosticLog> launchCaptor =
+                ArgumentCaptor.forClass(BrowserRuntimeDiagnosticLog.class);
+        verify(diagnosticLogger).log(eq("playwright_launch_failure"), launchCaptor.capture());
+        BrowserRuntimeDiagnosticLog launchLog = launchCaptor.getValue();
+        assertEquals("PLAYWRIGHT_RUNTIME", launchLog.getSourceType());
+        assertEquals("chromium", launchLog.getEngineKey());
+        assertEquals("RUNTIME_PIPE_BROKEN", launchLog.getFailureKind());
+        assertEquals("RUNTIME_AND_BROWSER", launchLog.getRestartScope());
+        assertEquals("RETRY_LAUNCH", launchLog.getFallbackAction());
+
+        ArgumentCaptor<BrowserRuntimeDiagnosticLog> recreateCaptor =
+                ArgumentCaptor.forClass(BrowserRuntimeDiagnosticLog.class);
+        verify(diagnosticLogger, atLeastOnce()).log(eq("playwright_runtime_recreate"), recreateCaptor.capture());
+        BrowserRuntimeDiagnosticLog recreateLog = recreateCaptor.getValue();
+        assertEquals("PLAYWRIGHT_RUNTIME", recreateLog.getSourceType());
+        assertEquals("chromium", recreateLog.getEngineKey());
+        assertEquals("RUNTIME_PIPE_BROKEN", recreateLog.getFailureKind());
+        assertEquals("RUNTIME_AND_BROWSER", recreateLog.getRestartScope());
+        assertEquals("RETRY_LAUNCH", recreateLog.getFallbackAction());
     }
 }

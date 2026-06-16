@@ -324,6 +324,97 @@ class Phase2WorkflowIntegrationTest {
                 .anyMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS));
     }
 
+    @Test
+    void shouldExposeTask7SmokeContractsAcrossPreviewNodesReplayAndResume() throws Exception {
+        CreateTaskRequest request = new CreateTaskRequest();
+        request.setTaskName("Task 7 Smoke 验收");
+        request.setSubjectProduct("企业级 AI 竞品分析平台");
+        request.setCompetitorNames(List.of("Notion AI"));
+        request.setCompetitorUrls(List.of("https://www.notion.so/product/ai"));
+        request.setAnalysisDimensions(List.of("产品能力", "价格策略", "市场定位"));
+        request.setSourceScope(List.of("官网", "产品文档", "定价页面"));
+
+        ResponseEntity<ApiResponse> previewEntity =
+                restTemplate.postForEntity(taskUrl("/preview"), request, ApiResponse.class);
+        assertEquals(200, previewEntity.getStatusCode().value());
+        Map<?, ?> previewPayload = (Map<?, ?>) previewEntity.getBody().getData();
+        assertEquals("TASK_PLAN_PREVIEW_V1", previewPayload.get("contractType"));
+        assertFalse(((List<?>) previewPayload.get("nodes")).isEmpty());
+
+        Long taskId = createTask(request);
+        restTemplate.postForEntity(taskUrl("/" + taskId + "/execute"), null, ApiResponse.class);
+        consumeLatestTaskExecutionRequested(taskId);
+
+        Map<?, ?> stoppedTaskBody = waitForTaskDetailStatus(taskId, AnalysisTaskStatus.STOPPED);
+        assertEquals("STOPPED", stoppedTaskBody.get("status"));
+        assertEquals(Boolean.TRUE, stoppedTaskBody.get("canResume"));
+
+        ResponseEntity<ApiResponse> nodesEntity = restTemplate.getForEntity(
+                taskUrl("/" + taskId + "/nodes"),
+                ApiResponse.class
+        );
+        assertEquals(200, nodesEntity.getStatusCode().value());
+        List<Map<String, Object>> nodePayloads = (List<Map<String, Object>>) nodesEntity.getBody().getData();
+        Map<String, Object> collectorNodePayload = nodePayloads.stream()
+                .filter(node -> String.valueOf(node.get("nodeName")).startsWith("collect_sources_"))
+                .findFirst()
+                .orElseThrow();
+        Map<?, ?> collectorInsight = (Map<?, ?>) collectorNodePayload.get("collectorInsight");
+        assertNotNull(collectorInsight);
+        Map<?, ?> nodeTrace = (Map<?, ?>) collectorInsight.get("searchExecutionTrace");
+        assertNotNull(nodeTrace);
+        assertEquals("ANTI_BOT_BLOCKED", nodeTrace.get("browserFailureKind"));
+        assertEquals("NONE", nodeTrace.get("browserRestartScope"));
+        assertEquals("HTTP_FALLBACK", nodeTrace.get("browserFallbackAction"));
+        assertEquals("LOGIN_OR_CHALLENGE_REDIRECT", nodeTrace.get("browserBlockedReason"));
+        assertTrue(((List<?>) nodeTrace.get("browserMatchedSignals")).contains("title:Verify you are human"));
+
+        /*
+         * Task 7 的 smoke 口径要求 WAITING_INTERVENTION 只能出现在预算耗尽或人工介入场景。
+         * 这条链路走的是人工介入停点，因此如果节点进入 WAITING_INTERVENTION，说明文字里必须显式带出人工语义。
+         */
+        List<Map<String, Object>> waitingInterventionNodes = nodePayloads.stream()
+                .filter(node -> "WAITING_INTERVENTION".equals(String.valueOf(node.get("status"))))
+                .toList();
+        assertTrue(waitingInterventionNodes.isEmpty()
+                || waitingInterventionNodes.stream().allMatch(node -> {
+                    String interventionSummary = String.valueOf(node.get("interventionSummary"));
+                    String statusSummary = String.valueOf(node.get("statusSummary"));
+                    String errorMessage = String.valueOf(node.get("errorMessage"));
+                    return interventionSummary.contains("人工")
+                            || statusSummary.contains("人工")
+                            || errorMessage.contains("人工");
+                }));
+
+        ResponseEntity<ApiResponse> replayEntity = restTemplate.getForEntity(
+                taskUrl("/" + taskId + "/replay"),
+                ApiResponse.class
+        );
+        assertEquals(200, replayEntity.getStatusCode().value());
+        Map<?, ?> replayPayload = (Map<?, ?>) replayEntity.getBody().getData();
+        List<Map<String, Object>> searchReplays = (List<Map<String, Object>>) replayPayload.get("searchReplays");
+        Map<String, Object> collectorReplay = searchReplays.stream()
+                .filter(item -> String.valueOf(item.get("nodeName")).startsWith("collect_sources_"))
+                .findFirst()
+                .orElseThrow();
+        Map<?, ?> searchAudit = (Map<?, ?>) collectorReplay.get("searchAudit");
+        assertNotNull(searchAudit);
+        Map<?, ?> replayTrace = (Map<?, ?>) searchAudit.get("executionTrace");
+        assertNotNull(replayTrace);
+        assertEquals("ANTI_BOT_BLOCKED", replayTrace.get("browserFailureKind"));
+        assertEquals("NONE", replayTrace.get("browserRestartScope"));
+        assertEquals("HTTP_FALLBACK", replayTrace.get("browserFallbackAction"));
+        assertEquals("LOGIN_OR_CHALLENGE_REDIRECT", replayTrace.get("browserBlockedReason"));
+        assertTrue(((List<?>) replayTrace.get("browserMatchedSignals")).contains("url:/challenge"));
+
+        restTemplate.postForEntity(taskUrl("/" + taskId + "/resume"), null, ApiResponse.class);
+        consumeLatestTaskExecutionRequested(taskId);
+
+        Map<?, ?> successTaskBody = waitForTaskDetailStatus(taskId, AnalysisTaskStatus.SUCCESS);
+        assertEquals("SUCCESS", successTaskBody.get("status"));
+        assertEquals(Boolean.TRUE, successTaskBody.get("canViewReport"));
+    }
+
     private Long createTask(CreateTaskRequest request) {
         ResponseEntity<ApiResponse> createResponse = restTemplate.postForEntity(taskUrl("/create"), request, ApiResponse.class);
         assertEquals(200, createResponse.getStatusCode().value());
@@ -481,7 +572,13 @@ class Phase2WorkflowIntegrationTest {
                           "verifiedCandidateCount": 1,
                           "supplementedCandidateCount": 0,
                           "selectedCandidateCount": 1,
-                          "selectedUrls": ["%s"]
+                          "selectedUrls": ["%s"],
+                          "browserFailureKind":"ANTI_BOT_BLOCKED",
+                          "browserRestartScope":"NONE",
+                          "browserFallbackAction":"HTTP_FALLBACK",
+                          "browserMatchedSignals":["title:Verify you are human","url:/challenge"],
+                          "browserBlockedReason":"LOGIN_OR_CHALLENGE_REDIRECT",
+                          "browserBlockedCount":1
                         },
                         "latestProgress": {
                           "status":"SUCCESS",
@@ -542,7 +639,13 @@ class Phase2WorkflowIntegrationTest {
                         "selectedCandidateCount": 1,
                         "fallbackDecision":"USE_PLANNED_CANDIDATES",
                         "recoveryCheckpoint":"SELECT_TARGETS",
-                        "selectedUrls": ["%s"]
+                        "selectedUrls": ["%s"],
+                        "browserFailureKind":"ANTI_BOT_BLOCKED",
+                        "browserRestartScope":"NONE",
+                        "browserFallbackAction":"HTTP_FALLBACK",
+                        "browserMatchedSignals":["title:Verify you are human","url:/challenge"],
+                        "browserBlockedReason":"LOGIN_OR_CHALLENGE_REDIRECT",
+                        "browserBlockedCount":1
                       }
                     }
                     """.formatted(

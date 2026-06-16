@@ -10,6 +10,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -123,6 +124,48 @@ public class TaskSnapshotCacheService {
             log.warn("load cached node outputs from redis failed, taskId={}", taskId, e);
             return Collections.emptyMap();
         }
+    }
+
+    /**
+     * 缓存共享输出信封。
+     * Redis 中对 Collector 等重对象节点优先写入信封 JSON，而不是原始大输出。
+     */
+    public void cacheSharedOutputEnvelope(Long taskId, SharedNodeOutputEnvelope envelope) {
+        if (taskId == null || envelope == null || envelope.getNodeName() == null || envelope.getPayloadJson() == null) {
+            return;
+        }
+        try {
+            String runtimeKey = buildRuntimeKey(taskId);
+            stringRedisTemplate.opsForHash().put(runtimeKey, envelope.getNodeName(), objectMapper.writeValueAsString(envelope));
+            stringRedisTemplate.expire(runtimeKey, redisProperties.getRuntimeTtl());
+        } catch (Exception e) {
+            log.warn("cache shared output envelope to redis failed, taskId={}, nodeName={}",
+                    taskId, envelope == null ? null : envelope.getNodeName(), e);
+        }
+    }
+
+    /**
+     * 优先按共享信封读取运行时缓存。
+     * 历史缓存仍允许以字符串形式回退为 LEGACY_STRING_OUTPUT。
+     */
+    public Map<String, SharedNodeOutputEnvelope> getCachedSharedOutputEnvelopes(Long taskId) {
+        Map<String, String> rawOutputs = getCachedNodeOutputs(taskId);
+        Map<String, SharedNodeOutputEnvelope> envelopes = new LinkedHashMap<>();
+        rawOutputs.forEach((nodeName, rawValue) -> {
+            try {
+                SharedNodeOutputEnvelope envelope = objectMapper.readValue(rawValue, SharedNodeOutputEnvelope.class);
+                envelopes.put(nodeName, envelope);
+            } catch (Exception ignored) {
+                envelopes.put(nodeName, SharedNodeOutputEnvelope.builder()
+                        .taskId(taskId)
+                        .nodeName(nodeName)
+                        .projectionType("LEGACY_STRING_OUTPUT")
+                        .payloadJson(rawValue)
+                        .sourceUrls(java.util.List.of())
+                        .build());
+            }
+        });
+        return envelopes;
     }
 
     /**

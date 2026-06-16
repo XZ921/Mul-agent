@@ -4,13 +4,11 @@ import cn.bugstack.competitoragent.source.SourceCandidate;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -20,6 +18,16 @@ import java.util.Set;
  */
 @Component
 public class CollectionTargetSelector {
+
+    private final CanonicalUrlResolver canonicalUrlResolver;
+
+    public CollectionTargetSelector() {
+        this(new CanonicalUrlResolver());
+    }
+
+    public CollectionTargetSelector(CanonicalUrlResolver canonicalUrlResolver) {
+        this.canonicalUrlResolver = canonicalUrlResolver;
+    }
 
     /**
      * 目标选择一次性完成三件事：
@@ -142,6 +150,9 @@ public class CollectionTargetSelector {
         if (!selectedUrls.contains(normalizedUrl)) {
             return candidate;
         }
+        if (!candidate.getUrl().equals(normalizedUrl)) {
+            return candidate;
+        }
         String selectedReason = Boolean.TRUE.equals(candidate.getVerified())
                 ? "运行期验证通过后被选为正式采集目标"
                 : "在验证不足时作为兜底候选被选为正式采集目标";
@@ -188,25 +199,6 @@ public class CollectionTargetSelector {
      * 避免同一文档因为追踪参数不同被误判成两个独立来源。
      */
     private String normalizeUrl(String url) {
-        if (!StringUtils.hasText(url)) {
-            return null;
-        }
-        try {
-            URI uri = URI.create(url.trim());
-            if (!StringUtils.hasText(uri.getHost())) {
-                return url.trim();
-            }
-            String scheme = StringUtils.hasText(uri.getScheme()) ? uri.getScheme().toLowerCase(Locale.ROOT) : "https";
-            String path = uri.getPath();
-            if (!StringUtils.hasText(path)) {
-                path = "";
-            }
-            if (path.length() > 1 && path.endsWith("/")) {
-                path = path.substring(0, path.length() - 1);
-            }
-            return scheme + "://" + uri.getHost().toLowerCase(Locale.ROOT) + path;
-        } catch (Exception ignored) {
-            return url.trim();
-        }
+        return canonicalUrlResolver.canonicalize(url);
     }
 }

@@ -101,6 +101,12 @@ public class SearchSourceCatalogProperties {
         private List<String> auxiliaryTools = List.of();
         private UpdatePolicyProperties updatePolicy = new UpdatePolicyProperties();
         private List<String> queryTemplates = List.of();
+        /**
+         * 工具到 provider key 的可选绑定。
+         * Source Family Catalog 只声明业务家族与工具语义；
+         * 真实 provider 是否启用、是否 fail-open，继续由 SearchProviderProperties 管理。
+         */
+        private Map<String, String> toolProviderKeys = new LinkedHashMap<>();
 
         public SourceFamilyProperties() {
         }
@@ -121,6 +127,21 @@ public class SearchSourceCatalogProperties {
             this.auxiliaryTools = auxiliaryTools;
             this.updatePolicy = updatePolicy;
             this.queryTemplates = queryTemplates;
+        }
+
+        /**
+         * 根据主辅角色解析当前家族绑定到哪些 provider key。
+         * 本轮只建立配置字段和解析语义，不要求这些 provider 一定有真实实现。
+         */
+        public List<String> resolveProviderKeys(SearchProviderRole role) {
+            List<String> toolKeys = role == SearchProviderRole.PRIMARY_VERTICAL ? primaryTools : auxiliaryTools;
+            if (toolKeys == null || toolKeys.isEmpty() || toolProviderKeys == null || toolProviderKeys.isEmpty()) {
+                return List.of();
+            }
+            return toolKeys.stream()
+                    .map(toolProviderKeys::get)
+                    .filter(StringUtils::hasText)
+                    .toList();
         }
     }
 

@@ -10,10 +10,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Page;
+import com.microsoft.playwright.options.ViewportSize;
 import com.microsoft.playwright.options.LoadState;
 import com.microsoft.playwright.options.WaitUntilState;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -37,7 +38,6 @@ import java.util.UUID;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class BrowserSearchRuntimeService {
 
     private static final List<String> GENERIC_RESULT_SELECTORS = List.of(
@@ -52,6 +52,60 @@ public class BrowserSearchRuntimeService {
     private final SearchEngineProperties searchEngineProperties;
     private final ObjectMapper objectMapper;
     private final SearchRuntimeFallbackPolicy fallbackPolicy;
+    private final BrowserFailureClassifier browserFailureClassifier;
+    private final AntiBotSignalDetector antiBotSignalDetector;
+    private final BrowserRuntimeDiagnosticLogger diagnosticLogger;
+
+    @Autowired
+    public BrowserSearchRuntimeService(PlaywrightBrowserManager browserManager,
+                                       SearchBrowserProperties properties,
+                                       SearchEngineProperties searchEngineProperties,
+                                       ObjectMapper objectMapper,
+                                       SearchRuntimeFallbackPolicy fallbackPolicy,
+                                       BrowserFailureClassifier browserFailureClassifier,
+                                       AntiBotSignalDetector antiBotSignalDetector,
+                                       BrowserRuntimeDiagnosticLogger diagnosticLogger) {
+        this.browserManager = browserManager;
+        this.properties = properties;
+        this.searchEngineProperties = searchEngineProperties;
+        this.objectMapper = objectMapper;
+        this.fallbackPolicy = fallbackPolicy;
+        this.browserFailureClassifier = browserFailureClassifier;
+        this.antiBotSignalDetector = antiBotSignalDetector;
+        this.diagnosticLogger = diagnosticLogger;
+    }
+
+    BrowserSearchRuntimeService(PlaywrightBrowserManager browserManager,
+                                SearchBrowserProperties properties,
+                                SearchEngineProperties searchEngineProperties,
+                                ObjectMapper objectMapper,
+                                SearchRuntimeFallbackPolicy fallbackPolicy,
+                                BrowserFailureClassifier browserFailureClassifier,
+                                AntiBotSignalDetector antiBotSignalDetector) {
+        this(browserManager,
+                properties,
+                searchEngineProperties,
+                objectMapper,
+                fallbackPolicy,
+                browserFailureClassifier,
+                antiBotSignalDetector,
+                new BrowserRuntimeDiagnosticLogger(objectMapper));
+    }
+
+    BrowserSearchRuntimeService(PlaywrightBrowserManager browserManager,
+                                SearchBrowserProperties properties,
+                                SearchEngineProperties searchEngineProperties,
+                                ObjectMapper objectMapper,
+                                SearchRuntimeFallbackPolicy fallbackPolicy) {
+        this(browserManager,
+                properties,
+                searchEngineProperties,
+                objectMapper,
+                fallbackPolicy,
+                new BrowserFailureClassifier(),
+                new AntiBotSignalDetector(properties),
+                new BrowserRuntimeDiagnosticLogger(objectMapper));
+    }
 
     public String getSearchEngineName() {
         return resolvePrimarySearchEngineKey();
@@ -123,7 +177,7 @@ public class BrowserSearchRuntimeService {
         List<String> executedQueries = new ArrayList<>();
         AtomicInteger blockedCount = new AtomicInteger();
         AtomicInteger openedResultPages = new AtomicInteger();
-        String blockedReason = null;
+        BrowserDiagnosticSnapshot browserDiagnosticSnapshot = null;
         for (int index = 0; index < queries.size(); index++) {
             long intervalMillis = resolveMinIntervalMillis(config);
             if (index > 0 && intervalMillis > 0) {
@@ -139,9 +193,9 @@ public class BrowserSearchRuntimeService {
                     engineSequence
             );
             candidates.addAll(attemptResult.candidates());
-            if (attemptResult.blockedReason() != null) {
+            if (attemptResult.diagnostic() != null && attemptResult.diagnostic().blockedReason() != null) {
                 blockedCount.incrementAndGet();
-                blockedReason = attemptResult.blockedReason();
+                browserDiagnosticSnapshot = attemptResult.diagnostic();
             }
             if (candidates.size() >= resolveMaxResults(config)) {
                 break;
@@ -151,7 +205,7 @@ public class BrowserSearchRuntimeService {
         List<SourceCandidate> filteredCandidates = limitAndFilterCandidates(candidates, config);
         String executedEngineSummary = summarizeEngines(filteredCandidates, engineSequence);
         String summary = filteredCandidates.isEmpty()
-                ? buildEmptyResultSummary(blockedReason)
+                ? buildEmptyResultSummary(browserDiagnosticSnapshot == null ? null : browserDiagnosticSnapshot.blockedReason())
                 : "浏览器搜索执行 " + executedQueries.size() + " 个 query，经由 " + executedEngineSummary + " 提取到 "
                 + filteredCandidates.size() + " 条候选来源";
         return BrowserSearchRuntimeResult.builder()
@@ -160,7 +214,11 @@ public class BrowserSearchRuntimeService {
                 .searchEngine(resolveResultEngine(filteredCandidates))
                 .summary(summary)
                 .fallbackSuggested(filteredCandidates.isEmpty())
-                .blockedReason(blockedReason)
+                .failureKind(browserDiagnosticSnapshot == null ? null : browserDiagnosticSnapshot.failureKind())
+                .restartScope(browserDiagnosticSnapshot == null ? null : browserDiagnosticSnapshot.restartScope())
+                .fallbackAction(browserDiagnosticSnapshot == null ? null : browserDiagnosticSnapshot.fallbackAction())
+                .matchedSignals(browserDiagnosticSnapshot == null ? List.of() : browserDiagnosticSnapshot.matchedSignals())
+                .blockedReason(browserDiagnosticSnapshot == null ? null : browserDiagnosticSnapshot.blockedReason())
                 .blockedCount(blockedCount.get())
                 .browserTraceId(browserTraceId)
                 .build();
@@ -174,17 +232,37 @@ public class BrowserSearchRuntimeService {
                                                 String browserTraceId,
                                                 AtomicInteger openedResultPages,
                                                 List<String> engineSequence) {
-        String blockedReason = null;
+        BrowserDiagnosticSnapshot browserDiagnosticSnapshot = null;
         for (String engineKey : engineSequence) {
             int attempts = Math.max(1, resolveMaxRetries(config) + 1);
             RuntimeException lastError = null;
             String failureCode = null;
+            BrowserFailureDecision lastDecision = null;
             for (int attempt = 1; attempt <= attempts; attempt++) {
                 Browser runtimeBrowser = null;
                 try {
                     runtimeBrowser = browserManager.getBrowser();
                     if (runtimeBrowser == null) {
-                        return new SearchAttemptResult(List.of(), "browser_unavailable");
+                        BrowserDiagnosticSnapshot diagnostic = diagnosticSnapshot(
+                                "BROWSER_UNAVAILABLE",
+                                "NONE",
+                                "HTTP_FALLBACK",
+                                "browser_unavailable",
+                                List.of()
+                        );
+                        logSearchDiagnostic("search_browser_unavailable",
+                                config,
+                                query,
+                                buildSearchUrl(engineKey, query),
+                                engineKey,
+                                diagnostic);
+                        return new SearchAttemptResult(List.of(), diagnosticSnapshot(
+                                "BROWSER_UNAVAILABLE",
+                                "NONE",
+                                "HTTP_FALLBACK",
+                                "browser_unavailable",
+                                List.of()
+                        ));
                     }
                     SearchAttemptResult result = searchOnce(
                             runtimeBrowser,
@@ -194,8 +272,11 @@ public class BrowserSearchRuntimeService {
                             openedResultPages,
                             engineKey
                     );
-                    if (result.blockedReason() != null) {
-                        blockedReason = result.blockedReason();
+                    if (result.diagnostic() != null && result.diagnostic().blockedReason() != null) {
+                        browserDiagnosticSnapshot = result.diagnostic();
+                        if ("ANTI_BOT_BLOCKED".equals(result.diagnostic().failureKind())) {
+                            return new SearchAttemptResult(List.of(), browserDiagnosticSnapshot);
+                        }
                         break;
                     }
                     if (!result.candidates().isEmpty()) {
@@ -204,7 +285,9 @@ public class BrowserSearchRuntimeService {
                     break;
                 } catch (RuntimeException e) {
                     lastError = e;
-                    failureCode = fallbackPolicy.classifyRuntimeFailure(e);
+                    BrowserFailureDecision decision = browserFailureClassifier.classify(e, null);
+                    lastDecision = decision;
+                    failureCode = resolveFailureCode(decision, e);
                     log.warn("browser runtime search failed, competitor={}, sourceType={}, query={}, engine={}, attempt={}/{}",
                             UrlSecurityUtils.maskForLog(config.getCompetitorName()),
                             config.getSourceType(),
@@ -218,7 +301,13 @@ public class BrowserSearchRuntimeService {
                      * 如果直接重启共享浏览器，会把其他并发中的搜索线程和页面采集线程一起打断，
                      * 形成连锁报错。只有明确识别为浏览器实例失活时，才允许重启共享浏览器。
                      */
-                    if (shouldRestartSharedBrowser(failureCode)) {
+                    if (decision.recreateRuntime()) {
+                        browserManager.recreateRuntimeForFailure(
+                                "browser runtime search failed: " + e.getMessage(),
+                                e
+                        );
+                    }
+                    if (decision.restartSharedBrowser()) {
                         browserManager.restartBrowserIfCurrent(
                                 runtimeBrowser,
                                 "browser runtime search failed: " + e.getMessage()
@@ -235,19 +324,46 @@ public class BrowserSearchRuntimeService {
                         lastError.getMessage());
                 if ("search_timeout".equals(failureCode)
                         && fallbackPolicy.shouldContinueOnSearchTimeout(config.getSearchRuntimePolicy())) {
-                    return new SearchAttemptResult(List.of(), failureCode);
+                    BrowserDiagnosticSnapshot diagnostic = diagnosticSnapshot(
+                            "SEARCH_TIMEOUT",
+                            "NONE",
+                            "HTTP_FALLBACK",
+                            failureCode,
+                            List.of()
+                    );
+                    logSearchDiagnostic("search_retry_exhausted",
+                            config,
+                            query,
+                            buildSearchUrl(engineKey, query),
+                            engineKey,
+                            diagnostic);
+                    return new SearchAttemptResult(List.of(), diagnostic);
                 }
                 if ("browser_unavailable".equals(failureCode)
                         && fallbackPolicy.shouldContinueOnBrowserUnavailable(config.getSearchRuntimePolicy())) {
-                    return new SearchAttemptResult(List.of(), failureCode);
+                    /**
+                     * Task 6 要求在运行时断链和浏览器实例失活两种场景下保留不同的失败语义，
+                     * 不能在重试耗尽时一律收敛成笼统的 BROWSER_UNAVAILABLE/BROWSER。
+                     * 这里显式复用最后一次分类决策，把真正的 failureKind 和 restartScope 透传到结果与 trace。
+                     */
+                    BrowserDiagnosticSnapshot diagnostic = diagnosticSnapshot(
+                            resolveFailureKind(lastDecision, "BROWSER_UNAVAILABLE"),
+                            resolveRestartScope(lastDecision),
+                            "HTTP_FALLBACK",
+                            failureCode,
+                            List.of()
+                    );
+                    logSearchDiagnostic("search_retry_exhausted",
+                            config,
+                            query,
+                            buildSearchUrl(engineKey, query),
+                            engineKey,
+                            diagnostic);
+                    return new SearchAttemptResult(List.of(), diagnostic);
                 }
             }
         }
-        return new SearchAttemptResult(List.of(), blockedReason);
-    }
-
-    private boolean shouldRestartSharedBrowser(String failureCode) {
-        return "browser_unavailable".equalsIgnoreCase(failureCode);
+        return new SearchAttemptResult(List.of(), browserDiagnosticSnapshot);
     }
 
     private SearchAttemptResult searchOnce(Browser browser,
@@ -264,7 +380,9 @@ public class BrowserSearchRuntimeService {
             if (StringUtils.hasText(userAgent)) {
                 contextOptions.setUserAgent(userAgent);
             }
+            applyStealthContextOptions(contextOptions, config);
             browserContext = browser.newContext(contextOptions);
+            applyStealthDefaults(browserContext, config);
             page = browserContext.newPage();
             page.setDefaultTimeout(resolvePageTimeoutMillis(config));
             page.navigate(buildSearchUrl(engineKey, query),
@@ -276,12 +394,43 @@ public class BrowserSearchRuntimeService {
                 log.debug("browser search page did not reach LOAD quickly, continue parsing DOM");
             }
 
-            String blockedReason = detectBlockedReason(page, config);
-            if (blockedReason != null) {
-                return new SearchAttemptResult(List.of(), blockedReason);
-            }
-
             List<Map<String, Object>> extractedRows = extractRows(page, engineKey);
+            AntiBotDetectionResult detection = antiBotSignalDetector.detect(
+                    buildSignalSnapshot(page, config, extractedRows),
+                    config.getSearchRuntimePolicy()
+            );
+            if (detection.isBlocked()) {
+                BrowserDiagnosticSnapshot diagnostic = diagnosticSnapshot(
+                        "ANTI_BOT_BLOCKED",
+                        "NONE",
+                        "HTTP_FALLBACK",
+                        detection.getReasonCode(),
+                        detection.getMatchedSignals()
+                );
+                logSearchDiagnostic("search_once_blocked",
+                        config,
+                        query,
+                        page.url(),
+                        engineKey,
+                        diagnostic);
+                return new SearchAttemptResult(List.of(), diagnostic);
+            }
+            if (detection.isSuspected() && extractedRows.isEmpty()) {
+                BrowserDiagnosticSnapshot diagnostic = diagnosticSnapshot(
+                        "CONTENT_UNUSABLE",
+                        "NONE",
+                        "HTTP_FALLBACK",
+                        detection.getReasonCode(),
+                        detection.getMatchedSignals()
+                );
+                logSearchDiagnostic("search_once_unusable",
+                        config,
+                        query,
+                        page.url(),
+                        engineKey,
+                        diagnostic);
+                return new SearchAttemptResult(List.of(), diagnostic);
+            }
             List<SourceCandidate> candidates = buildCandidatesFromRows(
                     config,
                     query,
@@ -574,19 +723,27 @@ public class BrowserSearchRuntimeService {
         return Math.min(nodeLimit, browserLimit);
     }
 
-    private String detectBlockedReason(Page page, CollectorNodeConfig config) {
-        String title = safe(page.title()).toLowerCase(Locale.ROOT);
-        String html = safe(page.content()).toLowerCase(Locale.ROOT);
-        for (String signal : resolveBlockedSignals(config)) {
-            String normalized = safe(signal).toLowerCase(Locale.ROOT);
-            if (normalized.isBlank()) {
-                continue;
-            }
-            if (title.contains(normalized) || html.contains(normalized)) {
-                return normalized;
-            }
-        }
-        return null;
+    /**
+     * 反爬检测需要同时消费正文长度、搜索结果主结构和页面元信息，
+     * 因此这里在运行时显式构造信号快照，再交给统一检测器判定。
+     */
+    private BrowserSignalSnapshot buildSignalSnapshot(Page page,
+                                                      CollectorNodeConfig config,
+                                                      List<Map<String, Object>> extractedRows) {
+        String bodyText = PageContentExtractionSupport.extractMainContent(page);
+        int bodyLength = safe(bodyText).trim().length();
+        int primaryResultCount = extractedRows == null ? 0 : extractedRows.size();
+        int minimumPrimaryResultCount = resolveMinimumPrimaryResultCount(config);
+        int shortBodyThreshold = resolveShortBodyThreshold(config);
+        return BrowserSignalSnapshot.builder()
+                .finalUrl(safe(page.url()))
+                .pageTitle(safe(page.title()))
+                .bodyText(bodyText)
+                .bodyLength(bodyLength)
+                .primaryResultCount(primaryResultCount)
+                .missingPrimaryResults(primaryResultCount < minimumPrimaryResultCount)
+                .bodyTooShort(bodyLength < shortBodyThreshold)
+                .build();
     }
 
     String buildSearchUrl(String query) {
@@ -864,18 +1021,160 @@ public class BrowserSearchRuntimeService {
         return userAgents.get(index);
     }
 
-    private List<String> resolveBlockedSignals() {
-        return properties.getBlockedSignals() == null ? List.of() : properties.getBlockedSignals();
+    /**
+     * 反爬最小伪装的第一层是把 locale、timezone 和 viewport 固定为正常桌面浏览器画像，
+     * 避免上下文一创建出来就暴露默认自动化环境特征。
+     */
+    private void applyStealthContextOptions(Browser.NewContextOptions contextOptions, CollectorNodeConfig config) {
+        if (!isStealthEnabled(config)) {
+            return;
+        }
+        String locale = resolveLocale(config);
+        if (StringUtils.hasText(locale)) {
+            contextOptions.setLocale(locale);
+        }
+        String timezoneId = resolveTimezoneId(config);
+        if (StringUtils.hasText(timezoneId)) {
+            contextOptions.setTimezoneId(timezoneId);
+        }
+        contextOptions.setViewportSize(new ViewportSize(
+                resolveViewportWidth(config),
+                resolveViewportHeight(config)
+        ));
     }
 
-    private List<String> resolveBlockedSignals(CollectorNodeConfig config) {
+    /**
+     * 这里先只注入方案要求的最小 stealth 脚本，
+     * 目标是降低最明显的 webdriver / chrome runtime / permissions 指纹暴露。
+     */
+    private void applyStealthDefaults(BrowserContext browserContext, CollectorNodeConfig config) {
+        if (browserContext == null || !isStealthEnabled(config)) {
+            return;
+        }
+        browserContext.addInitScript("""
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en-US'] });
+                Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
+                Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+                window.chrome = window.chrome || { runtime: {} };
+                const originalQuery = window.navigator.permissions && window.navigator.permissions.query;
+                if (originalQuery) {
+                  window.navigator.permissions.query = (parameters) => (
+                    parameters && parameters.name === 'notifications'
+                      ? Promise.resolve({ state: Notification.permission })
+                      : originalQuery(parameters)
+                  );
+                }
+                """);
+    }
+
+    private boolean isStealthEnabled(CollectorNodeConfig config) {
         if (config != null
                 && config.getSearchRuntimePolicy() != null
-                && config.getSearchRuntimePolicy().getBlockedSignals() != null
-                && !config.getSearchRuntimePolicy().getBlockedSignals().isEmpty()) {
-            return config.getSearchRuntimePolicy().getBlockedSignals();
+                && config.getSearchRuntimePolicy().getStealthEnabled() != null) {
+            return Boolean.TRUE.equals(config.getSearchRuntimePolicy().getStealthEnabled());
         }
-        return resolveBlockedSignals();
+        return properties.isStealthEnabled();
+    }
+
+    private String resolveLocale(CollectorNodeConfig config) {
+        if (config != null
+                && config.getSearchRuntimePolicy() != null
+                && StringUtils.hasText(config.getSearchRuntimePolicy().getLocale())) {
+            return config.getSearchRuntimePolicy().getLocale();
+        }
+        return properties.getLocale();
+    }
+
+    private String resolveTimezoneId(CollectorNodeConfig config) {
+        if (config != null
+                && config.getSearchRuntimePolicy() != null
+                && StringUtils.hasText(config.getSearchRuntimePolicy().getTimezoneId())) {
+            return config.getSearchRuntimePolicy().getTimezoneId();
+        }
+        return properties.getTimezoneId();
+    }
+
+    private int resolveViewportWidth(CollectorNodeConfig config) {
+        if (config != null
+                && config.getSearchRuntimePolicy() != null
+                && config.getSearchRuntimePolicy().getViewportWidth() != null) {
+            return Math.max(320, config.getSearchRuntimePolicy().getViewportWidth());
+        }
+        return Math.max(320, properties.getViewportWidth());
+    }
+
+    private int resolveViewportHeight(CollectorNodeConfig config) {
+        if (config != null
+                && config.getSearchRuntimePolicy() != null
+                && config.getSearchRuntimePolicy().getViewportHeight() != null) {
+            return Math.max(320, config.getSearchRuntimePolicy().getViewportHeight());
+        }
+        return Math.max(320, properties.getViewportHeight());
+    }
+
+    private int resolveShortBodyThreshold(CollectorNodeConfig config) {
+        if (config != null
+                && config.getSearchRuntimePolicy() != null
+                && config.getSearchRuntimePolicy().getShortBodyThreshold() != null) {
+            return Math.max(1, config.getSearchRuntimePolicy().getShortBodyThreshold());
+        }
+        return Math.max(1, properties.getShortBodyThreshold());
+    }
+
+    private int resolveMinimumPrimaryResultCount(CollectorNodeConfig config) {
+        if (config != null
+                && config.getSearchRuntimePolicy() != null
+                && config.getSearchRuntimePolicy().getMinimumPrimaryResultCount() != null) {
+            return Math.max(0, config.getSearchRuntimePolicy().getMinimumPrimaryResultCount());
+        }
+        return Math.max(0, properties.getMinimumPrimaryResultCount());
+    }
+
+    /**
+     * 对外暴露的 blockedReason/summary 仍保持现有有限失败码，
+     * 这样可以在不打破已有回退文案和测试断言的前提下，把底层恢复动作切到统一决策树。
+     */
+    private String resolveFailureCode(BrowserFailureDecision decision, Throwable error) {
+        if (decision == null) {
+            return fallbackPolicy.classifyRuntimeFailure(error);
+        }
+        return switch (decision.kind()) {
+            case PAGE_TIMEOUT, SEARCH_TIMEOUT -> "search_timeout";
+            case BROWSER_INSTANCE_DEAD, RUNTIME_PIPE_BROKEN -> "browser_unavailable";
+            case ANTI_BOT_BLOCKED -> "blocked";
+            default -> fallbackPolicy.classifyRuntimeFailure(error);
+        };
+    }
+
+    /**
+     * 搜索链路的 trace 需要明确表达“本次故障到底重启了哪一层资源”，
+     * 这样 TaskReplay 和运行时诊断才能区分 page/context/browser/runtime 四种恢复粒度。
+     */
+    private String resolveRestartScope(BrowserFailureDecision decision) {
+        if (decision == null) {
+            return "NONE";
+        }
+        if (decision.recreateRuntime()) {
+            return "RUNTIME_AND_BROWSER";
+        }
+        if (decision.restartSharedBrowser()) {
+            return "BROWSER";
+        }
+        if (decision.closeContextOnly()) {
+            return "CONTEXT";
+        }
+        if (decision.closePageOnly()) {
+            return "PAGE";
+        }
+        return "NONE";
+    }
+
+    private String resolveFailureKind(BrowserFailureDecision decision, String fallbackFailureKind) {
+        if (decision == null || decision.kind() == null) {
+            return fallbackFailureKind;
+        }
+        return decision.kind().name();
     }
 
     private int resolveMaxSearchesPerTask(CollectorNodeConfig config) {
@@ -964,7 +1263,54 @@ public class BrowserSearchRuntimeService {
         return hosts.stream().anyMatch(host -> normalized.equals(host) || normalized.endsWith("." + host));
     }
 
-    private record SearchAttemptResult(List<SourceCandidate> candidates, String blockedReason) {
+    private BrowserDiagnosticSnapshot diagnosticSnapshot(String failureKind,
+                                                         String restartScope,
+                                                         String fallbackAction,
+                                                         String blockedReason,
+                                                         List<String> matchedSignals) {
+        return new BrowserDiagnosticSnapshot(
+                failureKind,
+                restartScope,
+                fallbackAction,
+                blockedReason,
+                matchedSignals == null ? List.of() : matchedSignals
+        );
+    }
+
+    /**
+     * 搜索链路的诊断日志统一由这里补齐字段，避免不同失败分支各自拼装导致口径漂移。
+     */
+    private void logSearchDiagnostic(String event,
+                                     CollectorNodeConfig config,
+                                     String query,
+                                     String targetUrl,
+                                     String engineKey,
+                                     BrowserDiagnosticSnapshot diagnostic) {
+        if (diagnostic == null) {
+            return;
+        }
+        diagnosticLogger.log(event, BrowserRuntimeDiagnosticLog.builder()
+                .competitorName(config == null ? null : config.getCompetitorName())
+                .sourceType(config == null ? null : defaultText(config.getSourceType(), "OFFICIAL"))
+                .query(query)
+                .targetUrl(targetUrl)
+                .engineKey(StringUtils.hasText(engineKey) ? searchEngineProperties.normalizeEngineKey(engineKey) : null)
+                .failureKind(diagnostic.failureKind())
+                .restartScope(diagnostic.restartScope())
+                .fallbackAction(diagnostic.fallbackAction())
+                .blockedReasonCode(diagnostic.blockedReason())
+                .matchedSignals(diagnostic.matchedSignals())
+                .build());
+    }
+
+    private record SearchAttemptResult(List<SourceCandidate> candidates, BrowserDiagnosticSnapshot diagnostic) {
+    }
+
+    private record BrowserDiagnosticSnapshot(String failureKind,
+                                             String restartScope,
+                                             String fallbackAction,
+                                             String blockedReason,
+                                             List<String> matchedSignals) {
     }
 
     private record SearchEngineProfile(String name, List<String> resultSelectors, List<String> snippetSelectors) {

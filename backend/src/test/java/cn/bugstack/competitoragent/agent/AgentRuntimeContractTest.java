@@ -38,6 +38,7 @@ class AgentRuntimeContractTest {
                 "branchKey",
                 "taskRagContextBundle",
                 "sharedState",
+                "sharedOutputEnvelopes",
                 "createdAt"
         ), declaredFieldNames(AgentContext.class));
     }

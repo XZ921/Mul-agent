@@ -22,6 +22,7 @@ import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
+import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
 import cn.bugstack.competitoragent.search.SearchCollectionTarget;
 import cn.bugstack.competitoragent.search.SearchProgressSnapshot;
 import cn.bugstack.competitoragent.search.SearchReplayTimelineItem;
@@ -465,6 +466,7 @@ public class TaskReplayProjectionService {
                     .latestProgress(latestProgress)
                     .timeline(replayTimeline)
                     .searchAudit(searchAudit)
+                    .searchAuditSummary(SearchAuditSummary.from(searchAudit))
                     .attemptedTargets(attemptedTargets)
                     .discardedCandidates(discardedCandidates)
                     .selectedTargets(selectedTargets)

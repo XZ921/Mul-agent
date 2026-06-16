@@ -16,6 +16,7 @@ import cn.bugstack.competitoragent.model.dto.ReportResponse.ReportDiagnosisInfo;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.SearchAuditOverview;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.SectionEvidenceBundleInfo;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.SectionEvidenceCoverage;
+import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
 import cn.bugstack.competitoragent.model.dto.RevisionPlan;
 import cn.bugstack.competitoragent.model.entity.CompetitorKnowledge;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
@@ -876,6 +877,7 @@ public class ReportService {
      */
     private SearchAuditOverview buildSearchAuditOverview(List<TaskNode> nodes) {
         List<CollectorSearchAudit> collectors = new ArrayList<>();
+        List<SearchAuditSummary> searchAuditSummaries = new ArrayList<>();
         int traceRecordedCount = 0;
         int checkpointRecoveredCount = 0;
         int degradedCount = 0;
@@ -923,6 +925,18 @@ public class ReportService {
             collectors.add(collector);
 
             if (traceRecorded) {
+                SearchAuditSummary summary = SearchAuditSummary.builder()
+                        .candidateCount(readInteger(trace, "plannedCandidateCount"))
+                        .selectedCount(readInteger(trace, "selectedCandidateCount"))
+                        .discardedCount(readInteger(trace, "discardedCandidateCount"))
+                        .attemptedCount(readInteger(trace, "attemptedCandidateCount"))
+                        .degraded(readBoolean(trace, "degraded"))
+                        .degradationReason(trace.path("degradationReason").asText(null))
+                        .fallbackDecision(trace.path("fallbackDecision").asText(null))
+                        .recoveryCheckpoint(trace.path("recoveryCheckpoint").asText(null))
+                        .sourceUrls(readStringList(trace.path("selectedUrls")))
+                        .build();
+                searchAuditSummaries.add(summary);
                 traceRecordedCount++;
                 if (Boolean.TRUE.equals(collector.getResumedFromCheckpoint())) {
                     checkpointRecoveredCount++;
@@ -952,7 +966,48 @@ public class ReportService {
                 .verifiedCandidateCount(verifiedCandidateCount)
                 .supplementedCandidateCount(supplementedCandidateCount)
                 .selectedCandidateCount(selectedCandidateCount)
+                .searchAuditSummary(mergeSearchAuditSummaries(searchAuditSummaries))
                 .collectors(collectors)
+                .build();
+    }
+
+    /**
+     * 报告主路径只聚合轻量搜索审计摘要。
+     * 这样可追溯性、计数和降级结论都有统一入口，不再要求下游重新解析节点大 JSON。
+     */
+    private SearchAuditSummary mergeSearchAuditSummaries(List<SearchAuditSummary> summaries) {
+        if (summaries == null || summaries.isEmpty()) {
+            return SearchAuditSummary.builder()
+                    .candidateCount(0)
+                    .selectedCount(0)
+                    .discardedCount(0)
+                    .attemptedCount(0)
+                    .sourceUrls(List.of())
+                    .build();
+        }
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        int candidateCount = 0;
+        int selectedCount = 0;
+        int discardedCount = 0;
+        int attemptedCount = 0;
+        for (SearchAuditSummary summary : summaries) {
+            if (summary == null) {
+                continue;
+            }
+            candidateCount += summary.getCandidateCount() == null ? 0 : summary.getCandidateCount();
+            selectedCount += summary.getSelectedCount() == null ? 0 : summary.getSelectedCount();
+            discardedCount += summary.getDiscardedCount() == null ? 0 : summary.getDiscardedCount();
+            attemptedCount += summary.getAttemptedCount() == null ? 0 : summary.getAttemptedCount();
+            if (summary.getSourceUrls() != null) {
+                sourceUrls.addAll(summary.getSourceUrls());
+            }
+        }
+        return SearchAuditSummary.builder()
+                .candidateCount(candidateCount)
+                .selectedCount(selectedCount)
+                .discardedCount(discardedCount)
+                .attemptedCount(attemptedCount)
+                .sourceUrls(new ArrayList<>(sourceUrls))
                 .build();
     }
 

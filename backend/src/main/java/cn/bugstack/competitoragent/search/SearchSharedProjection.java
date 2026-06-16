@@ -1,11 +1,13 @@
 package cn.bugstack.competitoragent.search;
 
+import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -20,12 +22,17 @@ import java.util.List;
  * 避免把 results/fullContent 这类大体积现场数据继续塞进共享上下文和 Redis。
  */
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class SearchSharedProjection {
 
+    private String projectionType;
+    private String recoveryCheckpoint;
+    private SearchAuditSummary searchAuditSummary;
+    private List<SearchSelectedTargetSummary> selectedTargets;
     private List<String> sourceUrls;
     private List<String> issueFlags;
     private List<String> selectedUrls;
@@ -66,17 +73,67 @@ public class SearchSharedProjection {
                     output.path("issueFlags"),
                     new TypeReference<List<String>>() {
                     });
-
-            return new SearchSharedProjection(
-                    new ArrayList<>(sourceUrls),
-                    issueFlags == null ? List.of() : issueFlags,
-                    new ArrayList<>(selectedUrls),
-                    textOrNull(traceNode, "fallbackDecision"),
-                    textOrNull(traceNode, "degradationReason")
+            List<String> stableSourceUrls = new ArrayList<>(sourceUrls);
+            List<SearchSelectedTargetSummary> selectedTargetSummaries = buildSelectedTargetSummaries(
+                    output.path("selectedTargets"),
+                    stableSourceUrls
             );
+            String recoveryCheckpoint = textOrNull(traceNode, "recoveryCheckpoint");
+            SearchAuditSummary summary = SearchAuditSummary.builder()
+                    .selectedCount(selectedUrls.size())
+                    .degradationReason(textOrNull(traceNode, "degradationReason"))
+                    .fallbackDecision(textOrNull(traceNode, "fallbackDecision"))
+                    .recoveryCheckpoint(recoveryCheckpoint)
+                    .sourceUrls(stableSourceUrls)
+                    .build();
+
+            return SearchSharedProjection.builder()
+                    .projectionType("SEARCH_SHARED_PROJECTION_V1")
+                    .recoveryCheckpoint(recoveryCheckpoint)
+                    .searchAuditSummary(summary)
+                    .selectedTargets(selectedTargetSummaries)
+                    .sourceUrls(stableSourceUrls)
+                    .issueFlags(issueFlags == null ? List.of() : issueFlags)
+                    .selectedUrls(new ArrayList<>(selectedUrls))
+                    .fallbackDecision(textOrNull(traceNode, "fallbackDecision"))
+                    .degradationReason(textOrNull(traceNode, "degradationReason"))
+                    .build();
         } catch (Exception e) {
-            return new SearchSharedProjection(List.of(), List.of("PROJECTION_PARSE_FAILED"), List.of(), null, null);
+            return SearchSharedProjection.builder()
+                    .projectionType("SEARCH_SHARED_PROJECTION_V1")
+                    .sourceUrls(List.of())
+                    .issueFlags(List.of("PROJECTION_PARSE_FAILED"))
+                    .selectedUrls(List.of())
+                    .selectedTargets(List.of())
+                    .build();
         }
+    }
+
+    private static List<SearchSelectedTargetSummary> buildSelectedTargetSummaries(JsonNode targetsNode,
+                                                                                  List<String> fallbackSourceUrls) {
+        if (targetsNode == null || !targetsNode.isArray()) {
+            return List.of();
+        }
+        List<SearchSelectedTargetSummary> summaries = new ArrayList<>();
+        for (JsonNode targetNode : targetsNode) {
+            String url = textOrNull(targetNode, "url");
+            JsonNode candidateNode = targetNode.path("candidate");
+            if (url == null) {
+                url = textOrNull(candidateNode, "url");
+            }
+            summaries.add(SearchSelectedTargetSummary.builder()
+                    .url(url)
+                    .title(textOrNull(targetNode, "title") == null ? textOrNull(candidateNode, "title") : textOrNull(targetNode, "title"))
+                    .sourceType(textOrNull(candidateNode, "sourceType"))
+                    .sourceFamilyKey(textOrNull(candidateNode, "sourceFamilyKey"))
+                    .providerKey(textOrNull(candidateNode, "providerKey"))
+                    .selectionStage(textOrNull(candidateNode, "selectionStage"))
+                    .selectionReason(textOrNull(candidateNode, "selectionReason"))
+                    .reusedCollectedPage(targetNode.has("collectedPage") && !targetNode.path("collectedPage").isMissingNode())
+                    .sourceUrls(fallbackSourceUrls == null ? List.of() : fallbackSourceUrls)
+                    .build());
+        }
+        return summaries;
     }
 
     private static JsonNode resolveExecutionTraceNode(JsonNode output) {

@@ -28,4 +28,9 @@ public class SearchExecutionResult {
     private String reasoningSummary;
     private SearchExecutionTrace executionTrace;
     private SearchAuditSnapshot auditSnapshot;
+    /**
+     * Collector 输出给下游共享上下文的稳定投影。
+     * 原始审计快照仍用于节点详情与回放；共享上下文只消费瘦身投影。
+     */
+    private SearchSharedProjection sharedProjection;
 }
