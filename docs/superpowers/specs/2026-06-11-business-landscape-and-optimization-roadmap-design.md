@@ -145,7 +145,7 @@
 | 链路 | 诊断 | 方案 | 实施 | 实链验证 |
 | --- | --- | --- | --- | --- |
 | 任务定义与编排 | 🟡 历史存量，待补正式诊断文档 | ✅ [2026-06-11-task-definition-and-orchestration-contract.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-11-task-definition-and-orchestration-contract.md) | ✅ 2026-06-12 已按 3.1 实施封板条件复核 | 🟡 dev live 已验证 rerun / resume 入口可调度，完整任务仍受下游提取链路阻塞 |
-| 搜索与采集 | ✅ [CollectorAgent.md](/E:/java_study/Mul-agnet/docs/problem/CollectorAgent.md) | ✅ [2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md) 已按诊断继承、阻塞分级、优化波次重写，旧 Task 轴方案不再作为正式依据 | ✅ 2026-06-12 已完成首轮 blocking 实施复核，统一测试口径与 backend 全量测试通过 | ✅ 2026-06-12 dev live 已完成真实补源、正式采集、回放、rerun / resume 验收 |
+| 搜索与采集 | ✅ [CollectorAgent.md](/E:/java_study/Mul-agnet/docs/problem/CollectorAgent.md) | ✅ [2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md) 已按诊断继承、阻塞分级、优化波次重写，旧 Task 轴方案不再作为正式依据；方案已新增 `Wave 6`，把“至少一个垂直 API provider + 注册进路由 + `resolveProviderRole` 主辅区分”列为显式交付项 | 🟡 首轮三个 blocking 收口包和第二轮自动化契约 + dev live smoke 收口已落地，backend 全量测试 438 tests PASS；attemptedTargets / discardedCandidates / replay timeline、collector insight、preview/runtime 家族同构和排序质量硬化已由自动化与任务 `39` live smoke 覆盖；真实垂直 provider、主辅路由闭环、对象瘦身与跨重启 replay 底座仍待推进 | 🟡 2026-06-12 搜索段已通过 dev live 验收（补源/采集/回放/rerun/resume）；2026-06-15 任务 `39` 已补跑第二轮 preview/create/execute/replay/rerun/resume smoke，搜索事实源、回放、重跑与恢复字段通过；完整业务质量闭环仍因采集证据质量不足、最终质检未通过而未升绿；`Wave 6` 垂直 provider 仍未进入真实运行链路 |
 | 提取结构化 | ✅ [ExtractionStructured.md](/E:/java_study/Mul-agnet/docs/problem/ExtractionStructured.md) | ⬜ | ⬜ | ⬜ |
 | 分析推理 | ⬜ | ⬜ | ⬜ | ⬜ |
 | 报告写作 | ⬜ | ⬜ | ⬜ | ⬜ |
@@ -166,18 +166,21 @@
 - 方案：`✅` 已有方案文档 [2026-06-11-task-definition-and-orchestration-contract.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-11-task-definition-and-orchestration-contract.md)。
 - 实施：`✅` 已按本看板封板条件复核。
   复核证据：`TaskDraft -> TaskDefinition -> ExecutionPlanDefinition -> WorkflowPlan` 正式链路已落地；预览态返回 `TASK_PLAN_PREVIEW_V1`，运行态节点返回 `TASK_NODE_RUNTIME_V1`；创建任务时写入 `currentPlanVersionId/currentPlanVersion`，`rerun / resume` 继续沿用同一计划版本语义；`TaskDefinitionContractTest`、`TaskDefinitionAppServiceTest`、`TaskControllerTest`、`WorkflowFactoryTest`、`WorkflowPlanValidatorTest`、`TaskRuntimeCommandAppServiceTest`、`AnalysisTaskServiceTest`、`TaskPlanVersionerTest`、`BackendModuleDependencyTest`、`TaskDefinitionVerificationIntegrationTest`、`Phase1WorkflowIntegrationTest`，以及前端 `TaskCreatePage.test.tsx`、`taskNodeInsights.test.ts` 已于 2026-06-12 本地 PASS。
-- 实链验证：`🟡` 已完成 dev live app 验收，rerun / resume 入口已不再被本地异步编排阻塞，但完整任务仍未闭环。
+- 实链验证：`🟡` 已完成 dev live app 验收，rerun / resume 入口已不再被本地异步编排阻塞，但完整业务质量闭环仍未通过。
   当前证据：2026-06-12 以真实 Spring Boot 应用（`dev` profile，PostgreSQL / Redis / RocketMQ 端口可用）完成 `POST /api/task/preview`、`POST /api/task/create`、`POST /api/task/{id}/execute`、`POST /api/task/{id}/resume`、`POST /api/task/{id}/nodes/{nodeName}/rerun`、`GET /api/task/{id}`、`GET /api/task/{id}/nodes` 验收，确认正式异步编排入口可调度，`rerun / resume` 返回 200。
-  当前阻塞：完整任务在 `extract_schema` 停为 `WAITING_INTERVENTION`，日志显示下游 LLM provider token 无效，属于提取结构化链路的实链闭环问题，不再是 `WORKFLOW_DISPATCH_UNAVAILABLE (10008)`。
+  当前证据补充：2026-06-15 使用 User 级 `DEEPSEEK_API_KEY`（后缀 `e66d2c7b`）重启 dev live app 后，任务 `37` 通过 `/api/task/37/resume` 从 `extract_schema` 检查点恢复，提取、分析、撰写、初审、改写、终审节点均执行到 `SUCCESS`，原 LLM token blocker 已解除。
+  当前阻塞：完整任务最终总状态仍为 `FAILED`，原因是最终质量门禁未通过（`qualityScore=61`、`qualityPassed=false`），不是本地异步编排入口不可用，也不是 LLM token 鉴权失败。
 
 ### 3.2 搜索与采集
 
 - 诊断：`✅` 已有诊断文档 [CollectorAgent.md](/E:/java_study/Mul-agnet/docs/problem/CollectorAgent.md)。
-- 方案：`✅` 方案文档已重写完成，[2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md) 已明确废止旧 Task 轴结构，改为按 `诊断继承 -> 阻塞分级 -> 优化波次 -> 首轮实施裁剪` 推进，并显式继承“私域垂直 API 主力、公网搜索辅助”的业务优化原则，同时把官网、新闻、GitHub 等纳入 `Source Family Catalog` 配置架构。旧稿不再作为正式方案依据。
-- 实施：`✅` 2026-06-12 已完成首轮 blocking 实施复核。
-  复核证据：`SearchExecutionTruthContractTest, SearchKeywordPolicyTest, SearchEnginePropertiesTest, SearchSourceCatalogPropertiesTest, SearchPolicyResolverTest, SearchPropertiesBindingTest, SearchExecutionCoordinatorTest, CandidateVerifierTest, SearchAndCollectionGoldenMasterTest, PromptTemplateServiceTest, WorkflowFactoryTest, BrowserPreviewSearchSourceProviderTest, RuntimeEventEmitterTest, TaskReplayProjectionServiceTest, TaskEventReplayServiceTest, TaskRuntimeCommandAppServiceTest, AnalysisTaskServiceTest, Phase2WorkflowIntegrationTest` 全部通过，且 `mvn -pl backend test` 已通过。
-- 实链验证：`✅` 2026-06-12 dev live 已完成搜索与采集段验收。
-  验收证据：真实任务 `33` 使用 `/api/task/preview`、`/api/task/create`、`/api/task/{id}/execute` 跑出 4 个成功的 `COLLECTOR` 节点，累计 14 个 `sourceUrls`，每个采集节点均包含 `searchAudit`，回放接口返回 4 条 `searchReplays`；随后 `/api/task/{id}/resume` 与 `/api/task/{id}/nodes/collect_sources_01_01/rerun` 均返回 200，重跑后的采集节点仍保持 `searchAuditCheckpoint=SELECT_TARGETS`。完整任务停在 `extract_schema`，该下游阻塞不回退搜索与采集段验收结论。
+- 方案：`✅` 方案文档已重写完成，[2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md) 已明确废止旧 Task 轴结构，改为按 `诊断继承 -> 阻塞分级 -> 优化波次 -> 首轮实施裁剪 -> 垂直 provider 闭环` 推进，并显式继承“私域垂直 API 主力、公网搜索辅助”的业务优化原则。方案同时把官网、新闻、GitHub 等纳入 `Source Family Catalog` 配置架构，并新增 `Wave 6` 要求至少实现一个真实垂直 provider、注册进路由、让 `resolveProviderRole` 真正区分 `PRIMARY_VERTICAL / AUXILIARY_PUBLIC`。旧稿不再作为正式方案依据。
+- 实施：`🟡` 首轮三个 blocking 收口包（执行真相收口、质量止血、连续性事实源）已于 2026-06-12 落地；第二轮自动化契约收口已于 2026-06-15 完成，覆盖 attemptedTargets、discardedCandidates、稳定 replay timeline、collector insight 直出、preview/runtime source family 同构和排序质量硬化。封板条件中的策略入口统一、HEURISTIC 清理、模板治理、SearchKeywordPolicy、searchAudit、Source Family Catalog 配置骨架均已到位。但 [2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md) 定义的 Wave 5（对象瘦身与底座化）尚未推进；新增 `Wave 6` 中“至少一个垂直 provider 真实实现、注册进路由、`resolveProviderRole` 主辅区分、主力优先 / 公网辅助审计闭环”也未开始。实施列不得升 `✅`。
+  当前证据：`SearchAuditTimelineContractTest, SearchPreviewRuntimeHomologyContractTest, SearchExecutionCoordinatorTest, SearchAuditSnapshotCompatibilityTest, CollectionTargetSelectorTest, SourceCandidateRankerTest, HeuristicSourceDiscoveryServiceTest, BrowserPreviewSearchSourceProviderTest, WorkflowFactoryTest, RuntimeEventEmitterTest, TaskReplayProjectionServiceTest, TaskEventReplayServiceTest, TaskNodeViewAssemblerTest, SearchAndCollectionGoldenMasterTest` 聚合命令通过 49 tests；`mvn -pl backend test` 通过 438 tests。
+- 实链验证：`🟡` 搜索段已于 2026-06-12 通过 dev live 验收，但未满足全部 4 条硬条件。
+  已通过：① 真实场景（dev 环境任务 `33`，4 个 COLLECTOR 节点，14 个 sourceUrls）；② 搜索段产出正确（searchAudit 完整，回放接口返回 4 条 searchReplays）；③ 过程可观测（采集节点均含 searchAudit，rerun 后保持 searchAuditCheckpoint=SELECT_TARGETS）；④ rerun / resume 返回 200，入口可调度。
+  补证：2026-06-15 任务 `37` 复验中，DeepSeek token 已通过直连鉴权，`extract_schema` 到 `quality_check_final` 全部执行到 `SUCCESS`；回放接口返回 `sourceUrls=2`、`searchReplays=1`、`timeline=8`、`attemptedTargets=1`、`discardedCandidates=1`、`recoveryCheckpoint=SELECT_TARGETS`。
+  未通过：第二轮新增 attempted / discarded / replay timeline / insight / homology / ranking 事实已完成自动化复核，并于 2026-06-15 通过任务 `39` 补跑 dev live API smoke；但 `Wave 6` 垂直 provider 尚未进入真实运行链路，全链路最终产出仍无法升绿。当前原因已从 `extract_schema` token 阻塞转为采集证据质量不足；任务 `37` 报告证据接口仅返回 1 条 `aiqicha.baidu.com` 证据且最终质检评分 61，任务 `39` 初次 execute 也暴露 Playwright `__adopt__` / 反爬信号导致 Collector 进入 `WAITING_INTERVENTION`，虽然后续 rerun 成功补证搜索事实源不丢。
 
 ### 3.3 提取结构化
 
@@ -220,14 +223,14 @@
 | 引擎 | 成熟度 | 当前状态 | 主要来源 |
 | --- | --- | --- | --- |
 | 任务执行引擎 | 🟡 已识别 | 边界已在任务定义与编排链路中被显式识别，但 `WorkflowFactory`、`DagExecutor`、`TaskRuntimeCommandAppService` 仍混合承载计划生成、调度、事件、快照与动态补图职责 | [2026-06-11-task-definition-and-orchestration-contract.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-11-task-definition-and-orchestration-contract.md) |
-| 搜索执行引擎 | 🟡 已识别 | 优化需求已从搜索与采集链路中浮现，但当前语义仍散落在 `CollectorAgent`、`SearchExecutionCoordinator`、`CandidateVerifier`、`CollectionTargetSelector`、`BrowserSearchRuntimeService` 等协作者中 | [CollectorAgent.md](/E:/java_study/Mul-agnet/docs/problem/CollectorAgent.md)、[2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md) |
+| 搜索执行引擎 | 🟡 已识别 | 优化需求已从搜索与采集链路中浮现，但当前语义仍散落在 `CollectorAgent`、`SearchExecutionCoordinator`、`CandidateVerifier`、`CollectionTargetSelector`、`BrowserSearchRuntimeService` 等协作者中；`Source Family Catalog` 已有骨架，但真实垂直 provider 与主辅路由闭环尚未落地 | [CollectorAgent.md](/E:/java_study/Mul-agnet/docs/problem/CollectorAgent.md)、[2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md) |
 | 质量回流引擎 | ⬜ 隐式存在 | 系统中已存在“质量问题 -> 补证 / 重写 / 重跑 / 人工接管”的隐含转换，但仍待质量审查与修订重写两条链路共同诊断后再收口为独立引擎边界 | 当前总控层映射与现有运行时实现 |
 | 对话动作引擎 | ⬜ 隐式存在 | 统一入口已经形成，但动作预览、确认、正式执行的边界尚未通过正式链路诊断固化为独立引擎语义 | 当前总控层映射与现有会话实现 |
 
 执行引擎升 `✅` 的硬条件：
 
 1. `任务执行引擎`：计划生成、运行调度、事件投递、快照裁剪、动态补图已从混合服务中拆清；存在独立契约与独立测试，不再由 `WorkflowFactory` / `DagExecutor` / `TaskRuntimeCommandAppService` 交叉承载。
-2. `搜索执行引擎`：`SearchPolicyResolver` 成为唯一策略入口，`SearchExecutionCoordinator` 不再自行推导 fallback 顺序，搜索审计快照与恢复检查点契约稳定，搜索相关协作者已形成独立子域边界。
+2. `搜索执行引擎`：`SearchPolicyResolver` 成为唯一策略入口，`SearchExecutionCoordinator` 不再自行推导 fallback 顺序，搜索审计快照与恢复检查点契约稳定；至少一个真实 `PRIMARY_VERTICAL` provider 已注册进路由并优先执行，`resolveProviderRole` 能区分垂直主力与公网辅助 provider，搜索相关协作者已形成独立子域边界。
 3. `质量回流引擎`：质量问题分类、回流动作协议、受影响范围分析、动态补图模板已经独立成正式协作者，并由质量审查与修订重写两条链路共同消费。
 4. `对话动作引擎`：模式识别、动作预览、确认执行、正式命令桥接已形成独立契约与独立测试，不再散落在会话服务内部字符串判断。
 
@@ -260,4 +263,4 @@
 
 | 底座任务 | 关联底座 | 状态 | 阻塞范围 | 说明 |
 | --- | --- | --- | --- | --- |
-| 本地异步编排 / 消息基础设施验证基线 | 恢复与回放 | 🟡 已有 dev live 验证证据，待沉淀统一脚本 | 不再阻塞搜索与采集段实链验证；仍需沉淀为跨链路可复用验收基线 | 2026-06-12 dev live 验收中，`POST /api/task/{id}/nodes/{nodeName}/rerun` 与 `POST /api/task/{id}/resume` 已返回 200，说明本地 RocketMQ / outbox 调度入口在 dev 环境可用。完整任务后续停在 `extract_schema` 的 LLM token 问题，不属于异步编排入口不可用。 |
+| 本地异步编排 / 消息基础设施验证基线 | 恢复与回放 | 🟡 已有 dev live 验证证据，待沉淀统一脚本 | 不再阻塞搜索与采集段实链验证；仍需沉淀为跨链路可复用验收基线 | 2026-06-12 dev live 验收中，`POST /api/task/{id}/nodes/{nodeName}/rerun` 与 `POST /api/task/{id}/resume` 已返回 200，说明本地 RocketMQ / outbox 调度入口在 dev 环境可用。2026-06-15 任务 `37` 从 `extract_schema` 检查点恢复后推进到最终质检，证明原 LLM token blocker 已解除；当前失败来自质量门禁未通过，不属于异步编排入口不可用。 |

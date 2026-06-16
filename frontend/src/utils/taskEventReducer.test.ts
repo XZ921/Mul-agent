@@ -107,6 +107,26 @@ describe('taskEventReducer', () => {
             },
             sourceUrls: ['https://www.notion.so/product/ai'],
           },
+          attemptedTargets: [
+            {
+              candidate: {
+                url: 'https://www.notion.so/product/ai',
+              },
+            },
+          ],
+          discardedCandidates: [
+            {
+              url: 'https://www.notion.so/login',
+              selectionReason: 'LOW_SIGNAL_UTILITY_PAGE',
+            },
+          ],
+          replayTimeline: [
+            {
+              stepCode: 'SELECT_TARGETS',
+              status: 'SUCCESS',
+              sourceUrls: ['https://www.notion.so/product/ai'],
+            },
+          ],
           selectedTargets: [
             {
               url: 'https://www.notion.so/product/ai',
@@ -119,6 +139,9 @@ describe('taskEventReducer', () => {
     })
 
     expect(updated.nodes[0].collectorInsight?.searchAudit?.executionTrace?.recoveryCheckpoint).toBe('SELECT_TARGETS')
+    expect(updated.nodes[0].collectorInsight?.attemptedTargets?.[0]?.candidate?.url).toBe('https://www.notion.so/product/ai')
+    expect(updated.nodes[0].collectorInsight?.discardedCandidates?.[0]?.url).toBe('https://www.notion.so/login')
+    expect(updated.nodes[0].collectorInsight?.searchReplayTimeline?.[0]?.stepCode).toBe('SELECT_TARGETS')
     expect(updated.nodes[0].collectorInsight?.selectedTargets[0]?.url).toBe('https://www.notion.so/product/ai')
     expect(updated.nodes[0].collectorInsight?.selectedCount).toBe(1)
     expect(updated.nodes[0].collectorInsight?.sourceUrls).toEqual(['https://www.notion.so/product/ai'])

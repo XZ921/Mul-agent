@@ -722,6 +722,15 @@ public class TaskNodeViewAssembler {
                         output == null ? null : output.get("searchExecutionTrace"),
                         SearchExecutionTrace.class))
                 .searchAudit(searchAudit)
+                .attemptedTargets(searchAudit == null || searchAudit.getAttemptedTargets() == null
+                        ? List.of()
+                        : searchAudit.getAttemptedTargets())
+                .discardedCandidates(searchAudit == null || searchAudit.getDiscardedCandidates() == null
+                        ? List.of()
+                        : searchAudit.getDiscardedCandidates())
+                .searchReplayTimeline(searchAudit == null || searchAudit.getReplayTimeline() == null
+                        ? List.of()
+                        : searchAudit.getReplayTimeline())
                 .searchProgressSnapshots(convertList(
                         output == null ? null : output.get("searchProgressSnapshots"),
                         new TypeReference<List<SearchProgressSnapshot>>() {
@@ -776,6 +785,11 @@ public class TaskNodeViewAssembler {
                     .summaryText(summary.toString())
                     .competitorName(competitor)
                     .sourceType(sourceType)
+                    .sourceFamilyKey(textOrNull(config, "sourceFamilyKey"))
+                    .sourceFamilyRole(textOrNull(config, "sourceFamilyRole"))
+                    .primaryTools(readStringList(config.get("primaryTools")))
+                    .auxiliaryTools(readStringList(config.get("auxiliaryTools")))
+                    .queryTemplates(readStringList(config.get("queryTemplates")))
                     .sourceTypeLabel(sourceTypeLabel)
                     .searchMode(searchMode)
                     .searchModeLabel(searchModeLabel)

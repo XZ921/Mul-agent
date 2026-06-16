@@ -1,9 +1,11 @@
 package cn.bugstack.competitoragent.model.dto;
 
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
+import cn.bugstack.competitoragent.search.SearchCollectionTarget;
 import cn.bugstack.competitoragent.search.SearchExecutionPlan;
 import cn.bugstack.competitoragent.search.SearchExecutionTrace;
 import cn.bugstack.competitoragent.search.SearchProgressSnapshot;
+import cn.bugstack.competitoragent.search.SearchReplayTimelineItem;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
@@ -86,6 +88,27 @@ public class CollectorNodeInsightResponse {
      */
     @Schema(description = "Formal search audit snapshot")
     private SearchAuditSnapshot searchAudit;
+
+    /**
+     * 节点洞察直接透出本轮搜索实际尝试过的采集目标。
+     * 前端详情页可直接展示恢复现场，不需要再从 searchAudit 内部二次钻取。
+     */
+    @Schema(description = "Attempted collection targets from search audit")
+    private List<SearchCollectionTarget> attemptedTargets;
+
+    /**
+     * 节点洞察直接透出被丢弃候选及其原因。
+     * 这是解释“为什么没有采集这些高分但低价值来源”的正式事实源。
+     */
+    @Schema(description = "Discarded source candidates from search audit")
+    private List<SourceCandidate> discardedCandidates;
+
+    /**
+     * 节点洞察直接透出搜索 replay 时间线。
+     * 与 searchAudit.replayTimeline 保持同源，便于前端按稳定字段消费。
+     */
+    @Schema(description = "Search replay timeline from search audit")
+    private List<SearchReplayTimelineItem> searchReplayTimeline;
 
     @Schema(description = "Search progress snapshots")
     private List<SearchProgressSnapshot> searchProgressSnapshots;

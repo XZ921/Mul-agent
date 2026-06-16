@@ -65,6 +65,9 @@ class BrowserPreviewSearchSourceProviderTest {
         SourceCandidate candidate = candidates.get(0);
         assertEquals("BROWSER_PREVIEW", candidate.getDiscoveryMethod());
         assertEquals("PLANNED", candidate.getSelectionStage());
+        assertEquals("official", candidate.getSourceFamilyKey());
+        assertEquals("PRIMARY_VERTICAL", candidate.getSourceFamilyRole());
+        assertEquals(List.of("https://docs.notion.so/reference"), candidate.getSourceUrls());
         assertEquals("规划期通过浏览器预览补源生成候选来源", candidate.getSelectionReason());
         assertTrue(candidate.getReason().contains("浏览器预览补源"));
 
@@ -73,6 +76,11 @@ class BrowserPreviewSearchSourceProviderTest {
         CollectorNodeConfig previewConfig = configCaptor.getValue();
         assertEquals("Notion AI", previewConfig.getCompetitorName());
         assertEquals("DOCS", previewConfig.getSourceType());
+        assertEquals("official", previewConfig.getSourceFamilyKey());
+        assertEquals("PRIMARY_VERTICAL", previewConfig.getSourceFamilyRole());
+        assertTrue(previewConfig.getPrimaryTools().contains("WEB_SCRAPER"));
+        assertTrue(previewConfig.getAuxiliaryTools().contains("PUBLIC_SEARCH"));
+        assertTrue(previewConfig.getQueryTemplates().contains("search-docs-primary"));
         assertEquals("BROWSER_ONLY", previewConfig.getSearchMode());
         assertTrue(Boolean.TRUE.equals(previewConfig.getBrowserSearchEnabled()));
         assertTrue(Boolean.FALSE.equals(previewConfig.getVerifyResultPage()));

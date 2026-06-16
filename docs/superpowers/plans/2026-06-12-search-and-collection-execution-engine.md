@@ -34,15 +34,16 @@
 
 ## Current Stage
 
-当前阶段：搜索与采集首轮 blocking 实施与搜索/采集段实链验证已完成，下游提取/报告闭环另行验收
+当前阶段：搜索与采集首轮 blocking 实施与搜索/采集段实链验证已完成；第二轮 attempted / discarded / replay timeline / preview-runtime homology / ranking hardening 自动化收口与 dev live smoke 已完成；`Wave 5 / Wave 6` 后续独立实施待启动，下游提取/报告闭环另行验收
 
 - [x] 诊断证据归并：已完成
 - [x] 旧 Task 轴方案降级：已完成
 - [x] 阻塞层级重排：已完成
-- [x] 优化波次定义：已完成
+- [x] 优化波次定义：已完成，已补入 `Wave 6` 垂直 provider 闭环
 - [x] 首轮实施裁剪：已完成
 - [x] 实施复核：已完成
 - [x] 实链验证：已完成搜索与采集段 live 验收
+- [ ] 垂直 provider 落地：待执行，归属 `Wave 6`
 
 ---
 
@@ -226,6 +227,8 @@ search:
 
 首轮实施只要求建立上述配置骨架，并让 `official / news / github` 三个家族能被绑定、解析和审计展示；不要求一次真实接入 News API、GitHub API、Twitter / Reddit API、Crunchbase API、Patent API。
 
+但这只是首轮收口边界，不是长期方案完成口径。`Source Family Catalog` 只解决“业务上采什么、主辅工具如何声明”的配置骨架问题；它不能替代真实垂直 API provider。后续必须用独立波次把至少一个 `PRIMARY_VERTICAL` provider 做成可运行实现，并注册进路由、审计与角色解析链路，否则系统仍会退回 `qianfan -> serpapi -> browser -> http` 这组公网引擎串扫。
+
 ---
 
 ## Optimization Waves
@@ -331,6 +334,27 @@ search:
 
 这不是“以后有空再看”的尾项，而是搜索执行引擎要从“问题样板”走向“稳定子域”必须完成的收口波次。
 
+### Wave 6: 垂直 API Provider 落地与主辅路由闭环
+
+目标：把 [CollectorAgent.md:56](/E:/java_study/Mul-agnet/docs/problem/CollectorAgent.md:56) 的“私域垂直 API 主力、公网搜索辅助”从配置声明推进到真实运行链路，避免前五个波次完成后 provider 路由仍只有公网搜索引擎在工作。
+
+本波次必须解决的内容：
+
+1. 至少实现一个真实 `PRIMARY_VERTICAL` provider，优先从 `GitHub API` 或 `News API / RSS` 中选择一个作为首个落地对象；如果生产凭证暂不可用，也必须有配置禁用态、凭证缺失告警、Mock HTTP 契约测试和可复核的重试 / 超时 / 降级行为。
+2. 新 provider 必须实现稳定 provider 身份、可用性判断、Max Retries、异常捕获、`sourceUrls` 回填和结构化审计字段，不能依赖接口默认 `providerKey`、默认 `isAvailable=true` 或 fail-open 吞错。
+3. `Source Family Catalog` 的 `primaryTools` 必须能绑定到真实 provider；`SearchProviderProperties` 负责 provider 启停、凭证、超时、重试与降级；二者通过稳定 key 关联，不能重新把业务家族硬编码进 provider 私有逻辑。
+4. `SearchPolicyResolver.resolveProviderRole(...)` 必须真正区分 `PRIMARY_VERTICAL` 与 `AUXILIARY_PUBLIC`：真实垂直 provider 返回 `PRIMARY_VERTICAL`，`qianfan / serpapi / browser / http` 等公网搜索 provider 继续返回 `AUXILIARY_PUBLIC`。
+5. `RoutingSearchSourceProvider` 或其后续路由器必须按主辅关系执行：先跑可用的垂直主力 provider；当主力 provider 不可用、候选不足、质量水位不足或预算策略允许时，才进入公网搜索辅助补漏。
+6. 审计、回放和 insight 必须能展示 provider role、source family、provider key、query/template、跳过原因、降级原因和最终候选来源，不能只展示混合后的候选列表。
+7. 测试必须覆盖配置绑定、provider 可用性、凭证缺失、重试耗尽、主辅路由顺序、`resolveProviderRole` 差异、`sourceUrls` 保留、审计字段和公网辅助降级路径。
+
+本波次明确不要求一次完成：
+
+1. 社交媒体、财务数据、专利数据的真实外部 API 全量接入。
+2. provider 成本平台、配额仪表盘和反爬产品化面板。
+3. 所有数据源家族的垂直 provider 全覆盖。
+4. 跨重启 replay 持久化底座和任务恢复总策略重构。
+
 ---
 
 ## Mandatory Corrections From The Previous Draft
@@ -341,6 +365,8 @@ search:
 2. `isMarketingLandingPage(...)` 不得只出现在调用点。它必须作为正式规则落地，明确依赖哪些标题/正文/路径/按钮词信号，并由测试覆盖。
 3. `PromptTemplateService` 若调整模板装载逻辑，必须同时明确 `backend/src/main/resources/prompts/search-queries.yml` 是否需要同步修改。默认接受的方案是“装载逻辑与模板源内容一起治理”，不接受隐式造成英文模板池空转。
 4. `SearchEngineProperties` 相关测试不得只拿裸 `Map` 走通 happy path。必须同时验证 alias 归一化与 enabled 可用性解析链路，例如 `ddg -> duckduckgo -> enabled=true`。
+
+本次复核新增一个方案级 guard：`Source Family Catalog` 配置骨架不得被解释为“垂直 API provider 已完成”。真实 provider 实现、注册进路由、`resolveProviderRole` 主辅区分和审计可解释性必须进入 `Wave 6`，否则 `搜索与采集` 的整体实施状态不得升为 `✅`。
 
 ---
 
@@ -396,7 +422,7 @@ search:
 3. 不做前端搜索详情页和回放面板的全量正式切换，只允许最小兼容透传。
 4. 不做跨重启 replay 持久化底座。
 5. 不把对象瘦身与底座化波次偷偷塞进首轮 blocking 实施。
-6. 不真实接入 Twitter / Reddit、Crunchbase、Patent API；News API 与 GitHub API 只要求配置架构可承载，不要求本轮完成外部 API 调用。
+6. 不真实接入 Twitter / Reddit、Crunchbase、Patent API；News API 与 GitHub API 在首轮只要求配置架构可承载，真实 provider 实现转入 `Wave 6`，不得再用“后置”模糊处理。
 
 ---
 
@@ -411,8 +437,9 @@ search:
 | Phase C | 完成 `Wave 3` 预览 / 运行同骨架 | 1-3 天 | Phase A 完成 | 已完成 |
 | Phase D | 完成 `Wave 4` 连续性事实源最小贯通 | 2-4 天 | Phase A 完成，Phase B 基本止血 | 已完成 |
 | Phase E | 启动 `Wave 5` 对象瘦身、数据源家族配置平台化与底座化专题 | 1-2 个迭代 | Phase A-D 完成并复核 | 待执行 |
+| Phase F | 完成 `Wave 6` 垂直 API provider 落地与主辅路由闭环 | 1 个迭代 | Phase E 至少完成 provider / source family 职责拆分，且选定首个垂直 provider 的凭证或 Mock 契约 | 待执行 |
 
-当前允许进入实施的范围，仅限 `Phase A + Phase B + Phase C + Phase D` 里的首轮 blocking 收口包；`Phase E` 不得提前偷跑。
+当前允许进入实施的范围，仅限 `Phase A + Phase B + Phase C + Phase D` 里的首轮 blocking 收口包；`Phase E / Phase F` 不得提前偷跑。若团队决定优先补垂直 provider，也必须先单独改写实施计划，不能把它隐式塞进首轮完成口径。
 
 ---
 
@@ -426,9 +453,10 @@ search:
 4. 文档同时给出长期优化波次与首轮实施裁剪，避免再把大工程压成几个顺手 patch。
 5. 文档把前稿遗漏的四个 guard 升级为正式实施要求。
 6. 文档明确把官网、新闻、GitHub 等建模为数据源家族，把 Web Scraper、Jina Reader、News API、GitHub API、公网搜索建模为工具层或 provider 层。
-7. `specs` 中 `搜索与采集` 的状态口径与本文件一致。
+7. 文档显式给出 `Wave 6`，把“至少一个垂直 provider + 注册进路由 + `resolveProviderRole` 主辅区分”列为独立交付项。
+8. `specs` 中 `搜索与采集` 的状态口径与本文件一致。
 
-首轮实施要把 `实施` 状态改成 `✅`，还必须同时满足以下条件：
+首轮 blocking 收口包要标记为完成，必须同时满足以下条件：
 
 1. `SearchPolicyResolver` 已成为统一策略入口。
 2. `HEURISTIC` 假能力已被清理或真实实现。
@@ -438,21 +466,33 @@ search:
 6. `official / news / github` 数据源家族配置骨架已能绑定、解析并进入审计说明。
 7. 相关单元测试、集成测试、架构测试 PASS。
 
-`实链验证` 已于 2026-06-12 通过 dev live app 完成搜索与采集段验收：真实任务 `33` 通过 `/api/task/preview`、`/api/task/create`、`/api/task/{id}/execute` 跑出 4 个成功的 `COLLECTOR` 节点，累计 14 个 `sourceUrls`，每个采集节点均包含 `searchAudit`，回放接口返回 4 条 `searchReplays`；随后 `/api/task/{id}/resume` 与 `/api/task/{id}/nodes/collect_sources_01_01/rerun` 均返回 200，重跑后的采集节点仍保持 `searchAuditCheckpoint=SELECT_TARGETS`。完整任务仍停在 `extract_schema` 的人工介入点，日志显示下游 LLM provider token 无效，该问题属于提取/报告闭环，不回退搜索与采集段验收结论。
+整体 `搜索与采集` 实施状态要从 `🟡` 升为 `✅`，除首轮 blocking 收口包之外，还必须额外满足以下条件：
+
+1. 至少一个真实垂直 provider 已完成实现，并能在配置启用时返回可追溯候选。
+2. 该 provider 已通过 `Source Family Catalog.primaryTools` 与 `SearchProviderProperties` 注册进正式路由。
+3. `resolveProviderRole` 对真实垂直 provider 返回 `PRIMARY_VERTICAL`，对 `qianfan / serpapi / browser / http` 等公网搜索 provider 返回 `AUXILIARY_PUBLIC`。
+4. 路由审计能证明主力垂直 provider 优先执行，公网搜索只作为查漏补缺、候选不足或降级兜底路径。
+5. 新 provider 的 Max Retries、异常捕获、凭证缺失、`sourceUrls`、审计字段和降级路径均有自动化测试覆盖。
+
+`实链验证` 已于 2026-06-12 通过 dev live app 完成搜索与采集段验收：真实任务 `33` 通过 `/api/task/preview`、`/api/task/create`、`/api/task/{id}/execute` 跑出 4 个成功的 `COLLECTOR` 节点，累计 14 个 `sourceUrls`，每个采集节点均包含 `searchAudit`，回放接口返回 4 条 `searchReplays`；随后 `/api/task/{id}/resume` 与 `/api/task/{id}/nodes/collect_sources_01_01/rerun` 均返回 200，重跑后的采集节点仍保持 `searchAuditCheckpoint=SELECT_TARGETS`。这次验收只证明首轮公网补源 / 采集 / 回放链路可工作，不代表 `Wave 6` 垂直 provider 已完成。
+
+`LLM token 复验` 已于 2026-06-15 通过 dev live app 补证：User 级 `DEEPSEEK_API_KEY`（后缀 `e66d2c7b`）对 DeepSeek `/v1/models` 直连返回 200；真实任务 `37` 通过 `/api/task/37/resume` 从 `extract_schema` 检查点恢复后，`extract_schema`、`analyze_competitors`、`write_report`、`quality_check`、`rewrite_report`、`quality_check_final` 均执行到 `SUCCESS`，原先“下游 LLM provider token 无效”的 blocker 已解除。该任务最终总状态仍为 `FAILED`，原因是最终质量门禁未通过（`qualityScore=61`、`qualityPassed=false`），报告证据接口仅返回 1 条有效证据且为 `https://aiqicha.baidu.com/feedback/official?from=baidu&type=gw`；回放侧仍保留 `sourceUrls=2`、`searchReplays=1`、`timeline=8`、`attemptedTargets=1`、`discardedCandidates=1`、`recoveryCheckpoint=SELECT_TARGETS`。因此当前剩余 blocker 已从 token 鉴权转为采集证据质量 / 业务质量闭环问题，不回退首轮搜索与采集段实链验收结论。
+
+`第二轮自动化复核与 dev live smoke` 已于 2026-06-15 完成：attemptedTargets、discardedCandidates、稳定 replay timeline、collector insight 直出、preview/runtime source family 同构、质量信号排序硬化均已由契约测试覆盖；聚合命令 `mvn -pl backend "-Dtest=SearchAuditTimelineContractTest,SearchPreviewRuntimeHomologyContractTest,SearchExecutionCoordinatorTest,SearchAuditSnapshotCompatibilityTest,CollectionTargetSelectorTest,SourceCandidateRankerTest,HeuristicSourceDiscoveryServiceTest,BrowserPreviewSearchSourceProviderTest,WorkflowFactoryTest,RuntimeEventEmitterTest,TaskReplayProjectionServiceTest,TaskEventReplayServiceTest,TaskNodeViewAssemblerTest,SearchAndCollectionGoldenMasterTest" test` 通过 49 tests，`mvn -pl backend test` 通过 438 tests。真实任务 `39` 已补跑 `/api/task/preview`、`/api/task/create`、`/api/task/{id}/execute`、`/api/task/{id}/replay`、`/api/task/{id}/nodes/collect_sources_01_01/rerun`、`/api/task/{id}/resume`：preview/create 可见 source family 字段；execute/replay/rerun/resume 保留 `attemptedTargets / discardedCandidates / replayTimeline`，且 `recoveryCheckpoint=SELECT_TARGETS` 与 timeline 末尾一致。初次 execute 因 Playwright `__adopt__` / 反爬信号进入 `WAITING_INTERVENTION`，但 rerun 成功补证事实源不丢；`Wave 6` 垂直 provider、主辅路由闭环和跨重启 replay 持久化仍保持待实施。
 
 ---
 
 ## Rollback
 
-如果团队决定暂缓首轮实施，允许回退到以下保守状态：
+如果团队决定暂缓 `Wave 5 / Wave 6` 后续实施，允许回退到以下保守状态：
 
 1. 保留本文档作为搜索与采集的正式优化方案基线。
 2. 旧 Task 轴草稿继续保留为历史参考，但不得重新升格为正式方案。
 3. `specs` 中 `搜索与采集` 维持：
    - 诊断 `✅`
    - 方案 `✅`
-   - 实施 `✅`
-   - 实链验证 `✅`
+   - 实施 `🟡`
+   - 实链验证 `🟡`
 
 ---
 
@@ -463,4 +503,4 @@ search:
 3. 搜索详情页、回放页、事件 reducer 的前端全量协议切换。
 4. 搜索链路的跨重启 replay 持久化底座。
 5. 共享上下文、热快照缓存、任务恢复服务的整体系重构。
-6. 社交媒体、财务数据、专利数据的真实外部 API 接入、凭证治理、配额治理和产品化调度面板。
+6. 社交媒体、财务数据、专利数据的真实外部 API 接入、凭证治理、配额治理和产品化调度面板；但 `GitHub API` 或 `News API / RSS` 中至少一个真实垂直 provider 不在本 Out Of Scope，归 `Wave 6`。

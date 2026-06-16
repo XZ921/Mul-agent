@@ -22,7 +22,10 @@ import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
+import cn.bugstack.competitoragent.search.SearchCollectionTarget;
 import cn.bugstack.competitoragent.search.SearchProgressSnapshot;
+import cn.bugstack.competitoragent.search.SearchReplayTimelineItem;
+import cn.bugstack.competitoragent.source.SourceCandidate;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -434,7 +437,23 @@ public class TaskReplayProjectionService {
             if (sourceUrls.isEmpty() && searchAudit != null) {
                 sourceUrls = normalizeSourceUrls(searchAudit.getSourceUrls());
             }
-            if (searchAudit == null && selectedTargets.isEmpty() && sourceUrls.isEmpty()) {
+            List<SearchCollectionTarget> attemptedTargets = resolveSearchAuditList(
+                    searchAudit == null ? null : searchAudit.getAttemptedTargets(),
+                    output.get("attemptedTargets"),
+                    new TypeReference<List<SearchCollectionTarget>>() {
+                    });
+            List<SourceCandidate> discardedCandidates = resolveSearchAuditList(
+                    searchAudit == null ? null : searchAudit.getDiscardedCandidates(),
+                    output.get("discardedCandidates"),
+                    new TypeReference<List<SourceCandidate>>() {
+                    });
+            List<SearchReplayTimelineItem> replayTimeline = normalizeReplayTimeline(resolveReplayTimeline(output, searchAudit), sourceUrls);
+            if (searchAudit == null
+                    && selectedTargets.isEmpty()
+                    && sourceUrls.isEmpty()
+                    && attemptedTargets.isEmpty()
+                    && discardedCandidates.isEmpty()
+                    && replayTimeline.isEmpty()) {
                 continue;
             }
 
@@ -444,12 +463,73 @@ public class TaskReplayProjectionService {
                     .planVersion(resolvePlanVersion(taskPlanMap, taskNode.getPlanVersionId()))
                     .branchKey(taskNode.getBranchKey())
                     .latestProgress(latestProgress)
+                    .timeline(replayTimeline)
                     .searchAudit(searchAudit)
+                    .attemptedTargets(attemptedTargets)
+                    .discardedCandidates(discardedCandidates)
                     .selectedTargets(selectedTargets)
                     .sourceUrls(sourceUrls)
                     .build());
         }
         return searchReplays;
+    }
+
+    /**
+     * replay 响应优先消费 searchAudit 的正式事实源，历史 output 顶层字段作为兼容兜底。
+     * 这样既满足第二轮 DTO 顶层字段契约，也避免破坏已有 searchAudit 嵌套消费方。
+     */
+    private <T> List<T> resolveSearchAuditList(List<T> auditValues, JsonNode fallbackNode, TypeReference<List<T>> typeReference) {
+        if (auditValues != null) {
+            return auditValues;
+        }
+        return convertList(fallbackNode, typeReference);
+    }
+
+    private List<SearchReplayTimelineItem> resolveReplayTimeline(JsonNode output, SearchAuditSnapshot searchAudit) {
+        if (searchAudit != null && searchAudit.getReplayTimeline() != null) {
+            return searchAudit.getReplayTimeline();
+        }
+        JsonNode replayTimelineNode = firstPresent(output.get("searchReplayTimeline"), output.get("replayTimeline"));
+        return convertList(replayTimelineNode, new TypeReference<List<SearchReplayTimelineItem>>() {
+        });
+    }
+
+    /**
+     * 回放时间线必须显式带 sourceUrls。
+     * 历史节点可能已经有 replayTimeline 但条目缺少来源，这里用节点级来源兜底补齐。
+     */
+    private List<SearchReplayTimelineItem> normalizeReplayTimeline(List<SearchReplayTimelineItem> replayTimeline,
+                                                                   List<String> fallbackSourceUrls) {
+        if (replayTimeline == null || replayTimeline.isEmpty()) {
+            return List.of();
+        }
+        List<String> stableFallbackSourceUrls = normalizeSourceUrls(fallbackSourceUrls);
+        return replayTimeline.stream()
+                .filter(Objects::nonNull)
+                .map(item -> {
+                    List<String> itemSourceUrls = normalizeSourceUrls(item.getSourceUrls());
+                    if (!itemSourceUrls.isEmpty() || stableFallbackSourceUrls.isEmpty()) {
+                        return item;
+                    }
+                    return SearchReplayTimelineItem.builder()
+                            .stepCode(item.getStepCode())
+                            .stepName(item.getStepName())
+                            .status(item.getStatus())
+                            .message(item.getMessage())
+                            .completedSteps(item.getCompletedSteps())
+                            .totalSteps(item.getTotalSteps())
+                            .progressPercent(item.getProgressPercent())
+                            .candidateCount(item.getCandidateCount())
+                            .attemptedCount(item.getAttemptedCount())
+                            .selectedCount(item.getSelectedCount())
+                            .discardedCount(item.getDiscardedCount())
+                            .degraded(item.getDegraded())
+                            .degradationReason(item.getDegradationReason())
+                            .sourceUrls(stableFallbackSourceUrls)
+                            .updatedAt(item.getUpdatedAt())
+                            .build();
+                })
+                .toList();
     }
 
     private List<cn.bugstack.competitoragent.model.dto.ReplayIntegrationEntryPoint> buildIntegrationEntryPoints(List<String> sourceUrls) {
@@ -623,6 +703,10 @@ public class TaskReplayProjectionService {
             return List.of();
         }
         return objectMapper.convertValue(node, typeReference);
+    }
+
+    private JsonNode firstPresent(JsonNode primary, JsonNode fallback) {
+        return primary == null || primary.isNull() ? fallback : primary;
     }
 
     private List<String> normalizeSourceUrls(List<String> sourceUrls) {

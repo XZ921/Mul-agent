@@ -82,6 +82,11 @@ export interface TaskNodeConfigSummary {
   summaryText?: string | null
   competitorName?: string | null
   sourceType?: string | null
+  sourceFamilyKey?: string | null
+  sourceFamilyRole?: string | null
+  primaryTools?: string[] | null
+  auxiliaryTools?: string[] | null
+  queryTemplates?: string[] | null
   sourceTypeLabel?: string | null
   searchMode?: string | null
   searchModeLabel?: string | null
@@ -144,6 +149,9 @@ export interface CollectorNodeInsightData {
   searchExecutionPlan: SearchExecutionPlanInfo | null
   searchExecutionTrace?: SearchExecutionTraceInfo | null
   searchAudit?: SearchAuditSnapshotInfo | null
+  attemptedTargets?: SearchAuditTargetInfo[] | null
+  discardedCandidates?: SourceCandidateInfo[] | null
+  searchReplayTimeline?: SearchReplayTimelineItemInfo[] | null
   searchProgressSnapshots?: SearchProgressInfo[] | null
   sourceCandidates: SourceCandidateInfo[]
   selectedTargets: CollectorSelectedTargetSummary[]
@@ -491,6 +499,9 @@ export interface SearchProgressEventPayload {
   searchExecutionTrace?: SearchExecutionTraceInfo | null
   searchProgressSnapshots?: SearchProgressInfo[] | null
   searchAudit?: SearchAuditSnapshotInfo | null
+  attemptedTargets?: SearchAuditTargetInfo[] | null
+  discardedCandidates?: SourceCandidateInfo[] | null
+  replayTimeline?: SearchReplayTimelineItemInfo[] | null
   selectedTargets?: CollectorSelectedTargetSummary[] | null
   sourceUrls?: string[] | null
 }
@@ -628,13 +639,34 @@ export interface SearchAuditTargetInfo {
   } | null
 }
 
+export interface SearchReplayTimelineItemInfo {
+  stepCode?: string | null
+  stepName?: string | null
+  status?: string | null
+  message?: string | null
+  completedSteps?: number | null
+  totalSteps?: number | null
+  progressPercent?: number | null
+  candidateCount?: number | null
+  attemptedCount?: number | null
+  selectedCount?: number | null
+  discardedCount?: number | null
+  degraded?: boolean | null
+  degradationReason?: string | null
+  sourceUrls?: string[] | null
+  updatedAt?: string | null
+}
+
 export interface SearchAuditSnapshotInfo {
   executionTrace?: SearchExecutionTraceInfo | null
   executionPlan?: SearchExecutionPlanInfo | null
   latestProgress?: SearchProgressInfo | null
   progressHistory?: SearchProgressInfo[] | null
+  replayTimeline?: SearchReplayTimelineItemInfo[] | null
   sourceCandidates?: SourceCandidateInfo[] | null
+  attemptedTargets?: SearchAuditTargetInfo[] | null
   selectedTargets?: SearchAuditTargetInfo[] | null
+  discardedCandidates?: SourceCandidateInfo[] | null
   sourceUrls?: string[] | null
 }
 
@@ -660,7 +692,10 @@ export interface SearchReplaySnapshotInfo {
   planVersion?: number | null
   branchKey?: string | null
   latestProgress?: SearchProgressInfo | null
+  timeline?: SearchReplayTimelineItemInfo[] | null
   searchAudit?: SearchAuditSnapshotInfo | null
+  attemptedTargets?: SearchAuditTargetInfo[] | null
+  discardedCandidates?: SourceCandidateInfo[] | null
   selectedTargets?: SelectedTargetInfo[] | null
   sourceUrls?: string[] | null
 }

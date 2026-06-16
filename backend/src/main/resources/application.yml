@@ -1,5 +1,9 @@
 server:
   port: 9093
+  tomcat:
+    # 显式指定嵌入式 Tomcat 工作目录，避免启动环境缺少 TEMP/TMP 时回退到 C:\WINDOWS 导致无权限创建临时目录。
+    basedir: ${TOMCAT_BASEDIR:${user.home}/.competitor-agent/tomcat}
+    document-root: ${TOMCAT_DOCBASE:${user.home}/.competitor-agent/tomcat-docbase}
 
 spring:
   application:
@@ -73,12 +77,6 @@ ai:
   temperature: 0.3
   timeout-seconds: 120
   providers:
-    bailian:
-      url: https://dashscope.aliyuncs.com
-      api-key: ${BAILIAN_API_KEY:}
-      endpoints:
-        chat: /compatible-mode/v1/chat/completions
-        rerank: /api/v1/services/rerank/text-rerank/text-rerank
     deepseek:
       url: https://api.deepseek.com
       api-key: ${DEEPSEEK_API_KEY:}
@@ -112,9 +110,16 @@ springdoc:
 
 playwright:
   browser: chromium
-  channel: msedge
+  # 默认使用 Playwright 托管的纯 Chromium，避免系统 Edge 弹窗、账号、更新和 channel 查找差异影响后台采集。
+  channel:
+  # 当前显式绑定本机已安装的 Playwright Chromium，避免 channel 查找和浏览器缓存目录差异影响后台采集。
+  executable-path: D:/Aplaywright/chromium-1117/chrome-win/chrome.exe
   headless: true
   timeout-millis: 30000
+  # 启动期不直接 launch 浏览器，避免 IDE/Windows 下 Playwright driver 管道偶发断开时输出误导性 ERROR；运行期会按需启动。
+  startup-warmup-enabled: ${PLAYWRIGHT_STARTUP_WARMUP_ENABLED:false}
+  # 定时健康检查默认只检查已有浏览器，不在空实例时主动预热，避免后台周期性触发 Playwright driver 管道异常。
+  health-check-warmup-enabled: ${PLAYWRIGHT_HEALTH_CHECK_WARMUP_ENABLED:false}
   screenshot-on-collect: false
   health-check-interval-millis: 60000
   health-check-initial-delay-millis: 15000
@@ -367,8 +372,11 @@ rocketmq:
 playwright:
   browser: chromium
   channel:
+  executable-path:
   headless: true
   timeout-millis: 10000
+  startup-warmup-enabled: false
+  health-check-warmup-enabled: false
   screenshot-on-collect: false
   health-check-interval-millis: 60000
   health-check-initial-delay-millis: 60000

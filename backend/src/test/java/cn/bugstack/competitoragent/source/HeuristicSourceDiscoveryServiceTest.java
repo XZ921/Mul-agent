@@ -57,8 +57,19 @@ class HeuristicSourceDiscoveryServiceTest {
 
         assertNotNull(docsPlan.getCandidates());
         assertFalse(docsPlan.getCandidates().isEmpty());
+        assertEquals("official", docsPlan.getSourceFamilyKey());
+        assertEquals("PRIMARY_VERTICAL", docsPlan.getSourceFamilyRole());
+        assertTrue(docsPlan.getPrimaryTools().contains("WEB_SCRAPER"));
+        assertTrue(docsPlan.getAuxiliaryTools().contains("PUBLIC_SEARCH"));
+        assertTrue(docsPlan.getQueryTemplates().contains("search-docs-primary"));
+        assertEquals(docsPlan.getUrls(), docsPlan.getSourceUrls());
         assertTrue(docsPlan.getCandidates().stream().anyMatch(candidate ->
                 "SEARCH".equals(candidate.getDiscoveryMethod())));
+        assertTrue(docsPlan.getCandidates().stream().allMatch(candidate ->
+                "official".equals(candidate.getSourceFamilyKey())
+                        && "PRIMARY_VERTICAL".equals(candidate.getSourceFamilyRole())
+                        && candidate.getSourceUrls() != null
+                        && candidate.getSourceUrls().contains(candidate.getUrl())));
         assertEquals(docsPlan.getCandidates().stream().map(SourceCandidate::getUrl).toList(),
                 docsPlan.getUrls());
         assertTrue(docsPlan.getCandidates().get(0).getTotalScore() >= docsPlan.getCandidates().get(docsPlan.getCandidates().size() - 1).getTotalScore());
@@ -140,6 +151,9 @@ class HeuristicSourceDiscoveryServiceTest {
 
         assertEquals(2, plans.size());
         assertTrue(plans.stream().allMatch(plan -> plan.getUrls().isEmpty()));
+        assertTrue(plans.stream().allMatch(plan -> plan.getSourceUrls().isEmpty()));
+        assertTrue(plans.stream().allMatch(plan -> plan.getSourceFamilyKey() != null));
+        assertTrue(plans.stream().allMatch(plan -> plan.getPrimaryTools() != null));
         assertTrue(plans.stream().allMatch(plan -> plan.getCandidates().isEmpty()));
         assertTrue(plans.stream().allMatch(plan -> plan.getNotes().contains("跳过域名猜测")));
         assertFalse(plans.stream()

@@ -872,4 +872,5 @@ git commit -m "docs(search): mark first iteration implementation ready for verif
 - 提交方式：用户要求跳过分包提交，改为最终一次性提交全部相关代码、测试与文档改动。
 - 最近验证结果：首轮目标测试集 PASS（102 tests, 0 failures, 0 errors）；`mvn -pl backend test` PASS（417 tests, 0 failures, 0 errors, 0 skipped）。
 - 实链验证结果：dev live 任务 `33` 已完成搜索与采集段真实补源、正式采集、回放、rerun / resume 验收；4 个 `COLLECTOR` 节点成功，累计 14 个 `sourceUrls`，回放接口返回 4 条 `searchReplays`，重跑后的采集节点保留 `searchAuditCheckpoint=SELECT_TARGETS`。
-- 当前收口状态：搜索与采集段已完成；完整任务仍停在 `extract_schema` 人工介入点，日志显示下游 LLM provider token 无效，归入提取结构化链路后续处理。
+- 实链补证结果：2026-06-15 使用 User 级 `DEEPSEEK_API_KEY`（后缀 `e66d2c7b`）启动 dev live app，DeepSeek `/v1/models` 直连返回 200；随后真实任务 `37` 通过 `/api/task/37/resume` 从既有检查点恢复，`extract_schema`、`analyze_competitors`、`write_report`、`quality_check`、`rewrite_report`、`quality_check_final` 均执行到 `SUCCESS`，原先的 LLM provider token blocker 已解除。
+- 当前收口状态：搜索与采集段验收结论不回退；任务 `37` 最终总状态为 `FAILED`，原因不是 token 或调度失败，而是最终质量门禁未通过（`qualityScore=61`、`qualityPassed=false`）。报告证据接口仅返回 1 条有效证据，且为 `https://aiqicha.baidu.com/feedback/official?from=baidu&type=gw`，说明完整业务质量闭环仍受采集证据质量不足影响；回放侧仍保留 `sourceUrls=2`、`searchReplays=1`、`timeline=8`、`attemptedTargets=1`、`discardedCandidates=1`、`recoveryCheckpoint=SELECT_TARGETS`。

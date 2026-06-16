@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * 搜索策略解析器。
@@ -148,6 +149,34 @@ public class SearchPolicyResolver {
             return SearchProviderRole.AUXILIARY_PUBLIC;
         }
         return SearchProviderRole.AUXILIARY_PUBLIC;
+    }
+
+    /**
+     * 根据业务 sourceType 反查数据源家族 key。
+     * preview、runtime、replay 都依赖同一套解释，避免 DOCS / NEWS 等类型在不同阶段被打上不同家族语义。
+     */
+    public String resolveSourceFamilyKeyForSourceType(String sourceType) {
+        if (!StringUtils.hasText(sourceType)) {
+            return "official";
+        }
+        String normalizedSourceType = sourceType.trim().toUpperCase(Locale.ROOT);
+        for (Map.Entry<String, SearchSourceCatalogProperties.SourceFamilyProperties> entry
+                : resolveSourceCatalog().getFamilies().entrySet()) {
+            SearchSourceCatalogProperties.SourceFamilyProperties family = entry.getValue();
+            if (family != null && family.getSourceTypes() != null
+                    && family.getSourceTypes().stream().anyMatch(type -> normalizedSourceType.equalsIgnoreCase(type))) {
+                return entry.getKey();
+            }
+        }
+        return "official";
+    }
+
+    /**
+     * 根据业务 sourceType 反查完整家族配置。
+     * 找不到显式配置时回退到 official，保证调用方仍能拿到稳定的工具与 query template 语义。
+     */
+    public SearchSourceCatalogProperties.SourceFamilyProperties resolveSourceFamilyForSourceType(String sourceType) {
+        return resolveSourceCatalog().resolveFamily(resolveSourceFamilyKeyForSourceType(sourceType));
     }
 
     /**

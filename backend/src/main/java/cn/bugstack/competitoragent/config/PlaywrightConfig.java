@@ -23,8 +23,11 @@ public class PlaywrightConfig {
     public static class PlaywrightProperties {
         private String browser = "chromium";
         private String channel;
+        private String executablePath;
         private boolean headless = true;
         private int timeoutMillis = 30000;
+        private boolean startupWarmupEnabled = false;
+        private boolean healthCheckWarmupEnabled = false;
         private boolean screenshotOnCollect = false;
         private long healthCheckIntervalMillis = 60000L;
         private long healthCheckInitialDelayMillis = 15000L;

@@ -33,7 +33,12 @@ class RuntimeEventEmitterTest {
                         {
                           "searchProgress":{"status":"SUCCESS","currentStep":"SELECT_TARGETS"},
                           "searchExecutionTrace":{"recoveryCheckpoint":"SELECT_TARGETS","degraded":false},
-                          "searchAudit":{"executionTrace":{"recoveryCheckpoint":"SELECT_TARGETS"}},
+                          "searchAudit":{
+                            "executionTrace":{"recoveryCheckpoint":"SELECT_TARGETS"},
+                            "attemptedTargets":[{"candidate":{"url":"https://docs.notion.so/reference"}}],
+                            "discardedCandidates":[{"url":"https://www.notion.so/login","selectionReason":"LOW_SIGNAL_UTILITY_PAGE"}],
+                            "replayTimeline":[{"stepCode":"SELECT_TARGETS","status":"SUCCESS","sourceUrls":["https://docs.notion.so/reference"]}]
+                          },
                           "selectedTargets":[{"url":"https://docs.notion.so/reference","title":"Reference"}],
                           "sourceUrls":["https://docs.notion.so/reference"]
                         }
@@ -44,6 +49,9 @@ class RuntimeEventEmitterTest {
 
         verify(taskEventPublisher).publishSearchProgressEvent(eq(24L), eq("collect_sources_docs"), argThat(payload ->
                 payload.containsKey("searchAudit")
+                        && payload.containsKey("attemptedTargets")
+                        && payload.containsKey("discardedCandidates")
+                        && payload.containsKey("replayTimeline")
                         && payload.containsKey("selectedTargets")
                         && payload.containsKey("sourceUrls")));
     }

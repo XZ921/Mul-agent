@@ -553,9 +553,9 @@ public class ExecutionPlanDefinitionBuilder {
             if (mergedUrls.isEmpty() && keptCandidates.isEmpty()) {
                 if (safeList(sourcePlan.getUrls()).isEmpty()
                         && (sourcePlan.getCandidates() == null || sourcePlan.getCandidates().isEmpty())) {
-                    deduplicatedPlans.add(SourcePlan.builder()
-                            .sourceType(sourcePlan.getSourceType())
+                    deduplicatedPlans.add(sourcePlan.toBuilder()
                             .urls(List.of())
+                            .sourceUrls(List.of())
                             .notes(appendDedupeNote(sourcePlan.getNotes(), duplicateCount))
                             .candidates(List.of())
                             .build());
@@ -570,9 +570,10 @@ public class ExecutionPlanDefinitionBuilder {
 
             seenUrls.addAll(mergedUrls.keySet());
             String notes = appendDedupeNote(sourcePlan.getNotes(), duplicateCount);
-            deduplicatedPlans.add(SourcePlan.builder()
-                    .sourceType(sourcePlan.getSourceType())
-                    .urls(new ArrayList<>(mergedUrls.values()))
+            List<String> deduplicatedUrls = new ArrayList<>(mergedUrls.values());
+            deduplicatedPlans.add(sourcePlan.toBuilder()
+                    .urls(deduplicatedUrls)
+                    .sourceUrls(deduplicatedUrls)
                     .notes(notes)
                     .candidates(keptCandidates)
                     .build());

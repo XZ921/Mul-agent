@@ -71,10 +71,12 @@ public class SourceCandidateRanker {
         double relevance = clamp(candidate.getRelevanceScore() > 0 ? candidate.getRelevanceScore() : inferRelevance(candidate));
         double freshness = clamp(candidate.getFreshnessScore() > 0 ? candidate.getFreshnessScore() : inferFreshness(candidate.getPublishedAt()));
         double quality = clamp(candidate.getQualityScore() > 0 ? candidate.getQualityScore() : inferQuality(normalizedDomain, candidate.getDiscoveryMethod()));
-        double total = round(relevance * 0.5 + freshness * 0.2 + quality * 0.3);
+        List<String> qualitySignals = resolveQualitySignals(candidate, normalizedDomain);
+        double total = applyQualitySignalBoost(round(relevance * 0.5 + freshness * 0.2 + quality * 0.3), qualitySignals);
         SourceSelectionReason decisionReason = resolveDecisionReason(candidate);
         SourceTrustTier trustTier = resolveTrustTier(candidate, normalizedDomain);
         List<String> rankingReasons = buildRankingReasons(candidate, normalizedDomain, trustTier, freshness);
+        rankingReasons.addAll(buildQualitySignalRankingReasons(qualitySignals));
 
         // 登录、招聘等工具页虽然可能有较高文本相关度，但对竞品研究价值低，
         // 这里直接降权并打上淘汰原因，避免它们在排序时挤占真正高价值的文档和定价页。
@@ -90,12 +92,18 @@ public class SourceCandidateRanker {
                 .reason(candidate.getReason())
                 .domain(normalizedDomain)
                 .publishedAt(candidate.getPublishedAt())
+                .sourceFamilyKey(candidate.getSourceFamilyKey())
+                .sourceFamilyRole(candidate.getSourceFamilyRole())
+                .providerKey(candidate.getProviderKey())
+                .providerRole(candidate.getProviderRole())
+                .sourceUrls(resolveSourceUrls(candidate))
                 .relevanceScore(round(relevance))
                 .freshnessScore(round(freshness))
                 .qualityScore(round(quality))
                 .totalScore(total)
                 .trustTier(trustTier)
                 .trustTierLabel(trustTier.getDisplayName())
+                .qualitySignals(qualitySignals)
                 .rankingReasons(rankingReasons)
                 .rankingSummary(buildRankingSummary(trustTier, rankingReasons))
                 .searchQuery(candidate.getSearchQuery())
@@ -247,6 +255,71 @@ public class SourceCandidateRanker {
             return SourceTrustTier.MEDIUM;
         }
         return SourceTrustTier.LOW;
+    }
+
+    /**
+     * 质量信号用于识别“同一 sourceType 下更值得优先采集的路径”。
+     * 例如 DOCS 家族里，docs 子域名、/api、/reference 比官网首页更适合进入首轮采集。
+     */
+    private List<String> resolveQualitySignals(SourceCandidate candidate, String normalizedDomain) {
+        LinkedHashSet<String> signals = new LinkedHashSet<>();
+        if (candidate.getQualitySignals() != null) {
+            for (String signal : candidate.getQualitySignals()) {
+                if (StringUtils.hasText(signal)) {
+                    signals.add(signal);
+                }
+            }
+        }
+
+        String sourceType = defaultText(candidate.getSourceType()).toUpperCase(Locale.ROOT);
+        String url = defaultText(candidate.getUrl()).toLowerCase(Locale.ROOT);
+        String domain = defaultText(normalizedDomain).toLowerCase(Locale.ROOT);
+        if ("DOCS".equals(sourceType) && (domain.startsWith("docs.") || url.contains("/docs")
+                || url.contains("/documentation") || url.contains("/api") || url.contains("/reference"))) {
+            signals.add("DOCS_HIGH_VALUE_PATH");
+        }
+        if ("PRICING".equals(sourceType) && (url.contains("/pricing") || url.contains("/plans")
+                || url.contains("价格") || url.contains("定价"))) {
+            signals.add("PRICING_HIGH_VALUE_PATH");
+        }
+        if ("NEWS".equals(sourceType) && (url.contains("/blog") || url.contains("/news")
+                || url.contains("/changelog") || url.contains("/release"))) {
+            signals.add("NEWS_HIGH_VALUE_PATH");
+        }
+        return new ArrayList<>(signals);
+    }
+
+    private double applyQualitySignalBoost(double total, List<String> qualitySignals) {
+        if (qualitySignals == null || qualitySignals.isEmpty()) {
+            return total;
+        }
+        return Math.min(1.0D, round(total + qualitySignals.size() * 0.08D));
+    }
+
+    private List<String> buildQualitySignalRankingReasons(List<String> qualitySignals) {
+        if (qualitySignals == null || qualitySignals.isEmpty()) {
+            return List.of();
+        }
+        List<String> reasons = new ArrayList<>();
+        for (String signal : qualitySignals) {
+            switch (signal) {
+                case "DOCS_HIGH_VALUE_PATH" -> reasons.add("命中文档高价值路径，优先级高于泛官网首页");
+                case "PRICING_HIGH_VALUE_PATH" -> reasons.add("命中定价高价值路径，适合优先采集价格与套餐信息");
+                case "NEWS_HIGH_VALUE_PATH" -> reasons.add("命中新闻高价值路径，适合优先采集发布、更新与动态信息");
+                default -> reasons.add("命中质量信号：" + signal);
+            }
+        }
+        return reasons;
+    }
+
+    private List<String> resolveSourceUrls(SourceCandidate candidate) {
+        if (candidate.getSourceUrls() != null && !candidate.getSourceUrls().isEmpty()) {
+            return candidate.getSourceUrls();
+        }
+        if (StringUtils.hasText(candidate.getUrl())) {
+            return List.of(candidate.getUrl());
+        }
+        return List.of();
     }
 
     /**

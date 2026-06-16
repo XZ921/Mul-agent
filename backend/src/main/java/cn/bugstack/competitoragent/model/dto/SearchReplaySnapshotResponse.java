@@ -1,7 +1,10 @@
 package cn.bugstack.competitoragent.model.dto;
 
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
+import cn.bugstack.competitoragent.search.SearchCollectionTarget;
 import cn.bugstack.competitoragent.search.SearchProgressSnapshot;
+import cn.bugstack.competitoragent.search.SearchReplayTimelineItem;
+import cn.bugstack.competitoragent.source.SourceCandidate;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -28,7 +31,18 @@ public class SearchReplaySnapshotResponse {
     private Integer planVersion;
     private String branchKey;
     private SearchProgressSnapshot latestProgress;
+    private List<SearchReplayTimelineItem> timeline;
     private SearchAuditSnapshot searchAudit;
+    /**
+     * 回放响应的扁平化尝试目标列表。
+     * 保留 searchAudit 的完整现场，同时给调用方一个稳定的顶层消费入口。
+     */
+    private List<SearchCollectionTarget> attemptedTargets;
+    /**
+     * 回放响应的扁平化丢弃候选列表。
+     * 用于解释选源裁剪结果，避免调用方必须理解 searchAudit 内部结构。
+     */
+    private List<SourceCandidate> discardedCandidates;
     private List<CollectorSelectedTargetSummary> selectedTargets;
     private List<String> sourceUrls;
 }

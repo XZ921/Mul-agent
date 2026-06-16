@@ -5,6 +5,7 @@ import type {
   CollectorSelectedTargetSummary,
   CreateTaskRequest,
   SearchReplaySnapshotInfo,
+  SearchReplayTimelineItemInfo,
   SearchExecutionPlanInfo,
   SearchExecutionStepInfo,
   SearchExecutionTraceInfo,
@@ -42,6 +43,9 @@ export interface CollectorNodeInsight {
   searchExecutionPlan: SearchExecutionPlanInfo | null
   searchExecutionTrace?: SearchExecutionTraceInfo | null
   searchAudit?: SearchAuditSnapshotInfo | null
+  attemptedTargets?: SearchAuditTargetInfo[] | null
+  discardedCandidates?: SourceCandidateInfo[] | null
+  searchReplayTimeline?: SearchReplayTimelineItemInfo[] | null
   searchProgressSnapshots?: SearchProgressInfo[] | null
   sourceCandidates: SourceCandidateInfo[]
   selectedTargets: SelectedTargetInfo[]
@@ -50,6 +54,9 @@ export interface CollectorNodeInsight {
 
 export interface SearchReplayView {
   searchAudit: SearchAuditSnapshotInfo | null
+  attemptedTargets: SearchAuditTargetInfo[]
+  discardedCandidates: SourceCandidateInfo[]
+  timeline: SearchReplayTimelineItemInfo[]
   selectedTargets: SelectedTargetInfo[]
   sourceUrls: string[]
 }
@@ -119,15 +126,31 @@ function normalizeSearchAuditSnapshot(value: unknown): SearchAuditSnapshotInfo |
     executionPlan: normalizeSearchExecutionPlan(raw.executionPlan),
     latestProgress: raw.latestProgress || null,
     progressHistory: normalizeRecordArray<SearchProgressInfo>(raw.progressHistory),
+    replayTimeline: normalizeReplayTimeline(raw.replayTimeline),
     sourceCandidates: normalizeRecordArray<SourceCandidateInfo>(raw.sourceCandidates)
       .map(normalizeSourceCandidate)
       .filter((candidate): candidate is SourceCandidateInfo => candidate !== null),
-    selectedTargets: normalizeRecordArray<SearchAuditTargetInfo>(raw.selectedTargets).map((target) => ({
-      ...target,
-      candidate: normalizeSourceCandidate(target.candidate as unknown),
-    })),
+    attemptedTargets: normalizeSearchAuditTargets(raw.attemptedTargets),
+    selectedTargets: normalizeSearchAuditTargets(raw.selectedTargets),
+    discardedCandidates: normalizeRecordArray<SourceCandidateInfo>(raw.discardedCandidates)
+      .map(normalizeSourceCandidate)
+      .filter((candidate): candidate is SourceCandidateInfo => candidate !== null),
     sourceUrls: normalizeStringArray(raw.sourceUrls),
   }
+}
+
+function normalizeSearchAuditTargets(value: unknown): SearchAuditTargetInfo[] {
+  return normalizeRecordArray<SearchAuditTargetInfo>(value).map((target) => ({
+    ...target,
+    candidate: normalizeSourceCandidate(target.candidate as unknown),
+  }))
+}
+
+function normalizeReplayTimeline(value: unknown): SearchReplayTimelineItemInfo[] {
+  return normalizeRecordArray<SearchReplayTimelineItemInfo>(value).map((item) => ({
+    ...item,
+    sourceUrls: normalizeStringArray(item.sourceUrls),
+  }))
 }
 
 export function getNormalizedSearchAudit(
@@ -224,11 +247,27 @@ export function getNormalizedSearchReplay(
     return null
   }
   const searchAudit = normalizeSearchAuditSnapshot(replay.searchAudit)
+  const attemptedTargets = normalizeSearchAuditTargets(replay.attemptedTargets)
+  const discardedCandidates = normalizeRecordArray<SourceCandidateInfo>(replay.discardedCandidates)
+    .map(normalizeSourceCandidate)
+    .filter((candidate): candidate is SourceCandidateInfo => candidate !== null)
+  const timeline = normalizeReplayTimeline(replay.timeline)
   const selectedTargets = normalizeRecordArray<CollectorSelectedTargetSummary>(replay.selectedTargets)
     .map(normalizeSelectedTarget)
     .filter((target): target is SelectedTargetInfo => target !== null)
   return {
     searchAudit,
+    attemptedTargets: attemptedTargets.length > 0
+      ? attemptedTargets
+      : normalizeSearchAuditTargets(searchAudit?.attemptedTargets),
+    discardedCandidates: discardedCandidates.length > 0
+      ? discardedCandidates
+      : normalizeRecordArray<SourceCandidateInfo>(searchAudit?.discardedCandidates)
+        .map(normalizeSourceCandidate)
+        .filter((candidate): candidate is SourceCandidateInfo => candidate !== null),
+    timeline: timeline.length > 0
+      ? timeline
+      : normalizeReplayTimeline(searchAudit?.replayTimeline),
     selectedTargets: selectedTargets.length > 0
       ? selectedTargets
       : getSelectedTargetsFromSearchAudit(searchAudit),
@@ -249,6 +288,11 @@ function fromBackendInsight(insight: CollectorNodeInsightData | null | undefined
     .filter((target): target is SelectedTargetInfo => target !== null)
   const normalizedProgressSnapshots = normalizeRecordArray<SearchProgressInfo>(insight.searchProgressSnapshots)
   const normalizedSourceUrls = normalizeStringArray(insight.sourceUrls)
+  const normalizedAttemptedTargets = normalizeSearchAuditTargets(insight.attemptedTargets)
+  const normalizedDiscardedCandidates = normalizeRecordArray<SourceCandidateInfo>(insight.discardedCandidates)
+    .map(normalizeSourceCandidate)
+    .filter((candidate): candidate is SourceCandidateInfo => candidate !== null)
+  const normalizedSearchReplayTimeline = normalizeReplayTimeline(insight.searchReplayTimeline)
 
   const sourceCandidates = normalizedSourceCandidates.length > 0
     ? normalizedSourceCandidates
@@ -261,6 +305,17 @@ function fromBackendInsight(insight: CollectorNodeInsightData | null | undefined
   const searchProgressSnapshots = normalizedProgressSnapshots.length > 0
     ? normalizedProgressSnapshots
     : (normalizedSearchAudit?.progressHistory || [])
+  const attemptedTargets = normalizedAttemptedTargets.length > 0
+    ? normalizedAttemptedTargets
+    : normalizeSearchAuditTargets(normalizedSearchAudit?.attemptedTargets)
+  const discardedCandidates = normalizedDiscardedCandidates.length > 0
+    ? normalizedDiscardedCandidates
+    : normalizeRecordArray<SourceCandidateInfo>(normalizedSearchAudit?.discardedCandidates)
+      .map(normalizeSourceCandidate)
+      .filter((candidate): candidate is SourceCandidateInfo => candidate !== null)
+  const searchReplayTimeline = normalizedSearchReplayTimeline.length > 0
+    ? normalizedSearchReplayTimeline
+    : normalizeReplayTimeline(normalizedSearchAudit?.replayTimeline)
   const sourceUrls = normalizedSourceUrls.length > 0
     ? normalizedSourceUrls
     : normalizeStringArray(normalizedSearchAudit?.sourceUrls)
@@ -286,6 +341,9 @@ function fromBackendInsight(insight: CollectorNodeInsightData | null | undefined
     searchExecutionPlan: normalizeSearchExecutionPlan(insight.searchExecutionPlan) || normalizedSearchAudit?.executionPlan || null,
     searchExecutionTrace: insight.searchExecutionTrace || normalizedSearchAudit?.executionTrace || null,
     searchAudit: normalizedSearchAudit,
+    attemptedTargets,
+    discardedCandidates,
+    searchReplayTimeline,
     searchProgressSnapshots,
     sourceCandidates,
     selectedTargets,
@@ -324,6 +382,9 @@ export function getCollectorNodeInsight(
     searchExecutionPlan: null,
     searchExecutionTrace: null,
     searchAudit: null,
+    attemptedTargets: [],
+    discardedCandidates: [],
+    searchReplayTimeline: [],
     searchProgressSnapshots: [],
     sourceCandidates: [],
     selectedTargets: [],

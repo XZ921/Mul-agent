@@ -28,6 +28,8 @@ public class SearchExecutionTrace {
     private List<String> searchQueries;
     private List<String> fallbackOrder;
     private Integer plannedCandidateCount;
+    private Integer attemptedCandidateCount;
+    private Integer discardedCandidateCount;
     private Integer verifiedCandidateCount;
     private Integer supplementedCandidateCount;
     private Integer selectedCandidateCount;

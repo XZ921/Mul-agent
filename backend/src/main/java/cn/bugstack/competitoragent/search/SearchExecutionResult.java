@@ -21,7 +21,10 @@ public class SearchExecutionResult {
     private SearchProgressSnapshot progressSnapshot;
     private List<SearchProgressSnapshot> progressSnapshots;
     private List<SourceCandidate> sourceCandidates;
+    private List<SearchCollectionTarget> attemptedTargets;
     private List<SearchCollectionTarget> selectedTargets;
+    private List<SourceCandidate> discardedCandidates;
+    private List<SearchReplayTimelineItem> replayTimeline;
     private String reasoningSummary;
     private SearchExecutionTrace executionTrace;
     private SearchAuditSnapshot auditSnapshot;

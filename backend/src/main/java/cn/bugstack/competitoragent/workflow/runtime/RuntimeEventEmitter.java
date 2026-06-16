@@ -9,8 +9,11 @@ import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
+import cn.bugstack.competitoragent.search.SearchCollectionTarget;
 import cn.bugstack.competitoragent.search.SearchExecutionTrace;
 import cn.bugstack.competitoragent.search.SearchProgressSnapshot;
+import cn.bugstack.competitoragent.search.SearchReplayTimelineItem;
+import cn.bugstack.competitoragent.source.SourceCandidate;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -133,7 +136,23 @@ public class RuntimeEventEmitter {
                     output.get("searchProgressSnapshots"),
                     new TypeReference<List<SearchProgressSnapshot>>() {
                     }));
-            payload.setSearchAudit(convertValue(output.get("searchAudit"), SearchAuditSnapshot.class));
+            SearchAuditSnapshot searchAudit = convertValue(output.get("searchAudit"), SearchAuditSnapshot.class);
+            payload.setSearchAudit(searchAudit);
+            payload.setAttemptedTargets(resolveSearchFactList(
+                    output.get("attemptedTargets"),
+                    searchAudit == null ? null : searchAudit.getAttemptedTargets(),
+                    new TypeReference<List<SearchCollectionTarget>>() {
+                    }));
+            payload.setDiscardedCandidates(resolveSearchFactList(
+                    output.get("discardedCandidates"),
+                    searchAudit == null ? null : searchAudit.getDiscardedCandidates(),
+                    new TypeReference<List<SourceCandidate>>() {
+                    }));
+            payload.setReplayTimeline(resolveSearchFactList(
+                    firstPresent(output.get("searchReplayTimeline"), output.get("replayTimeline")),
+                    searchAudit == null ? null : searchAudit.getReplayTimeline(),
+                    new TypeReference<List<SearchReplayTimelineItem>>() {
+                    }));
             payload.setSelectedTargets(convertList(
                     output.get("selectedTargets"),
                     new TypeReference<List<CollectorSelectedTargetSummary>>() {
@@ -178,8 +197,22 @@ public class RuntimeEventEmitter {
                 || payload.getSearchExecutionTrace() != null
                 || (payload.getSearchProgressSnapshots() != null && !payload.getSearchProgressSnapshots().isEmpty())
                 || payload.getSearchAudit() != null
+                || (payload.getAttemptedTargets() != null && !payload.getAttemptedTargets().isEmpty())
+                || (payload.getDiscardedCandidates() != null && !payload.getDiscardedCandidates().isEmpty())
+                || (payload.getReplayTimeline() != null && !payload.getReplayTimeline().isEmpty())
                 || (payload.getSelectedTargets() != null && !payload.getSelectedTargets().isEmpty())
                 || (payload.getSourceUrls() != null && !payload.getSourceUrls().isEmpty());
+    }
+
+    /**
+     * 搜索事实字段优先读取节点 output 顶层，兼容历史节点只写入 searchAudit 的情况。
+     * 这样新事件保持扁平契约，旧数据也不会因为字段布局升级而丢失回放现场。
+     */
+    private <T> List<T> resolveSearchFactList(JsonNode directNode, List<T> auditFallback, TypeReference<List<T>> typeReference) {
+        if (directNode != null && !directNode.isNull()) {
+            return convertList(directNode, typeReference);
+        }
+        return auditFallback;
     }
 
     private <T> T convertValue(JsonNode node, Class<T> targetType) {
@@ -194,6 +227,10 @@ public class RuntimeEventEmitter {
             return List.of();
         }
         return objectMapper.convertValue(node, typeReference);
+    }
+
+    private JsonNode firstPresent(JsonNode primary, JsonNode fallback) {
+        return primary == null || primary.isNull() ? fallback : primary;
     }
 
     private List<String> readStringList(JsonNode node) {

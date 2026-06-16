@@ -58,6 +58,7 @@ public class CollectionTargetSelector {
         List<SourceCandidate> updatedCandidates = candidates.stream()
                 .map(candidate -> applySelectionResult(candidate, selectedUrls))
                 .toList();
+        List<SourceCandidate> discardedCandidates = resolveDiscardedCandidates(updatedCandidates, selectedUrls);
         Map<String, SourceCandidate> updatedCandidatesByUrl = indexCandidatesByNormalizedUrl(updatedCandidates);
         List<SearchCollectionTarget> refreshedTargets = selectedTargets.stream()
                 .map(target -> refreshTargetCandidate(target, updatedCandidatesByUrl))
@@ -66,12 +67,28 @@ public class CollectionTargetSelector {
         return SearchSelectionDecision.builder()
                 .selectedTargets(refreshedTargets)
                 .updatedCandidates(updatedCandidates)
+                .discardedCandidates(discardedCandidates)
                 .sourceUrls(refreshedTargets.stream()
                         .map(target -> target == null || target.getCandidate() == null ? null : target.getCandidate().getUrl())
                         .filter(StringUtils::hasText)
                         .distinct()
                         .toList())
                 .build();
+    }
+
+    /**
+     * 只把已被正式标记为 DISCARDED 的候选写入丢弃事实源。
+     * 未被选中但也未明确丢弃的候选仍保留在 sourceCandidates，避免误判。
+     */
+    private List<SourceCandidate> resolveDiscardedCandidates(List<SourceCandidate> candidates,
+                                                             Set<String> selectedUrls) {
+        if (candidates == null || candidates.isEmpty()) {
+            return List.of();
+        }
+        return candidates.stream()
+                .filter(candidate -> candidate != null && "DISCARDED".equalsIgnoreCase(candidate.getSelectionStage()))
+                .filter(candidate -> !selectedUrls.contains(normalizeUrl(candidate.getUrl())))
+                .toList();
     }
 
     /**

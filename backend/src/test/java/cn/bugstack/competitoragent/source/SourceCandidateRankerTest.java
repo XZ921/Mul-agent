@@ -13,6 +13,38 @@ class SourceCandidateRankerTest {
     private final SourceCandidateRanker ranker = new SourceCandidateRanker();
 
     @Test
+    void shouldPreferHighValueDocsPageOverGenericHomepageForDocsFamily() {
+        List<SourceCandidate> ranked = ranker.rankAndDeduplicate(List.of(
+                SourceCandidate.builder()
+                        .url("https://www.example.com")
+                        .title("Example Homepage")
+                        .sourceType("DOCS")
+                        .sourceFamilyKey("official")
+                        .discoveryMethod("SEARCH")
+                        .relevanceScore(0.92)
+                        .freshnessScore(0.80)
+                        .qualityScore(0.88)
+                        .build(),
+                SourceCandidate.builder()
+                        .url("https://docs.example.com/api/reference")
+                        .title("Example API Reference")
+                        .sourceType("DOCS")
+                        .sourceFamilyKey("official")
+                        .discoveryMethod("SEARCH")
+                        .relevanceScore(0.86)
+                        .freshnessScore(0.65)
+                        .qualityScore(0.84)
+                        .build()
+        ));
+
+        SourceCandidate docsCandidate = ranked.get(0);
+        assertEquals("https://docs.example.com/api/reference", docsCandidate.getUrl());
+        assertEquals("official", docsCandidate.getSourceFamilyKey());
+        assertTrue(docsCandidate.getQualitySignals().contains("DOCS_HIGH_VALUE_PATH"));
+        assertTrue(docsCandidate.getRankingSummary().contains("文档高价值路径"));
+    }
+
+    @Test
     void shouldDemoteUtilityPagesEvenWhenRawScoresLookHigh() {
         // 这里先把“登录页、招聘页不应因为原始分高就排到前面”固化成红灯，
         // 后续实现时需要在排序器里补充页面价值识别与淘汰原因。

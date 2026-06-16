@@ -1,5 +1,9 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.search.SearchPolicyResolver;
+import cn.bugstack.competitoragent.search.SearchProviderRole;
+import cn.bugstack.competitoragent.search.SearchSourceCatalogProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -24,11 +28,20 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
 
     private final SearchSourceProvider searchSourceProvider;
     private final SourceCandidateRanker candidateRanker;
+    private final SearchPolicyResolver searchPolicyResolver;
 
     public HeuristicSourceDiscoveryService(SearchSourceProvider searchSourceProvider,
                                            SourceCandidateRanker candidateRanker) {
+        this(searchSourceProvider, candidateRanker, new SearchPolicyResolver());
+    }
+
+    @Autowired
+    public HeuristicSourceDiscoveryService(SearchSourceProvider searchSourceProvider,
+                                           SourceCandidateRanker candidateRanker,
+                                           SearchPolicyResolver searchPolicyResolver) {
         this.searchSourceProvider = searchSourceProvider;
         this.candidateRanker = candidateRanker;
+        this.searchPolicyResolver = searchPolicyResolver == null ? new SearchPolicyResolver() : searchPolicyResolver;
     }
 
     @Override
@@ -64,12 +77,7 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
             );
             if (mergedCandidates.isEmpty()) {
                 if (shouldCreateSearchOnlyPlan(normalizedRoots, scope, searchCandidates)) {
-                    plans.add(SourcePlan.builder()
-                            .sourceType(scope)
-                            .urls(List.of())
-                            .candidates(List.of())
-                            .notes(buildSearchOnlyNotes(scope))
-                            .build());
+                    plans.add(buildSourcePlan(scope, List.of(), List.of(), buildSearchOnlyNotes(scope)));
                 }
                 continue;
             }
@@ -77,27 +85,71 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
             List<String> urls = mergedCandidates.stream()
                     .map(SourceCandidate::getUrl)
                     .toList();
-            plans.add(SourcePlan.builder()
-                    .sourceType(scope)
-                    .urls(urls)
-                    .candidates(mergedCandidates)
-                    // notes 会显示在任务节点详情中，帮助用户理解系统为何选择这些入口。
-                    .notes(buildNotes(scope, mergedCandidates, providedUrls))
-                    .build());
+            // notes 会显示在任务节点详情中，帮助用户理解系统为何选择这些入口。
+            plans.add(buildSourcePlan(scope, urls, mergedCandidates, buildNotes(scope, mergedCandidates, providedUrls)));
         }
 
         // 如果 scope 没有扩展出额外路径，至少保留根域名作为兜底采集入口。
         if (plans.isEmpty() && !normalizedRoots.isEmpty()) {
             List<SourceCandidate> fallbackCandidates = buildHeuristicCandidates("OFFICIAL", normalizedRoots, competitorName, providedUrls);
-            plans.add(SourcePlan.builder()
-                    .sourceType("OFFICIAL")
-                    .urls(fallbackCandidates.stream().map(SourceCandidate::getUrl).toList())
-                    .candidates(fallbackCandidates)
-                    .notes("Fallback to root-domain collection")
-                    .build());
+            plans.add(buildSourcePlan(
+                    "OFFICIAL",
+                    fallbackCandidates.stream().map(SourceCandidate::getUrl).toList(),
+                    fallbackCandidates,
+                    "Fallback to root-domain collection"
+            ));
         }
 
         return plans;
+    }
+
+    /**
+     * 统一构造 SourcePlan，保证预览、运行时和回放都能看到同一套数据源家族解释字段。
+     * 同时给候选补齐 sourceUrls，避免后续审计链路出现“有候选但无来源链接”的隐式缺口。
+     */
+    private SourcePlan buildSourcePlan(String scope,
+                                       List<String> urls,
+                                       List<SourceCandidate> candidates,
+                                       String notes) {
+        String familyKey = searchPolicyResolver.resolveSourceFamilyKeyForSourceType(scope);
+        SearchSourceCatalogProperties.SourceFamilyProperties family =
+                searchPolicyResolver.resolveSourceFamilyForSourceType(scope);
+        String familyRole = family == null || !StringUtils.hasText(family.getRole())
+                ? SearchProviderRole.AUXILIARY_PUBLIC.name()
+                : family.getRole();
+        List<String> normalizedUrls = urls == null ? List.of() : urls;
+        List<SourceCandidate> normalizedCandidates = candidates == null
+                ? List.of()
+                : candidates.stream()
+                .map(candidate -> stampCandidateFamily(candidate, familyKey, familyRole))
+                .toList();
+
+        return SourcePlan.builder()
+                .sourceType(scope)
+                .sourceFamilyKey(familyKey)
+                .sourceFamilyRole(familyRole)
+                .primaryTools(family == null || family.getPrimaryTools() == null ? List.of() : family.getPrimaryTools())
+                .auxiliaryTools(family == null || family.getAuxiliaryTools() == null ? List.of() : family.getAuxiliaryTools())
+                .queryTemplates(family == null || family.getQueryTemplates() == null ? List.of() : family.getQueryTemplates())
+                .urls(normalizedUrls)
+                .sourceUrls(normalizedUrls)
+                .candidates(normalizedCandidates)
+                .notes(notes)
+                .build();
+    }
+
+    private SourceCandidate stampCandidateFamily(SourceCandidate candidate, String familyKey, String familyRole) {
+        if (candidate == null) {
+            return null;
+        }
+        List<String> candidateSourceUrls = candidate.getSourceUrls() == null || candidate.getSourceUrls().isEmpty()
+                ? (StringUtils.hasText(candidate.getUrl()) ? List.of(candidate.getUrl()) : List.of())
+                : candidate.getSourceUrls();
+        return candidate.toBuilder()
+                .sourceFamilyKey(familyKey)
+                .sourceFamilyRole(familyRole)
+                .sourceUrls(candidateSourceUrls)
+                .build();
     }
 
     // 优先使用用户提供的 URL；如果没有可靠 URL，则交给后续搜索补源处理，不再盲猜域名。

@@ -98,4 +98,27 @@ class CollectionTargetSelectorTest {
         assertNotNull(decision.getSelectedTargets().get(0).getCollectedPage());
         assertEquals(List.of("https://docs.example.com/reference"), decision.getSourceUrls());
     }
+
+    @Test
+    void shouldExposeDiscardedCandidatesWhenSelectingTargets() {
+        SourceCandidate discarded = SourceCandidate.builder()
+                .url("https://www.example.com/login")
+                .selectionStage("DISCARDED")
+                .selectionReason("LOW_SIGNAL_UTILITY_PAGE")
+                .totalScore(0.99)
+                .build();
+        SourceCandidate selected = SourceCandidate.builder()
+                .url("https://docs.example.com/reference")
+                .selectionStage("VERIFIED")
+                .verified(Boolean.TRUE)
+                .totalScore(0.80)
+                .build();
+
+        SearchSelectionDecision decision = selector.selectTargets(List.of(discarded, selected), Map.of(), 1);
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        assertEquals("https://docs.example.com/reference", decision.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertEquals(List.of("https://www.example.com/login"),
+                decision.getDiscardedCandidates().stream().map(SourceCandidate::getUrl).toList());
+    }
 }

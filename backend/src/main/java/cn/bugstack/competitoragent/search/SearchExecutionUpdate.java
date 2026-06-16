@@ -22,6 +22,9 @@ public class SearchExecutionUpdate {
     private SearchProgressSnapshot latestProgress;
     private List<SearchProgressSnapshot> progressSnapshots;
     private List<SourceCandidate> sourceCandidates;
+    private List<SearchCollectionTarget> attemptedTargets;
     private List<SearchCollectionTarget> selectedTargets;
+    private List<SourceCandidate> discardedCandidates;
+    private List<SearchReplayTimelineItem> replayTimeline;
     private SearchExecutionTrace executionTrace;
 }

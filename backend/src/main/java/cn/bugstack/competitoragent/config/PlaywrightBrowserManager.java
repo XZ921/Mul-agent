@@ -10,6 +10,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -39,7 +40,10 @@ public class PlaywrightBrowserManager {
 
     @PostConstruct
     public void initialize() {
-        currentPlaywright();
+        if (!props.isStartupWarmupEnabled()) {
+            log.info("Playwright 启动期浏览器预热已关闭，将在运行期获取或定时健康检查时按需启动");
+            return;
+        }
         Browser browser = ensureBrowser("startup");
         if (browser == null) {
             log.warn("Playwright 浏览器未能在启动期完成初始化，后续会在运行期按需重试");
@@ -100,6 +104,10 @@ public class PlaywrightBrowserManager {
     public void maintainBrowserHealth() {
         Browser current = browserRef.get();
         if (current == null) {
+            if (!props.isHealthCheckWarmupEnabled()) {
+                log.debug("Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动");
+                return;
+            }
             ensureBrowser("scheduled warmup");
             return;
         }
@@ -138,38 +146,42 @@ public class PlaywrightBrowserManager {
     private Browser launchBrowser(String reason) {
         String browserType = normalizeBrowserType(props.getBrowser());
         List<LaunchAttempt> attempts = buildLaunchAttempts(browserType);
-        boolean runtimeRecreated = false;
 
         for (int index = 0; index < attempts.size(); ) {
             LaunchAttempt attempt = attempts.get(index);
-            try {
-                log.info("启动 Playwright 浏览器: browser={}, channel={}, headless={}, reason={}, attempt={}/{}",
-                        browserType,
-                        attempt.channel(),
-                        attempt.headless(),
-                        reason,
-                        index + 1,
-                        attempts.size());
-                Browser browser = doLaunch(currentPlaywright(), browserType, attempt.options());
-                if (index > 0) {
-                    log.warn("Playwright 浏览器已通过降级参数启动成功, browser={}, strategy={}, reason={}",
-                            browserType, attempt.label(), reason);
+            boolean retriedCurrentAttemptAfterRuntimeRecreate = false;
+            while (true) {
+                try {
+                    log.info("启动 Playwright 浏览器: browser={}, channel={}, executablePath={}, headless={}, reason={}, attempt={}/{}",
+                            browserType,
+                            attempt.channel(),
+                            attempt.executablePath(),
+                            attempt.headless(),
+                            reason,
+                            index + 1,
+                            attempts.size());
+                    Browser browser = doLaunch(currentPlaywright(), browserType, attempt.options());
+                    if (index > 0) {
+                        log.warn("Playwright 浏览器已通过备用参数启动成功, browser={}, strategy={}, reason={}",
+                                browserType, attempt.label(), reason);
+                    }
+                    return browser;
+                } catch (Exception e) {
+                    boolean runtimeRecreated = shouldRecreateRuntime(e) && recreatePlaywrightRuntime(reason, e);
+                    if (runtimeRecreated && !retriedCurrentAttemptAfterRuntimeRecreate) {
+                        retriedCurrentAttemptAfterRuntimeRecreate = true;
+                        continue;
+                    }
+                    if (index < attempts.size() - 1) {
+                        log.warn("启动 Playwright 浏览器失败，准备使用备用参数重试, browser={}, strategy={}, reason={}, error={}",
+                                browserType, attempt.label(), reason, e.getMessage());
+                        index++;
+                        break;
+                    }
+                    log.error("启动 Playwright 浏览器失败, browser={}, reason={}, error={}",
+                            props.getBrowser(), reason, e.getMessage(), e);
+                    return null;
                 }
-                return browser;
-            } catch (Exception e) {
-                if (!runtimeRecreated && shouldRecreateRuntime(e) && recreatePlaywrightRuntime(reason, e)) {
-                    runtimeRecreated = true;
-                    continue;
-                }
-                if (index < attempts.size() - 1) {
-                    log.warn("启动 Playwright 浏览器失败，准备降级重试, browser={}, strategy={}, reason={}, error={}",
-                            browserType, attempt.label(), reason, e.getMessage());
-                    index++;
-                    continue;
-                }
-                log.error("启动 Playwright 浏览器失败, browser={}, reason={}, error={}",
-                        props.getBrowser(), reason, e.getMessage(), e);
-                break;
             }
         }
         return null;
@@ -177,39 +189,58 @@ public class PlaywrightBrowserManager {
 
     /**
      * 浏览器启动属于整个采集与搜索链路的基础设施入口。
-     * 这里显式构造“主配置 -> 保守降级配置”的候选序列，确保：
+     * 这里显式构造“主配置 -> 真实浏览器路径备用配置”的候选序列，确保：
      * 1. 优先尊重用户当前配置；
-     * 2. 在 Edge channel 或有头模式受限时，自动尝试更稳妥的 Chromium 兜底；
-     * 3. 只有所有启动策略都失败时，才把本次启动判定为真正失败。
+     * 2. Edge channel 因运行环境缺少系统路径变量失败时，可继续使用 executablePath 启动真实 Edge；
+     * 3. 当用户已经显式配置 executablePath 且没有 channel 时，直接使用真实浏览器路径，避免先尝试 Playwright 默认缓存浏览器导致 driver 管道断开；
+     * 4. 只有所有启动策略都失败时，才把本次启动判定为真正失败。
      */
     private List<LaunchAttempt> buildLaunchAttempts(String browserType) {
         List<LaunchAttempt> attempts = new ArrayList<>();
+        String channel = normalizedChannel(browserType);
+        Path executablePath = normalizedExecutablePath(browserType);
+
+        if (executablePath != null && !StringUtils.hasText(channel)) {
+            attempts.add(new LaunchAttempt(
+                    "configured-executable-path",
+                    buildLaunchOptions(props.isHeadless(), null, executablePath),
+                    null,
+                    executablePath,
+                    props.isHeadless()
+            ));
+            return attempts;
+        }
+
         attempts.add(new LaunchAttempt(
                 "configured",
-                buildLaunchOptions(props.isHeadless(), normalizedChannel(browserType)),
-                normalizedChannel(browserType),
+                buildLaunchOptions(props.isHeadless(), channel, null),
+                channel,
+                null,
                 props.isHeadless()
         ));
 
-        if ("chromium".equals(browserType)
-                && StringUtils.hasText(normalizedChannel(browserType))
-                && !props.isHeadless()) {
+        if (executablePath != null) {
             attempts.add(new LaunchAttempt(
-                    "chromium-safe-fallback",
-                    buildLaunchOptions(true, null),
+                    "configured-executable-path",
+                    buildLaunchOptions(props.isHeadless(), null, executablePath),
                     null,
-                    true
+                    executablePath,
+                    props.isHeadless()
             ));
         }
+
         return attempts;
     }
 
-    private BrowserType.LaunchOptions buildLaunchOptions(boolean headless, String channel) {
+    private BrowserType.LaunchOptions buildLaunchOptions(boolean headless, String channel, Path executablePath) {
         BrowserType.LaunchOptions options = new BrowserType.LaunchOptions()
                 .setHeadless(headless)
                 .setTimeout((double) props.getTimeoutMillis());
         if (StringUtils.hasText(channel)) {
             options.setChannel(channel);
+        }
+        if (executablePath != null) {
+            options.setExecutablePath(executablePath);
         }
         return options;
     }
@@ -273,6 +304,14 @@ public class PlaywrightBrowserManager {
         return props.getChannel().trim();
     }
 
+    private Path normalizedExecutablePath(String browserType) {
+        if (!"chromium".equals(browserType) || !StringUtils.hasText(props.getExecutablePath())) {
+            return null;
+        }
+        // executablePath 只用于显式指定真实浏览器路径，不改变 browser/channel 的主配置语义。
+        return Path.of(props.getExecutablePath().trim());
+    }
+
     private boolean isHealthy(Browser browser) {
         if (browser == null) {
             return false;
@@ -328,6 +367,7 @@ public class PlaywrightBrowserManager {
     private record LaunchAttempt(String label,
                                  BrowserType.LaunchOptions options,
                                  String channel,
+                                 Path executablePath,
                                  boolean headless) {
     }
 }

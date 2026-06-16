@@ -24,12 +24,18 @@ public class SourceCandidate {
     private String reason;
     private String domain;
     private String publishedAt;
+    private String sourceFamilyKey;
+    private String sourceFamilyRole;
+    private String providerKey;
+    private String providerRole;
+    private List<String> sourceUrls;
     private double relevanceScore;
     private double freshnessScore;
     private double qualityScore;
     private double totalScore;
     private SourceTrustTier trustTier;
     private String trustTierLabel;
+    private List<String> qualitySignals;
     private List<String> rankingReasons;
     private String rankingSummary;
 

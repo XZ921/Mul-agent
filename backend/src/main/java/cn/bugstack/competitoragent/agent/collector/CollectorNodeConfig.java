@@ -26,6 +26,11 @@ import java.util.List;
         "competitorName",
         "competitorUrls",
         "sourceType",
+        "sourceFamilyKey",
+        "sourceFamilyRole",
+        "primaryTools",
+        "auxiliaryTools",
+        "queryTemplates",
         "sourceScope",
         "schemaName",
         "discoveryNotes",
@@ -61,6 +66,32 @@ public class CollectorNodeConfig {
      * 采集的来源分类（例如：官方渠道 "OFFICIAL"、第三方渠道 "THIRD_PARTY" 等）
      */
     private String sourceType;
+
+    /**
+     * 数据源家族 key，例如 official / news / github。
+     * 预览和运行必须共享这组字段，避免两端对同一 sourceType 作不同解释。
+     */
+    private String sourceFamilyKey;
+
+    /**
+     * 数据源家族角色，例如 PRIMARY_VERTICAL / AUXILIARY_PUBLIC。
+     */
+    private String sourceFamilyRole;
+
+    /**
+     * 当前数据源家族的主力采集工具。
+     */
+    private List<String> primaryTools;
+
+    /**
+     * 当前数据源家族的辅助或兜底工具。
+     */
+    private List<String> auxiliaryTools;
+
+    /**
+     * 当前数据源家族绑定的 query template key。
+     */
+    private List<String> queryTemplates;
 
     /**
      * 采集的范围限定（例如：限制在特定的频道、模块或板块内）

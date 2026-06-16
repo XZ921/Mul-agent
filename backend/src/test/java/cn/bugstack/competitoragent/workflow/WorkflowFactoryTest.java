@@ -80,6 +80,14 @@ class WorkflowFactoryTest {
         JsonNode config = objectMapper.readTree(collectNode.getNodeConfig());
         assertTrue(config.has("sourceCandidates"));
         assertFalse(config.get("sourceCandidates").isEmpty());
+        assertEquals("official", config.path("sourceFamilyKey").asText());
+        assertEquals("PRIMARY_VERTICAL", config.path("sourceFamilyRole").asText());
+        assertTrue(objectMapper.convertValue(config.path("primaryTools"), new TypeReference<List<String>>() {
+        }).contains("WEB_SCRAPER"));
+        assertTrue(objectMapper.convertValue(config.path("auxiliaryTools"), new TypeReference<List<String>>() {
+        }).contains("PUBLIC_SEARCH"));
+        assertTrue(objectMapper.convertValue(config.path("queryTemplates"), new TypeReference<List<String>>() {
+        }).contains("search-docs-primary"));
         assertTrue(config.has("discoveryNotes"));
         assertTrue(config.has("searchRuntimePolicy"));
         assertTrue(config.has("searchExecutionPlan"));

@@ -24,6 +24,29 @@ public class TaskNodeConfigSummary {
     @Schema(description = "Raw source type enum")
     private String sourceType;
 
+    /**
+     * 数据源家族键。
+     * 预览和运行态摘要都要显式暴露，便于验收 preview/runtime 是否使用同一套来源家族契约。
+     */
+    @Schema(description = "Source family key")
+    private String sourceFamilyKey;
+
+    /**
+     * 数据源家族角色。
+     * 用于区分业务主力来源与公网搜索辅助来源，避免只从 sourceType 反推策略语义。
+     */
+    @Schema(description = "Source family role")
+    private String sourceFamilyRole;
+
+    @Schema(description = "Primary tools declared by the source family")
+    private List<String> primaryTools;
+
+    @Schema(description = "Auxiliary tools declared by the source family")
+    private List<String> auxiliaryTools;
+
+    @Schema(description = "Query templates declared by the source family")
+    private List<String> queryTemplates;
+
     @Schema(description = "Localized source type label")
     private String sourceTypeLabel;
 

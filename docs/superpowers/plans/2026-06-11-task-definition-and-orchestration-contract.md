@@ -1404,6 +1404,19 @@ git commit -m "feat(task): preserve plan version semantics on rerun and resume"
   3. 对同一任务执行 `rerun` 或 `resume`，确认 `currentPlanVersionId` 未变化，历史快照即使缺少新字段也不会因严格 stage 校验失败。
   4. 打开任务详情接口或节点列表接口，确认节点响应携带 `TASK_NODE_RUNTIME_V1`。
 
+### 2026-06-12 验收复核
+
+- 实施：`✅`
+  复核结果：`TaskDraft -> TaskDefinition -> ExecutionPlanDefinition -> WorkflowPlan` 正式链路、`TASK_PLAN_PREVIEW_V1` / `TASK_NODE_RUNTIME_V1` 契约分离、`currentPlanVersionId/currentPlanVersion` 写入，以及 `rerun / resume` 沿用同一计划版本语义均已落地。
+  本地证据：`mvn test -pl backend '-Dtest=TaskDefinitionContractTest,TaskDefinitionAppServiceTest,TaskRuntimeCommandAppServiceTest,AnalysisTaskServiceTest,TaskControllerTest,WorkflowFactoryTest,WorkflowPlanValidatorTest,TaskPlanVersionerTest,BackendModuleDependencyTest,Phase1WorkflowIntegrationTest'`、`mvn test -pl backend '-Dtest=TaskDefinitionVerificationIntegrationTest'`，以及 `npm --prefix frontend test -- src/pages/TaskCreatePage.test.tsx src/utils/taskNodeInsights.test.ts` 已于 2026-06-12 通过。
+- 实链验证：`🟡`
+  live 验收结果：
+  1. 以真实 Spring Boot 应用启动 `test` profile，并额外传入 `--spring.autoconfigure.exclude=org.apache.rocketmq.spring.autoconfigure.RocketMQAutoConfiguration` 后，`/v3/api-docs` 可正常返回 `200`。
+  2. `POST /api/task/preview` live 返回 `TASK_PLAN_PREVIEW_V1`，并带出 `nodes[*].stageCode`、`fallbackOrder`、`configSummaryData`。
+  3. `POST /api/task/create` live 返回 `currentPlanVersionId=1`、`currentPlanVersion=1`；`GET /api/task/{id}` 与 `GET /api/task/{id}/nodes` 继续确认了计划版本与 `TASK_NODE_RUNTIME_V1`。
+  4. `POST /api/task/{id}/nodes/{nodeName}/rerun` 与 `POST /api/task/{id}/resume` live 返回 `WORKFLOW_DISPATCH_UNAVAILABLE (10008)`，错误明细为 `rocketmq.enabled=false`。
+  结论：preview / create / runtime contract 已在 live app 上成立，但 `rerun / resume` 的真实闭环被正式编排入口阻塞，尚未满足新 `specs` 对实链验证第 4 条硬条件，不能升为 `✅`。
+
 ## Rollback
 
 - 后端回滚前提：第一阶段继续保留旧 `AnalysisTask` 字段与 `TaskPlan.planSnapshot` 写入，新增 `WorkflowPlan` 字段只做增量写入，不删除旧事实来源。

@@ -6,7 +6,9 @@ import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.search.BrowserSearchRuntimeResult;
 import cn.bugstack.competitoragent.search.BrowserSearchRuntimeService;
 import cn.bugstack.competitoragent.search.SearchPolicyResolver;
+import cn.bugstack.competitoragent.search.SearchProviderRole;
 import cn.bugstack.competitoragent.search.SearchRuntimePolicy;
+import cn.bugstack.competitoragent.search.SearchSourceCatalogProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -74,9 +76,17 @@ public class BrowserPreviewSearchSourceProvider implements SearchSourceProvider 
     }
 
     private CollectorNodeConfig buildPreviewConfig(String competitorName, String scope) {
+        String familyKey = searchPolicyResolver.resolveSourceFamilyKeyForSourceType(scope);
+        SearchSourceCatalogProperties.SourceFamilyProperties family =
+                searchPolicyResolver.resolveSourceFamilyForSourceType(scope);
         return CollectorNodeConfig.builder()
                 .competitorName(competitorName)
                 .sourceType(scope)
+                .sourceFamilyKey(familyKey)
+                .sourceFamilyRole(resolveFamilyRole(family))
+                .primaryTools(family == null || family.getPrimaryTools() == null ? List.of() : family.getPrimaryTools())
+                .auxiliaryTools(family == null || family.getAuxiliaryTools() == null ? List.of() : family.getAuxiliaryTools())
+                .queryTemplates(family == null || family.getQueryTemplates() == null ? List.of() : family.getQueryTemplates())
                 .searchMode("BROWSER_ONLY")
                 // 规划期预览的职责就是复用浏览器搜索能力做候选预览，因此这里显式强制开启。
                 .browserSearchEnabled(Boolean.TRUE)
@@ -113,8 +123,28 @@ public class BrowserPreviewSearchSourceProvider implements SearchSourceProvider 
                         .selectionStage("PLANNED")
                         .selectionReason("规划期通过浏览器预览补源生成候选来源")
                         .reason(buildPreviewReason(candidate.getReason()))
+                        .sourceFamilyKey(searchPolicyResolver.resolveSourceFamilyKeyForSourceType(candidate.getSourceType()))
+                        .sourceFamilyRole(resolveFamilyRole(searchPolicyResolver.resolveSourceFamilyForSourceType(candidate.getSourceType())))
+                        .sourceUrls(resolveCandidateSourceUrls(candidate))
                         .build())
                 .toList();
+    }
+
+    private String resolveFamilyRole(SearchSourceCatalogProperties.SourceFamilyProperties family) {
+        if (family == null || !StringUtils.hasText(family.getRole())) {
+            return SearchProviderRole.AUXILIARY_PUBLIC.name();
+        }
+        return family.getRole();
+    }
+
+    private List<String> resolveCandidateSourceUrls(SourceCandidate candidate) {
+        if (candidate.getSourceUrls() != null && !candidate.getSourceUrls().isEmpty()) {
+            return candidate.getSourceUrls();
+        }
+        if (StringUtils.hasText(candidate.getUrl())) {
+            return List.of(candidate.getUrl());
+        }
+        return List.of();
     }
 
     private String buildPreviewReason(String originalReason) {

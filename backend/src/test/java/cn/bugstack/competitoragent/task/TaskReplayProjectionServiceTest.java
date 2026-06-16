@@ -120,6 +120,79 @@ class TaskReplayProjectionServiceTest {
     }
 
     @Test
+    void shouldExposeSearchReplayTimelineAndDiscardedCandidates() {
+        TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
+        TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);
+        TaskNodeRepository taskNodeRepository = mock(TaskNodeRepository.class);
+        TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository = mock(TaskNodeExecutionAttemptRepository.class);
+        MemorySnapshotRepository memorySnapshotRepository = mock(MemorySnapshotRepository.class);
+        AgentExecutionLogRepository agentExecutionLogRepository = mock(AgentExecutionLogRepository.class);
+        RecoveryCheckpointService recoveryCheckpointService = mock(RecoveryCheckpointService.class);
+        TaskRecoveryService taskRecoveryService = mock(TaskRecoveryService.class);
+
+        TaskNode collectNode = TaskNode.builder()
+                .id(1L)
+                .taskId(42L)
+                .nodeName("collect_sources_docs")
+                .displayName("collect_sources_docs")
+                .agentType(AgentType.COLLECTOR)
+                .status(TaskNodeStatus.SUCCESS)
+                .planVersionId(31L)
+                .branchKey("root")
+                .outputData("""
+                        {
+                          "searchAudit":{
+                            "executionTrace":{"recoveryCheckpoint":"SELECT_TARGETS"},
+                            "attemptedTargets":[{"candidate":{"url":"https://docs.example.com/reference"}}],
+                            "discardedCandidates":[{"url":"https://www.example.com/login","selectionReason":"LOW_SIGNAL_UTILITY_PAGE"}],
+                            "replayTimeline":[{"stepCode":"SELECT_TARGETS","status":"SUCCESS","sourceUrls":["https://docs.example.com/reference"]}],
+                            "sourceUrls":["https://docs.example.com/reference"]
+                          },
+                          "sourceUrls":["https://docs.example.com/reference"]
+                        }
+                        """)
+                .build();
+
+        when(taskPlanRepository.findByTaskIdOrderByPlanVersionAsc(42L)).thenReturn(List.of());
+        when(taskPlanRepository.findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(42L)).thenReturn(Optional.empty());
+        when(taskWorkflowEventRepository.findAll()).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(42L)).thenReturn(List.of(collectNode));
+        when(taskNodeExecutionAttemptRepository.findAll()).thenReturn(List.of());
+        when(memorySnapshotRepository.findByTaskIdOrderByIdDesc(42L)).thenReturn(List.of());
+        when(agentExecutionLogRepository.findByTaskIdOrderByCreatedAtAsc(42L)).thenReturn(List.of());
+        when(recoveryCheckpointService.listTaskCheckpoints(42L)).thenReturn(List.of());
+        when(taskRecoveryService.buildRecoveryAdvice(42L)).thenReturn(TaskRecoveryAdvice.builder()
+                .recommendedAction("OBSERVE_ONLY")
+                .summary("none")
+                .blockingNodeNames(List.of())
+                .resumeSupported(false)
+                .sourceUrls(List.of())
+                .build());
+
+        ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        TaskReplayProjectionService service = new TaskReplayProjectionService(
+                taskPlanRepository,
+                taskWorkflowEventRepository,
+                taskNodeRepository,
+                taskNodeExecutionAttemptRepository,
+                memorySnapshotRepository,
+                agentExecutionLogRepository,
+                recoveryCheckpointService,
+                taskRecoveryService,
+                objectMapper
+        );
+
+        TaskReplayResponse response = service.getTaskReplay(42L);
+        JsonNode payload = objectMapper.valueToTree(response);
+
+        assertThat(payload.at("/searchReplays/0/searchAudit/attemptedTargets")).hasSize(1);
+        assertThat(payload.at("/searchReplays/0/searchAudit/discardedCandidates")).hasSize(1);
+        assertThat(payload.at("/searchReplays/0/attemptedTargets")).hasSize(1);
+        assertThat(payload.at("/searchReplays/0/discardedCandidates")).hasSize(1);
+        assertThat(payload.at("/searchReplays/0/timeline/0/stepCode").asText()).isEqualTo("SELECT_TARGETS");
+    }
+
+    @Test
     void shouldProjectMainReplayChainAndReserveConversationAndExportEntryPoints() {
         TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
         TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);

@@ -227,6 +227,73 @@ class SearchExecutionCoordinatorTest {
     }
 
     @Test
+    void shouldCarryAttemptedDiscardedAndTimelineIntoExecutionResultAndAudit() {
+        CandidateVerifier candidateVerifier = mock(CandidateVerifier.class);
+        BrowserSearchRuntimeService browserRuntimeService = mock(BrowserSearchRuntimeService.class);
+        SearchSourceProvider sourceProvider = mock(SearchSourceProvider.class);
+        SearchExecutionCoordinator searchCoordinator = new SearchExecutionCoordinator(
+                candidateVerifier,
+                browserRuntimeService,
+                sourceProvider,
+                new SourceCandidateRanker(),
+                new CollectionTargetSelector(),
+                new SearchPolicyResolver()
+        );
+        SourceCandidate plannedDoc = SourceCandidate.builder()
+                .url("https://docs.example.com/reference")
+                .title("Reference")
+                .sourceType("DOCS")
+                .selectionStage("VERIFIED")
+                .verified(Boolean.TRUE)
+                .relevanceScore(0.9)
+                .freshnessScore(0.8)
+                .qualityScore(0.9)
+                .build();
+        SourceCandidate utilityPage = SourceCandidate.builder()
+                .url("https://www.example.com/login")
+                .title("Login")
+                .sourceType("DOCS")
+                .selectionStage("DISCARDED")
+                .selectionReason("LOW_SIGNAL_UTILITY_PAGE")
+                .relevanceScore(0.7)
+                .freshnessScore(0.6)
+                .qualityScore(0.1)
+                .build();
+        SearchCollectionTarget attemptedDoc = SearchCollectionTarget.builder()
+                .candidate(plannedDoc)
+                .build();
+
+        when(candidateVerifier.verify(eq("Example"), eq("DOCS"), any()))
+                .thenReturn(CandidateVerificationResult.builder()
+                        .updatedCandidates(List.of(plannedDoc, utilityPage))
+                        .attemptedTargets(List.of(attemptedDoc))
+                        .verifiedTargets(List.of(attemptedDoc))
+                        .build());
+
+        SearchExecutionResult result = searchCoordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Example")
+                .sourceType("DOCS")
+                .sourceCandidates(List.of(plannedDoc, utilityPage))
+                .verifyCandidates(Boolean.TRUE)
+                .browserSearchEnabled(Boolean.TRUE)
+                .searchMode("HYBRID")
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertEquals(1, result.getAttemptedTargets().size());
+        assertEquals(1, result.getDiscardedCandidates().size());
+        assertEquals("https://www.example.com/login", result.getDiscardedCandidates().get(0).getUrl());
+        assertFalse(result.getReplayTimeline().isEmpty());
+        assertEquals("SELECT_TARGETS", result.getReplayTimeline().get(result.getReplayTimeline().size() - 1).getStepCode());
+        assertEquals(1, result.getExecutionTrace().getAttemptedCandidateCount());
+        assertEquals(1, result.getExecutionTrace().getDiscardedCandidateCount());
+        assertEquals(1, result.getAuditSnapshot().getAttemptedTargets().size());
+        assertEquals(1, result.getAuditSnapshot().getDiscardedCandidates().size());
+        assertFalse(result.getAuditSnapshot().getReplayTimeline().isEmpty());
+    }
+
+    @Test
     void shouldKeepPlannedCandidatesWhenRuntimeSupplementReturnsEmpty() {
         when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
                 .candidates(List.of())

@@ -223,6 +223,26 @@ describe('getCollectorNodeInsight', () => {
               title: 'Notion AI',
             },
           ],
+          attemptedTargets: [
+            {
+              candidate: {
+                url: 'https://www.notion.so/product/ai',
+              },
+            },
+          ],
+          discardedCandidates: [
+            {
+              url: 'https://www.notion.so/login',
+              selectionReason: 'LOW_SIGNAL_UTILITY_PAGE',
+            },
+          ],
+          replayTimeline: [
+            {
+              stepCode: 'SELECT_TARGETS',
+              status: 'SUCCESS',
+              sourceUrls: ['https://www.notion.so/product/ai'],
+            },
+          ],
           selectedTargets: [
             {
               candidate: {
@@ -250,6 +270,9 @@ describe('getCollectorNodeInsight', () => {
     expect(insight.searchProgress?.currentStep).toBe('SELECT_TARGETS')
     expect(insight.searchExecutionPlan?.steps).toHaveLength(1)
     expect(insight.sourceCandidates[0]?.url).toBe('https://www.notion.so/product/ai')
+    expect(insight.attemptedTargets?.[0]?.candidate?.url).toBe('https://www.notion.so/product/ai')
+    expect(insight.discardedCandidates?.[0]?.url).toBe('https://www.notion.so/login')
+    expect(insight.searchReplayTimeline?.[0]?.stepCode).toBe('SELECT_TARGETS')
     expect(insight.selectedTargets[0]?.url).toBe('https://www.notion.so/product/ai')
     expect(insight.selectedTargets[0]?.hasPrefetchedPage).toBe(true)
     expect(insight.sourceUrls).toEqual(['https://www.notion.so/product/ai'])

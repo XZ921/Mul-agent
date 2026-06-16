@@ -239,6 +239,10 @@ public class SearchExecutionCoordinator {
         allCandidates = selectionDecision.getUpdatedCandidates() == null
                 ? allCandidates
                 : selectionDecision.getUpdatedCandidates();
+        List<SearchCollectionTarget> attemptedTargetList = new ArrayList<>(attemptedTargets.values());
+        List<SourceCandidate> discardedCandidates = selectionDecision.getDiscardedCandidates() == null
+                ? List.of()
+                : selectionDecision.getDiscardedCandidates();
         markStepSuccess(executionPlan, "SELECT_TARGETS",
                 "已选出 " + selectedTargets.size() + " 条正式采集目标");
         appendSnapshotAndPublish(progressSnapshots, executionPlan, "SELECT_TARGETS",
@@ -251,6 +255,8 @@ public class SearchExecutionCoordinator {
                 .searchQueries(executionPlan.getSearchQueries() == null ? List.of() : executionPlan.getSearchQueries())
                 .fallbackOrder(executionPlan.getFallbackOrder() == null ? List.of() : executionPlan.getFallbackOrder())
                 .plannedCandidateCount(config.getSourceCandidates() == null ? 0 : config.getSourceCandidates().size())
+                .attemptedCandidateCount(attemptedTargetList.size())
+                .discardedCandidateCount(discardedCandidates.size())
                 .verifiedCandidateCount(verifiedCount)
                 .supplementedCandidateCount(supplementedCount)
                 .supplementMethod(supplementMethod)
@@ -277,6 +283,13 @@ public class SearchExecutionCoordinator {
                 .generatedAt(LocalDateTime.now())
                 .build();
         publishProgress(progressListener, executionPlan, progressSnapshots, allCandidates, selectedTargets, executionTrace);
+        List<SearchReplayTimelineItem> replayTimeline = buildReplayTimeline(
+                progressSnapshots,
+                allCandidates,
+                attemptedTargetList,
+                selectedTargets,
+                discardedCandidates,
+                executionTrace.getSelectedUrls());
 
         SearchProgressSnapshot latestProgress = progressSnapshots.isEmpty()
                 ? buildProgressSnapshot(executionPlan, "LOAD_CANDIDATES", "搜索计划已初始化", false, null)
@@ -298,7 +311,10 @@ public class SearchExecutionCoordinator {
                 .progressSnapshot(latestProgress)
                 .progressSnapshots(progressSnapshots)
                 .sourceCandidates(allCandidates)
+                .attemptedTargets(attemptedTargetList)
                 .selectedTargets(selectedTargets)
+                .discardedCandidates(discardedCandidates)
+                .replayTimeline(replayTimeline)
                 .reasoningSummary(reasoningSummary)
                 .executionTrace(executionTrace)
                 .auditSnapshot(SearchAuditSnapshot.builder()
@@ -306,8 +322,11 @@ public class SearchExecutionCoordinator {
                         .executionPlan(executionPlan)
                         .latestProgress(latestProgress)
                         .progressHistory(progressSnapshots)
+                        .replayTimeline(replayTimeline)
                         .sourceCandidates(allCandidates)
+                        .attemptedTargets(attemptedTargetList)
                         .selectedTargets(selectedTargets)
+                        .discardedCandidates(discardedCandidates)
                         .sourceUrls(executionTrace.getSelectedUrls())
                         .build())
                 .build();
@@ -322,7 +341,11 @@ public class SearchExecutionCoordinator {
 
     private Map<String, SearchCollectionTarget> resolveAttemptedTargetsFromCheckpoint(SearchAuditSnapshot checkpoint) {
         Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
-        if (checkpoint == null || checkpoint.getSelectedTargets() == null || checkpoint.getSelectedTargets().isEmpty()) {
+        if (checkpoint == null) {
+            return attemptedTargets;
+        }
+        if (checkpoint.getAttemptedTargets() != null && !checkpoint.getAttemptedTargets().isEmpty()) {
+            appendAttemptedTargets(attemptedTargets, checkpoint.getAttemptedTargets());
             return attemptedTargets;
         }
         appendAttemptedTargets(attemptedTargets, checkpoint.getSelectedTargets());
@@ -820,6 +843,46 @@ public class SearchExecutionCoordinator {
                 .degradationReason(degradationReason)
                 .updatedAt(LocalDateTime.now())
                 .build();
+    }
+
+    /**
+     * 把搜索进度历史投影成稳定 replay 时间线。
+     * 候选、尝试、选中、丢弃数量来自最终事实源，保证回放时每个步骤都能解释当前搜索现场规模。
+     */
+    private List<SearchReplayTimelineItem> buildReplayTimeline(List<SearchProgressSnapshot> progressSnapshots,
+                                                               List<SourceCandidate> sourceCandidates,
+                                                               List<SearchCollectionTarget> attemptedTargets,
+                                                               List<SearchCollectionTarget> selectedTargets,
+                                                               List<SourceCandidate> discardedCandidates,
+                                                               List<String> sourceUrls) {
+        if (progressSnapshots == null || progressSnapshots.isEmpty()) {
+            return List.of();
+        }
+        int candidateCount = sourceCandidates == null ? 0 : sourceCandidates.size();
+        int attemptedCount = attemptedTargets == null ? 0 : attemptedTargets.size();
+        int selectedCount = selectedTargets == null ? 0 : selectedTargets.size();
+        int discardedCount = discardedCandidates == null ? 0 : discardedCandidates.size();
+        List<String> stableSourceUrls = sourceUrls == null ? List.of() : sourceUrls;
+        return progressSnapshots.stream()
+                .filter(snapshot -> snapshot != null && StringUtils.hasText(snapshot.getCurrentStepCode()))
+                .map(snapshot -> SearchReplayTimelineItem.builder()
+                        .stepCode(snapshot.getCurrentStepCode())
+                        .stepName(snapshot.getCurrentStep())
+                        .status(snapshot.getStatus())
+                        .message(snapshot.getMessage())
+                        .completedSteps(snapshot.getCompletedSteps())
+                        .totalSteps(snapshot.getTotalSteps())
+                        .progressPercent(snapshot.getProgressPercent())
+                        .candidateCount(candidateCount)
+                        .attemptedCount(attemptedCount)
+                        .selectedCount(selectedCount)
+                        .discardedCount(discardedCount)
+                        .degraded(snapshot.getDegraded())
+                        .degradationReason(snapshot.getDegradationReason())
+                        .sourceUrls(stableSourceUrls)
+                        .updatedAt(snapshot.getUpdatedAt())
+                        .build())
+                .toList();
     }
 
     private SearchRuntimePolicy resolveRuntimePolicy(CollectorNodeConfig config) {

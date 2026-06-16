@@ -300,7 +300,17 @@ class AnalysisTaskServiceTest {
                         .displayName("Notion AI - DOCS采集")
                         .agentType(AgentType.COLLECTOR.name())
                         .dependsOn(List.of())
-                        .nodeConfig("{\"competitorName\":\"Notion AI\",\"sourceType\":\"DOCS\"}")
+                        .nodeConfig("""
+                                {
+                                  "competitorName":"Notion AI",
+                                  "sourceType":"DOCS",
+                                  "sourceFamilyKey":"official",
+                                  "sourceFamilyRole":"PRIMARY_VERTICAL",
+                                  "primaryTools":["WEB_SCRAPER","JINA_READER"],
+                                  "auxiliaryTools":["PUBLIC_SEARCH"],
+                                  "queryTemplates":["search-docs-primary"]
+                                }
+                                """)
                         .executionOrder(0)
                         .build()))
                 .build();
@@ -317,6 +327,11 @@ class AnalysisTaskServiceTest {
         TaskPlanPreviewResponse response = taskService.previewWorkflow(request);
 
         assertEquals(1, response.getNodes().size());
+        assertEquals("official", response.getNodes().get(0).getConfigSummaryData().getSourceFamilyKey());
+        assertEquals("PRIMARY_VERTICAL", response.getNodes().get(0).getConfigSummaryData().getSourceFamilyRole());
+        assertEquals(List.of("WEB_SCRAPER", "JINA_READER"), response.getNodes().get(0).getConfigSummaryData().getPrimaryTools());
+        assertEquals(List.of("PUBLIC_SEARCH"), response.getNodes().get(0).getConfigSummaryData().getAuxiliaryTools());
+        assertEquals(List.of("search-docs-primary"), response.getNodes().get(0).getConfigSummaryData().getQueryTemplates());
         verify(workflowFactory, times(1)).buildPreviewPlan(any(AnalysisTask.class));
         verify(workflowFactory, never()).buildPlan(any(AnalysisTask.class));
     }

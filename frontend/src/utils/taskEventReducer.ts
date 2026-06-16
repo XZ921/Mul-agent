@@ -328,6 +328,9 @@ function applySearchProgressEvent(
       const nextSearchExecutionTrace =
         payload.searchExecutionTrace ?? collectorInsight.searchExecutionTrace ?? null
       const nextSearchAudit = payload.searchAudit ?? collectorInsight.searchAudit ?? null
+      const nextAttemptedTargets = payload.attemptedTargets ?? collectorInsight.attemptedTargets ?? []
+      const nextDiscardedCandidates = payload.discardedCandidates ?? collectorInsight.discardedCandidates ?? []
+      const nextSearchReplayTimeline = payload.replayTimeline ?? collectorInsight.searchReplayTimeline ?? []
       const nextSearchProgressSnapshots =
         payload.searchProgressSnapshots ?? collectorInsight.searchProgressSnapshots ?? []
       const nextSelectedTargets = payload.selectedTargets ?? collectorInsight.selectedTargets ?? []
@@ -339,6 +342,9 @@ function applySearchProgressEvent(
       if (nextSearchProgress === collectorInsight.searchProgress
         && nextSearchExecutionTrace === collectorInsight.searchExecutionTrace
         && nextSearchAudit === collectorInsight.searchAudit
+        && nextAttemptedTargets === collectorInsight.attemptedTargets
+        && nextDiscardedCandidates === collectorInsight.discardedCandidates
+        && nextSearchReplayTimeline === collectorInsight.searchReplayTimeline
         && nextSearchProgressSnapshots === collectorInsight.searchProgressSnapshots
         && nextSelectedTargets === collectorInsight.selectedTargets
         && nextSourceUrls === collectorInsight.sourceUrls
@@ -353,6 +359,9 @@ function applySearchProgressEvent(
           searchProgress: nextSearchProgress,
           searchExecutionTrace: nextSearchExecutionTrace,
           searchAudit: nextSearchAudit,
+          attemptedTargets: nextAttemptedTargets,
+          discardedCandidates: nextDiscardedCandidates,
+          searchReplayTimeline: nextSearchReplayTimeline,
           searchProgressSnapshots: nextSearchProgressSnapshots,
           selectedTargets: nextSelectedTargets,
           sourceUrls: nextSourceUrls,
@@ -710,6 +719,17 @@ function mergeCollectorOutputIntoNode(node: TaskNodeInfo, outputData?: string | 
         (output.searchExecutionTrace as CollectorNodeInsightData['searchExecutionTrace']) ?? collectorInsight.searchExecutionTrace ?? null,
       searchAudit:
         (output.searchAudit as CollectorNodeInsightData['searchAudit']) ?? collectorInsight.searchAudit ?? null,
+      attemptedTargets: Array.isArray(output.attemptedTargets)
+        ? normalizeObjectArray<NonNullable<CollectorNodeInsightData['attemptedTargets']>[number]>(output.attemptedTargets)
+        : collectorInsight.attemptedTargets,
+      discardedCandidates: Array.isArray(output.discardedCandidates)
+        ? normalizeObjectArray<NonNullable<CollectorNodeInsightData['discardedCandidates']>[number]>(output.discardedCandidates)
+        : collectorInsight.discardedCandidates,
+      searchReplayTimeline: Array.isArray(output.searchReplayTimeline)
+        ? normalizeObjectArray<NonNullable<CollectorNodeInsightData['searchReplayTimeline']>[number]>(output.searchReplayTimeline)
+        : Array.isArray(output.replayTimeline)
+          ? normalizeObjectArray<NonNullable<CollectorNodeInsightData['searchReplayTimeline']>[number]>(output.replayTimeline)
+          : collectorInsight.searchReplayTimeline,
       searchProgressSnapshots:
         (output.searchProgressSnapshots as CollectorNodeInsightData['searchProgressSnapshots'])
         ?? collectorInsight.searchProgressSnapshots
@@ -748,6 +768,9 @@ function ensureCollectorInsight(node: TaskNodeInfo): CollectorNodeInsightData {
     searchExecutionPlan: existing?.searchExecutionPlan ?? null,
     searchExecutionTrace: existing?.searchExecutionTrace ?? null,
     searchAudit: existing?.searchAudit ?? null,
+    attemptedTargets: existing?.attemptedTargets ?? [],
+    discardedCandidates: existing?.discardedCandidates ?? [],
+    searchReplayTimeline: existing?.searchReplayTimeline ?? [],
     searchProgressSnapshots: existing?.searchProgressSnapshots ?? [],
     sourceCandidates: existing?.sourceCandidates ?? [],
     selectedTargets: existing?.selectedTargets ?? [],
@@ -793,6 +816,13 @@ function normalizeControlState(
 
 function normalizeArray(value: unknown, fallback: string[]) {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : fallback
+}
+
+function normalizeObjectArray<T extends object>(value: unknown): T[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.filter((item): item is T => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
 }
 
 function uniqueStrings(values: Array<string | null | undefined>) {

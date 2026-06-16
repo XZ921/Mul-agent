@@ -21,5 +21,6 @@ public class SearchSelectionDecision {
 
     private List<SearchCollectionTarget> selectedTargets;
     private List<SourceCandidate> updatedCandidates;
+    private List<SourceCandidate> discardedCandidates;
     private List<String> sourceUrls;
 }
