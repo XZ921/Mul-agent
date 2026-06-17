@@ -319,6 +319,52 @@ class SchemaExtractorAgentTest {
         assertTrue(pricingBundle.path("gapSummary").asText().contains("pricing"));
     }
 
+    @Test
+    void shouldIgnoreUnknownPricingFieldsWhenBuildingKnowledgeDraft() {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Feishu")
+                        .evidenceId("T0001-COLLECT-001")
+                        .title("Pricing Docs")
+                        .url("https://example.com/pricing")
+                        .fullContent("pricing content")
+                        .contentSnippet("pricing snippet")
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://example.com",
+                          "summary": "ok",
+                          "positioning": "team collaboration",
+                          "targetUsers": ["teams"],
+                          "coreFeatures": [],
+                          "pricing": {
+                            "model": "seat-based",
+                            "hasFreeTier": true,
+                            "plans": ["free", "pro"],
+                            "sourceUrls": ["https://example.com/pricing"]
+                          },
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://example.com/pricing"]
+                        }
+                        """);
+
+        // 真实链路里 LLM 可能为 pricing 附带当前 DTO 尚未声明的字段，提取阶段不应因此整节点失败。
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        verify(knowledgeRepository, times(1)).save(any());
+    }
+
     private JsonNode findBundle(JsonNode bundles, String sectionKey) {
         for (JsonNode bundle : bundles) {
             if (sectionKey.equals(bundle.path("sectionKey").asText())) {

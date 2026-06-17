@@ -34,21 +34,29 @@ public class GithubApiCollectionExecutor extends ApiDataCollectionExecutor {
         String[] repoRef = parseRepoLocator(taskPackage == null ? null : taskPackage.getResourceLocator());
         if (repoRef == null) {
             return CollectionExecutionResult.builder()
+                    .taskPackageKey(taskPackage == null ? null : taskPackage.getPackageKey())
+                    .targetIndex(taskPackage == null ? null : taskPackage.getTargetIndex())
                     .executorType(executorType())
                     .success(false)
+                    .status("FAILED")
                     .resourceLocator(taskPackage == null ? null : taskPackage.getResourceLocator())
                     .sourceUrls(taskPackage == null ? List.of() : taskPackage.getSourceUrls())
                     .errorMessage("invalid github resource locator")
-                    .build();
+                    .build()
+                    .normalize();
         }
         if (githubApiClient == null) {
             return CollectionExecutionResult.builder()
+                    .taskPackageKey(taskPackage.getPackageKey())
+                    .targetIndex(taskPackage.getTargetIndex())
                     .executorType(executorType())
                     .success(false)
+                    .status("FAILED")
                     .resourceLocator(taskPackage.getResourceLocator())
                     .sourceUrls(taskPackage.getSourceUrls())
                     .errorMessage("github api client unavailable")
-                    .build();
+                    .build()
+                    .normalize();
         }
         try {
             String owner = repoRef[0];
@@ -67,22 +75,30 @@ public class GithubApiCollectionExecutor extends ApiDataCollectionExecutor {
 
             String sourceUrl = repository.path("html_url").asText();
             return CollectionExecutionResult.builder()
+                    .taskPackageKey(taskPackage.getPackageKey())
+                    .targetIndex(taskPackage.getTargetIndex())
                     .executorType(executorType())
                     .success(true)
+                    .status("SUCCESS")
                     .resourceLocator(taskPackage.getResourceLocator())
                     .title(repository.path("full_name").asText())
                     .content(repository.path("description").asText())
                     .sourceUrls(StringUtils.hasText(sourceUrl) ? List.of(sourceUrl) : taskPackage.getSourceUrls())
                     .structuredPayload(payload)
-                    .build();
+                    .build()
+                    .normalize();
         } catch (RuntimeException exception) {
             return CollectionExecutionResult.builder()
+                    .taskPackageKey(taskPackage.getPackageKey())
+                    .targetIndex(taskPackage.getTargetIndex())
                     .executorType(executorType())
                     .success(false)
+                    .status("FAILED")
                     .resourceLocator(taskPackage.getResourceLocator())
                     .sourceUrls(taskPackage.getSourceUrls())
                     .errorMessage(exception.getMessage())
-                    .build();
+                    .build()
+                    .normalize();
         }
     }
 

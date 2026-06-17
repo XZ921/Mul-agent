@@ -82,6 +82,19 @@ class TaskReplayProjectionServiceTest {
                             "selectedTargets":[{"candidate":{"url":"https://docs.notion.so/reference"}}],
                             "sourceUrls":["https://docs.notion.so/reference"]
                           },
+                          "collectionAudit":{
+                            "summary":{
+                              "totalPackages":1,
+                              "successCount":1,
+                              "status":"SUCCESS",
+                              "recoveryCheckpoint":"collect_sources_docs#001",
+                              "sourceUrls":["https://docs.notion.so/reference/raw"]
+                            },
+                            "status":"SUCCESS",
+                            "replayTimeline":[{"taskPackageKey":"collect_sources_docs#001","targetIndex":1,"status":"SUCCESS","executorType":"WEB_PAGE","sourceUrls":["https://docs.notion.so/reference/raw"]}],
+                            "recoveryCheckpoint":"collect_sources_docs#001",
+                            "sourceUrls":["https://docs.notion.so/reference/raw"]
+                          },
                           "selectedTargets":[{"url":"https://docs.notion.so/reference","title":"Reference"}],
                           "sourceUrls":["https://docs.notion.so/reference"]
                         }
@@ -115,11 +128,18 @@ class TaskReplayProjectionServiceTest {
         TaskReplayResponse response = service.getTaskReplay(42L);
 
         assertTrue(objectMapper.valueToTree(response).has("searchReplays"));
+        assertTrue(objectMapper.valueToTree(response).has("collectionReplays"));
         assertEquals("collect_sources_docs", objectMapper.valueToTree(response).at("/searchReplays/0/nodeName").asText());
         assertEquals("SELECT_TARGETS",
                 objectMapper.valueToTree(response).at("/searchReplays/0/searchAudit/executionTrace/recoveryCheckpoint").asText());
         assertEquals(1,
                 objectMapper.valueToTree(response).at("/searchReplays/0/searchAuditSummary/selectedCount").asInt());
+        assertEquals("collect_sources_docs",
+                objectMapper.valueToTree(response).at("/collectionReplays/0/nodeName").asText());
+        assertEquals("SUCCESS",
+                objectMapper.valueToTree(response).at("/collectionReplays/0/collectionAuditSummary/status").asText());
+        assertEquals("https://docs.notion.so/reference/raw",
+                objectMapper.valueToTree(response).at("/sourceUrls/1").asText());
     }
 
     @Test

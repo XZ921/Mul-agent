@@ -132,8 +132,11 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
             JsonNode pageMetadata = readMetadata(page.getMetadata());
             boolean success = page.isSuccess();
             return CollectionExecutionResult.builder()
+                    .taskPackageKey(taskPackage.getPackageKey())
+                    .targetIndex(taskPackage.getTargetIndex())
                     .executorType(executorType())
                     .success(success)
+                    .status(success ? "SUCCESS" : "FAILED")
                     .resourceLocator(taskPackage.getResourceLocator())
                     .title(page.getTitle())
                     .content(page.getContent())
@@ -145,7 +148,8 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
                     .structuredBlocks(resolveStructuredBlocks(pageMetadata))
                     .collectedAt(resolveCollectedAt(pageMetadata, startedAt))
                     .durationMillis(resolveDurationMillis(pageMetadata, startedAt))
-                    .build();
+                    .build()
+                    .normalize();
         } catch (RuntimeException exception) {
             return buildFailureResult(taskPackage,
                     resolveFailureKind(lightweightResult, exception.getMessage()),
@@ -162,8 +166,11 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
                                                            PageContentExtractionResult lightweightResult,
                                                            long startedAt) {
         return CollectionExecutionResult.builder()
+                .taskPackageKey(taskPackage.getPackageKey())
+                .targetIndex(taskPackage.getTargetIndex())
                 .executorType(executorType())
                 .success(true)
+                .status("SUCCESS")
                 .resourceLocator(taskPackage.getResourceLocator())
                 .title(lightweightResult.getTitle())
                 .content(lightweightResult.getMainContent())
@@ -177,7 +184,8 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
                 .durationMillis(lightweightResult.getDurationMillis() == null
                         ? Math.max(0L, System.currentTimeMillis() - startedAt)
                         : lightweightResult.getDurationMillis())
-                .build();
+                .build()
+                .normalize();
     }
 
     /**
@@ -339,8 +347,11 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
                                                          List<String> qualitySignals,
                                                          long startedAt) {
         return CollectionExecutionResult.builder()
+                .taskPackageKey(taskPackage == null ? null : taskPackage.getPackageKey())
+                .targetIndex(taskPackage == null ? null : taskPackage.getTargetIndex())
                 .executorType(executorType())
                 .success(false)
+                .status("FAILED")
                 .resourceLocator(taskPackage == null ? null : taskPackage.getResourceLocator())
                 .sourceUrls(taskPackage == null ? List.of() : resolveSourceUrls(taskPackage))
                 .errorMessage(errorMessage)
@@ -350,6 +361,7 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
                 .structuredBlocks(List.of())
                 .collectedAt(Instant.now())
                 .durationMillis(Math.max(0L, System.currentTimeMillis() - startedAt))
-                .build();
+                .build()
+                .normalize();
     }
 }

@@ -1,5 +1,9 @@
 package cn.bugstack.competitoragent.task;
 
+import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
+import cn.bugstack.competitoragent.collection.CollectionReplayTimelineItem;
+import cn.bugstack.competitoragent.model.dto.CollectionAuditSummary;
+import cn.bugstack.competitoragent.model.dto.CollectionReplaySnapshotResponse;
 import cn.bugstack.competitoragent.model.dto.RecoveryCheckpointResponse;
 import cn.bugstack.competitoragent.model.dto.CollectorSelectedTargetSummary;
 import cn.bugstack.competitoragent.model.dto.ReplayNodeSummary;
@@ -126,12 +130,14 @@ public class TaskReplayProjectionService {
         List<ReplayNodeSummary> nodeSummaries = buildNodeSummaries(taskNodes, executionAttempts, memorySnapshots, checkpoints);
         TaskRecoveryAdvice recoveryAdvice = taskRecoveryService.buildRecoveryAdvice(taskId);
         List<SearchReplaySnapshotResponse> searchReplays = buildSearchReplays(taskNodes, taskPlanMap);
+        List<CollectionReplaySnapshotResponse> collectionReplays = buildCollectionReplays(taskNodes, taskPlanMap);
         List<String> aggregatedSourceUrls = aggregateReplaySourceUrls(
                 timeline,
                 nodeSummaries,
                 recoveryAdvice,
                 checkpoints,
-                searchReplays);
+                searchReplays,
+                collectionReplays);
 
         return TaskReplayResponse.builder()
                 .taskId(taskId)
@@ -142,6 +148,7 @@ public class TaskReplayProjectionService {
                 .recoveryCheckpoints(checkpoints)
                 .planVersions(replayPlanVersions)
                 .searchReplays(searchReplays)
+                .collectionReplays(collectionReplays)
                 .integrationEntryPoints(buildIntegrationEntryPoints(aggregatedSourceUrls))
                 .sourceUrls(aggregatedSourceUrls)
                 .build();
@@ -389,7 +396,8 @@ public class TaskReplayProjectionService {
                                                    List<ReplayNodeSummary> nodeSummaries,
                                                    TaskRecoveryAdvice recoveryAdvice,
                                                    List<RecoveryCheckpointResponse> checkpoints,
-                                                   List<SearchReplaySnapshotResponse> searchReplays) {
+                                                   List<SearchReplaySnapshotResponse> searchReplays,
+                                                   List<CollectionReplaySnapshotResponse> collectionReplays) {
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
         for (ReplayTimelineEvent timelineEvent : timeline) {
             sourceUrls.addAll(normalizeSourceUrls(timelineEvent.getSourceUrls()));
@@ -405,6 +413,9 @@ public class TaskReplayProjectionService {
         }
         for (SearchReplaySnapshotResponse searchReplay : searchReplays) {
             sourceUrls.addAll(normalizeSourceUrls(searchReplay.getSourceUrls()));
+        }
+        for (CollectionReplaySnapshotResponse collectionReplay : collectionReplays) {
+            sourceUrls.addAll(normalizeSourceUrls(collectionReplay.getSourceUrls()));
         }
         return new ArrayList<>(sourceUrls);
     }
@@ -474,6 +485,64 @@ public class TaskReplayProjectionService {
                     .build());
         }
         return searchReplays;
+    }
+
+    /**
+     * collection 回放投影复用 searchReplay 的思路，但只承载 package 级采集语义。
+     * 这样 replay / insight / checkpoint 都能消费同一份正式 collectionAudit，而不是各自从 outputData 反推。
+     */
+    private List<CollectionReplaySnapshotResponse> buildCollectionReplays(List<TaskNode> taskNodes,
+                                                                          Map<Long, TaskPlan> taskPlanMap) {
+        List<CollectionReplaySnapshotResponse> collectionReplays = new ArrayList<>();
+        for (TaskNode taskNode : taskNodes) {
+            if (taskNode == null || taskNode.getAgentType() != AgentType.COLLECTOR) {
+                continue;
+            }
+            JsonNode output = readJson(taskNode.getOutputData());
+            if (output == null) {
+                continue;
+            }
+
+            CollectionAuditSnapshot collectionAudit = convertValue(output.get("collectionAudit"), CollectionAuditSnapshot.class);
+            LinkedHashSet<String> mergedSourceUrls = new LinkedHashSet<>(normalizeSourceUrls(readStringList(output.get("sourceUrls"))));
+            if (collectionAudit != null) {
+                mergedSourceUrls.addAll(normalizeSourceUrls(collectionAudit.getSourceUrls()));
+                if (collectionAudit.getSourceUrls() == null || collectionAudit.getSourceUrls().isEmpty()) {
+                    collectionAudit.setSourceUrls(new ArrayList<>(mergedSourceUrls));
+                }
+            }
+            List<String> sourceUrls = new ArrayList<>(mergedSourceUrls);
+            List<CollectionReplayTimelineItem> timeline = collectionAudit == null || collectionAudit.getReplayTimeline() == null
+                    ? convertList(output.get("collectionReplayTimeline"),
+                    new TypeReference<List<CollectionReplayTimelineItem>>() {
+                    })
+                    : collectionAudit.getReplayTimeline();
+            String collectionStatus = textValue(firstPresent(output.get("collectionStatus"),
+                    collectionAudit == null ? null : objectMapper.valueToTree(collectionAudit.getStatus())));
+
+            if (collectionAudit == null
+                    && timeline.isEmpty()
+                    && sourceUrls.isEmpty()
+                    && !hasText(collectionStatus)) {
+                continue;
+            }
+
+            CollectionAuditSummary collectionAuditSummary = resolveCollectionAuditSummary(collectionAudit);
+            collectionReplays.add(CollectionReplaySnapshotResponse.builder()
+                    .nodeName(taskNode.getNodeName())
+                    .planVersionId(taskNode.getPlanVersionId())
+                    .planVersion(resolvePlanVersion(taskPlanMap, taskNode.getPlanVersionId()))
+                    .branchKey(taskNode.getBranchKey())
+                    .collectionStatus(hasText(collectionStatus)
+                            ? collectionStatus
+                            : (collectionAudit == null ? null : collectionAudit.getStatus()))
+                    .collectionAudit(collectionAudit)
+                    .collectionAuditSummary(collectionAuditSummary)
+                    .timeline(timeline)
+                    .sourceUrls(sourceUrls)
+                    .build());
+        }
+        return collectionReplays;
     }
 
     /**
@@ -709,6 +778,24 @@ public class TaskReplayProjectionService {
 
     private JsonNode firstPresent(JsonNode primary, JsonNode fallback) {
         return primary == null || primary.isNull() ? fallback : primary;
+    }
+
+    private CollectionAuditSummary resolveCollectionAuditSummary(CollectionAuditSnapshot collectionAudit) {
+        if (collectionAudit == null) {
+            return null;
+        }
+        if (collectionAudit.getSummary() != null) {
+            return collectionAudit.getSummary();
+        }
+        return CollectionAuditSummary.from(collectionAudit);
+    }
+
+    private String textValue(JsonNode node) {
+        return node == null || node.isNull() ? null : node.asText(null);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private List<String> normalizeSourceUrls(List<String> sourceUrls) {

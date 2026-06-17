@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.agent.collector;
 
+import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
 import cn.bugstack.competitoragent.search.SearchExecutionPlan;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
 import cn.bugstack.competitoragent.search.SearchRuntimePolicy;
@@ -48,7 +49,8 @@ import java.util.List;
         "searchTimeoutMillis",
         "searchRuntimePolicy",
         "searchExecutionPlan",
-        "searchAuditCheckpoint"
+        "searchAuditCheckpoint",
+        "collectionAuditCheckpoint"
 })
 public class CollectorNodeConfig {
 
@@ -184,4 +186,10 @@ public class CollectorNodeConfig {
      * 搜索审计快照，记录合规性审计、反爬检测及当前节点的执行水位快照
      */
     private SearchAuditSnapshot searchAuditCheckpoint;
+
+    /**
+     * 采集审计快照，记录 package 级执行结果、回放时间线与恢复锚点。
+     * rerun / resume 会基于这个快照复用已经成功的采集包，避免重复抓取。
+     */
+    private CollectionAuditSnapshot collectionAuditCheckpoint;
 }

@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.task.command;
 
 import cn.bugstack.competitoragent.common.BusinessException;
 import cn.bugstack.competitoragent.common.ResultCode;
+import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
 import cn.bugstack.competitoragent.event.TaskEventPublisher;
 import cn.bugstack.competitoragent.model.dto.UpdateNodeConfigRequest;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
@@ -135,6 +136,7 @@ public class TaskRuntimeCommandAppService {
         taskArtifactCleanupCoordinator.cleanupNodeArtifacts(taskId, targetNode.getNodeName());
         for (TaskNode node : affectedNodes) {
             reuseSearchCheckpointIfPresent(node);
+            reuseCollectionCheckpointIfPresent(node);
             resetNodeExecutionState(node, true);
         }
         nodeRepository.saveAll(affectedNodes);
@@ -419,6 +421,7 @@ public class TaskRuntimeCommandAppService {
 
             hasWorkToResume = true;
             reuseSearchCheckpointIfPresent(node);
+            reuseCollectionCheckpointIfPresent(node);
             markManualResumeApprovalIfNecessary(node);
             resetNodeExecutionState(node, true);
         }
@@ -498,6 +501,38 @@ public class TaskRuntimeCommandAppService {
             node.setNodeConfig(objectMapper.writeValueAsString(configNode));
         } catch (Exception e) {
             log.warn("reuse search checkpoint failed, nodeName={}", node.getNodeName(), e);
+        }
+    }
+
+    /**
+     * Collector 节点在重跑或恢复前，同样需要把上一轮采集审计快照回写到 nodeConfig。
+     * 这样 CollectionExecutionCoordinator 才能复用已经成功的 package，只重跑失败包或待人工处理包。
+     */
+    private void reuseCollectionCheckpointIfPresent(TaskNode node) {
+        if (node == null
+                || node.getAgentType() != AgentType.COLLECTOR
+                || !hasText(node.getOutputData())
+                || !hasText(node.getNodeConfig())) {
+            return;
+        }
+        try {
+            JsonNode output = objectMapper.readTree(node.getOutputData());
+            JsonNode auditNode = output.get("collectionAudit");
+            if (auditNode == null || auditNode.isNull() || auditNode.isMissingNode()) {
+                return;
+            }
+            CollectionAuditSnapshot checkpoint = objectMapper.treeToValue(auditNode, CollectionAuditSnapshot.class);
+            if (checkpoint == null) {
+                return;
+            }
+            JsonNode configNode = objectMapper.readTree(node.getNodeConfig());
+            if (!configNode.isObject()) {
+                return;
+            }
+            ((ObjectNode) configNode).set("collectionAuditCheckpoint", objectMapper.valueToTree(checkpoint));
+            node.setNodeConfig(objectMapper.writeValueAsString(configNode));
+        } catch (Exception e) {
+            log.warn("reuse collection checkpoint failed, nodeName={}", node.getNodeName(), e);
         }
     }
 

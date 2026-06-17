@@ -44,6 +44,9 @@ public class TaskReplayResponse {
     @Schema(description = "Collector 搜索现场回放")
     private List<SearchReplaySnapshotResponse> searchReplays;
 
+    @Schema(description = "Collector 采集现场回放")
+    private List<CollectionReplaySnapshotResponse> collectionReplays;
+
     @Schema(description = "回放集成入口")
     private List<ReplayIntegrationEntryPoint> integrationEntryPoints;
 

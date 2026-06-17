@@ -1,5 +1,7 @@
 package cn.bugstack.competitoragent.model.dto;
 
+import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
+import cn.bugstack.competitoragent.collection.CollectionReplayTimelineItem;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
 import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
 import cn.bugstack.competitoragent.search.SearchCollectionTarget;
@@ -143,4 +145,16 @@ public class CollectorNodeInsightResponse {
 
     @Schema(description = "Lightweight selected target summaries")
     private List<SearchSelectedTargetSummary> selectedTargetSummaries;
+
+    @Schema(description = "Formal collection audit snapshot")
+    private CollectionAuditSnapshot collectionAudit;
+
+    @Schema(description = "Lightweight collection audit summary for default insight view")
+    private CollectionAuditSummary collectionAuditSummary;
+
+    @Schema(description = "Collection replay timeline from collection audit")
+    private List<CollectionReplayTimelineItem> collectionReplayTimeline;
+
+    @Schema(description = "Collection aggregate status")
+    private String collectionStatus;
 }

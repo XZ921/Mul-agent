@@ -39,6 +39,20 @@ class RuntimeEventEmitterTest {
                             "discardedCandidates":[{"url":"https://www.notion.so/login","selectionReason":"LOW_SIGNAL_UTILITY_PAGE"}],
                             "replayTimeline":[{"stepCode":"SELECT_TARGETS","status":"SUCCESS","sourceUrls":["https://docs.notion.so/reference"]}]
                           },
+                          "collectionAudit":{
+                            "summary":{
+                              "totalPackages":1,
+                              "successCount":1,
+                              "status":"SUCCESS",
+                              "recoveryCheckpoint":"collect_sources_docs#001",
+                              "sourceUrls":["https://docs.notion.so/reference"]
+                            },
+                            "status":"SUCCESS",
+                            "replayTimeline":[{"taskPackageKey":"collect_sources_docs#001","targetIndex":1,"status":"SUCCESS","executorType":"WEB_PAGE","sourceUrls":["https://docs.notion.so/reference"]}],
+                            "recoveryCheckpoint":"collect_sources_docs#001",
+                            "sourceUrls":["https://docs.notion.so/reference"]
+                          },
+                          "collectionStatus":"SUCCESS",
                           "selectedTargets":[{"url":"https://docs.notion.so/reference","title":"Reference"}],
                           "sourceUrls":["https://docs.notion.so/reference"]
                         }
@@ -49,6 +63,10 @@ class RuntimeEventEmitterTest {
 
         verify(taskEventPublisher).publishSearchProgressEvent(eq(24L), eq("collect_sources_docs"), argThat(payload ->
                 payload.containsKey("searchAudit")
+                        && payload.containsKey("collectionAudit")
+                        && payload.containsKey("collectionAuditSummary")
+                        && payload.containsKey("collectionReplayTimeline")
+                        && payload.containsKey("collectionStatus")
                         && payload.containsKey("attemptedTargets")
                         && payload.containsKey("discardedCandidates")
                         && payload.containsKey("replayTimeline")

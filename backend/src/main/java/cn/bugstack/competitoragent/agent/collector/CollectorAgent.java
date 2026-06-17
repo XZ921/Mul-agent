@@ -3,7 +3,9 @@ package cn.bugstack.competitoragent.agent.collector;
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.agent.BaseAgent;
+import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
 import cn.bugstack.competitoragent.collection.CollectionExecutionCoordinator;
+import cn.bugstack.competitoragent.collection.CollectionExecutionReport;
 import cn.bugstack.competitoragent.collection.CollectionExecutionResult;
 import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
@@ -18,6 +20,7 @@ import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.search.SearchCollectionTarget;
+import cn.bugstack.competitoragent.search.CanonicalUrlResolver;
 import cn.bugstack.competitoragent.search.SearchExecutionCoordinator;
 import cn.bugstack.competitoragent.search.SearchExecutionPlan;
 import cn.bugstack.competitoragent.search.SearchExecutionTrace;
@@ -61,6 +64,7 @@ public class CollectorAgent extends BaseAgent {
     private final CollectionExecutionCoordinator collectionExecutionCoordinator;
     private final TaskRetrievalIndexService taskRetrievalIndexService;
     private final ObjectMapper objectMapper;
+    private final CanonicalUrlResolver canonicalUrlResolver;
 
     public CollectorAgent(AgentExecutionLogRepository logRepository,
                           SourceCollector sourceCollector,
@@ -79,6 +83,7 @@ public class CollectorAgent extends BaseAgent {
         this.collectionExecutionCoordinator = collectionExecutionCoordinator;
         this.taskRetrievalIndexService = taskRetrievalIndexService;
         this.objectMapper = objectMapper;
+        this.canonicalUrlResolver = new CanonicalUrlResolver();
     }
 
     @Override
@@ -124,6 +129,7 @@ public class CollectorAgent extends BaseAgent {
                         !StringUtils.hasText(config.getSourceType()) ? "OFFICIAL" : config.getSourceType(),
                         context.getTaskRagPromptContext(),
                         searchExecutionResult,
+                        null,
                         progressSnapshots,
                         List.of(),
                         0,
@@ -148,13 +154,18 @@ public class CollectorAgent extends BaseAgent {
         List<SearchCollectionTarget> executableTargets = targets.stream()
                 .filter(this::requiresCoordinatorExecution)
                 .toList();
-        List<CollectionExecutionResult> collectionResults = collectionExecutionCoordinator.execute(
+        CollectionExecutionReport collectionReport = collectionExecutionCoordinator.execute(
                 context.getTaskId(),
                 context.getCurrentNodeName(),
                 context.getPlanVersionId(),
                 config.getCompetitorName(),
-                executableTargets
+                executableTargets,
+                config.getCollectionAuditCheckpoint()
         );
+        List<CollectionExecutionResult> collectionResults = collectionReport == null || collectionReport.getResults() == null
+                ? List.of()
+                : collectionReport.getResults();
+        List<CollectionExecutionResult> auditResults = new ArrayList<>();
         // 采集阶段统一先走协调器路由执行，只有验证阶段已经拿到页面快照的目标才继续复用旧页面，
         // 这样既能接入新的结构化采集执行器，也不会破坏“已验证页面不重复抓取”的既有契约。
         markCollectStep(executionPlan, SearchExecutionStep.StepStatus.RUNNING,
@@ -179,10 +190,20 @@ public class CollectorAgent extends BaseAgent {
             SourceCollector.CollectedPage page;
             if (target.getCollectedPage() != null) {
                 page = target.getCollectedPage();
+                auditResults.add(buildAuditResultFromPrefetchedPage(
+                        context,
+                        config,
+                        sourceType,
+                        index + 1,
+                        target,
+                        page));
             } else {
                 CollectionExecutionResult collectionResult = collectionResultIndex < collectionResults.size()
                         ? collectionResults.get(collectionResultIndex++)
                         : null;
+                if (collectionResult != null) {
+                    auditResults.add(collectionResult);
+                }
                 page = mapCollectionResultToCollectedPage(collectionResult, config.getCompetitorName(), sourceType);
             }
             // 每个目标都会形成一条独立证据。结构化采集执行器可能返回修正后的 sourceUrls，
@@ -285,6 +306,8 @@ public class CollectorAgent extends BaseAgent {
                     results, successCounterRef[0]);
         }
 
+        collectionReport = collectionExecutionCoordinator.summarize(auditResults);
+
         try {
             if (successCounterRef[0] == 0) {
                 markCollectStep(executionPlan, SearchExecutionStep.StepStatus.FAILED,
@@ -295,7 +318,7 @@ public class CollectorAgent extends BaseAgent {
                         Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
                         readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
                 String outputJson = buildCollectorOutput(
-                        config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, progressSnapshots, results, successCounterRef[0], targets);
+                        config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, collectionReport, progressSnapshots, results, successCounterRef[0], targets);
                 String actionableError = buildNoContentFailureMessage(
                         config, sourceType, searchExecutionResult.getExecutionTrace(), results);
                 return AgentResult.builder()
@@ -314,7 +337,7 @@ public class CollectorAgent extends BaseAgent {
                     Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
                     readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
             String outputJson = buildCollectorOutput(
-                    config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, progressSnapshots, results, successCounterRef[0], targets);
+                    config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, collectionReport, progressSnapshots, results, successCounterRef[0], targets);
             return AgentResult.builder()
                     .status(TaskNodeStatus.SUCCESS)
                     .outputData(outputJson)
@@ -374,6 +397,7 @@ public class CollectorAgent extends BaseAgent {
                             .selectedTargets(targets)
                             .executionTrace(executionTrace)
                             .build(),
+                    null,
                     progressSnapshots == null ? List.of() : progressSnapshots,
                     results,
                     successCounter,
@@ -397,6 +421,7 @@ public class CollectorAgent extends BaseAgent {
                                         String sourceType,
                                         String taskRagContext,
                                         SearchExecutionResult searchExecutionResult,
+                                        CollectionExecutionReport collectionReport,
                                         List<SearchProgressSnapshot> progressSnapshots,
                                         List<Map<String, Object>> results,
                                         int successCounter,
@@ -420,6 +445,11 @@ public class CollectorAgent extends BaseAgent {
         output.put("totalCollected", results.size());
         output.put("successCollected", successCounter);
         output.put("results", results);
+        output.put("collectionStatus", collectionReport == null ? null : collectionReport.getStatus());
+        output.put("collectionAudit", collectionReport == null ? null : collectionReport.getAuditSnapshot());
+        output.put("collectionReplayTimeline", collectionReport == null || collectionReport.getAuditSnapshot() == null
+                ? List.of()
+                : collectionReport.getAuditSnapshot().getReplayTimeline());
         CollectResult collectResult = buildCollectResult(config, results, successCounter);
         output.put("contractVersion", collectResult.getContractVersion());
         output.put("documents", collectResult.getDocuments());
@@ -884,6 +914,104 @@ public class CollectorAgent extends BaseAgent {
                 .success(false)
                 .errorMessage("collection executor returned no result")
                 .build();
+    }
+
+    /**
+     * 搜索验证阶段若已经预抓到了页面，无论成功还是失败，都要继续映射成正式 collection result。
+     * 这样 collectionAudit / replay / checkpoint 才能表达“这个包发生过什么”，而不是在失败时丢成空 SUCCESS。
+     */
+    private CollectionExecutionResult buildAuditResultFromPrefetchedPage(AgentContext context,
+                                                                         CollectorNodeConfig config,
+                                                                         String sourceType,
+                                                                         int targetIndex,
+                                                                         SearchCollectionTarget target,
+                                                                         SourceCollector.CollectedPage page) {
+        SourceCandidate candidate = target == null ? null : target.getCandidate();
+        String resourceLocator = candidate == null ? null : candidate.getUrl();
+        String effectiveUrl = firstNonBlank(page == null ? null : page.getUrl(), resourceLocator);
+        List<String> sourceUrls = resolveCollectedSourceUrls(page, candidate, effectiveUrl);
+        String taskPackageKey = context.getCurrentNodeName() + "#" + String.format("%03d", targetIndex);
+        String content = page == null ? null : page.getContent();
+        String failureKind = page != null && !page.isSuccess() ? "PREFETCH_FAILED" : null;
+        CollectionExecutionResult checkpointResult = findReusableCollectionCheckpointResult(
+                config.getCollectionAuditCheckpoint(),
+                resourceLocator,
+                sourceUrls
+        );
+        boolean reusedFromCheckpoint = checkpointResult != null
+                && page != null
+                && page.isSuccess()
+                && isUsableCollectedPage(page);
+        return CollectionExecutionResult.builder()
+                .taskPackageKey(taskPackageKey)
+                .targetIndex(targetIndex)
+                .executorType("PREFETCHED_PAGE")
+                .success(page != null && page.isSuccess() && isUsableCollectedPage(page))
+                .status(page != null && page.isSuccess() && isUsableCollectedPage(page) ? "SUCCESS" : "FAILED")
+                .resourceLocator(resourceLocator)
+                .title(firstNonBlank(page == null ? null : page.getTitle(),
+                        candidate == null ? null : candidate.getTitle()))
+                .content(content)
+                .sourceUrls(sourceUrls)
+                .errorMessage(page == null ? "prefetched page missing" : page.getErrorMessage())
+                .failureKind(failureKind)
+                .qualitySignals(page != null && page.isSuccess() && isUsableCollectedPage(page)
+                        ? List.of("PREFETCH_REUSED")
+                        : List.of("PREFETCH_FAILED"))
+                .checkpointSource(reusedFromCheckpoint ? "collectionAuditCheckpoint" : null)
+                .reusedFromCheckpoint(reusedFromCheckpoint)
+                .build()
+                .normalize();
+    }
+
+    /**
+     * rerun / resume 后，搜索检查点可能已经把成功页面以 prefetched page 形式重新挂回 selectedTargets，
+     * 这时这些目标不会再次进入 CollectionExecutionCoordinator。
+     * 为了让 collectionAudit 继续表达“这个成功包其实是从 checkpoint 复用来的”，
+     * 这里按稳定来源锚点去历史 collectionAuditCheckpoint 里查找可复用成功结果。
+     */
+    private CollectionExecutionResult findReusableCollectionCheckpointResult(CollectionAuditSnapshot checkpoint,
+                                                                             String resourceLocator,
+                                                                             List<String> sourceUrls) {
+        if (checkpoint == null || checkpoint.getResults() == null || checkpoint.getResults().isEmpty()) {
+            return null;
+        }
+        String currentStableIdentity = resolveStableCollectionIdentity(resourceLocator, sourceUrls);
+        if (!StringUtils.hasText(currentStableIdentity)) {
+            return null;
+        }
+        for (CollectionExecutionResult result : checkpoint.getResults()) {
+            if (result == null
+                    || !result.isSuccess()
+                    || !"SUCCESS".equalsIgnoreCase(result.getStatus())) {
+                continue;
+            }
+            String checkpointIdentity = resolveStableCollectionIdentity(
+                    result.getResourceLocator(),
+                    result.getSourceUrls()
+            );
+            if (currentStableIdentity.equals(checkpointIdentity)) {
+                return result;
+            }
+        }
+        return null;
+    }
+
+    private String resolveStableCollectionIdentity(String resourceLocator, List<String> sourceUrls) {
+        String canonicalResourceLocator = canonicalUrlResolver.canonicalize(resourceLocator);
+        if (StringUtils.hasText(canonicalResourceLocator)) {
+            return canonicalResourceLocator;
+        }
+        if (sourceUrls == null || sourceUrls.isEmpty()) {
+            return null;
+        }
+        for (String sourceUrl : sourceUrls) {
+            String canonicalSourceUrl = canonicalUrlResolver.canonicalize(sourceUrl);
+            if (StringUtils.hasText(canonicalSourceUrl)) {
+                return canonicalSourceUrl;
+            }
+        }
+        return null;
     }
 
     /**

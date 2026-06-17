@@ -1,6 +1,9 @@
 package cn.bugstack.competitoragent.task.assembler;
 
+import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
+import cn.bugstack.competitoragent.collection.CollectionReplayTimelineItem;
 import cn.bugstack.competitoragent.model.dto.CollectorNodeInsightResponse;
+import cn.bugstack.competitoragent.model.dto.CollectionAuditSummary;
 import cn.bugstack.competitoragent.model.dto.CollectorSelectedTargetSummary;
 import cn.bugstack.competitoragent.model.dto.TaskNodeConfigSummary;
 import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
@@ -441,7 +444,8 @@ public class TaskNodeViewAssembler {
             return false;
         }
         JsonNode output = readJson(node.getOutputData());
-        return output != null && output.hasNonNull("searchAudit");
+        return output != null
+                && (output.hasNonNull("searchAudit") || output.hasNonNull("collectionAudit"));
     }
 
     private String buildNodeInterventionSummary(TaskNode node,
@@ -694,6 +698,14 @@ public class TaskNodeViewAssembler {
             // 这里在详情组装阶段兜底一次，保证前端拿到的正式契约可直接消费。
             searchAudit.setSourceUrls(readStringList(output == null ? null : output.get("sourceUrls")));
         }
+        CollectionAuditSnapshot collectionAudit = convertValue(output == null ? null : output.get("collectionAudit"), CollectionAuditSnapshot.class);
+        if (collectionAudit != null && (collectionAudit.getSourceUrls() == null || collectionAudit.getSourceUrls().isEmpty())) {
+            // 采集审计同样显式兜底 sourceUrls，避免旧输出只保留顶层来源地址时丢失回放链路。
+            collectionAudit.setSourceUrls(readStringList(output == null ? null : output.get("sourceUrls")));
+        }
+        List<CollectionReplayTimelineItem> collectionReplayTimeline = collectionAudit == null || collectionAudit.getReplayTimeline() == null
+                ? List.of()
+                : collectionAudit.getReplayTimeline();
 
         return CollectorNodeInsightResponse.builder()
                 .competitorName(competitorName)
@@ -748,7 +760,23 @@ public class TaskNodeViewAssembler {
                                 .sourceUrls(target.getUrl() == null ? List.of() : List.of(target.getUrl()))
                                 .build())
                         .toList())
+                .collectionAudit(collectionAudit)
+                .collectionAuditSummary(resolveCollectionAuditSummary(collectionAudit))
+                .collectionReplayTimeline(collectionReplayTimeline)
+                .collectionStatus(defaultIfBlank(
+                        textOrNull(output, "collectionStatus"),
+                        collectionAudit == null ? null : collectionAudit.getStatus()))
                 .build();
+    }
+
+    private CollectionAuditSummary resolveCollectionAuditSummary(CollectionAuditSnapshot collectionAudit) {
+        if (collectionAudit == null) {
+            return null;
+        }
+        if (collectionAudit.getSummary() != null) {
+            return collectionAudit.getSummary();
+        }
+        return CollectionAuditSummary.from(collectionAudit);
     }
 
     private TaskNodeConfigSummary buildConfigSummaryData(AgentType agentType, JsonNode config) {

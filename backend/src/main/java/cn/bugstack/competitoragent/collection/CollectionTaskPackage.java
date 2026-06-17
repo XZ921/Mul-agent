@@ -17,6 +17,8 @@ public class CollectionTaskPackage {
     Long taskId;
     String nodeName;
     Long planVersionId;
+    String packageKey;
+    Integer targetIndex;
     String competitorName;
     String sourceFamilyKey;
     String sourceType;

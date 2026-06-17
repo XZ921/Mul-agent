@@ -1,5 +1,7 @@
 package cn.bugstack.competitoragent.task;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.assertj.core.api.SoftAssertions;
 import org.junit.jupiter.api.Test;
 
@@ -8,6 +10,7 @@ import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Task 5.6.a 回放契约存在性测试。
@@ -19,6 +22,8 @@ import java.util.List;
  */
 class TaskReplayContractPresenceTest {
 
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+
     @Test
     void shouldProvideFormalReplayContractsForTimelineCheckpointAndPlanVersionAssociation() throws Exception {
         SoftAssertions softly = new SoftAssertions();
@@ -29,6 +34,7 @@ class TaskReplayContractPresenceTest {
         assertFieldPresent(replayResponseClass, "timeline", softly);
         assertFieldPresent(replayResponseClass, "recoveryCheckpoints", softly);
         assertFieldPresent(replayResponseClass, "planVersions", softly);
+        assertFieldPresent(replayResponseClass, "collectionReplays", softly);
         assertFieldPresent(replayResponseClass, "sourceUrls", softly);
 
         Class<?> timelineEventClass = assertClassPresent(
@@ -59,6 +65,76 @@ class TaskReplayContractPresenceTest {
             softly.assertThat(migrationContent)
                     .as("恢复点表脚本应包含 source_urls 追溯字段")
                     .contains("source_urls");
+        }
+
+        softly.assertAll();
+    }
+
+    @Test
+    void shouldProvideCollectionReplaySnapshotSerializationContract() throws Exception {
+        SoftAssertions softly = new SoftAssertions();
+
+        Class<?> collectionReplayClass = assertClassPresent(
+                "cn.bugstack.competitoragent.model.dto.CollectionReplaySnapshotResponse",
+                softly);
+        Class<?> collectionAuditClass = assertClassPresent(
+                "cn.bugstack.competitoragent.collection.CollectionAuditSnapshot",
+                softly);
+        Class<?> collectionAuditSummaryClass = assertClassPresent(
+                "cn.bugstack.competitoragent.model.dto.CollectionAuditSummary",
+                softly);
+        Class<?> collectionTimelineClass = assertClassPresent(
+                "cn.bugstack.competitoragent.collection.CollectionReplayTimelineItem",
+                softly);
+
+        assertFieldPresent(collectionReplayClass, "collectionAudit", softly);
+        assertFieldPresent(collectionReplayClass, "collectionAuditSummary", softly);
+        assertFieldPresent(collectionReplayClass, "timeline", softly);
+        assertFieldPresent(collectionReplayClass, "sourceUrls", softly);
+
+        if (collectionReplayClass != null
+                && collectionAuditClass != null
+                && collectionAuditSummaryClass != null
+                && collectionTimelineClass != null) {
+            Object collectionReplay = collectionReplayClass.getDeclaredConstructor().newInstance();
+            Object collectionAudit = objectMapper.convertValue(Map.of(
+                    "summary", Map.of(
+                            "totalPackages", 1,
+                            "successCount", 1,
+                            "status", "SUCCESS",
+                            "recoveryCheckpoint", "collect_sources_docs#001",
+                            "sourceUrls", List.of("https://docs.example.com/reference")
+                    ),
+                    "status", "SUCCESS",
+                    "replayTimeline", List.of(),
+                    "sourceUrls", List.of("https://docs.example.com/reference")
+            ), collectionAuditClass);
+            Object collectionAuditSummary = objectMapper.convertValue(Map.of(
+                    "totalPackages", 1,
+                    "successCount", 1,
+                    "status", "SUCCESS",
+                    "recoveryCheckpoint", "collect_sources_docs#001",
+                    "sourceUrls", List.of("https://docs.example.com/reference")
+            ), collectionAuditSummaryClass);
+            Object timelineItem = objectMapper.convertValue(Map.of(
+                    "taskPackageKey", "collect_sources_docs#001",
+                    "targetIndex", 1,
+                    "status", "SUCCESS",
+                    "executorType", "WEB_PAGE",
+                    "sourceUrls", List.of("https://docs.example.com/reference")
+            ), collectionTimelineClass);
+
+            writeField(collectionReplay, "nodeName", "collect_sources_docs");
+            writeField(collectionReplay, "collectionAudit", collectionAudit);
+            writeField(collectionReplay, "collectionAuditSummary", collectionAuditSummary);
+            writeField(collectionReplay, "timeline", List.of(timelineItem));
+            writeField(collectionReplay, "sourceUrls", List.of("https://docs.example.com/reference"));
+
+            JsonNode payload = objectMapper.valueToTree(collectionReplay);
+            softly.assertThat(payload.has("collectionAudit")).as("序列化结果应保留 collectionAudit").isTrue();
+            softly.assertThat(payload.has("collectionAuditSummary")).as("序列化结果应保留 collectionAuditSummary").isTrue();
+            softly.assertThat(payload.has("timeline")).as("序列化结果应保留 timeline").isTrue();
+            softly.assertThat(payload.has("sourceUrls")).as("序列化结果应保留 sourceUrls").isTrue();
         }
 
         softly.assertAll();
@@ -120,6 +196,16 @@ class TaskReplayContractPresenceTest {
                     targetClass.getSimpleName(),
                     methodName,
                     parameterType.getSimpleName());
+        }
+    }
+
+    private void writeField(Object target, String fieldName, Object value) {
+        try {
+            Field field = target.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            field.set(target, value);
+        } catch (Exception exception) {
+            throw new IllegalStateException("写入字段失败: " + target.getClass().getSimpleName() + "." + fieldName, exception);
         }
     }
 }

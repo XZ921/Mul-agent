@@ -1,5 +1,7 @@
 package cn.bugstack.competitoragent.model.dto;
 
+import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
+import cn.bugstack.competitoragent.collection.CollectionReplayTimelineItem;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
 import cn.bugstack.competitoragent.search.SearchCollectionTarget;
 import cn.bugstack.competitoragent.search.SearchExecutionTrace;
@@ -49,5 +51,9 @@ public class SearchProgressEventPayload {
      */
     private List<SearchReplayTimelineItem> replayTimeline;
     private List<CollectorSelectedTargetSummary> selectedTargets;
+    private String collectionStatus;
+    private CollectionAuditSnapshot collectionAudit;
+    private CollectionAuditSummary collectionAuditSummary;
+    private List<CollectionReplayTimelineItem> collectionReplayTimeline;
     private List<String> sourceUrls;
 }

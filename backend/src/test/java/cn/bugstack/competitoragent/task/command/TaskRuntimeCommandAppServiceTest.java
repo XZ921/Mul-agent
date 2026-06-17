@@ -568,6 +568,36 @@ class TaskRuntimeCommandAppServiceTest {
                         "selectionStage": "SELECTED"
                       }
                     ]
+                  },
+                  "collectionAudit": {
+                    "summary": {
+                      "totalPackages": 1,
+                      "successCount": 1,
+                      "status": "SUCCESS",
+                      "recoveryCheckpoint": "collect_sources_web#001",
+                      "sourceUrls": ["https://docs.example.com"]
+                    },
+                    "status": "SUCCESS",
+                    "results": [
+                      {
+                        "taskPackageKey": "collect_sources_web#001",
+                        "targetIndex": 1,
+                        "status": "SUCCESS",
+                        "executorType": "WEB_PAGE",
+                        "sourceUrls": ["https://docs.example.com"]
+                      }
+                    ],
+                    "replayTimeline": [
+                      {
+                        "taskPackageKey": "collect_sources_web#001",
+                        "targetIndex": 1,
+                        "status": "SUCCESS",
+                        "executorType": "WEB_PAGE",
+                        "sourceUrls": ["https://docs.example.com"]
+                      }
+                    ],
+                    "recoveryCheckpoint": "collect_sources_web#001",
+                    "sourceUrls": ["https://docs.example.com"]
                   }
                 }
                 """);
@@ -579,8 +609,11 @@ class TaskRuntimeCommandAppServiceTest {
 
         JsonNode updatedConfig = objectMapper.readTree(collectorNode.getNodeConfig());
         assertTrue(updatedConfig.has("searchAuditCheckpoint"));
+        assertTrue(updatedConfig.has("collectionAuditCheckpoint"));
         assertEquals("SELECT_TARGETS",
                 updatedConfig.path("searchAuditCheckpoint").path("executionTrace").path("recoveryCheckpoint").asText());
+        assertEquals("collect_sources_web#001",
+                updatedConfig.path("collectionAuditCheckpoint").path("recoveryCheckpoint").asText());
     }
 
     @Test

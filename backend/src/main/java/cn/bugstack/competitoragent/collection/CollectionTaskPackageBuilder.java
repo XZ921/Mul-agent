@@ -43,6 +43,8 @@ public class CollectionTaskPackageBuilder {
                 .taskId(taskId)
                 .nodeName(nodeName)
                 .planVersionId(planVersionId)
+                .packageKey(buildPackageKey(nodeName, priority))
+                .targetIndex(priority)
                 .competitorName(competitorName)
                 .sourceFamilyKey(sourceFamilyKey)
                 .sourceType(sourceType)
@@ -55,6 +57,14 @@ public class CollectionTaskPackageBuilder {
                 .priority(priority)
                 .sourceUrls(resolveSourceUrls(candidate, url))
                 .build();
+    }
+
+    /**
+     * 包级身份必须在构建阶段稳定生成，后续 replay / checkpoint / rerun-resume 都依赖它作为锚点。
+     */
+    private String buildPackageKey(String nodeName, int targetIndex) {
+        String safeNodeName = StringUtils.hasText(nodeName) ? nodeName.trim() : "collection";
+        return safeNodeName + "#" + String.format("%03d", Math.max(targetIndex, 0));
     }
 
     /**

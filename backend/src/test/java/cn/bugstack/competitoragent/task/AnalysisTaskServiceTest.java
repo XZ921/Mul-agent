@@ -651,6 +651,36 @@ class AnalysisTaskServiceTest {
                         "selectionStage": "SELECTED"
                       }
                     ]
+                  },
+                  "collectionAudit": {
+                    "summary": {
+                      "totalPackages": 1,
+                      "successCount": 1,
+                      "status": "SUCCESS",
+                      "recoveryCheckpoint": "collect_sources_web#001",
+                      "sourceUrls": ["https://docs.example.com"]
+                    },
+                    "status": "SUCCESS",
+                    "results": [
+                      {
+                        "taskPackageKey": "collect_sources_web#001",
+                        "targetIndex": 1,
+                        "status": "SUCCESS",
+                        "executorType": "WEB_PAGE",
+                        "sourceUrls": ["https://docs.example.com"]
+                      }
+                    ],
+                    "replayTimeline": [
+                      {
+                        "taskPackageKey": "collect_sources_web#001",
+                        "targetIndex": 1,
+                        "status": "SUCCESS",
+                        "executorType": "WEB_PAGE",
+                        "sourceUrls": ["https://docs.example.com"]
+                      }
+                    ],
+                    "recoveryCheckpoint": "collect_sources_web#001",
+                    "sourceUrls": ["https://docs.example.com"]
                   }
                 }
                 """);
@@ -662,8 +692,11 @@ class AnalysisTaskServiceTest {
 
         JsonNode updatedConfig = objectMapper.readTree(collectorNode.getNodeConfig());
         assertTrue(updatedConfig.has("searchAuditCheckpoint"));
+        assertTrue(updatedConfig.has("collectionAuditCheckpoint"));
         assertEquals("SELECT_TARGETS",
                 updatedConfig.path("searchAuditCheckpoint").path("executionTrace").path("recoveryCheckpoint").asText());
+        assertEquals("collect_sources_web#001",
+                updatedConfig.path("collectionAuditCheckpoint").path("recoveryCheckpoint").asText());
     }
 
     @Test
@@ -1154,6 +1187,34 @@ class AnalysisTaskServiceTest {
                       "traceVersion": "v1",
                       "recoveryCheckpoint": "SELECT_TARGETS"
                     }
+                  },
+                  "collectionAudit": {
+                    "summary": {
+                      "totalPackages": 2,
+                      "successCount": 1,
+                      "status": "PARTIAL_SUCCESS",
+                      "recoveryCheckpoint": "collect_sources_web#002",
+                      "sourceUrls": ["https://docs.example.com", "https://docs.example.com/pricing"]
+                    },
+                    "status": "PARTIAL_SUCCESS",
+                    "replayTimeline": [
+                      {
+                        "taskPackageKey": "collect_sources_web#001",
+                        "targetIndex": 1,
+                        "status": "SUCCESS",
+                        "executorType": "WEB_PAGE",
+                        "sourceUrls": ["https://docs.example.com"]
+                      },
+                      {
+                        "taskPackageKey": "collect_sources_web#002",
+                        "targetIndex": 2,
+                        "status": "FAILED",
+                        "executorType": "WEB_PAGE",
+                        "sourceUrls": ["https://docs.example.com/pricing"]
+                      }
+                    ],
+                    "recoveryCheckpoint": "collect_sources_web#002",
+                    "sourceUrls": ["https://docs.example.com", "https://docs.example.com/pricing"]
                   }
                 }
                 """);
@@ -1166,10 +1227,16 @@ class AnalysisTaskServiceTest {
 
         List<TaskNodeResponse> responses = taskService.getTaskNodes(taskId);
         TaskNodeResponse collectorResponse = responses.get(0);
+        JsonNode collectorInsight = objectMapper.valueToTree(collectorResponse.getCollectorInsight());
 
         assertEquals(Boolean.TRUE, collectorResponse.getCanRerun());
         assertEquals(Boolean.TRUE, collectorResponse.getCanUpdateConfigAndRerun());
         assertEquals(Boolean.TRUE, collectorResponse.getCanReuseCheckpoint());
+        assertTrue(collectorInsight.has("collectionAuditSummary"));
+        assertTrue(collectorInsight.has("collectionReplayTimeline"));
+        assertEquals("PARTIAL_SUCCESS", collectorInsight.path("collectionAuditSummary").path("status").asText());
+        assertEquals("collect_sources_web#002",
+                collectorInsight.path("collectionAuditSummary").path("recoveryCheckpoint").asText());
         assertEquals(Boolean.FALSE, collectorResponse.getCanPause());
         assertEquals(Boolean.FALSE, collectorResponse.getCanResumeNode());
         assertEquals(Boolean.FALSE, collectorResponse.getCanSkip());

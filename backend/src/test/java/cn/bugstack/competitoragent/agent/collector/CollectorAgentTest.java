@@ -232,6 +232,11 @@ class CollectorAgentTest {
         assertEquals("https://example.com/help", output.path("documents").get(1).path("sourceUrls").get(0).asText());
         assertTrue(output.path("documents").get(1).path("issueFlags").toString().contains("COLLECT_FAILED"));
         assertTrue(output.path("issueFlags").toString().contains("PARTIAL_COLLECTION_FAILURE"));
+        assertEquals("PARTIAL_SUCCESS", output.path("collectionStatus").asText());
+        assertEquals("PARTIAL_SUCCESS", output.path("collectionAudit").path("summary").path("status").asText());
+        assertTrue(output.path("collectionAudit").path("replayTimeline").isArray());
+        assertEquals(2, output.path("collectionAudit").path("replayTimeline").size());
+        assertTrue(output.path("collectionAudit").path("sourceUrls").isArray());
         assertTrue(output.path("evidenceFragments").isArray());
         assertTrue(output.path("sectionEvidenceBundles").isArray());
     }
@@ -404,6 +409,64 @@ class CollectorAgentTest {
     }
 
     @Test
+    void shouldReflectFailedPrefetchedPageInsideCollectionAudit() throws Exception {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of())
+                .summary("browser search unused")
+                .fallbackSuggested(true)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        mockCollectedPage("https://example.com/docs", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/docs")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(false)
+                .errorMessage("verification failed")
+                .build());
+
+        AgentResult result = collectorAgent.execute(buildContextWithVerification("[\"https://example.com/docs\"]"));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("FAILED", result.getStatus().name());
+        assertEquals("FAILED", output.path("collectionStatus").asText());
+        assertEquals("FAILED", output.path("collectionAudit").path("summary").path("status").asText());
+        assertEquals("collect_sources_01_01#001",
+                output.path("collectionAudit").path("summary").path("recoveryCheckpoint").asText());
+        assertEquals(1, output.path("collectionAudit").path("results").size());
+        assertEquals("FAILED", output.path("collectionAudit").path("results").get(0).path("status").asText());
+        assertEquals(1, output.path("collectionAudit").path("replayTimeline").size());
+        verify(sourceCollector, times(1)).collect("https://example.com/docs", "Feishu", "DOCS");
+    }
+
+    @Test
+    void shouldMarkCheckpointReuseForPrefetchedSuccessWhenTargetOrderChanges() throws Exception {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of())
+                .summary("browser search unused")
+                .fallbackSuggested(true)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        mockCollectedPage("https://example.com/docs", "Feishu", "DOCS", successfulCollectedPage("https://example.com/docs", "Docs"));
+        mockCollectedPage("https://example.com/documentation", "Feishu", "DOCS",
+                successfulCollectedPage("https://example.com/documentation", "Documentation"));
+        mockCollectedPage("https://example.com/guide", "Feishu", "DOCS", successfulCollectedPage("https://example.com/guide", "Guide"));
+        mockCollectedPage("https://example.com/help", "Feishu", "DOCS", successfulCollectedPage("https://example.com/help", "Help"));
+
+        AgentResult result = collectorAgent.execute(buildContextWithVerificationAndCollectionCheckpoint());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name(), result.getErrorMessage());
+        assertEquals(4, output.path("collectionAudit").path("summary").path("totalPackages").asInt());
+        assertEquals(1, output.path("collectionAudit").path("summary").path("reusedCount").asInt());
+        JsonNode helpResult = findCollectionAuditResult(output, "https://example.com/help");
+        assertEquals("SUCCESS", helpResult.path("status").asText());
+        assertTrue(helpResult.path("reusedFromCheckpoint").asBoolean());
+        assertEquals("collectionAuditCheckpoint", helpResult.path("checkpointSource").asText());
+    }
+
+    @Test
     void shouldCollectGithubViaApiExecutorWithoutOpeningHtmlPage() throws Exception {
         when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
                 .candidates(List.of())
@@ -548,6 +611,172 @@ class CollectorAgentTest {
                         }
                         """)
                 .build();
+    }
+
+    private AgentContext buildContextWithVerificationAndCollectionCheckpoint() {
+        return AgentContext.builder()
+                .taskId(4L)
+                .taskName("task")
+                .currentNodeName("collect_sources_01_02")
+                .currentNodeConfig("""
+                        {
+                          "competitorName": "Feishu",
+                          "competitorUrls": [
+                            "https://example.com/help",
+                            "https://example.com/docs",
+                            "https://example.com/documentation",
+                            "https://example.com/guide"
+                          ],
+                          "sourceType": "DOCS",
+                          "discoveryNotes": "test",
+                          "verifyCandidates": true,
+                          "verifyResultPage": true,
+                          "browserSearchEnabled": false,
+                          "searchMode": "HTTP_ONLY",
+                          "minVerifiedCandidates": 1,
+                          "maxSearchResults": 4,
+                          "sourceCandidates": [
+                            {
+                              "url": "https://example.com/help",
+                              "title": "Help",
+                              "sourceType": "DOCS",
+                              "discoveryMethod": "CONFIG",
+                              "reason": "test",
+                              "domain": "example.com",
+                              "selectionStage": "PLANNED",
+                              "selectionReason": "配置提供"
+                            },
+                            {
+                              "url": "https://example.com/docs",
+                              "title": "Docs",
+                              "sourceType": "DOCS",
+                              "discoveryMethod": "CONFIG",
+                              "reason": "test",
+                              "domain": "example.com",
+                              "selectionStage": "PLANNED",
+                              "selectionReason": "配置提供"
+                            },
+                            {
+                              "url": "https://example.com/documentation",
+                              "title": "Documentation",
+                              "sourceType": "DOCS",
+                              "discoveryMethod": "CONFIG",
+                              "reason": "test",
+                              "domain": "example.com",
+                              "selectionStage": "PLANNED",
+                              "selectionReason": "配置提供"
+                            },
+                            {
+                              "url": "https://example.com/guide",
+                              "title": "Guide",
+                              "sourceType": "DOCS",
+                              "discoveryMethod": "CONFIG",
+                              "reason": "test",
+                              "domain": "example.com",
+                              "selectionStage": "PLANNED",
+                              "selectionReason": "配置提供"
+                            }
+                          ],
+                          "_testNote": "该场景需要让 competitorUrls 数量与 maxSearchResults 一致，才能稳定复现 rerun 后 4 个 prefetched target 的顺序漂移",
+                          "collectionAuditCheckpoint": {
+                            "summary": {
+                              "totalPackages": 4,
+                              "successCount": 1,
+                              "failedCount": 3,
+                              "reusedCount": 0,
+                              "status": "PARTIAL_SUCCESS",
+                              "recoveryCheckpoint": "collect_sources_01_02#002",
+                              "sourceUrls": [
+                                "https://example.com/help",
+                                "https://example.com/docs",
+                                "https://example.com/documentation",
+                                "https://example.com/guide"
+                              ]
+                            },
+                            "status": "PARTIAL_SUCCESS",
+                            "results": [
+                              {
+                                "taskPackageKey": "collect_sources_01_02#001",
+                                "targetIndex": 1,
+                                "executorType": "WEB_PAGE",
+                                "success": true,
+                                "status": "SUCCESS",
+                                "resourceLocator": "https://example.com/help",
+                                "sourceUrls": ["https://example.com/help"]
+                              },
+                              {
+                                "taskPackageKey": "collect_sources_01_02#002",
+                                "targetIndex": 2,
+                                "executorType": "PREFETCHED_PAGE",
+                                "success": false,
+                                "status": "FAILED",
+                                "resourceLocator": "https://example.com/docs",
+                                "failureKind": "PREFETCH_FAILED",
+                                "sourceUrls": ["https://example.com/docs"]
+                              },
+                              {
+                                "taskPackageKey": "collect_sources_01_02#003",
+                                "targetIndex": 3,
+                                "executorType": "PREFETCHED_PAGE",
+                                "success": false,
+                                "status": "FAILED",
+                                "resourceLocator": "https://example.com/documentation",
+                                "failureKind": "PREFETCH_FAILED",
+                                "sourceUrls": ["https://example.com/documentation"]
+                              },
+                              {
+                                "taskPackageKey": "collect_sources_01_02#004",
+                                "targetIndex": 4,
+                                "executorType": "PREFETCHED_PAGE",
+                                "success": false,
+                                "status": "FAILED",
+                                "resourceLocator": "https://example.com/guide",
+                                "failureKind": "PREFETCH_FAILED",
+                                "sourceUrls": ["https://example.com/guide"]
+                              }
+                            ],
+                            "replayTimeline": [
+                              {
+                                "taskPackageKey": "collect_sources_01_02#001",
+                                "targetIndex": 1,
+                                "status": "SUCCESS",
+                                "executorType": "WEB_PAGE",
+                                "resourceLocator": "https://example.com/help",
+                                "sourceUrls": ["https://example.com/help"]
+                              }
+                            ],
+                            "recoveryCheckpoint": "collect_sources_01_02#002",
+                            "sourceUrls": [
+                              "https://example.com/help",
+                              "https://example.com/docs",
+                              "https://example.com/documentation",
+                              "https://example.com/guide"
+                            ]
+                          }
+                        }
+                        """)
+                .build();
+    }
+
+    private SourceCollector.CollectedPage successfulCollectedPage(String url, String title) {
+        return SourceCollector.CollectedPage.builder()
+                .url(url)
+                .title(title)
+                .content("useful docs content for " + title)
+                .snippet(title + " snippet")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(true)
+                .build();
+    }
+
+    private JsonNode findCollectionAuditResult(JsonNode output, String resourceLocator) {
+        for (JsonNode result : output.path("collectionAudit").path("results")) {
+            if (resourceLocator.equals(result.path("resourceLocator").asText())) {
+                return result;
+            }
+        }
+        throw new AssertionError("missing collectionAudit result for " + resourceLocator);
     }
 
     /**

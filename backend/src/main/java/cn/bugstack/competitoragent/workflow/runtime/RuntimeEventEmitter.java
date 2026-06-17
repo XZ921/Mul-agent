@@ -1,8 +1,11 @@
 package cn.bugstack.competitoragent.workflow.runtime;
 
+import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
+import cn.bugstack.competitoragent.collection.CollectionReplayTimelineItem;
 import cn.bugstack.competitoragent.event.TaskEventPublisher;
 import cn.bugstack.competitoragent.log.AgentLogService;
 import cn.bugstack.competitoragent.model.dto.AgentLogResponse;
+import cn.bugstack.competitoragent.model.dto.CollectionAuditSummary;
 import cn.bugstack.competitoragent.model.dto.CollectorSelectedTargetSummary;
 import cn.bugstack.competitoragent.model.dto.SearchProgressEventPayload;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
@@ -157,6 +160,14 @@ public class RuntimeEventEmitter {
                     output.get("selectedTargets"),
                     new TypeReference<List<CollectorSelectedTargetSummary>>() {
                     }));
+            CollectionAuditSnapshot collectionAudit = convertValue(output.get("collectionAudit"), CollectionAuditSnapshot.class);
+            if (collectionAudit != null && (collectionAudit.getSourceUrls() == null || collectionAudit.getSourceUrls().isEmpty())) {
+                collectionAudit.setSourceUrls(readStringList(output.get("sourceUrls")));
+            }
+            payload.setCollectionStatus(textValue(output.get("collectionStatus")));
+            payload.setCollectionAudit(collectionAudit);
+            payload.setCollectionAuditSummary(resolveCollectionAuditSummary(collectionAudit));
+            payload.setCollectionReplayTimeline(resolveCollectionReplayTimeline(output, collectionAudit));
             payload.setSourceUrls(readStringList(output.get("sourceUrls")));
         }
 
@@ -201,6 +212,10 @@ public class RuntimeEventEmitter {
                 || (payload.getDiscardedCandidates() != null && !payload.getDiscardedCandidates().isEmpty())
                 || (payload.getReplayTimeline() != null && !payload.getReplayTimeline().isEmpty())
                 || (payload.getSelectedTargets() != null && !payload.getSelectedTargets().isEmpty())
+                || payload.getCollectionAudit() != null
+                || payload.getCollectionAuditSummary() != null
+                || hasText(payload.getCollectionStatus())
+                || (payload.getCollectionReplayTimeline() != null && !payload.getCollectionReplayTimeline().isEmpty())
                 || (payload.getSourceUrls() != null && !payload.getSourceUrls().isEmpty());
     }
 
@@ -231,6 +246,34 @@ public class RuntimeEventEmitter {
 
     private JsonNode firstPresent(JsonNode primary, JsonNode fallback) {
         return primary == null || primary.isNull() ? fallback : primary;
+    }
+
+    private List<CollectionReplayTimelineItem> resolveCollectionReplayTimeline(JsonNode output,
+                                                                               CollectionAuditSnapshot collectionAudit) {
+        if (collectionAudit != null && collectionAudit.getReplayTimeline() != null) {
+            return collectionAudit.getReplayTimeline();
+        }
+        return convertList(firstPresent(output.get("collectionReplayTimeline"),
+                output.get("replayTimeline")), new TypeReference<List<CollectionReplayTimelineItem>>() {
+        });
+    }
+
+    private CollectionAuditSummary resolveCollectionAuditSummary(CollectionAuditSnapshot collectionAudit) {
+        if (collectionAudit == null) {
+            return null;
+        }
+        if (collectionAudit.getSummary() != null) {
+            return collectionAudit.getSummary();
+        }
+        return CollectionAuditSummary.from(collectionAudit);
+    }
+
+    private String textValue(JsonNode node) {
+        return node == null || node.isNull() ? null : node.asText(null);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private List<String> readStringList(JsonNode node) {
