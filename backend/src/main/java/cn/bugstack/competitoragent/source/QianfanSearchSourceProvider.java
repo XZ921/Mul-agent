@@ -160,8 +160,10 @@ public class QianfanSearchSourceProvider implements SearchSourceProvider {
                 rank++;
                 candidates.add(SourceCandidate.builder()
                         .url(url)
+                        .sourceUrls(List.of(url))
                         .title(defaultText(text(item, "title"), competitorName + " " + scope))
                         .sourceType(scope)
+                        .providerKey("qianfan")
                         .discoveryMethod("QIANFAN_SEARCH")
                         .reason(buildReason(scope, defaultText(text(item, "content"), text(item, "snippet"))))
                         .domain(extractDomain(url))

@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.search;
 import lombok.Data;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -44,7 +45,7 @@ public class SearchSourceCatalogProperties {
     }
 
     private SourceFamilyProperties createOfficialFamily() {
-        return new SourceFamilyProperties(
+        SourceFamilyProperties family = new SourceFamilyProperties(
                 true,
                 SearchProviderRole.PRIMARY_VERTICAL.name(),
                 List.of("OFFICIAL", "PRICING", "DOCS"),
@@ -59,10 +60,17 @@ public class SearchSourceCatalogProperties {
                         "search-docs-primary"
                 )
         );
+        family.setPreferredWebRenderHint("LIGHTWEIGHT");
+        family.setExpectedBlockTypes(List.of(
+                "PRICING_BLOCK",
+                "DOCUMENTATION_OUTLINE",
+                "JSON_LD_METADATA"
+        ));
+        return family;
     }
 
     private SourceFamilyProperties createNewsFamily() {
-        return new SourceFamilyProperties(
+        SourceFamilyProperties family = new SourceFamilyProperties(
                 true,
                 SearchProviderRole.PRIMARY_VERTICAL.name(),
                 List.of("NEWS"),
@@ -72,10 +80,13 @@ public class SearchSourceCatalogProperties {
                 new UpdatePolicyProperties("REALTIME_RSS_AND_SCHEDULED_SWEEP", "PT1H"),
                 List.of("search-news-primary", "search-news-secondary")
         );
+        family.setPreferredWebRenderHint("LIGHTWEIGHT");
+        family.setExpectedBlockTypes(List.of("ARTICLE_BODY", "JSON_LD_METADATA"));
+        return family;
     }
 
     private SourceFamilyProperties createGithubFamily() {
-        return new SourceFamilyProperties(
+        SourceFamilyProperties family = new SourceFamilyProperties(
                 true,
                 SearchProviderRole.PRIMARY_VERTICAL.name(),
                 List.of("GITHUB", "OPEN_SOURCE"),
@@ -85,6 +96,15 @@ public class SearchSourceCatalogProperties {
                 new UpdatePolicyProperties("DAILY_API_POLLING", "PT24H"),
                 List.of("search-github-repository", "search-github-release")
         );
+        /**
+         * 第四轮开始显式绑定 GitHub 家族的工具与 provider 身份。
+         * 这样 discovery 路由与 collection 路由都能基于同一份家族语义做判断。
+         */
+        family.getToolProviderKeys().put("GITHUB_API", "github");
+        family.getToolProviderKeys().put("PUBLIC_SEARCH", "qianfan");
+        family.setPreferredWebRenderHint("FULL_RENDER");
+        family.setExpectedBlockTypes(List.of("RELEASE_NOTES", "JSON_LD_METADATA"));
+        return family;
     }
 
     /**
@@ -101,6 +121,12 @@ public class SearchSourceCatalogProperties {
         private List<String> auxiliaryTools = List.of();
         private UpdatePolicyProperties updatePolicy = new UpdatePolicyProperties();
         private List<String> queryTemplates = List.of();
+        /**
+         * 网页采集偏好只解释“公开网页应该怎么采”，
+         * 不替代 provider route，也不替代 API executor owner。
+         */
+        private String preferredWebRenderHint;
+        private List<String> expectedBlockTypes = new ArrayList<>();
         /**
          * 工具到 provider key 的可选绑定。
          * Source Family Catalog 只声明业务家族与工具语义；
@@ -142,6 +168,16 @@ public class SearchSourceCatalogProperties {
                     .map(toolProviderKeys::get)
                     .filter(StringUtils::hasText)
                     .toList();
+        }
+
+        /**
+         * 统一解析网页采集提示。
+         * 当配置缺失时安全回退为 LIGHTWEIGHT，避免调用方继续散落默认值。
+         */
+        public String resolvePreferredWebRenderHint() {
+            return StringUtils.hasText(preferredWebRenderHint)
+                    ? preferredWebRenderHint.trim().toUpperCase(Locale.ROOT)
+                    : "LIGHTWEIGHT";
         }
     }
 

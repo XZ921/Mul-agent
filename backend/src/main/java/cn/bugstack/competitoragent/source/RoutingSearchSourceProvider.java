@@ -1,5 +1,7 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.search.SearchPolicyResolver;
+import cn.bugstack.competitoragent.search.SearchProviderRole;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
@@ -25,6 +27,7 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
     private final SearchProviderProperties properties;
     private final List<SearchSourceProvider> delegateProviders;
     private final SourceCandidateRanker sourceCandidateRanker;
+    private final SearchPolicyResolver searchPolicyResolver;
 
     /**
      * Spring 运行时统一走显式装配构造器。
@@ -37,24 +40,36 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
                                        SerpApiSearchSourceProvider serpApiSearchSourceProvider,
                                        BrowserPreviewSearchSourceProvider browserPreviewProvider,
                                        HttpSearchSourceProvider httpSearchSourceProvider,
-                                       SourceCandidateRanker sourceCandidateRanker) {
+                                       SourceCandidateRanker sourceCandidateRanker,
+                                       SearchPolicyResolver searchPolicyResolver) {
         this(properties,
                 List.of(qianfanSearchSourceProvider, serpApiSearchSourceProvider, browserPreviewProvider, httpSearchSourceProvider),
-                sourceCandidateRanker);
+                sourceCandidateRanker,
+                searchPolicyResolver);
     }
 
     public RoutingSearchSourceProvider(SearchProviderProperties properties,
                                        List<? extends SearchSourceProvider> delegateProviders,
                                        SourceCandidateRanker sourceCandidateRanker) {
+        this(properties, delegateProviders, sourceCandidateRanker, new SearchPolicyResolver());
+    }
+
+    public RoutingSearchSourceProvider(SearchProviderProperties properties,
+                                       List<? extends SearchSourceProvider> delegateProviders,
+                                       SourceCandidateRanker sourceCandidateRanker,
+                                       SearchPolicyResolver searchPolicyResolver) {
         this.properties = properties;
         this.delegateProviders = List.copyOf(delegateProviders);
         this.sourceCandidateRanker = sourceCandidateRanker;
+        this.searchPolicyResolver = searchPolicyResolver;
     }
 
     @Override
     public List<SourceCandidate> search(String competitorName, List<String> requestedScopes) {
         List<SourceCandidate> mergedCandidates = new ArrayList<>();
         Map<String, SearchSourceProvider> providersByKey = indexProvidersByKey();
+        int primaryCandidateCount = 0;
+        boolean primarySatisfied = false;
 
         for (String providerKey : resolveProviderOrder()) {
             SearchSourceProvider provider = providersByKey.get(normalizeProviderKey(providerKey));
@@ -62,6 +77,14 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
                 continue;
             }
             SearchSourceProviderDescriptor descriptor = provider.descriptor();
+            SearchProviderRole providerRole = searchPolicyResolver.resolveProviderRole(descriptor.getProviderKey());
+            if (primarySatisfied
+                    && !properties.isRunAuxiliaryWhenPrimarySatisfied()
+                    && providerRole != SearchProviderRole.PRIMARY_VERTICAL) {
+                log.debug("skip auxiliary provider because primary threshold already satisfied, provider={}",
+                        descriptor.getProviderKey());
+                continue;
+            }
             if (!descriptor.isEnabled(properties)) {
                 log.debug("search provider disabled by routing config, provider={}", descriptor.getProviderKey());
                 continue;
@@ -74,6 +97,10 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
                 List<SourceCandidate> providerCandidates = provider.search(competitorName, requestedScopes);
                 if (!providerCandidates.isEmpty()) {
                     mergedCandidates.addAll(providerCandidates);
+                    if (providerRole == SearchProviderRole.PRIMARY_VERTICAL) {
+                        primaryCandidateCount += providerCandidates.size();
+                        primarySatisfied = primaryCandidateCount >= Math.max(1, properties.getPrimaryCandidateThreshold());
+                    }
                 }
             } catch (RuntimeException e) {
                 log.warn("search provider failed, provider={}, failOpen={}, error={}",

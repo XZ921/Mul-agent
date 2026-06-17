@@ -129,6 +129,14 @@ collector:
   page-timeout-seconds: 30
   user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
+collection:
+  jina-reader:
+    enabled: true
+    endpoint: https://r.jina.ai/http://
+    timeout-seconds: 20
+    max-retries: 2
+    minimum-content-length: 160
+
 source-discovery:
   search:
     provider-order:
@@ -175,6 +183,11 @@ search:
       official:
         enabled: true
         role: PRIMARY_VERTICAL
+        preferred-web-render-hint: LIGHTWEIGHT
+        expected-block-types:
+          - PRICING_BLOCK
+          - DOCUMENTATION_OUTLINE
+          - JSON_LD_METADATA
         source-types:
           - OFFICIAL
           - PRICING
@@ -199,6 +212,10 @@ search:
       news:
         enabled: true
         role: PRIMARY_VERTICAL
+        preferred-web-render-hint: LIGHTWEIGHT
+        expected-block-types:
+          - ARTICLE_BODY
+          - JSON_LD_METADATA
         source-types:
           - NEWS
         content-scopes:
@@ -219,6 +236,10 @@ search:
       github:
         enabled: true
         role: PRIMARY_VERTICAL
+        preferred-web-render-hint: FULL_RENDER
+        expected-block-types:
+          - RELEASE_NOTES
+          - JSON_LD_METADATA
         source-types:
           - GITHUB
           - OPEN_SOURCE

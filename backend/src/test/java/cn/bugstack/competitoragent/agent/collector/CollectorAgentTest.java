@@ -4,6 +4,13 @@ import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.context.TaskRagContextBundle;
+import cn.bugstack.competitoragent.collection.CollectionExecutionCoordinator;
+import cn.bugstack.competitoragent.collection.CollectionExecutor;
+import cn.bugstack.competitoragent.collection.CollectionExecutorRegistry;
+import cn.bugstack.competitoragent.collection.CollectionExecutionResult;
+import cn.bugstack.competitoragent.collection.CollectionTaskPackage;
+import cn.bugstack.competitoragent.collection.CollectionTaskPackageBuilder;
+import cn.bugstack.competitoragent.collection.WebPageCollectionExecutor;
 import cn.bugstack.competitoragent.model.entity.KnowledgeDocument;
 import cn.bugstack.competitoragent.model.entity.RetrievalChunk;
 import cn.bugstack.competitoragent.model.entity.RetrievalIndex;
@@ -20,6 +27,7 @@ import cn.bugstack.competitoragent.search.SearchPolicyResolver;
 import cn.bugstack.competitoragent.search.SearchExecutionCoordinator;
 import cn.bugstack.competitoragent.source.SearchSourceProvider;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
+import cn.bugstack.competitoragent.source.SourceCollectRequest;
 import cn.bugstack.competitoragent.source.SourceCollector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -33,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -51,6 +60,14 @@ class CollectorAgentTest {
     private final BrowserSearchRuntimeService browserSearchRuntimeService = mock(BrowserSearchRuntimeService.class);
     private final SearchSourceProvider searchSourceProvider = mock(SearchSourceProvider.class);
     private final TaskRetrievalIndexService taskRetrievalIndexService = mock(TaskRetrievalIndexService.class);
+    private final CollectionExecutor githubApiExecutor = mock(CollectionExecutor.class);
+    private final CollectionExecutionCoordinator collectionExecutionCoordinator = new CollectionExecutionCoordinator(
+            new CollectionTaskPackageBuilder(),
+            new CollectionExecutorRegistry(List.of(
+                    githubApiExecutor,
+                    new WebPageCollectionExecutor(sourceCollector)
+            ))
+    );
     private final SearchExecutionCoordinator searchExecutionCoordinator = new SearchExecutionCoordinator(
             new CandidateVerifier(sourceCollector),
             browserSearchRuntimeService,
@@ -66,9 +83,18 @@ class CollectorAgentTest {
             nodeRepository,
             agentContextAssembler,
             searchExecutionCoordinator,
+            collectionExecutionCoordinator,
             taskRetrievalIndexService,
             objectMapper
     );
+
+    {
+        when(githubApiExecutor.supports(any())).thenAnswer(invocation -> {
+            CollectionTaskPackage taskPackage = invocation.getArgument(0);
+            return taskPackage != null && "GITHUB_API".equalsIgnoreCase(taskPackage.getPrimaryTool());
+        });
+        when(githubApiExecutor.executorType()).thenReturn("API_DATA");
+    }
 
     @Test
     void shouldExposeUnifiedTaskRagContextInCollectorOutput() throws Exception {
@@ -91,16 +117,15 @@ class CollectorAgentTest {
                 .fallbackSuggested(true)
                 .build());
         when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
-        when(sourceCollector.collect("https://example.com/docs", "Feishu", "DOCS"))
-                .thenReturn(SourceCollector.CollectedPage.builder()
-                        .url("https://example.com/docs")
-                        .title("Docs")
-                        .content("useful docs content with api reference")
-                        .snippet("api reference")
-                        .competitorName("Feishu")
-                        .sourceType("DOCS")
-                        .success(true)
-                        .build());
+        mockCollectedPage("https://example.com/docs", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/docs")
+                .title("Docs")
+                .content("useful docs content with api reference")
+                .snippet("api reference")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(true)
+                .build());
 
         AgentResult result = collectorAgent.execute(buildContext("[\"https://example.com/docs\"]"));
         JsonNode output = objectMapper.readTree(result.getOutputData());
@@ -119,7 +144,7 @@ class CollectorAgentTest {
                 .fallbackSuggested(true)
                 .build());
         when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
-        when(sourceCollector.collect(any(), any(), any())).thenReturn(SourceCollector.CollectedPage.builder()
+        mockCollectedPageForAnyRequest(SourceCollector.CollectedPage.builder()
                 .url("https://example.com/pricing")
                 .competitorName("Feishu")
                 .sourceType("PRICING")
@@ -145,24 +170,22 @@ class CollectorAgentTest {
                 .fallbackSuggested(true)
                 .build());
         when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
-        when(sourceCollector.collect("https://example.com/docs", "Feishu", "DOCS"))
-                .thenReturn(SourceCollector.CollectedPage.builder()
-                        .url("https://example.com/docs")
-                        .title("Docs")
-                        .content("useful docs content with api reference")
-                        .snippet("api reference")
-                        .competitorName("Feishu")
-                        .sourceType("DOCS")
-                        .success(true)
-                        .build());
-        when(sourceCollector.collect("https://example.com/help", "Feishu", "DOCS"))
-                .thenReturn(SourceCollector.CollectedPage.builder()
-                        .url("https://example.com/help")
-                        .competitorName("Feishu")
-                        .sourceType("DOCS")
-                        .success(false)
-                        .errorMessage("timeout")
-                        .build());
+        mockCollectedPage("https://example.com/docs", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/docs")
+                .title("Docs")
+                .content("useful docs content with api reference")
+                .snippet("api reference")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(true)
+                .build());
+        mockCollectedPage("https://example.com/help", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/help")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(false)
+                .errorMessage("timeout")
+                .build());
 
         AgentResult result = collectorAgent.execute(buildContext("[\"https://example.com/docs\",\"https://example.com/help\"]"));
 
@@ -184,24 +207,22 @@ class CollectorAgentTest {
                 .fallbackSuggested(true)
                 .build());
         when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
-        when(sourceCollector.collect("https://example.com/docs", "Feishu", "DOCS"))
-                .thenReturn(SourceCollector.CollectedPage.builder()
-                        .url("https://example.com/docs")
-                        .title("Docs")
-                        .content("useful docs content with api reference")
-                        .snippet("api reference")
-                        .competitorName("Feishu")
-                        .sourceType("DOCS")
-                        .success(true)
-                        .build());
-        when(sourceCollector.collect("https://example.com/help", "Feishu", "DOCS"))
-                .thenReturn(SourceCollector.CollectedPage.builder()
-                        .url("https://example.com/help")
-                        .competitorName("Feishu")
-                        .sourceType("DOCS")
-                        .success(false)
-                        .errorMessage("timeout")
-                        .build());
+        mockCollectedPage("https://example.com/docs", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/docs")
+                .title("Docs")
+                .content("useful docs content with api reference")
+                .snippet("api reference")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(true)
+                .build());
+        mockCollectedPage("https://example.com/help", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/help")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(false)
+                .errorMessage("timeout")
+                .build());
 
         AgentResult result = collectorAgent.execute(buildContext("[\"https://example.com/docs\",\"https://example.com/help\"]"));
         JsonNode output = objectMapper.readTree(result.getOutputData());
@@ -224,16 +245,15 @@ class CollectorAgentTest {
                 .fallbackSuggested(true)
                 .build());
         when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
-        when(sourceCollector.collect("https://example.com/docs", "Feishu", "DOCS"))
-                .thenReturn(SourceCollector.CollectedPage.builder()
-                        .url("https://example.com/docs")
-                        .title("Docs")
-                        .content("useful docs content with api reference")
-                        .snippet("api reference")
-                        .competitorName("Feishu")
-                        .sourceType("DOCS")
-                        .success(true)
-                        .build());
+        mockCollectedPage("https://example.com/docs", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/docs")
+                .title("Docs")
+                .content("useful docs content with api reference")
+                .snippet("api reference")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(true)
+                .build());
         when(taskRetrievalIndexService.indexEvidence(any())).thenReturn(TaskRetrievalIndexingResult.success(
                 KnowledgeDocument.builder()
                         .taskId(1L)
@@ -306,16 +326,15 @@ class CollectorAgentTest {
                 .fallbackSuggested(true)
                 .build());
         when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
-        when(sourceCollector.collect("https://example.com/docs", "Feishu", "DOCS"))
-                .thenReturn(SourceCollector.CollectedPage.builder()
-                        .url("https://example.com/docs")
-                        .title("Docs")
-                        .content("content")
-                        .snippet("snippet")
-                        .competitorName("Feishu")
-                        .sourceType("DOCS")
-                        .success(true)
-                        .build());
+        mockCollectedPage("https://example.com/docs", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/docs")
+                .title("Docs")
+                .content("content")
+                .snippet("snippet")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(true)
+                .build());
 
         AgentResult result = collectorAgent.execute(buildContext("[\"https://example.com/docs\"]"));
         JsonNode output = objectMapper.readTree(result.getOutputData());
@@ -333,16 +352,15 @@ class CollectorAgentTest {
                 .fallbackSuggested(true)
                 .build());
         when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
-        when(sourceCollector.collect("https://example.com/docs", "Feishu", "DOCS"))
-                .thenReturn(SourceCollector.CollectedPage.builder()
-                        .url("https://example.com/docs")
-                        .title("Docs")
-                        .content("useful docs content with api reference")
-                        .snippet("api reference")
-                        .competitorName("Feishu")
-                        .sourceType("DOCS")
-                        .success(true)
-                        .build());
+        mockCollectedPage("https://example.com/docs", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/docs")
+                .title("Docs")
+                .content("useful docs content with api reference")
+                .snippet("api reference")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(true)
+                .build());
 
         AgentResult result = collectorAgent.execute(buildContext("[\"https://example.com/docs\"]"));
         JsonNode output = objectMapper.readTree(result.getOutputData());
@@ -369,21 +387,61 @@ class CollectorAgentTest {
                 .fallbackSuggested(true)
                 .build());
         when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
-        when(sourceCollector.collect("https://example.com/docs", "Feishu", "DOCS"))
-                .thenReturn(SourceCollector.CollectedPage.builder()
-                        .url("https://example.com/docs")
-                        .title("Docs")
-                        .content("useful docs content with api reference")
-                        .snippet("api reference")
-                        .competitorName("Feishu")
-                        .sourceType("DOCS")
-                        .success(true)
-                        .build());
+        mockCollectedPage("https://example.com/docs", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/docs")
+                .title("Docs")
+                .content("useful docs content with api reference")
+                .snippet("api reference")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(true)
+                .build());
 
         AgentResult result = collectorAgent.execute(buildContextWithVerification("[\"https://example.com/docs\"]"));
 
         assertEquals("SUCCESS", result.getStatus().name(), result.getErrorMessage());
         verify(sourceCollector, times(1)).collect("https://example.com/docs", "Feishu", "DOCS");
+    }
+
+    @Test
+    void shouldCollectGithubViaApiExecutorWithoutOpeningHtmlPage() throws Exception {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of())
+                .summary("mock browser search disabled")
+                .fallbackSuggested(true)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        when(githubApiExecutor.execute(any())).thenReturn(
+                CollectionExecutionResult.builder()
+                        .executorType("API_DATA")
+                        .success(true)
+                        .resourceLocator("github://repo/acme/rocket")
+                        .title("acme/rocket")
+                        .content("Acme AI agent platform")
+                        .sourceUrls(List.of("https://github.com/acme/rocket"))
+                        .structuredPayload(Map.of(
+                                "repository", "acme/rocket",
+                                "latestReleaseTag", "v1.2.3"
+                        ))
+                        .build()
+        );
+
+        AgentResult result = collectorAgent.execute(buildGithubContext());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name(), result.getErrorMessage());
+        assertEquals("https://github.com/acme/rocket",
+                output.path("documents").get(0).path("sourceUrls").get(0).asText());
+        assertTrue(output.path("documents").get(0).path("success").asBoolean());
+        assertTrue(output.path("documents").get(0).path("evidenceFragments").isArray());
+
+        ArgumentCaptor<cn.bugstack.competitoragent.model.entity.EvidenceSource> evidenceCaptor =
+                ArgumentCaptor.forClass(cn.bugstack.competitoragent.model.entity.EvidenceSource.class);
+        verify(evidenceRepository, times(1)).save(evidenceCaptor.capture());
+        assertTrue(evidenceCaptor.getValue().getPageMetadata().contains("\"repository\":\"acme/rocket\""));
+        assertTrue(evidenceCaptor.getValue().getPageMetadata().contains("\"sourceUrls\":[\"https://github.com/acme/rocket\"]"));
+        verify(sourceCollector, never()).collect("https://github.com/acme/rocket", "Acme", "GITHUB");
     }
 
     private AgentContext buildContext(String competitorUrlsJson) {
@@ -458,5 +516,59 @@ class CollectorAgentTest {
                         }
                         """.formatted(competitorUrlsJson))
                 .build();
+    }
+
+    private AgentContext buildGithubContext() {
+        return AgentContext.builder()
+                .taskId(3L)
+                .taskName("task")
+                .planVersionId(9L)
+                .currentNodeName("collect_sources_01_01")
+                .currentNodeConfig("""
+                        {
+                          "competitorName": "Acme",
+                          "competitorUrls": ["https://github.com/acme/rocket"],
+                          "sourceType": "GITHUB",
+                          "discoveryNotes": "test",
+                          "sourceCandidates": [
+                            {
+                              "url": "https://github.com/acme/rocket",
+                              "title": "acme/rocket",
+                              "sourceType": "GITHUB",
+                              "sourceFamilyKey": "github",
+                              "providerKey": "github",
+                              "sourceUrls": ["https://github.com/acme/rocket"],
+                              "discoveryMethod": "CONFIG",
+                              "reason": "test",
+                              "domain": "github.com",
+                              "selectionStage": "PLANNED",
+                              "selectionReason": "配置提供"
+                            }
+                          ]
+                        }
+                        """)
+                .build();
+    }
+
+    /**
+     * 测试需要同时兼容旧的 collect(String,...) 和新的 collect(SourceCollectRequest) 路径，
+     * 否则架构升级后很容易只 stub 旧接口，导致执行器路径拿到 null。
+     */
+    private void mockCollectedPage(String url,
+                                   String competitorName,
+                                   String sourceType,
+                                   SourceCollector.CollectedPage page) {
+        when(sourceCollector.collect(argThat((SourceCollectRequest request) ->
+                request != null
+                        && url.equals(request.getUrl())
+                        && competitorName.equals(request.getCompetitorName())
+                        && sourceType.equals(request.getSourceType()))))
+                .thenReturn(page);
+        when(sourceCollector.collect(url, competitorName, sourceType)).thenReturn(page);
+    }
+
+    private void mockCollectedPageForAnyRequest(SourceCollector.CollectedPage page) {
+        when(sourceCollector.collect(any(SourceCollectRequest.class))).thenReturn(page);
+        when(sourceCollector.collect(any(), any(), any())).thenReturn(page);
     }
 }

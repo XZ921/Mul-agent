@@ -185,8 +185,10 @@ public class HttpSearchSourceProvider implements SearchSourceProvider {
                 index++;
                 candidates.add(SourceCandidate.builder()
                         .url(url)
+                        .sourceUrls(List.of(url))
                         .title(defaultText(text(item, properties.getTitleField()), competitorName + " " + scope))
                         .sourceType(scope)
+                        .providerKey("http")
                         .discoveryMethod("SEARCH")
                         .reason(buildReason(scope, text(item, properties.getSnippetField())))
                         .domain(extractDomain(url))

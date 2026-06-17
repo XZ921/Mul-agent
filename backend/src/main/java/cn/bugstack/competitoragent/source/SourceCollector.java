@@ -13,6 +13,13 @@ import java.util.List;
 public interface SourceCollector {
 
     /**
+     * 第五轮开始新增正式请求对象入口。
+     * 当前先保持默认转发，避免在 Task 2 就破坏既有采集器实现；
+     * Task 4 再把主逻辑完整迁移到 request 版本。
+     */
+    CollectedPage collect(SourceCollectRequest request);
+
+    /**
      * 采集单个 URL 的页面内容
      *
      * @param url         目标 URL
@@ -20,7 +27,13 @@ public interface SourceCollector {
      * @param sourceType  信息源类型（官网/文档/定价页等）
      * @return 采集结果
      */
-    CollectedPage collect(String url, String competitorName, String sourceType);
+    default CollectedPage collect(String url, String competitorName, String sourceType) {
+        return collect(SourceCollectRequest.builder()
+                .url(url)
+                .competitorName(competitorName)
+                .sourceType(sourceType)
+                .build());
+    }
 
     /**
      * 批量采集多个 URL

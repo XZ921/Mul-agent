@@ -36,12 +36,27 @@ class SearchPropertiesBindingTest {
                     "search.browser.continue-on-page-collect-failure=false",
                     "search.browser.recover-partial-content-on-timeout=true",
                     "search.source-catalog.families.official.role=PRIMARY_VERTICAL",
+                    "search.source-catalog.families.official.preferred-web-render-hint=LIGHTWEIGHT",
+                    "search.source-catalog.families.official.expected-block-types[0]=PRICING_BLOCK",
+                    "search.source-catalog.families.official.expected-block-types[1]=DOCUMENTATION_OUTLINE",
+                    "search.source-catalog.families.official.expected-block-types[2]=JSON_LD_METADATA",
                     "search.source-catalog.families.official.primary-tools[0]=WEB_SCRAPER",
                     "search.source-catalog.families.official.primary-tools[1]=JINA_READER",
                     "search.source-catalog.families.news.update-policy.mode=REALTIME_RSS_AND_SCHEDULED_SWEEP",
+                    "search.source-catalog.families.news.preferred-web-render-hint=LIGHTWEIGHT",
+                    "search.source-catalog.families.news.expected-block-types[0]=ARTICLE_BODY",
+                    "search.source-catalog.families.news.expected-block-types[1]=JSON_LD_METADATA",
+                    "search.source-catalog.families.github.preferred-web-render-hint=FULL_RENDER",
+                    "search.source-catalog.families.github.expected-block-types[0]=RELEASE_NOTES",
+                    "search.source-catalog.families.github.expected-block-types[1]=JSON_LD_METADATA",
                     "search.source-catalog.families.github.query-templates[0]=search-github-repository",
                     "search.source-catalog.families.github.query-templates[1]=search-github-release",
                     "search.source-catalog.families.github.tool-provider-keys.GITHUB_API=github",
+                    "github-api.enabled=true",
+                    "github-api.endpoint=https://api.github.com",
+                    "github-api.api-token=test-github-token",
+                    "github-api.timeout-seconds=20",
+                    "github-api.max-retries=3",
                     "source-discovery.search.primary-candidate-threshold=1",
                     "source-discovery.search.run-auxiliary-when-primary-satisfied=false",
                     "serpapi.api-key=test-serp-key",
@@ -60,6 +75,8 @@ class SearchPropertiesBindingTest {
             SearchBrowserProperties searchBrowserProperties = context.getBean(SearchBrowserProperties.class);
             SerpApiProperties serpApiProperties = context.getBean(SerpApiProperties.class);
             QianfanSearchProperties qianfanSearchProperties = context.getBean(QianfanSearchProperties.class);
+            cn.bugstack.competitoragent.source.GithubApiProperties githubApiProperties =
+                    context.getBean(cn.bugstack.competitoragent.source.GithubApiProperties.class);
             SearchProperties searchProperties = context.getBean(SearchProperties.class);
 
             assertThat(searchProviderProperties.getProviderOrder()).containsExactly("serpapi", "qianfan");
@@ -87,13 +104,30 @@ class SearchPropertiesBindingTest {
             assertThat(qianfanSearchProperties.getApiKey()).isEqualTo("test-qianfan-key");
             assertThat(qianfanSearchProperties.getDefaultEngine()).isEqualTo("baidu");
             assertThat(qianfanSearchProperties.resolveDefaultEngineKey(searchEngineProperties)).isEqualTo("baidu");
+            assertThat(githubApiProperties.isEnabled()).isTrue();
+            assertThat(githubApiProperties.getEndpoint()).isEqualTo("https://api.github.com");
+            assertThat(githubApiProperties.getApiToken()).isEqualTo("test-github-token");
+            assertThat(githubApiProperties.getTimeoutSeconds()).isEqualTo(20);
+            assertThat(githubApiProperties.getMaxRetries()).isEqualTo(3);
             assertThat(searchProperties.getSourceCatalog().getFamilies()).containsKeys("official", "news", "github");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getRole())
                     .isEqualTo("PRIMARY_VERTICAL");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getPreferredWebRenderHint())
+                    .isEqualTo("LIGHTWEIGHT");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getExpectedBlockTypes())
+                    .containsExactly("PRICING_BLOCK", "DOCUMENTATION_OUTLINE", "JSON_LD_METADATA");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getPrimaryTools())
                     .containsExactly("WEB_SCRAPER", "JINA_READER");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("news").getPreferredWebRenderHint())
+                    .isEqualTo("LIGHTWEIGHT");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("news").getExpectedBlockTypes())
+                    .containsExactly("ARTICLE_BODY", "JSON_LD_METADATA");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("news").getUpdatePolicy().getMode())
                     .isEqualTo("REALTIME_RSS_AND_SCHEDULED_SWEEP");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("github").getPreferredWebRenderHint())
+                    .isEqualTo("FULL_RENDER");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("github").getExpectedBlockTypes())
+                    .containsExactly("RELEASE_NOTES", "JSON_LD_METADATA");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("github").getQueryTemplates())
                     .containsExactly("search-github-repository", "search-github-release");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("github").getToolProviderKeys())
@@ -125,6 +159,7 @@ class SearchPropertiesBindingTest {
             SearchEngineProperties.class,
             SearchBrowserProperties.class,
             SearchProperties.class,
+            cn.bugstack.competitoragent.source.GithubApiProperties.class,
             SerpApiProperties.class,
             QianfanSearchProperties.class
     })

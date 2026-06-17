@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.search.SearchPolicyResolver;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -64,7 +65,8 @@ class RoutingSearchSourceProviderTest {
         RoutingSearchSourceProvider provider = new RoutingSearchSourceProvider(
                 properties,
                 List.of(qianfanProvider, serpProvider, httpProvider),
-                ranker
+                ranker,
+                new SearchPolicyResolver()
         );
 
         assertThat(provider.search("Notion AI", List.of("DOCS"))).isEqualTo(ranked);
@@ -126,7 +128,8 @@ class RoutingSearchSourceProviderTest {
         RoutingSearchSourceProvider provider = new RoutingSearchSourceProvider(
                 properties,
                 List.of(qianfanProvider, serpProvider, httpProvider),
-                ranker
+                ranker,
+                new SearchPolicyResolver()
         );
 
         assertThat(provider.search("Notion AI", List.of("DOCS"))).isEqualTo(ranked);

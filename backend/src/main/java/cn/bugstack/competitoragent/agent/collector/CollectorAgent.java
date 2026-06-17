@@ -3,6 +3,8 @@ package cn.bugstack.competitoragent.agent.collector;
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.agent.BaseAgent;
+import cn.bugstack.competitoragent.collection.CollectionExecutionCoordinator;
+import cn.bugstack.competitoragent.collection.CollectionExecutionResult;
 import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.model.entity.KnowledgeDocument;
@@ -56,6 +58,7 @@ public class CollectorAgent extends BaseAgent {
     private final EvidenceSourceRepository evidenceRepository;
     private final TaskNodeRepository nodeRepository;
     private final SearchExecutionCoordinator searchExecutionCoordinator;
+    private final CollectionExecutionCoordinator collectionExecutionCoordinator;
     private final TaskRetrievalIndexService taskRetrievalIndexService;
     private final ObjectMapper objectMapper;
 
@@ -65,6 +68,7 @@ public class CollectorAgent extends BaseAgent {
                           TaskNodeRepository nodeRepository,
                           AgentContextAssembler agentContextAssembler,
                           SearchExecutionCoordinator searchExecutionCoordinator,
+                          CollectionExecutionCoordinator collectionExecutionCoordinator,
                           TaskRetrievalIndexService taskRetrievalIndexService,
                           ObjectMapper objectMapper) {
         super(logRepository, agentContextAssembler);
@@ -72,6 +76,7 @@ public class CollectorAgent extends BaseAgent {
         this.evidenceRepository = evidenceRepository;
         this.nodeRepository = nodeRepository;
         this.searchExecutionCoordinator = searchExecutionCoordinator;
+        this.collectionExecutionCoordinator = collectionExecutionCoordinator;
         this.taskRetrievalIndexService = taskRetrievalIndexService;
         this.objectMapper = objectMapper;
     }
@@ -137,16 +142,33 @@ public class CollectorAgent extends BaseAgent {
         }
 
         int evidenceCounter = 0;
-        markCollectStep(executionPlan, SearchExecutionStep.StepStatus.RUNNING, "正在抓取页面正文并持久化证据");
+        int reusedTargetCount = (int) targets.stream()
+                .filter(target -> target != null && target.getCollectedPage() != null)
+                .count();
+        List<SearchCollectionTarget> executableTargets = targets.stream()
+                .filter(this::requiresCoordinatorExecution)
+                .toList();
+        List<CollectionExecutionResult> collectionResults = collectionExecutionCoordinator.execute(
+                context.getTaskId(),
+                context.getCurrentNodeName(),
+                context.getPlanVersionId(),
+                config.getCompetitorName(),
+                executableTargets
+        );
+        // 采集阶段统一先走协调器路由执行，只有验证阶段已经拿到页面快照的目标才继续复用旧页面，
+        // 这样既能接入新的结构化采集执行器，也不会破坏“已验证页面不重复抓取”的既有契约。
+        markCollectStep(executionPlan, SearchExecutionStep.StepStatus.RUNNING,
+                "正在通过采集协调器处理 " + targets.size() + " 个目标，其中复用已验证页面 " + reusedTargetCount + " 个");
         progressSnapshots.add(buildProgressSnapshot(executionPlan,
                 "COLLECT_PAGES",
-                "已进入页面采集阶段，准备抓取 " + targets.size() + " 个目标页面",
+                "已进入采集阶段，待处理目标 " + targets.size() + " 个，复用已验证页面 " + reusedTargetCount + " 个",
                 Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
                 readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
         persistRunningOutput(context, config, sourceType, executionPlan, progressSnapshots,
                 searchExecutionResult.getSourceCandidates(), targets, searchExecutionResult.getExecutionTrace(),
                 results, successCounterRef[0]);
 
+        int collectionResultIndex = 0;
         for (int index = 0; index < targets.size(); index++) {
             SearchCollectionTarget target = targets.get(index);
             SourceCandidate matchedCandidate = target.getCandidate();
@@ -154,10 +176,20 @@ public class CollectorAgent extends BaseAgent {
             if (!StringUtils.hasText(url)) {
                 continue;
             }
-            // 每个 URL 都会形成一条独立证据，后续抽取、报告、质检都依赖 evidenceId 做串联。
-            SourceCollector.CollectedPage page = target.getCollectedPage() != null
-                    ? target.getCollectedPage()
-                    : sourceCollector.collect(url, config.getCompetitorName(), sourceType);
+            SourceCollector.CollectedPage page;
+            if (target.getCollectedPage() != null) {
+                page = target.getCollectedPage();
+            } else {
+                CollectionExecutionResult collectionResult = collectionResultIndex < collectionResults.size()
+                        ? collectionResults.get(collectionResultIndex++)
+                        : null;
+                page = mapCollectionResultToCollectedPage(collectionResult, config.getCompetitorName(), sourceType);
+            }
+            // 每个目标都会形成一条独立证据。结构化采集执行器可能返回修正后的 sourceUrls，
+            // 这里优先使用执行结果里的回指地址，避免再次退化为原始 locator 或丢失可追溯来源。
+            List<String> collectedSourceUrls = resolveCollectedSourceUrls(page, matchedCandidate, url);
+            String effectiveUrl = firstNonBlank(page == null ? null : page.getUrl(),
+                    collectedSourceUrls.isEmpty() ? url : collectedSourceUrls.get(0));
             evidenceCounter++;
             String evidenceId = generateEvidenceId(context.getTaskId(), context.getCurrentNodeName(), evidenceCounter);
             String pageMetadata = mergePageMetadata(page, matchedCandidate);
@@ -169,8 +201,8 @@ public class CollectorAgent extends BaseAgent {
                         .taskId(context.getTaskId())
                         .competitorName(config.getCompetitorName())
                         .evidenceId(evidenceId)
-                        .title(page.getTitle() != null ? page.getTitle() : url)
-                        .url(url)
+                        .title(page.getTitle() != null ? page.getTitle() : effectiveUrl)
+                        .url(effectiveUrl)
                         .contentSnippet(page.getSnippet())
                         .fullContent(page.getContent())
                         .pageMetadata(pageMetadata)
@@ -207,7 +239,7 @@ public class CollectorAgent extends BaseAgent {
             resultEntry.put("competitor", config.getCompetitorName());
             resultEntry.put("sourceType", sourceType);
             resultEntry.put("sourceCategory", resolveSourceCategory(matchedCandidate));
-            resultEntry.put("url", url);
+            resultEntry.put("url", effectiveUrl);
             resultEntry.put("evidenceId", evidenceId);
             resultEntry.put("success", page.isSuccess());
             resultEntry.put("title", page.getTitle());
@@ -229,9 +261,10 @@ public class CollectorAgent extends BaseAgent {
             resultEntry.put("selectionStage", matchedCandidate == null ? null : matchedCandidate.getSelectionStage());
             resultEntry.put("selectionReason", matchedCandidate == null ? null : matchedCandidate.getSelectionReason());
             resultEntry.put("selectionSummary", matchedCandidate == null ? null : matchedCandidate.getSelectionSummary());
-            resultEntry.put("sourceUrls", List.of(url));
+            resultEntry.put("sourceUrls", collectedSourceUrls);
             resultEntry.put("issueFlags", collectionIssueFlags);
-            resultEntry.put("evidenceFragments", buildCollectedEvidenceFragments(config, sourceType, page, matchedCandidate, evidenceId, url));
+            resultEntry.put("evidenceFragments", buildCollectedEvidenceFragments(
+                    config, sourceType, page, matchedCandidate, evidenceId, effectiveUrl));
             if (retrievalIndexingResult != null) {
                 resultEntry.put("knowledgeDocument", toKnowledgeDocumentPayload(retrievalIndexingResult.knowledgeDocument()));
                 resultEntry.put("retrievalChunks", toRetrievalChunkPayloads(retrievalIndexingResult.retrievalChunks()));
@@ -751,6 +784,9 @@ public class CollectorAgent extends BaseAgent {
     private String mergePageMetadata(SourceCollector.CollectedPage page,
                                      SourceCandidate matchedCandidate) {
         Map<String, Object> metadata = new LinkedHashMap<>();
+        if (page == null) {
+            return null;
+        }
         JsonNode existingMetadata = readJson(page.getMetadata());
         if (existingMetadata != null && existingMetadata.isObject()) {
             existingMetadata.fields().forEachRemaining(entry -> metadata.put(entry.getKey(), entry.getValue()));
@@ -800,6 +836,132 @@ public class CollectorAgent extends BaseAgent {
     }
 
     /**
+     * 只有未复用旧页面的目标才需要交给新的采集协调器执行。
+     * 这里显式排除空目标和空 URL，避免主链路因为脏数据把执行结果和目标序号错位。
+     */
+    private boolean requiresCoordinatorExecution(SearchCollectionTarget target) {
+        return target != null
+                && target.getCollectedPage() == null
+                && target.getCandidate() != null
+                && StringUtils.hasText(target.getCandidate().getUrl());
+    }
+
+    /**
+     * 将新的采集执行结果兼容映射回旧的 CollectedPage 契约，确保证据入库、CollectResult 组装、
+     * 以及 Task RAG 索引都还能复用现有逻辑。如果 structured payload 序列化失败，只记录日志并降级为 null。
+     */
+    private SourceCollector.CollectedPage mapCollectionResultToCollectedPage(CollectionExecutionResult result,
+                                                                             String competitorName,
+                                                                             String sourceType) {
+        if (result == null) {
+            return buildMissingCollectionResultPage(competitorName, sourceType, null);
+        }
+        String effectiveUrl = result.getSourceUrls() != null && !result.getSourceUrls().isEmpty()
+                ? result.getSourceUrls().get(0)
+                : result.getResourceLocator();
+        String content = result.getContent();
+        String snippet = content == null ? null : content.substring(0, Math.min(500, content.length()));
+        return SourceCollector.CollectedPage.builder()
+                .url(effectiveUrl)
+                .title(result.getTitle())
+                .content(content)
+                .snippet(snippet)
+                .metadata(serializeCollectionResultMetadata(result))
+                .competitorName(competitorName)
+                .sourceType(sourceType)
+                .success(result.isSuccess())
+                .errorMessage(result.getErrorMessage())
+                .build();
+    }
+
+    private SourceCollector.CollectedPage buildMissingCollectionResultPage(String competitorName,
+                                                                           String sourceType,
+                                                                           String fallbackUrl) {
+        return SourceCollector.CollectedPage.builder()
+                .url(fallbackUrl)
+                .competitorName(competitorName)
+                .sourceType(sourceType)
+                .success(false)
+                .errorMessage("collection executor returned no result")
+                .build();
+    }
+
+    /**
+     * 结构化采集结果需要把 executor/sourceUrls/structuredPayload 一起固化到 metadata 中，
+     * 这样即使下游仍消费旧的 CollectedPage，也不会丢掉 API 采集的关键信息。
+     */
+    private String serializeCollectionResultMetadata(CollectionExecutionResult result) {
+        if (result == null) {
+            return null;
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("executorType", result.getExecutorType());
+        metadata.put("resourceLocator", result.getResourceLocator());
+        metadata.put("sourceUrls", result.getSourceUrls() == null ? List.of() : result.getSourceUrls());
+        metadata.put("qualitySignals", result.getQualitySignals() == null ? List.of() : result.getQualitySignals());
+        metadata.put("qualityScore", result.getQualityScore());
+        metadata.put("failureKind", result.getFailureKind());
+        metadata.put("structuredBlocks", result.getStructuredBlocks() == null ? List.of() : result.getStructuredBlocks());
+        metadata.put("durationMillis", result.getDurationMillis());
+        metadata.put("collectedAt", result.getCollectedAt());
+        if (result.getStructuredPayload() != null && !result.getStructuredPayload().isEmpty()) {
+            metadata.put("structuredPayload", result.getStructuredPayload());
+        }
+        try {
+            return objectMapper.writeValueAsString(metadata);
+        } catch (JsonProcessingException exception) {
+            log.warn("serialize collection execution result metadata failed", exception);
+            return null;
+        }
+    }
+
+    /**
+     * sourceUrls 是“无幻觉”追溯链路的硬约束，因此优先读取采集执行器返回的 sourceUrls，
+     * 其次回退到候选元数据和最终落库 URL，确保每条证据都能稳定回指来源。
+     */
+    private List<String> resolveCollectedSourceUrls(SourceCollector.CollectedPage page,
+                                                    SourceCandidate matchedCandidate,
+                                                    String fallbackUrl) {
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        JsonNode metadata = page == null ? null : readJson(page.getMetadata());
+        if (metadata != null && metadata.path("sourceUrls").isArray()) {
+            metadata.path("sourceUrls").forEach(node -> {
+                if (node != null && node.isTextual() && StringUtils.hasText(node.asText())) {
+                    sourceUrls.add(node.asText());
+                }
+            });
+        }
+        if (matchedCandidate != null && matchedCandidate.getSourceUrls() != null) {
+            for (String sourceUrl : matchedCandidate.getSourceUrls()) {
+                if (StringUtils.hasText(sourceUrl)) {
+                    sourceUrls.add(sourceUrl);
+                }
+            }
+        }
+        if (page != null && StringUtils.hasText(page.getUrl())) {
+            sourceUrls.add(page.getUrl());
+        }
+        if (sourceUrls.isEmpty() && StringUtils.hasText(fallbackUrl)) {
+            sourceUrls.add(fallbackUrl);
+        }
+        return new ArrayList<>(sourceUrls);
+    }
+
+    private boolean hasStructuredPayloadMetadata(SourceCollector.CollectedPage page) {
+        JsonNode metadata = page == null ? null : readJson(page.getMetadata());
+        return metadata != null
+                && metadata.path("structuredPayload").isObject()
+                && metadata.path("structuredPayload").size() > 0;
+    }
+
+    private boolean hasStructuredBlockMetadata(SourceCollector.CollectedPage page) {
+        JsonNode metadata = page == null ? null : readJson(page.getMetadata());
+        return metadata != null
+                && metadata.path("structuredBlocks").isArray()
+                && metadata.path("structuredBlocks").size() > 0;
+    }
+
+    /**
      * 只有采集成功且正文/摘要至少有一项可用时，才作为有效证据进入后续抽取链路。
      */
     private boolean isUsableCollectedPage(SourceCollector.CollectedPage page) {
@@ -808,7 +970,7 @@ public class CollectorAgent extends BaseAgent {
         }
         boolean hasContent = page.getContent() != null && !page.getContent().isBlank();
         boolean hasSnippet = page.getSnippet() != null && !page.getSnippet().isBlank();
-        return hasContent || hasSnippet;
+        return hasContent || hasSnippet || hasStructuredPayloadMetadata(page) || hasStructuredBlockMetadata(page);
     }
 
     private void markCollectStep(SearchExecutionPlan executionPlan,

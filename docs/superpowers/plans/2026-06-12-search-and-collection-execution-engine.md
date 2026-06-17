@@ -34,7 +34,7 @@
 
 ## Current Stage
 
-当前阶段：搜索与采集首轮 blocking 实施与搜索/采集段实链验证已完成；第二轮 attempted / discarded / replay timeline / preview-runtime homology / ranking hardening 自动化收口与 dev live smoke 已完成；`Wave 5` 对象瘦身、共享投影分层与配置平台化已完成，`Wave 6` 垂直 provider 闭环待执行，下游提取/报告闭环另行验收
+当前阶段：搜索与采集前三轮 blocking 收口、第二轮自动化契约、第四轮 discovery/collection 联合实施已完成；`Wave 5` 对象瘦身、`Wave 7` 最小采集执行接缝、以及首个 GitHub API 结构化采集执行器均已落地并完成定向测试，`Wave 6` 真实 discovery provider 进真实运行链路与下游提取/报告业务质量闭环仍待后续验收
 
 - [x] 诊断证据归并：已完成
 - [x] 旧 Task 轴方案降级：已完成
@@ -43,7 +43,9 @@
 - [x] 首轮实施裁剪：已完成
 - [x] 实施复核：已完成
 - [x] 实链验证：已完成搜索与采集段 live 验收
-- [ ] 垂直 provider 落地：待执行，归属 `Wave 6`
+- [x] 最小采集执行接缝：已完成，归属 `Wave 7`
+- [x] 首个 API 结构化采集执行器：已完成首个 GitHub 闭环，归属 `Wave 10`
+- [ ] 垂直 provider discovery 实链落地：待执行，归属 `Wave 6`
 
 ---
 
@@ -975,6 +977,8 @@ API 执行器进入后，并不意味着网页兜底消失：
 
 目标：先把采集执行缝、最小任务包和协调器骨架正式化，而不是预判一整套可能没人真正使用的执行策略字段。
 
+第四轮联合实施已完成本波次的最小闭环：`CollectionTaskPackage`、`CollectionExecutionCoordinator`、`CollectionExecutorRegistry`、`CollectionExecutionResult` 已落地，`CollectorAgent` 已从“直接调用 `SourceCollector.collect(...)`”演进为“搜索发现 -> 任务包构建 -> 执行器路由 -> 兼容映射”的最小主链路，并保留了网页预抓页面复用契约。
+
 必须覆盖：
 
 1. `CollectionTaskPackage` 最小核心字段
@@ -994,6 +998,8 @@ API 执行器进入后，并不意味着网页兜底消失：
 ### Wave 8: Web Page Collection Hardening
 
 目标：把网页采集从“Playwright 单路径”升级为“JinaReader 主路径 + Playwright 重型兜底路径”，并把网页执行器暴露出的真实失败模式反向收口成正式字段与状态分类。
+
+第五轮联合实施已完成本波次的实现收口：`CollectionTaskPackage / CollectionExecutionResult` 已补齐 `renderHint / failureKind / qualitySignals / qualityScore / structuredBlocks / collectedAt / durationMillis`；`SearchSourceCatalogProperties` 与 `SearchPolicyResolver` 已能表达 source family 级网页采集偏好；`WebPageCollectionExecutor` 已切换为 `JinaReader` 主路径 + `Playwright FULL_RENDER` 兜底；`PageContentExtractionSupport` 已正式返回分层提取结果；`CollectorAgent` 兼容映射已保留 `sourceUrls` 与新增采集元数据。自动化验证方面，第五轮聚合命令与 `mvn -pl backend test` 已于 2026-06-16 通过。本波次仍未宣称真实业务质量闭环升绿，后续还需结合任务实链继续验证采集证据质量与最终质检表现。
 
 必须覆盖：
 
@@ -1028,6 +1034,8 @@ API 执行器进入后，并不意味着网页兜底消失：
 ### Wave 10: API Collection Convergence
 
 目标：让至少两类结构化来源进入统一采集执行体系，优先兑现 `github / news`。
+
+第四轮联合实施已提前完成本波次的首个最小落点：`ApiDataCollectionExecutor` 与 `GithubApiCollectionExecutor` 已接入统一采集执行体系，并通过 `github://repo/{owner}/{repo}` locator 直接返回结构化证据；但 `news` 家族的 API / feed 执行器、API-Web 补证策略与更完整的实链验收仍留待后续波次。
 
 必须覆盖：
 
@@ -1066,10 +1074,10 @@ API 执行器进入后，并不意味着网页兜底消失：
 
 | 阶段 | 核心目标 | 预期耗时 | 依赖前置条件 | 当前状态 |
 | --- | --- | --- | --- | --- |
-| Phase G | 完成 `Wave 7` 最小采集契约、执行协调器、执行器注册表与采集检查点骨架 | 1 个迭代 | `Wave 6` 至少完成一个真实垂直发现 provider | 待执行 |
-| Phase H | 完成 `Wave 8` 双路径网页采集执行器落地：`JinaReader` 主路径、`Playwright` 兜底路径，以及失败模式收口与契约扩展字段补齐 | 1-2 个迭代 | Phase G 启动后可并行推进 | 待执行 |
+| Phase G | 完成 `Wave 7` 最小采集契约、执行协调器、执行器注册表与采集检查点骨架 | 1 个迭代 | `Wave 6` 至少完成一个真实垂直发现 provider | 已完成最小闭环 |
+| Phase H | 完成 `Wave 8` 双路径网页采集执行器落地：`JinaReader` 主路径、`Playwright` 兜底路径，以及失败模式收口与契约扩展字段补齐 | 1-2 个迭代 | Phase G 启动后可并行推进 | 已完成实现与自动化收口，实链验收待后续补跑 |
 | Phase I | 完成 `Wave 9` 采集审计、采集回放、包级重跑与恢复语义 | 1 个迭代 | Phase G-H 完成 | 待执行 |
-| Phase J | 完成 `Wave 10` API 型采集执行器与 `github / news` 统一 evidence 闭环 | 1-2 个迭代 | Phase G 完成，且具备目标 provider 凭证或 Mock 契约 | 待执行 |
+| Phase J | 完成 `Wave 10` API 型采集执行器与 `github / news` 统一 evidence 闭环 | 1-2 个迭代 | Phase G 完成，且具备目标 provider 凭证或 Mock 契约 | 已启动，GitHub 首个闭环完成 |
 | Phase K | 完成 `Wave 11` feed / subscription 增量监控体系 | 1 个迭代以上 | Phase G、Phase J 至少一项完成 | 待执行 |
 | Phase L | 完成 `Wave 12` 采集结果到下游提取 / 报告质量门禁的正式联动 | 跨专题协同 | Extraction 方案正式启动 | 待执行 |
 

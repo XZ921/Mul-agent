@@ -167,8 +167,10 @@ public class SerpApiSearchSourceProvider implements SearchSourceProvider {
                 rank++;
                 candidates.add(SourceCandidate.builder()
                         .url(url)
+                        .sourceUrls(List.of(url))
                         .title(defaultText(text(item, "title"), competitorName + " " + scope))
                         .sourceType(scope)
+                        .providerKey("serpapi")
                         .discoveryMethod("SERP_API")
                         .reason(buildReason(scope, text(item, "snippet")))
                         .domain(extractDomain(url))

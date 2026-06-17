@@ -1,10 +1,15 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.collection.CollectionFailureKind;
+import cn.bugstack.competitoragent.collection.StructuredContentBlock;
 import com.microsoft.playwright.Page;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -93,6 +98,35 @@ public final class PageContentExtractionSupport {
         }
     }
 
+    /**
+     * Task 5 的正式抽取结果入口。
+     * 这里把正文、结构块、质量信号和评分统一收敛成一个结果对象，供 Playwright 与执行器链路复用。
+     */
+    public static PageContentExtractionResult extract(Page page, String sourceType) {
+        Instant startedAt = Instant.now();
+        String html = page == null ? null : page.content();
+        String mainContent = page == null ? "" : extractMainContent(page);
+        List<StructuredContentBlock> structuredBlocks = extractStructuredBlocks(html, sourceType);
+        List<String> qualitySignals = buildQualitySignals(mainContent, structuredBlocks);
+        double qualityScore = calculateQualityScore(mainContent, structuredBlocks);
+        boolean success = (mainContent != null && !mainContent.isBlank()) || !structuredBlocks.isEmpty();
+
+        PageContentExtractionResult.PageContentExtractionResultBuilder builder = PageContentExtractionResult.builder()
+                .success(success)
+                .title(page == null ? null : page.title())
+                .mainContent(mainContent)
+                .qualitySignals(qualitySignals)
+                .qualityScore(qualityScore)
+                .structuredBlocks(structuredBlocks)
+                .collectedAt(Instant.now())
+                .durationMillis(Duration.between(startedAt, Instant.now()).toMillis());
+        if (!success) {
+            builder.failureKind(CollectionFailureKind.EXTRACTION_EMPTY.name())
+                    .errorMessage("page extraction produced neither main content nor structured blocks");
+        }
+        return builder.build();
+    }
+
     public static String selectBestContentBlock(List<Map<String, Object>> blocks) {
         if (blocks == null || blocks.isEmpty()) {
             return "";
@@ -117,6 +151,104 @@ public final class PageContentExtractionSupport {
         return normalized.length() <= safeMaxLength
                 ? normalized
                 : normalized.substring(0, safeMaxLength);
+    }
+
+    /**
+     * 结构块抽取先用最小启发式命中价格卡、文档目录和 JSON-LD。
+     * 后续可以继续扩展更多 blockType，而不需要改动调用方契约。
+     */
+    private static List<StructuredContentBlock> extractStructuredBlocks(String html, String sourceType) {
+        if (html == null || html.isBlank()) {
+            return List.of();
+        }
+        String normalizedHtml = html.toLowerCase(Locale.ROOT);
+        List<StructuredContentBlock> blocks = new ArrayList<>();
+        if (normalizedHtml.contains("pricing-card")) {
+            blocks.add(StructuredContentBlock.builder()
+                    .blockType("PRICING_BLOCK")
+                    .title("pricing")
+                    .content("pricing-card hit")
+                    .qualitySignal("PRICING_BLOCK_HIT")
+                    .build());
+        }
+        if (normalizedHtml.contains("docs-outline")) {
+            blocks.add(StructuredContentBlock.builder()
+                    .blockType("DOCUMENTATION_OUTLINE")
+                    .title("docs-outline")
+                    .content("docs-outline hit")
+                    .qualitySignal("DOCUMENTATION_OUTLINE_HIT")
+                    .build());
+        }
+        if (normalizedHtml.contains("application/ld+json")) {
+            blocks.add(StructuredContentBlock.builder()
+                    .blockType("JSON_LD_METADATA")
+                    .title(resolveStructuredBlockTitle(sourceType, "json-ld"))
+                    .content("json-ld hit")
+                    .qualitySignal("JSON_LD_METADATA_HIT")
+                    .build());
+        }
+        return blocks;
+    }
+
+    /**
+     * 质量信号既要表达命中，也要表达缺失，方便后续路由和兼容映射做出明确判断。
+     */
+    private static List<String> buildQualitySignals(String mainContent, List<StructuredContentBlock> structuredBlocks) {
+        LinkedHashSet<String> signals = new LinkedHashSet<>();
+        if (mainContent == null || mainContent.isBlank()) {
+            signals.add("NO_MAIN_CONTENT");
+        } else {
+            signals.add("MAIN_CONTENT_READY");
+        }
+        if (structuredBlocks == null || structuredBlocks.isEmpty()) {
+            signals.add("NO_STRUCTURED_BLOCKS");
+            return new ArrayList<>(signals);
+        }
+        signals.add("STRUCTURED_BLOCK_HIT");
+        for (StructuredContentBlock structuredBlock : structuredBlocks) {
+            if (structuredBlock != null && structuredBlock.getQualitySignal() != null && !structuredBlock.getQualitySignal().isBlank()) {
+                signals.add(structuredBlock.getQualitySignal());
+            }
+        }
+        return new ArrayList<>(signals);
+    }
+
+    /**
+     * 当前评分是 Task 5 的最小稳定分。
+     * 正文长度提供基础分，结构块命中提供结构化加分，保证 fallback 后能稳定回填给执行器与 CollectorAgent。
+     */
+    private static double calculateQualityScore(String mainContent, List<StructuredContentBlock> structuredBlocks) {
+        boolean hasMainContent = mainContent != null && !mainContent.isBlank();
+        boolean hasStructuredBlocks = structuredBlocks != null && !structuredBlocks.isEmpty();
+        if (!hasMainContent && !hasStructuredBlocks) {
+            return 0.0D;
+        }
+
+        double score = 0.0D;
+        if (hasMainContent) {
+            int contentLength = mainContent.trim().length();
+            if (contentLength >= 800) {
+                score += 0.52D;
+            } else if (contentLength >= 400) {
+                score += 0.46D;
+            } else if (contentLength >= 180) {
+                score += 0.40D;
+            } else {
+                score += 0.32D;
+            }
+        }
+        if (hasStructuredBlocks) {
+            score += 0.15D;
+            score += Math.min(0.33D, structuredBlocks.size() * 0.11D);
+        }
+        return Math.min(0.98D, Math.round(score * 100.0D) / 100.0D);
+    }
+
+    private static String resolveStructuredBlockTitle(String sourceType, String fallbackTitle) {
+        if (sourceType == null || sourceType.isBlank()) {
+            return fallbackTitle;
+        }
+        return sourceType.trim().toLowerCase(Locale.ROOT) + "-" + fallbackTitle;
     }
 
     private static ScoredContentBlock toScoredContentBlock(Map<String, Object> block) {

@@ -575,6 +575,8 @@ public class SearchExecutionCoordinator {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
+        String sourceFamilyKey = searchPolicyResolver.resolveSourceFamilyKeyForSourceType(config.getSourceType());
+        String sourceFamilyRole = searchPolicyResolver.resolveSourceFamilyRole(sourceFamilyKey).name();
         List<SourceCandidate> normalized = candidates.stream()
                 .filter(candidate -> candidate != null && StringUtils.hasText(candidate.getUrl()))
                 .map(candidate -> {
@@ -582,11 +584,23 @@ public class SearchExecutionCoordinator {
                     if (base == null) {
                         return null;
                     }
+                    String providerKey = resolveProviderKey(base, stage);
                     String effectiveStage = StringUtils.hasText(base.getSelectionStage()) ? base.getSelectionStage() : stage;
                     String effectiveReason = StringUtils.hasText(base.getSelectionReason())
                             ? base.getSelectionReason()
                             : ("PLANNED".equals(stage) ? "来自规划期补源候选" : "来自运行期补源候选");
                     return base.toBuilder()
+                            .sourceFamilyKey(StringUtils.hasText(base.getSourceFamilyKey())
+                                    ? base.getSourceFamilyKey()
+                                    : sourceFamilyKey)
+                            .sourceFamilyRole(StringUtils.hasText(base.getSourceFamilyRole())
+                                    ? base.getSourceFamilyRole()
+                                    : sourceFamilyRole)
+                            .providerKey(providerKey)
+                            .providerRole(searchPolicyResolver.resolveProviderRole(providerKey).name())
+                            .sourceUrls((base.getSourceUrls() == null || base.getSourceUrls().isEmpty())
+                                    ? List.of(base.getUrl())
+                                    : base.getSourceUrls())
                             .selectionStage(effectiveStage)
                             .selectionReason(effectiveReason)
                             .build();
@@ -605,6 +619,22 @@ public class SearchExecutionCoordinator {
             return executionPlan.getSearchQueries();
         }
         return List.of();
+    }
+
+    /**
+     * 统一补齐候选 providerKey，保证后续采集路由、审计与回放都能依赖稳定身份。
+     */
+    private String resolveProviderKey(SourceCandidate candidate, String stage) {
+        if (candidate != null && StringUtils.hasText(candidate.getProviderKey())) {
+            return candidate.getProviderKey();
+        }
+        if ("HTTP".equalsIgnoreCase(stage)) {
+            return "http";
+        }
+        if ("BROWSER".equalsIgnoreCase(stage)) {
+            return "browser";
+        }
+        return "planned";
     }
 
     private List<String> resolveSearchFallbackOrder(CollectorNodeConfig config) {

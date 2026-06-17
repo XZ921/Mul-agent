@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 
 class SearchPolicyResolverTest {
 
@@ -52,5 +53,35 @@ class SearchPolicyResolverTest {
         assertEquals(SearchProviderRole.PRIMARY_VERTICAL, resolver.resolveSourceFamilyRole("official"));
         assertEquals(SearchProviderRole.PRIMARY_VERTICAL, resolver.resolveSourceFamilyRole("news"));
         assertEquals(SearchProviderRole.PRIMARY_VERTICAL, resolver.resolveSourceFamilyRole("github"));
+    }
+
+    @Test
+    void shouldResolveWebRenderHintFromSourceFamilyCatalog() {
+        SearchPolicyResolver resolver = new SearchPolicyResolver();
+        resolver.setSearchProperties(new SearchProperties());
+
+        assertEquals(
+                cn.bugstack.competitoragent.collection.WebPageRenderHint.LIGHTWEIGHT,
+                resolver.resolveWebRenderHint("official", "DOCS")
+        );
+        assertEquals(
+                cn.bugstack.competitoragent.collection.WebPageRenderHint.FULL_RENDER,
+                resolver.resolveWebRenderHint("github", "GITHUB")
+        );
+    }
+
+    @Test
+    void shouldResolveExpectedBlockTypesFromSourceFamilyCatalog() {
+        SearchPolicyResolver resolver = new SearchPolicyResolver();
+        resolver.setSearchProperties(new SearchProperties());
+
+        assertIterableEquals(
+                List.of("PRICING_BLOCK", "DOCUMENTATION_OUTLINE", "JSON_LD_METADATA"),
+                resolver.resolveExpectedBlockTypes("official", "DOCS")
+        );
+        assertIterableEquals(
+                List.of("RELEASE_NOTES", "JSON_LD_METADATA"),
+                resolver.resolveExpectedBlockTypes("github", "GITHUB")
+        );
     }
 }

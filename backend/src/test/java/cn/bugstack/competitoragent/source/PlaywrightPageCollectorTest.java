@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.collection.WebPageRenderHint;
 import cn.bugstack.competitoragent.config.CollectorProperties;
 import cn.bugstack.competitoragent.config.PlaywrightBrowserManager;
 import cn.bugstack.competitoragent.search.BrowserFailureClassifier;
@@ -7,10 +8,12 @@ import cn.bugstack.competitoragent.search.BrowserRuntimeDiagnosticLog;
 import cn.bugstack.competitoragent.search.BrowserRuntimeDiagnosticLogger;
 import cn.bugstack.competitoragent.search.SearchBrowserProperties;
 import cn.bugstack.competitoragent.search.SearchRuntimeFallbackPolicy;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.Page;
-import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.Collections;
 import java.util.List;
@@ -33,6 +36,7 @@ import static org.mockito.Mockito.when;
 
 class PlaywrightPageCollectorTest {
 
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private final PlaywrightBrowserManager browserManager = mock(PlaywrightBrowserManager.class);
     private final CollectorProperties collectorProperties = new CollectorProperties();
     private final SearchRuntimeFallbackPolicy fallbackPolicy =
@@ -126,7 +130,7 @@ class PlaywrightPageCollectorTest {
         SourceCollector.CollectedPage page = collector.collect("file:///etc/passwd", "Notion AI", "DOCS");
 
         assertFalse(page.isSuccess());
-        assertEquals("浠呭厑璁搁噰闆?http/https 椤甸潰", page.getErrorMessage());
+        assertEquals("仅允许采集 http/https 页面", page.getErrorMessage());
     }
 
     @Test
@@ -248,6 +252,65 @@ class PlaywrightPageCollectorTest {
     }
 
     @Test
+    void shouldExposeStructuredExtractionMetadataForFullRenderCollection() throws Exception {
+        Browser browser = mock(Browser.class);
+        Page page = mock(Page.class);
+
+        when(browserManager.getBrowser()).thenReturn(browser);
+        when(browser.newPage()).thenReturn(page);
+        when(page.title()).thenReturn("Pricing");
+        when(page.url()).thenReturn("https://example.com/pricing");
+        when(page.content()).thenReturn("""
+                <html>
+                  <body>
+                    <main>
+                      <section class="pricing-card">Pro 199 / month</section>
+                      <nav class="docs-outline">
+                        <a>Quick Start</a>
+                        <a>API Reference</a>
+                      </nav>
+                      <script type="application/ld+json">
+                        {"@type":"Product","name":"Acme AI"}
+                      </script>
+                    </main>
+                  </body>
+                </html>
+                """);
+        when(page.evaluate(anyString())).thenReturn(List.of(
+                Map.of(
+                        "selector", "main",
+                        "tagName", "MAIN",
+                        "className", "pricing-card docs-outline",
+                        "idName", "main-content",
+                        "text", """
+                                Acme AI pricing explains plan tiers, enterprise support coverage, seat limits,
+                                billing cadence, implementation guidance, and API onboarding details so buyers
+                                can compare commercial terms and technical rollout expectations in one page.
+                                """,
+                        "linkTextLength", 12
+                )
+        ));
+
+        SourceCollector.CollectedPage collectedPage = collector.collect(SourceCollectRequest.builder()
+                .url("https://example.com/pricing")
+                .competitorName("Notion AI")
+                .sourceType("PRICING")
+                .renderHint(WebPageRenderHint.FULL_RENDER)
+                .expectedBlockTypes(List.of("PRICING_BLOCK", "DOCUMENTATION_OUTLINE", "JSON_LD_METADATA"))
+                .sourceUrls(List.of("https://example.com/pricing"))
+                .build());
+
+        assertTrue(collectedPage.isSuccess());
+        JsonNode metadata = objectMapper.readTree(collectedPage.getMetadata());
+        assertEquals("https://example.com/pricing", metadata.path("sourceUrls").get(0).asText());
+        assertTrue(metadata.path("qualityScore").asDouble() >= 0.45D);
+        assertTrue(metadata.path("qualitySignals").toString().contains("STRUCTURED_BLOCK_HIT"));
+        assertTrue(metadata.path("structuredBlocks").toString().contains("PRICING_BLOCK"));
+        assertTrue(metadata.path("structuredBlocks").toString().contains("DOCUMENTATION_OUTLINE"));
+        assertTrue(metadata.path("structuredBlocks").toString().contains("JSON_LD_METADATA"));
+    }
+
+    @Test
     void shouldDeduplicateCanonicalUrlVariantsBeforeBatchCollect() {
         PlaywrightPageCollector batchCollector = spy(new PlaywrightPageCollector(
                 browserManager,
@@ -294,7 +357,7 @@ class PlaywrightPageCollectorTest {
                 .competitorName("Notion AI")
                 .sourceType("DOCS")
                 .success(false)
-                .errorMessage("页面采集失败，已降级返回失败结果: blocked")
+                .errorMessage("blocked")
                 .build();
 
         doReturn(blockedPage).when(batchCollector).collect("https://example.com/challenge-a", "Notion AI", "DOCS");
@@ -312,8 +375,7 @@ class PlaywrightPageCollectorTest {
 
         assertEquals(3, results.size());
         assertFalse(results.get(2).isSuccess());
-        assertTrue(results.get(2).getErrorMessage().contains("blocked domain")
-                || results.get(2).getErrorMessage().contains("提前停止"));
+        assertTrue(results.get(2).getErrorMessage().contains("blocked domain"));
         verify(batchCollector, times(1)).collect("https://example.com/challenge-a", "Notion AI", "DOCS");
         verify(batchCollector, times(1)).collect("https://example.com/challenge-b", "Notion AI", "DOCS");
         verify(batchCollector, never()).collect("https://example.com/docs", "Notion AI", "DOCS");

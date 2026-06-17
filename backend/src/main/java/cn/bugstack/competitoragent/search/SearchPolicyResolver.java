@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.search;
 
+import cn.bugstack.competitoragent.collection.WebPageRenderHint;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -148,6 +149,18 @@ public class SearchPolicyResolver {
         if (!StringUtils.hasText(providerKey)) {
             return SearchProviderRole.AUXILIARY_PUBLIC;
         }
+        String normalized = providerKey.trim().toLowerCase(Locale.ROOT);
+        for (Map.Entry<String, SearchSourceCatalogProperties.SourceFamilyProperties> entry
+                : resolveSourceCatalog().getFamilies().entrySet()) {
+            SearchSourceCatalogProperties.SourceFamilyProperties family = entry.getValue();
+            if (family == null) {
+                continue;
+            }
+            if (family.resolveProviderKeys(SearchProviderRole.PRIMARY_VERTICAL).stream()
+                    .anyMatch(bound -> normalized.equalsIgnoreCase(bound))) {
+                return SearchProviderRole.PRIMARY_VERTICAL;
+            }
+        }
         return SearchProviderRole.AUXILIARY_PUBLIC;
     }
 
@@ -205,6 +218,29 @@ public class SearchPolicyResolver {
             return List.of();
         }
         return family.resolveProviderKeys(role);
+    }
+
+    /**
+     * 统一把 source family 的网页采集偏好翻译成正式 render hint。
+     * 找不到家族配置时回退到 LIGHTWEIGHT，保证网页路径有稳定默认语义。
+     */
+    public WebPageRenderHint resolveWebRenderHint(String sourceFamilyKey, String sourceType) {
+        SearchSourceCatalogProperties.SourceFamilyProperties family = resolveSourceCatalog().resolveFamily(sourceFamilyKey);
+        if (family == null) {
+            return WebPageRenderHint.LIGHTWEIGHT;
+        }
+        return WebPageRenderHint.valueOf(family.resolvePreferredWebRenderHint());
+    }
+
+    /**
+     * 统一解析网页结构块预期。
+     * 调用方只消费标准化后的块类型列表，不需要自己理解 catalog 内部结构。
+     */
+    public List<String> resolveExpectedBlockTypes(String sourceFamilyKey, String sourceType) {
+        SearchSourceCatalogProperties.SourceFamilyProperties family = resolveSourceCatalog().resolveFamily(sourceFamilyKey);
+        return family == null || family.getExpectedBlockTypes() == null
+                ? List.of()
+                : family.getExpectedBlockTypes();
     }
 
     private String normalizeFallbackStage(String stage) {
