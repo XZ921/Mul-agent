@@ -5,12 +5,16 @@ import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.context.TaskRagContextBundle;
 import cn.bugstack.competitoragent.collection.CollectionExecutionCoordinator;
+import cn.bugstack.competitoragent.collection.CollectionExecutionReport;
 import cn.bugstack.competitoragent.collection.CollectionExecutor;
 import cn.bugstack.competitoragent.collection.CollectionExecutorRegistry;
+import cn.bugstack.competitoragent.collection.CollectionFailureKind;
+import cn.bugstack.competitoragent.collection.CollectionReplayTimelineItem;
 import cn.bugstack.competitoragent.collection.CollectionExecutionResult;
 import cn.bugstack.competitoragent.collection.CollectionTaskPackage;
 import cn.bugstack.competitoragent.collection.CollectionTaskPackageBuilder;
 import cn.bugstack.competitoragent.collection.WebPageCollectionExecutor;
+import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
 import cn.bugstack.competitoragent.model.entity.KnowledgeDocument;
 import cn.bugstack.competitoragent.model.entity.RetrievalChunk;
 import cn.bugstack.competitoragent.model.entity.RetrievalIndex;
@@ -507,6 +511,61 @@ class CollectorAgentTest {
         verify(sourceCollector, never()).collect("https://github.com/acme/rocket", "Acme", "GITHUB");
     }
 
+    @Test
+    void shouldPersistRssStructuredPayloadEvenWhenContentIsShort() throws Exception {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of())
+                .summary("mock browser search disabled")
+                .fallbackSuggested(true)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        when(githubApiExecutor.supports(any())).thenAnswer(invocation -> {
+            CollectionTaskPackage taskPackage = invocation.getArgument(0);
+            return taskPackage != null && "RSS".equalsIgnoreCase(taskPackage.getPrimaryTool());
+        });
+        when(githubApiExecutor.execute(any())).thenReturn(
+                CollectionExecutionResult.builder()
+                        .executorType("API_DATA")
+                        .success(true)
+                        .status("SUCCESS")
+                        .resourceLocator("rss://feed/YWNtZQ==")
+                        .title("https://blog.example.com/feed.xml")
+                        .content("简讯")
+                        .sourceUrls(List.of("https://blog.example.com/feed.xml", "https://blog.example.com/agent-launch"))
+                        .qualitySignals(List.of("FEED_ITEMS_READY"))
+                        .qualityScore(0.68D)
+                        .structuredPayload(Map.of(
+                                "feedUrl", "https://blog.example.com/feed.xml",
+                                "items", List.of(Map.of(
+                                        "title", "Agent launch",
+                                        "link", "https://blog.example.com/agent-launch",
+                                        "summary", "简讯"
+                                ))
+                        ))
+                        .durationMillis(12L)
+                        .build()
+        );
+
+        AgentResult result = collectorAgent.execute(buildRssContext());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name(), result.getErrorMessage());
+        assertTrue(output.path("collectionAudit").path("sourceUrls").isArray());
+        assertEquals("https://blog.example.com/feed.xml",
+                output.path("sourceUrls").get(0).asText());
+        assertTrue(output.path("documents").get(0).path("sourceUrls").isArray());
+        assertEquals("https://blog.example.com/feed.xml",
+                output.path("documents").get(0).path("sourceUrls").get(0).asText());
+
+        ArgumentCaptor<cn.bugstack.competitoragent.model.entity.EvidenceSource> evidenceCaptor =
+                ArgumentCaptor.forClass(cn.bugstack.competitoragent.model.entity.EvidenceSource.class);
+        verify(evidenceRepository, times(1)).save(evidenceCaptor.capture());
+        assertTrue(evidenceCaptor.getValue().getPageMetadata().contains("\"items\""));
+        assertTrue(evidenceCaptor.getValue().getPageMetadata().contains("\"sourceUrls\""));
+        verify(sourceCollector, never()).collect("https://blog.example.com/feed.xml", "Acme RSS", "NEWS");
+    }
+
     private AgentContext buildContext(String competitorUrlsJson) {
         return AgentContext.builder()
                 .taskId(1L)
@@ -604,6 +663,41 @@ class CollectorAgentTest {
                               "discoveryMethod": "CONFIG",
                               "reason": "test",
                               "domain": "github.com",
+                              "selectionStage": "PLANNED",
+                              "selectionReason": "配置提供"
+                            }
+                          ]
+                        }
+                        """)
+                .build();
+    }
+
+    private AgentContext buildRssContext() {
+        return AgentContext.builder()
+                .taskId(5L)
+                .taskName("task")
+                .planVersionId(9L)
+                .currentNodeName("collect_sources_news")
+                .currentNodeConfig("""
+                        {
+                          "competitorName": "Acme RSS",
+                          "competitorUrls": ["https://blog.example.com/feed.xml"],
+                          "sourceType": "NEWS",
+                          "sourceFamilyKey": "news",
+                          "discoveryNotes": "test",
+                          "sourceCandidates": [
+                            {
+                              "url": "https://blog.example.com/feed.xml",
+                              "title": "Acme Feed",
+                              "sourceType": "NEWS",
+                              "sourceFamilyKey": "news",
+                              "providerKey": "http",
+                              "sourceUrls": [
+                                "https://blog.example.com/feed.xml"
+                              ],
+                              "discoveryMethod": "CONFIG",
+                              "reason": "test",
+                              "domain": "blog.example.com",
                               "selectionStage": "PLANNED",
                               "selectionReason": "配置提供"
                             }

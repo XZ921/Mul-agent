@@ -34,7 +34,7 @@
 
 ## Current Stage
 
-当前阶段：搜索与采集前三轮 blocking 收口、第二轮自动化契约、第四轮 discovery/collection 联合实施已完成；`Wave 5` 对象瘦身、`Wave 6` 统一公网发现口径与 owner 边界收口、`Wave 7` 最小采集执行接缝、`Wave 8` 双路径网页采集加固、`Wave 9` 采集审计/回放/恢复闭环以及首个 GitHub API 结构化采集执行器均已落地并完成自动化复核。当前剩余重点已转为 `news / rss` 采集专项、跨重启 replay 持久化与下游提取 / 报告业务质量闭环验收
+当前阶段：搜索与采集前三轮 blocking 收口、第二轮自动化契约、第四轮 discovery/collection 联合实施已完成；`Wave 5` 对象瘦身、`Wave 6` 统一公网发现口径与 owner 边界收口、`Wave 7` 最小采集执行接缝、`Wave 8` 双路径网页采集加固、`Wave 9` 采集审计/回放/恢复闭环，以及 `Wave 10` 中 GitHub API 与显式 RSS feed 两类结构化采集 owner 的自动化收口均已落地。当前剩余重点已转为第七轮 dev live 验收、跨重启 replay 持久化与下游提取 / 报告业务质量闭环验收
 
 - [x] 诊断证据归并：已完成
 - [x] 旧 Task 轴方案降级：已完成
@@ -47,7 +47,9 @@
 - [x] 采集审计 / 回放 / 恢复闭环：已完成，归属 `Wave 9`
 - [x] 首个 API 结构化采集执行器：已完成首个 GitHub 闭环，归属 `Wave 10`
 - [x] 统一公网发现口径与主辅语义闭环：已完成，归属 `Wave 6`
-- [ ] `news / rss` 采集专项与下游质量闭环：待执行，归属 `Wave 10 / Wave 12`
+- [x] `news / rss` 采集专项第七轮代码与定向自动化收口：已完成，归属 `Wave 10`
+- [ ] 第七轮跨重启 replay 持久化与下游质量闭环：待执行，归属 `Wave 12`
+- [x] 第七轮 dev live 验收：已完成，归属 `Wave 10`
 
 ---
 
@@ -153,6 +155,19 @@
 
 ## Source Family Catalog And Configuration Architecture
 
+最终 `架构 1` 已冻结为 `家族驱动的分层采集架构`，执行口径固定为：
+
+`Source Family Catalog -> Discovery Router -> Candidate Verification -> Target Selection -> Collection Owners -> Audit / Replay / Recovery`
+
+这里有六条不可再回退的边界：
+
+1. `official / news / github` 这类 `source family` 才是业务语义，表达的是“要采什么”。
+2. `Qianfan / SerpApi / Bing / Baidu / Browser / HTTP` 只属于 `PUBLIC_SEARCH` 发现工具层，不再被视为业务来源本身。
+3. `JinaReader` 只负责网页正文提取主路，不承担 URL discovery 语义。
+4. `Playwright` 只负责网页重渲染与重型兜底，不承担默认发现职责。
+5. `RSS / GitHub API` 这类结构化源必须作为正式 `collection owner` 存在；命中显式 feed、repo 或稳定 locator 时，允许直接进入 owner，不要求先绕通用搜索。
+6. `sourceUrls` 必须贯穿发现、采集、审计、回放与恢复，整条链路共用同一份来源回指。
+
 用户提供的参考表应被吸收为“数据源家族目录”，而不是简单变成一串新 provider。正式架构必须区分三层概念：
 
 1. 数据源家族：业务上要采什么，例如官网、新闻、GitHub、专利。
@@ -163,10 +178,10 @@
 
 | 数据源家族 | 采集内容 | 主采集工具 | 辅助 / 兜底工具 | 更新策略 | 角色定位 | 首轮状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 官方网站 | 产品页面、定价、文档 | Web Scraper、Jina Reader | 公网搜索引擎用于发现遗漏页面 | 每日增量爬取 | `PRIMARY_VERTICAL` | 首轮必须进入配置骨架 |
-| 新闻媒体 | 产品发布、融资、合作 | RSS、Jina Reader、Web Scraper | Google / Bing / Baidu 等公网搜索负责文章 / 站点发现 | 实时 RSS + 定时补扫 | `PRIMARY_VERTICAL` | RSS 已进入正式采集体系，普通文章 URL 继续走网页采集，News API 可后置 |
+| 官方网站 | 产品页面、定价、文档 | `WEB_PAGE`（`JinaReader` 主路，`Playwright` 兜底） | 公网搜索引擎仅用于发现遗漏页面 | 每日增量爬取 | `PRIMARY_VERTICAL` | 首轮必须进入配置骨架 |
+| 新闻媒体 | 产品发布、融资、合作 | `RSS`（显式 feed） | `PUBLIC_SEARCH` 负责文章 / 站点发现；普通文章 URL 进入统一网页采集主链路 | 实时 RSS + 定时补扫 | `PRIMARY_VERTICAL` | 显式 RSS feed 已作为正式采集 owner 接入；普通文章 URL 继续走网页采集；News API 后移到独立 news discovery 专题 |
 | 技术博客 | 技术架构、开源贡献 | Blog Crawler | 公网搜索补充站外转载 | 每周全量扫描 | `PRIMARY_VERTICAL` | 后续波次实现，首轮保留 schema |
-| GitHub | 代码仓库、Star 趋势、release | GitHub API | 公网搜索统一负责组织 / 仓库 URL 发现 | 每日 API 轮询 | `PRIMARY_VERTICAL` | GitHub API 已作为正式采集执行器落地；不再要求额外 GitHub discovery provider |
+| GitHub | 代码仓库、Star 趋势、release | GitHub API | `PUBLIC_SEARCH` 仅做 repo / release 补漏发现 | 每日 API 轮询 | `PRIMARY_VERTICAL` | GitHub API 已作为正式采集执行器落地；不再要求额外 GitHub discovery provider |
 | 社交媒体 | 用户反馈、舆情 | Twitter / Reddit API | 公网搜索与人工补证 | 关键词实时监控 | `AUXILIARY_PUBLIC` | 后续波次实现，首轮保留 schema |
 | 财务数据 | 营收、用户量、估值 | Crunchbase API | 新闻搜索补证 | 季度更新 | `PRIMARY_VERTICAL` | 后续波次实现，首轮保留 schema |
 | 专利数据 | 技术专利申请 | Patent API | 公网搜索补证 | 月度扫描 | `PRIMARY_VERTICAL` | 后续波次实现，首轮保留 schema |
@@ -205,7 +220,7 @@ search:
         role: PRIMARY_VERTICAL
         sourceTypes: [NEWS]
         contentScopes: [PRODUCT_RELEASE, FUNDING, PARTNERSHIP]
-        primaryTools: [RSS, JINA_READER, WEB_SCRAPER]
+        primaryTools: [RSS]
         auxiliaryTools: [PUBLIC_SEARCH]
         updatePolicy:
           mode: REALTIME_RSS_AND_SCHEDULED_SWEEP
@@ -231,7 +246,9 @@ search:
 
 首轮实施只要求建立上述配置骨架，并让 `official / news / github` 三个家族能被绑定、解析和审计展示；不要求一次真实接入 News API、GitHub API、Twitter / Reddit API、Crunchbase API、Patent API。
 
-但这只是首轮收口边界，不是长期方案完成口径。`Source Family Catalog` 只解决“业务上采什么、主辅工具如何声明”的配置骨架问题；它不能替代真实运行链路与 owner 边界。按照当前架构，GitHub 与普通新闻文章 URL 的发现统一复用公网搜索，差异化能力下沉到采集执行层：`GitHub API` 负责结构化采集，显式 `RSS` feed 进入专项采集，普通新闻文章继续走网页采集路径。只有当后续出现“显式 feed 枚举 / 订阅监控 / 主动发现”这类公网搜索不能稳定覆盖的场景时，才允许另起专题建设专用 discovery 机制。
+这里对 `news` 家族有一条当前阶段的明确约束：`primaryTools: [RSS]` 只表达“显式 feed URL 的正式采集 owner 是 RSS”；普通新闻文章 URL 仍复用统一网页采集主链路，不在这一轮通过家族配置把 `JINA_READER / WEB_SCRAPER` 重新声明成 `news` 专属 owner。
+
+但这只是首轮收口边界，不是长期方案完成口径。`Source Family Catalog` 只解决“业务上采什么、主辅工具如何声明”的配置骨架问题；它不能替代真实运行链路与 owner 边界。按照最终架构 1，`PUBLIC_SEARCH` 只是 family 可选的 discovery 工具，而不是所有来源的必经前置；`GitHub API`、显式 `RSS` feed 等结构化 owner 一旦命中稳定 locator，就应直接承接正式采集，普通新闻文章与官网文档等公开网页则继续走统一网页采集路径。只有当后续出现“显式 feed 枚举 / 订阅监控 / 主动发现”这类公网搜索不能稳定覆盖的场景时，才允许另起专题建设专用 discovery 机制。
 
 ---
 
@@ -340,20 +357,20 @@ search:
 
 ### Wave 6: 统一公网发现与主辅语义闭环
 
-目标：把 [CollectorAgent.md:56](/E:/java_study/Mul-agnet/docs/problem/CollectorAgent.md:56) 的“私域垂直 API 主力、公网搜索辅助”收敛为当前可稳定落地的运行模型：公网搜索统一承担 URL 发现，数据源家族继续表达业务主责，真正的差异化能力进入采集执行层，避免再为 GitHub / 普通新闻文章重复实现一套会被后续推翻的垂直 discovery provider。
+目标：把 [CollectorAgent.md:56](/E:/java_study/Mul-agnet/docs/problem/CollectorAgent.md:56) 的“私域垂直 owner 主力、公网搜索辅助”收敛为当前可稳定落地的运行模型：先由 `source family` 决定业务语义，再由 family 决定 discovery 路径与 collection owner；`PUBLIC_SEARCH` 只承担补漏与长尾发现，显式 feed / repo / 稳定 locator 允许直接进入结构化 owner，避免再把所有来源压成“先搜索、再网页抓取”的单一路径。
 
 本波次需要额外明确两条 owner 边界：
 
-1. `Wave 6` 归属搜索发现层，职责是统一 discovery 口径、候选元数据标准化与主辅审计语义，不再要求 `GitHub API`、`News API` 之类外部 API 再进入 discovery 路由重复找 URL。
+1. `Wave 6` 归属搜索发现层，职责是统一 discovery 口径、候选元数据标准化与主辅审计语义；它要求 family-first 解释，但不要求所有来源都先经过 `PUBLIC_SEARCH`。
 2. `Wave 6` 仍然只产出候选 URL、候选资源或稳定 `resource locator`；最终结构化证据由采集执行层 owner 负责，不能把“发现到了 URL”和“已经完成正式证据采集”混成一件事。
 
 本波次必须解决的内容：
 
-1. 默认 discovery 路径统一走公网搜索 / 浏览器搜索 provider；官网、文档、普通新闻文章、GitHub 仓库页等 URL 均先通过同一套 query、排序、审计与候选验证链路发现，避免为 `GitHub API` 重复实现“公网搜索已经稳定能找到的 URL 发现”。
-2. 候选标准化阶段必须稳定回填 `providerKey / providerRole / sourceFamilyKey / sourceFamilyRole / sourceUrls / resourceLocator / qualitySignals`，让同一 discovered URL 能在采集层被重新解释为 `GITHUB_API`、`RSS`、`JINA_READER`、`WEB_SCRAPER` 等不同 owner。
+1. discovery 必须先按 `source family` 解释“要采什么”，再决定是否使用 `PUBLIC_SEARCH`、显式 locator、feed、repo 或其它结构化发现路径；`official / news / github` 不再被要求统一先绕公网搜索。
+2. 候选标准化阶段必须稳定回填 `providerKey / providerRole / sourceFamilyKey / sourceFamilyRole / sourceUrls / resourceLocator / qualitySignals`，让同一 discovered target 能在采集层被重新解释为 `GITHUB_API`、`RSS`、`JINA_READER`、`WEB_SCRAPER` 等不同 owner。
 3. `SearchPolicyResolver`、`RoutingSearchSourceProvider` 与审计投影必须显式区分“业务家族角色”和“实际 discovery provider 角色”：`github / news / official` 等 source family 仍可保持 `PRIMARY_VERTICAL` 语义，但 `qianfan / serpapi / browser / http` 这类公网发现 provider 在 discovery 运行时继续是 `AUXILIARY_PUBLIC`。
-4. `CollectionTaskPackageBuilder / CollectionExecutionCoordinator` 必须承接同一 discovered target 的差异化路由：`GitHub` 目标进入 `github://repo/{owner}/{repo}` 等 locator，再由 `GithubApiCollectionExecutor` 采集；显式 feed URL 进入 `RSS`；普通新闻文章 URL 继续走 `JINA_READER / WEB_SCRAPER`。
-5. 测试必须覆盖：统一 discovery 审计、`providerRole` 与 `sourceFamilyRole` 差异、候选到 `resourceLocator` 的标准化、`sourceUrls` 保留、GitHub API 不作为 discovery 依赖、News API 不被误用为“按 URL 找单篇正文”的边界断言。
+4. `CollectionTaskPackageBuilder / CollectionExecutionCoordinator` 必须承接同一 discovered target 的差异化路由：`GitHub` 目标进入 `github://repo/{owner}/{repo}` 等 locator，再由 `GithubApiCollectionExecutor` 采集；显式 feed URL 进入 `RSS` owner；普通新闻文章 URL 继续走 `JINA_READER / WEB_SCRAPER`。
+5. 测试必须覆盖：统一 discovery 审计、`providerRole` 与 `sourceFamilyRole` 差异、候选到 `resourceLocator` 的标准化、`sourceUrls` 保留、显式 `RSS / GitHub` 结构化资源可直接进入 owner、`News API` 不被误用为“按 URL 找单篇正文”的边界断言。
 6. 专用 discovery 例外只保留给公网搜索不能稳定覆盖的场景，例如显式 feed 枚举、订阅监控、主动新闻发现；这类能力必须另起专题，不得再把 GitHub Search API 之类重复发现能力塞回默认链路。
 
 本波次明确不要求一次完成：
@@ -447,7 +464,7 @@ search:
 | Phase E | 完成 `Wave 5` 对象瘦身、数据源家族配置平台化与底座化专题 | 1-2 个迭代 | Phase A-D 完成并复核 | 已完成 |
 | Phase F | 完成 `Wave 6` 统一公网发现口径与主辅语义闭环 | 1 个迭代 | Phase E 已完成 | 已完成 |
 
-当前允许进入实施的范围，已扩展到 `Phase F` 完成后的采集执行深化专题；`Wave 6` 已在第四轮 discovery/collection 联合实施中完成统一 discovery 口径、候选元数据标准化与 owner 边界收口，不再要求额外补做 GitHub vertical discovery provider。
+当前允许进入实施的范围，已扩展到 `Phase F` 完成后的采集执行深化专题；`Wave 6` 已在第四轮 discovery/collection 联合实施中完成 family-first discovery 解释、候选元数据标准化与 owner 边界收口，不再要求额外补做 GitHub vertical discovery provider，也不再把 `PUBLIC_SEARCH` 视为所有来源的必经前置。
 
 ---
 
@@ -461,7 +478,7 @@ search:
 4. 文档同时给出长期优化波次与首轮实施裁剪，避免再把大工程压成几个顺手 patch。
 5. 文档把前稿遗漏的四个 guard 升级为正式实施要求。
 6. 文档明确把官网、新闻、GitHub 等建模为数据源家族，把 Web Scraper、Jina Reader、News API、GitHub API、公网搜索建模为工具层或 provider 层。
-7. 文档显式给出 `Wave 6`，把“统一公网发现口径 + 主辅语义审计 + discovery/collection owner 边界”列为独立交付项。
+7. 文档显式给出 `Wave 6`，把“family-first discovery 解释 + 主辅语义审计 + discovery/collection owner 边界”列为独立交付项。
 8. `specs` 中 `搜索与采集` 的状态口径与本文件一致。
 
 首轮 blocking 收口包要标记为完成，必须同时满足以下条件：
@@ -476,9 +493,9 @@ search:
 
 整体 `搜索与采集` 实施状态要从 `🟡` 升为 `✅`，除首轮 blocking 收口包之外，还必须额外满足以下条件：
 
-1. `Wave 6` 统一 discovery 口径已进入真实链路，公网搜索发现到的候选能稳定回填 `sourceFamily / sourceUrls / resourceLocator / qualitySignals`。
-2. 路由审计能同时说明 `sourceFamilyRole`、实际 discovery `providerRole`、候选来源、跳过原因和降级路径，不再把“业务主责”与“实际发现工具”混成一件事。
-3. `GitHub API` 已作为正式采集 owner 工作，且不再要求额外 GitHub discovery provider；`news` 家族至少一个正式采集 owner（当前为 `RSS` 或后续专题）进入真实链路。
+1. `Wave 6` 的 family-first discovery 解释已进入真实链路，按家族解析出的候选或 locator 能稳定回填 `sourceFamily / sourceUrls / resourceLocator / qualitySignals`。
+2. 路由审计能同时说明 `sourceFamilyRole`、实际 discovery `providerRole`、是否直达结构化 owner、候选来源、跳过原因和降级路径，不再把“业务主责”与“实际发现工具”混成一件事。
+3. `GitHub API`、显式 `RSS` feed 已作为正式采集 owner 工作，且不要求先绕通用搜索；`news` 家族当前代码实现已明确选择“显式 RSS feed -> RSS owner，普通 news article URL -> 网页采集主链路”，`News API` 不再作为本 wave 前置条件。
 4. 统一 discovery 与采集 owner 交界处的 Max Retries、异常捕获、凭证缺失、`sourceUrls`、审计字段和降级路径均有自动化测试覆盖。
 
 `实链验证` 已于 2026-06-12 通过 dev live app 完成搜索与采集段验收：真实任务 `33` 通过 `/api/task/preview`、`/api/task/create`、`/api/task/{id}/execute` 跑出 4 个成功的 `COLLECTOR` 节点，累计 14 个 `sourceUrls`，每个采集节点均包含 `searchAudit`，回放接口返回 4 条 `searchReplays`；随后 `/api/task/{id}/resume` 与 `/api/task/{id}/nodes/collect_sources_01_01/rerun` 均返回 200，重跑后的采集节点仍保持 `searchAuditCheckpoint=SELECT_TARGETS`。这次验收证明统一公网补源 / 采集 / 回放链路可工作，但不代表 `news / rss` 采集专项、跨重启 replay 持久化与下游质量闭环已经完成。
@@ -539,8 +556,8 @@ search:
 
 如果只完成 `Wave 6`，系统能够做到“统一 discovery 口径、候选标准化和 owner 边界收口”，但仍然存在三个结构性缺口：
 
-1. `SearchExecutionCoordinator` 能把 URL 选出来，不等于系统已经具备按不同信源类型稳定采集证据的能力。
-2. `SourceCollector -> PlaywrightPageCollector` 仍然默认“所有来源最后都尽量走网页抓取”，这会把 API 型、结构化型、订阅型来源都错误降解为页面抓取问题。
+1. `SearchExecutionCoordinator` 能把 URL 或 locator 选出来，不等于系统已经具备按不同信源类型稳定采集证据的能力。
+2. 如果仍让 `SourceCollector -> PlaywrightPageCollector` 默认承接全部来源，就会把 API 型、结构化型、订阅型来源都错误降解为页面抓取问题。
 3. 下游 `提取结构化 / 分析推理 / 报告写作 / 质量审查` 真正需要的不是“抓到一个页面”，而是“拿到可追溯、可解释、可评分的证据包”。
 
 因此，`Wave 6` 不是终点，而是“统一发现口径与 owner 边界完成点”；其后必须继续完成“采集执行体系闭环”，否则搜索与采集链路仍然会卡在“搜得到，但拿不到；拿到了，但拿不准；拿准了，但拿不成可用证据”的阶段。
@@ -585,9 +602,9 @@ search:
 | `C0` | 采集任务与执行器之间没有正式契约 | `selectedTargets` 直接喂给单一 collector，执行器自己猜目标、字段、渲染策略 | 后续一加 API / RSS / 登录态页面，就会继续把差异散落到 if/else |
 | `C0` | 网页采集链路拿不到稳定页面内容 | 反爬页、空壳页、骨架屏、`__adopt__` / iframe / shadow root、超时和 challenge 页误采集 | 搜索质量再高也无法形成真实证据 |
 | `C1` | 即使拿到页面，也拿不到正确正文与结构块 | 价格表、功能对比表、文档目录、发布说明、FAQ、JSON-LD 被遗漏或截断 | 下游提取只能消费残缺文本，最终报告证据稀薄 |
-| `C1` | API / 结构化来源没有进入统一采集执行模型 | GitHub、News、工商、应用市场等来源只能曲线走网页抓取 | 垂直 provider 价值被浪费，主辅路由闭环无法真正兑现 |
-| `C1` | 采集现场没有正式事实源 | 只有搜索 audit，没有采集审计、采集质量分、执行器决策、局部重跑语义 | 发生空内容、错内容时，系统只能“知道失败”，不能“知道为什么失败” |
-| `C2` | 订阅监控缺少正式增量摄取模型 | RSS / Feed / 公众号等只能作为临时补源，而不是长期增量来源 | 搜索与采集永远停留在一次性任务心智，无法形成持续资料池 |
+| `C1` | 非网页结构化来源仍未全量进入统一采集执行模型 | GitHub 与显式 RSS feed 已进入统一执行器体系，但工商、应用市场等更多结构化来源仍未完成正式 owner 落地 | 已落地的垂直采集能力无法扩展到更多 source family，下游证据仍会偏向网页链路 |
+| `C1` | 采集现场事实源虽已建立，但尚未对所有采集模式全覆盖 | `collectionAudit / replay / checkpoint` 已覆盖网页、GitHub API 与 RSS；但更多后续专项若不继续沿用同等审计粒度，仍可能退回黑盒 | 发生空内容、错内容时，只有已接入模式具备完整解释能力，新增专项仍可能退回黑盒 |
+| `C2` | 订阅监控缺少正式增量摄取模型 | RSS / Feed / 公众号等仍未形成长期 subscription / cursor / dedupe 语义 | 搜索与采集永远停留在一次性任务心智，无法形成持续资料池 |
 | `C2` | 采集结果和下游证据对象之间边界不稳定 | 一会儿是页面正文，一会儿是 ExtractResult，一会儿是 evidence fragment | 采集质量无法直接传导到提取和报告质量门禁 |
 
 这决定了后续顺序：
@@ -738,7 +755,7 @@ search:
 | 执行器 | 主要资源类型 | 典型来源家族 | 同步 / 异步 | 当前优先级 |
 | --- | --- | --- | --- | --- |
 | `WebPageCollectionExecutor` | 官网、文档、媒体、帮助中心、定价页 | `official / news / docs / review` | 同步 | `P0` |
-| `ApiDataCollectionExecutor` | GitHub、News API、工商、应用市场等结构化接口 | `github / news / finance / enterprise` | 同步 | `P1` |
+| `ApiDataCollectionExecutor` | GitHub、工商、应用市场等结构化接口 | `github / finance / enterprise` | 同步 | `P1` |
 | `FeedCollectionExecutor` | RSS / Atom / 简单订阅源 | `news / blog / community` | 同步或准异步 | `P2` |
 | `SubscriptionMonitor` | 长期监控型增量源 | `news / social / blog / feed` | 异步常驻 | `P2` |
 
@@ -751,13 +768,13 @@ search:
 
 ### 2. Source Family To Executor Matrix
 
-`Source Family Catalog` 后续不能只负责“发现阶段的模板与工具”；它还要能解释采集执行偏好：
+`Source Family Catalog` 后续不能只负责“发现阶段的模板与工具”；它还要能解释 discovery 偏好、正式 owner 与采集执行偏好：
 
-| 数据源家族 | 发现主工具 | 采集主执行器 | 采集兜底执行器 | 预期证据形态 |
+| 数据源家族 | discovery 工具 | 正式 collection owner | 采集兜底执行器 | 预期证据形态 |
 | --- | --- | --- | --- | --- |
-| 官方网站 | `WEB_SCRAPER / JINA / PUBLIC_SEARCH` | `WebPageCollectionExecutor` | `FeedCollectionExecutor` 仅限站点 feed | 正文、价格块、功能表、文档目录、更新时间 |
-| 新闻媒体 | `NEWS_API / RSS / PUBLIC_SEARCH` | `ApiDataCollectionExecutor` 或 `WebPageCollectionExecutor` | `FeedCollectionExecutor` | 标题、发布日期、事件类型、正文、出处 |
-| GitHub | `GITHUB_API / PUBLIC_SEARCH` | `ApiDataCollectionExecutor` | `WebPageCollectionExecutor` 仅作 release / repo 页兜底 | 仓库、release、star、commit、组织归属 |
+| 官方网站 | `PUBLIC_SEARCH / 显式 URL / 站内模板` | `WebPageCollectionExecutor` | `FeedCollectionExecutor` 仅限站点 feed | 正文、价格块、功能表、文档目录、更新时间 |
+| 新闻媒体 | `显式 RSS feed / PUBLIC_SEARCH` | 显式 feed 走 `FeedCollectionExecutor`，普通文章走 `WebPageCollectionExecutor` | 后续若启用 `News API`，必须作为独立 news discovery / 补证专题接入 | 标题、发布日期、事件类型、正文、出处 |
+| GitHub | `显式 repo URL / repo locator / PUBLIC_SEARCH` | `ApiDataCollectionExecutor` | `WebPageCollectionExecutor` 仅作 release / repo 页兜底 | 仓库、release、star、commit、组织归属 |
 | 技术博客 | `BLOG_CRAWLER / RSS / PUBLIC_SEARCH` | `WebPageCollectionExecutor` | `FeedCollectionExecutor` | 正文、发布时间、作者、技术主题 |
 | 社交媒体 | `API / PUBLIC_SEARCH` | `SubscriptionMonitor` | `WebPageCollectionExecutor` 仅限公开页面 | 帖文、时间、互动量、情绪信号 |
 
@@ -850,11 +867,11 @@ search:
 
 1. 搜索发现层 provider 负责返回候选 URL、候选资源或稳定 `resource locator`。
 2. 采集执行层 executor 负责返回结构化字段、证据块、质量分和审计结果。
-3. `Wave 6` 解决 discovery 统一口径、候选标准化和审计语义，不再强制为 GitHub / 普通新闻文章额外引入专用 vertical discovery provider。
+3. `Wave 6` 解决 family-first discovery 解释、候选标准化和审计语义；显式 repo / feed / locator 可直接进入 owner，不再强制所有来源先走 `PUBLIC_SEARCH`。
 4. `Wave 10 / Wave 11` 解决差异化 collection owner，以及少数公网搜索不能稳定覆盖的专用 discovery 例外。
 
 对于 `GitHub API`，这条边界必须强制成立：  
-GitHub URL discovery 继续复用统一公网搜索；`GithubApiCollectionExecutor` 才是结构化采集 owner，不允许再退回“GitHub Search API 再发现一遍仓库 URL”的重复链路。
+显式 repo URL、repo locator 或已规范化的 GitHub target 应直接进入 `GithubApiCollectionExecutor`；`PUBLIC_SEARCH` 只负责补漏发现，不允许再退回“先把 GitHub 当通用网页搜一遍，再靠正文抓取碰运气”的重复链路。
 
 ### 1. API Executor Responsibilities
 
@@ -869,13 +886,13 @@ GitHub URL discovery 继续复用统一公网搜索；`GithubApiCollectionExecut
 
 ### 2. First-Class API Families
 
-在现有工程语义下，API 类来源的首批正式对象建议为：
+在现有工程语义下，结构化来源的首批正式对象建议为：
 
 1. `GitHub API`
-2. `News API`
-3. `RSS / Feed` 读取器
+2. `RSS / Feed` 读取器
+3. 若后续单开主动新闻发现专题，再评估 `News API / Bing News Search`
 
-原因不是它们最容易，而是它们和当前 `Source Family Catalog` 的 `github / news` 最直接对齐，能够最早把“垂直发现路由”兑现为“垂直采集执行”。
+原因不是它们最容易，而是它们和当前 `Source Family Catalog` 的 `github / news` 最直接对齐，能够最早把“家族语义”兑现为“正式采集 owner”；其中 `News API` 若启用，也应优先被视为 news discovery / 补证工具，而不是“按 URL 精确提取单篇正文”的 collection owner。
 
 ### 3. Web Fallback Still Exists
 
@@ -1040,13 +1057,13 @@ API 执行器进入后，并不意味着网页兜底消失：
 
 目标：让至少两类结构化来源进入统一采集执行体系，优先兑现 `github / news`。
 
-第四轮联合实施已提前完成本波次的首个最小落点：`ApiDataCollectionExecutor` 与 `GithubApiCollectionExecutor` 已接入统一采集执行体系，并通过 `github://repo/{owner}/{repo}` locator 直接返回结构化证据；但 `news` 家族的 API / feed 执行器、API-Web 补证策略与更完整的实链验收仍留待后续波次。
+第四轮联合实施已提前完成本波次的首个最小落点：`ApiDataCollectionExecutor` 与 `GithubApiCollectionExecutor` 已接入统一采集执行体系，并通过 `github://repo/{owner}/{repo}` locator 直接返回结构化证据。第七轮进一步把“显式 RSS feed URL”正式接入统一采集执行体系，明确普通 news article URL 继续走网页采集，`News API` 因不适合承接“按 URL 精确提取单篇正文”被后移到独立 news discovery 专题。当前仍待补的是更完整的 dev live 验收、API-Web 补证策略与后续主动新闻发现能力。
 
 必须覆盖：
 
 1. `ApiDataCollectionExecutor`
 2. `GitHub API` 正式采集执行闭环
-3. `News API` 或 `RSS` 正式采集执行闭环
+3. `RSS` 正式采集执行闭环，且 `News API` 若后续启用必须以独立 news discovery 专题推进
 4. API 结果到统一 evidence bundle 的映射
 5. API / Web 互补补证路径
 
@@ -1077,14 +1094,14 @@ API 执行器进入后，并不意味着网页兜底消失：
 
 ## Extended Progress Plan
 
-| 阶段 | 核心目标 | 预期耗时 | 依赖前置条件 | 当前状态 |
-| --- | --- | --- | --- | --- |
-| Phase G | 完成 `Wave 7` 最小采集契约、执行协调器、执行器注册表与采集检查点骨架 | 1 个迭代 | `Wave 6` 统一发现口径与候选标准化已完成 | 已完成最小闭环 |
-| Phase H | 完成 `Wave 8` 双路径网页采集执行器落地：`JinaReader` 主路径、`Playwright` 兜底路径，以及失败模式收口与契约扩展字段补齐 | 1-2 个迭代 | Phase G 启动后可并行推进 | 已完成实现与自动化收口，实链验收待后续补跑 |
-| Phase I | 完成 `Wave 9` 采集审计、采集回放、包级重跑与恢复语义 | 1 个迭代 | Phase G-H 完成 | 已完成实现、自动化回归与 dev live smoke |
-| Phase J | 完成 `Wave 10` API 型采集执行器与 `github / news` 统一 evidence 闭环 | 1-2 个迭代 | Phase G 完成，且具备目标 provider 凭证或 Mock 契约 | 已启动，GitHub 首个闭环完成 |
-| Phase K | 完成 `Wave 11` feed / subscription 增量监控体系 | 1 个迭代以上 | Phase G、Phase J 至少一项完成 | 待执行 |
-| Phase L | 完成 `Wave 12` 采集结果到下游提取 / 报告质量门禁的正式联动 | 跨专题协同 | Extraction 方案正式启动 | 待执行 |
+| 阶段 | 核心目标 | 预期耗时 | 依赖前置条件                                  | 当前状态 |
+| --- | --- | --- |-----------------------------------------| --- |
+| Phase G | 完成 `Wave 7` 最小采集契约、执行协调器、执行器注册表与采集检查点骨架 | 1 个迭代 | `Wave 6` 统一发现口径与候选标准化已完成                | 已完成最小闭环 |
+| Phase H | 完成 `Wave 8` 双路径网页采集执行器落地：`JinaReader` 主路径、`Playwright` 兜底路径，以及失败模式收口与契约扩展字段补齐 | 1-2 个迭代 | Phase G 启动后可并行推进                        | 已完成实现与自动化收口，实链验收待后续补跑 |
+| Phase I | 完成 `Wave 9` 采集审计、采集回放、包级重跑与恢复语义 | 1 个迭代 | Phase G-H 完成                            | 已完成实现、自动化回归与 dev live smoke |
+| Phase J | 完成 `Wave 10` API 型采集执行器与 `github / news` 统一 evidence 闭环 | 1-2 个迭代 | Phase G 完成ji，且具备目标 provider 凭证或 Mock 契约 | 已启动，GitHub 与显式 RSS feed 自动化闭环完成，dev live 与更高阶补证待继续 |
+| Phase K | 完成 `Wave 11` feed / subscription 增量监控体系 | 1 个迭代以上 | Phase G、Phase J 至少一项完成                  | 待执行 |
+| Phase L | 完成 `Wave 12` 采集结果到下游提取 / 报告质量门禁的正式联动 | 跨专题协同 | Extraction 方案正式启动                       | 待执行 |
 
 ---
 

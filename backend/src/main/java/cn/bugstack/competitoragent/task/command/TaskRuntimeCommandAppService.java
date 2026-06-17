@@ -484,6 +484,16 @@ public class TaskRuntimeCommandAppService {
             return;
         }
         try {
+            JsonNode configNode = objectMapper.readTree(node.getNodeConfig());
+            if (!configNode.isObject()) {
+                return;
+            }
+            // 当用户在 config-rerun 里显式把 searchAuditCheckpoint 设为 null 时，
+            // 说明这次重跑希望丢弃旧搜索现场，重新按照新配置执行。
+            // 因此这里必须尊重“显式清空”的意图，不能再从旧 outputData 偷偷回填旧 checkpoint。
+            if (configNode.has("searchAuditCheckpoint") && configNode.get("searchAuditCheckpoint").isNull()) {
+                return;
+            }
             JsonNode output = objectMapper.readTree(node.getOutputData());
             JsonNode auditNode = output.get("searchAudit");
             if (auditNode == null || auditNode.isNull() || auditNode.isMissingNode()) {
@@ -491,10 +501,6 @@ public class TaskRuntimeCommandAppService {
             }
             SearchAuditSnapshot checkpoint = objectMapper.treeToValue(auditNode, SearchAuditSnapshot.class);
             if (checkpoint == null) {
-                return;
-            }
-            JsonNode configNode = objectMapper.readTree(node.getNodeConfig());
-            if (!configNode.isObject()) {
                 return;
             }
             ((ObjectNode) configNode).set("searchAuditCheckpoint", objectMapper.valueToTree(checkpoint));
@@ -516,6 +522,15 @@ public class TaskRuntimeCommandAppService {
             return;
         }
         try {
+            JsonNode configNode = objectMapper.readTree(node.getNodeConfig());
+            if (!configNode.isObject()) {
+                return;
+            }
+            // collectionAuditCheckpoint 与 searchAuditCheckpoint 语义一致：
+            // 一旦用户明确传入 null，就表示要放弃旧采集现场，不能再自动回填历史 package checkpoint。
+            if (configNode.has("collectionAuditCheckpoint") && configNode.get("collectionAuditCheckpoint").isNull()) {
+                return;
+            }
             JsonNode output = objectMapper.readTree(node.getOutputData());
             JsonNode auditNode = output.get("collectionAudit");
             if (auditNode == null || auditNode.isNull() || auditNode.isMissingNode()) {
@@ -523,10 +538,6 @@ public class TaskRuntimeCommandAppService {
             }
             CollectionAuditSnapshot checkpoint = objectMapper.treeToValue(auditNode, CollectionAuditSnapshot.class);
             if (checkpoint == null) {
-                return;
-            }
-            JsonNode configNode = objectMapper.readTree(node.getNodeConfig());
-            if (!configNode.isObject()) {
                 return;
             }
             ((ObjectNode) configNode).set("collectionAuditCheckpoint", objectMapper.valueToTree(checkpoint));

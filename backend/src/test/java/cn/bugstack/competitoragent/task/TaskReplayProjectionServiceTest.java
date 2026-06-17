@@ -216,6 +216,108 @@ class TaskReplayProjectionServiceTest {
     }
 
     @Test
+    void shouldExposeCollectionAuditSourceUrlsAndFastFailSignalsForRssReplay() {
+        TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
+        TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);
+        TaskNodeRepository taskNodeRepository = mock(TaskNodeRepository.class);
+        TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository = mock(TaskNodeExecutionAttemptRepository.class);
+        MemorySnapshotRepository memorySnapshotRepository = mock(MemorySnapshotRepository.class);
+        AgentExecutionLogRepository agentExecutionLogRepository = mock(AgentExecutionLogRepository.class);
+        RecoveryCheckpointService recoveryCheckpointService = mock(RecoveryCheckpointService.class);
+        TaskRecoveryService taskRecoveryService = mock(TaskRecoveryService.class);
+
+        when(taskPlanRepository.findByTaskIdOrderByPlanVersionAsc(84L)).thenReturn(List.of());
+        when(taskPlanRepository.findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(84L)).thenReturn(Optional.empty());
+        when(taskWorkflowEventRepository.findAll()).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(84L)).thenReturn(List.of(TaskNode.builder()
+                .id(11L)
+                .taskId(84L)
+                .nodeName("collect_sources_news")
+                .displayName("collect_sources_news")
+                .agentType(AgentType.COLLECTOR)
+                .status(TaskNodeStatus.FAILED)
+                .planVersionId(51L)
+                .branchKey("root")
+                .outputData("""
+                        {
+                          "collectionStatus":"FAILED",
+                          "sourceUrls":["https://blog.example.com/feed.xml","https://blog.example.com/agent-launch"],
+                          "collectionAudit":{
+                            "summary":{
+                              "totalPackages":1,
+                              "successCount":0,
+                              "failedCount":1,
+                              "reusedCount":0,
+                              "status":"FAILED",
+                              "recoveryCheckpoint":"collect_sources_news#001",
+                              "sourceUrls":["https://blog.example.com/feed.xml","https://blog.example.com/agent-launch"]
+                            },
+                            "status":"FAILED",
+                            "results":[
+                              {
+                                "taskPackageKey":"collect_sources_news#001",
+                                "targetIndex":1,
+                                "executorType":"API_DATA",
+                                "success":false,
+                                "status":"FAILED",
+                                "resourceLocator":"rss://feed/YWNtZQ",
+                                "failureKind":"RUNTIME_FAILURE",
+                                "qualitySignals":["TOOL_UNAVAILABLE_FAST_FAIL"],
+                                "sourceUrls":["https://blog.example.com/feed.xml","https://blog.example.com/agent-launch"]
+                              }
+                            ],
+                            "replayTimeline":[
+                              {
+                                "taskPackageKey":"collect_sources_news#001",
+                                "targetIndex":1,
+                                "status":"FAILED",
+                                "executorType":"API_DATA",
+                                "resourceLocator":"rss://feed/YWNtZQ",
+                                "errorMessage":"rss disabled",
+                                "sourceUrls":["https://blog.example.com/feed.xml","https://blog.example.com/agent-launch"]
+                              }
+                            ],
+                            "recoveryCheckpoint":"collect_sources_news#001",
+                            "sourceUrls":["https://blog.example.com/feed.xml","https://blog.example.com/agent-launch"]
+                          }
+                        }
+                        """)
+                .build()));
+        when(taskNodeExecutionAttemptRepository.findAll()).thenReturn(List.of());
+        when(memorySnapshotRepository.findByTaskIdOrderByIdDesc(84L)).thenReturn(List.of());
+        when(agentExecutionLogRepository.findByTaskIdOrderByCreatedAtAsc(84L)).thenReturn(List.of());
+        when(recoveryCheckpointService.listTaskCheckpoints(84L)).thenReturn(List.of());
+        when(taskRecoveryService.buildRecoveryAdvice(84L)).thenReturn(TaskRecoveryAdvice.builder()
+                .recommendedAction("OBSERVE_ONLY")
+                .summary("none")
+                .blockingNodeNames(List.of())
+                .resumeSupported(false)
+                .sourceUrls(List.of())
+                .build());
+
+        ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        TaskReplayProjectionService service = new TaskReplayProjectionService(
+                taskPlanRepository,
+                taskWorkflowEventRepository,
+                taskNodeRepository,
+                taskNodeExecutionAttemptRepository,
+                memorySnapshotRepository,
+                agentExecutionLogRepository,
+                recoveryCheckpointService,
+                taskRecoveryService,
+                objectMapper
+        );
+
+        TaskReplayResponse response = service.getTaskReplay(84L);
+        JsonNode payload = objectMapper.valueToTree(response);
+
+        assertThat(payload.at("/collectionReplays/0/collectionAudit/sourceUrls")).hasSize(2);
+        assertThat(payload.at("/collectionReplays/0/sourceUrls")).hasSize(2);
+        assertThat(payload.at("/collectionReplays/0/collectionAudit/results/0/qualitySignals/0").asText())
+                .isEqualTo("TOOL_UNAVAILABLE_FAST_FAIL");
+    }
+
+    @Test
     void shouldProjectMainReplayChainAndReserveConversationAndExportEntryPoints() {
         TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
         TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);

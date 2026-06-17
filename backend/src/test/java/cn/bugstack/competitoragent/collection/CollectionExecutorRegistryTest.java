@@ -41,4 +41,19 @@ class CollectionExecutorRegistryTest {
 
         assertThat(registry.resolve(taskPackage).executorType()).isEqualTo("WEB_PAGE");
     }
+
+    @Test
+    void shouldResolveRssExecutorForRssPrimaryTool() {
+        CollectionExecutor githubExecutor = new GithubApiCollectionExecutor(null);
+        CollectionExecutor rssExecutor = new RssFeedCollectionExecutor(null, new cn.bugstack.competitoragent.source.RssFeedProperties());
+        CollectionExecutor webExecutor = new WebPageCollectionExecutor(null, null);
+        CollectionExecutorRegistry registry = new CollectionExecutorRegistry(List.of(githubExecutor, rssExecutor, webExecutor));
+
+        CollectionTaskPackage taskPackage = CollectionTaskPackage.builder()
+                .primaryTool("RSS")
+                .resourceLocator("rss://feed/aGVsbG8")
+                .build();
+
+        assertThat(registry.resolve(taskPackage).executorType()).isEqualTo("API_DATA");
+    }
 }

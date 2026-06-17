@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Mul-agent RSS Smoke Feed</title>
+    <link>http://127.0.0.1:18080/feed.xml</link>
+    <description>Smoke feed for live RSS collection verification.</description>
+    <item>
+      <title>RSS smoke item one</title>
+      <link>https://openai.com/index/introducing-gpt-4o/</link>
+      <pubDate>Tue, 17 Jun 2026 08:00:00 GMT</pubDate>
+      <description>Validate RSS routing, payload items, and sourceUrls propagation.</description>
+    </item>
+    <item>
+      <title>RSS smoke item two</title>
+      <link>https://openai.com/index/gpt-4-1/</link>
+      <pubDate>Tue, 17 Jun 2026 09:00:00 GMT</pubDate>
+      <description>Validate maxItemsPerFeed truncation behavior in live flow if needed.</description>
+    </item>
+  </channel>
+</rss>

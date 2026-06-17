@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status Note (2026-06-17):** 本文档保留为第六轮实施期的历史快照。下文“执行中 / 待执行”勾选未随落地结果逐条回写，不代表当前工程现状。第六轮 `Wave 9` 已在父方案中回写为“实现、自动化回归与 dev live smoke 完成”；现状请以 [2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md) 为准。
+
 **Goal:** 承接父方案 `Wave 9`，把第五轮已经落地的 `CollectionTaskPackage -> CollectionExecutionCoordinator -> CollectionExecutionResult -> CollectorAgent` 最小采集执行骨架升级为正式的 `collectionAudit / collectionReplayTimeline / collectionAuditCheckpoint / 包级 rerun-resume` 闭环，让采集段像搜索段一样具备可解释、可回放、可恢复能力。
 
 **Architecture:** 本轮不重做 `Wave 8` 的 `JinaReader + Playwright FULL_RENDER` 双路径，也不提前扩展 `Wave 10` 的 `news / feed` 结构化采集 owner。实现顺序固定为 `红灯契约 -> collection 正式对象 -> Collector 输出与事件/洞察对齐 -> collection checkpoint 与包级恢复 -> replay / task view 对齐 -> 自动化与 live 验收`。为避免本轮同时引入前端 topic 切换，运行期事件继续复用现有 `SEARCH_PROGRESS_V1` 通道，但 payload 必须增量补齐 collection 字段。

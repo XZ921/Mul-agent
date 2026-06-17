@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status Note (2026-06-17):** 本文档保留为第四轮实施期的历史快照。其“待执行”勾选与阶段状态没有持续回写，不代表当前工程现状。当前正式基线请以 [2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md) 为准；GitHub URL discovery 已改为统一复用公网搜索，`GithubApiCollectionExecutor` 才是正式采集 owner。
+
 **Goal:** 在不引入 GitHub 搜索层半成品返工的前提下，联合完成 `Wave 6` discovery 路由闭环、`Wave 7` 最小采集执行接缝，以及首个 GitHub API 结构化采集执行器。
 
 **Architecture:** 本计划不再落地 `GithubApiSearchSourceProvider -> repo URL -> Playwright HTML` 这条会被后续推翻的路径，而是把 `Wave 6` 收敛为 discovery 路由与候选元数据标准化，把 `Wave 7` 提前为最小采集任务包、采集协调器与执行器注册表。GitHub 在本轮只允许两类 owner：discovery 层负责返回稳定候选 URL 与 `resourceLocator`，collection 层由 `ApiDataCollectionExecutor` 直接返回结构化证据，不再要求浏览器主采集 GitHub HTML 页面。

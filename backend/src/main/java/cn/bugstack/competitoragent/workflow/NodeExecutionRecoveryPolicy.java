@@ -348,6 +348,13 @@ public class NodeExecutionRecoveryPolicy {
             ObjectNode configObject = configNode != null && configNode.isObject()
                     ? (ObjectNode) configNode.deepCopy()
                     : objectMapper.createObjectNode();
+            // 当 nodeConfig 已显式把 searchAuditCheckpoint 清空为 null 时，
+            // 说明本次恢复要放弃历史搜索现场，不能再从旧 outputData 回填 checkpoint。
+            if (configObject.has("searchAuditCheckpoint")
+                    && configObject.get("searchAuditCheckpoint") != null
+                    && configObject.get("searchAuditCheckpoint").isNull()) {
+                return;
+            }
             configObject.set("searchAuditCheckpoint", auditNode.deepCopy());
             node.setNodeConfig(objectMapper.writeValueAsString(configObject));
         } catch (Exception ignored) {

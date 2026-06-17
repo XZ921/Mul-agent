@@ -806,4 +806,40 @@ class SearchExecutionCoordinatorTest {
                 .distinct()
                 .count());
     }
+
+    @Test
+    void shouldPreserveExplicitRssFeedUrlWhenSelectingNewsCandidate() {
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("RSS Smoke")
+                .sourceType("NEWS")
+                .sourceCandidates(List.of(SourceCandidate.builder()
+                        .url("http://127.0.0.1:18080/feed.xml")
+                        .title("Mul-agent RSS Smoke Feed")
+                        .sourceType("NEWS")
+                        .discoveryMethod("CONFIG")
+                        .reason("RSS live smoke")
+                        .domain("127.0.0.1")
+                        .sourceUrls(List.of("http://127.0.0.1:18080/feed.xml"))
+                        .relevanceScore(0.95)
+                        .freshnessScore(0.80)
+                        .qualityScore(0.90)
+                        .build()))
+                .verifyCandidates(Boolean.FALSE)
+                .verifyResultPage(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HEURISTIC_ONLY")
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertEquals(1, result.getSelectedTargets().size());
+        assertEquals("http://127.0.0.1:18080/feed.xml",
+                result.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertEquals(List.of("http://127.0.0.1:18080/feed.xml"),
+                result.getExecutionTrace().getSelectedUrls());
+        assertTrue(result.getSourceCandidates().stream()
+                .anyMatch(candidate -> "http://127.0.0.1:18080/feed.xml".equals(candidate.getUrl())));
+        verify(browserSearchRuntimeService, never()).search(any());
+        verify(searchSourceProvider, never()).search(any(), any());
+    }
 }

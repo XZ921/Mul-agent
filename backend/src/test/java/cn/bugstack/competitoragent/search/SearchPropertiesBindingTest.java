@@ -46,6 +46,10 @@ class SearchPropertiesBindingTest {
                     "search.source-catalog.families.news.preferred-web-render-hint=LIGHTWEIGHT",
                     "search.source-catalog.families.news.expected-block-types[0]=ARTICLE_BODY",
                     "search.source-catalog.families.news.expected-block-types[1]=JSON_LD_METADATA",
+                    "search.source-catalog.families.news.primary-tools[0]=RSS",
+                    "search.source-catalog.families.news.auxiliary-tools[0]=PUBLIC_SEARCH",
+                    "search.source-catalog.families.news.tool-provider-keys.RSS=rss",
+                    "search.source-catalog.families.news.tool-provider-keys.PUBLIC_SEARCH=qianfan",
                     "search.source-catalog.families.github.preferred-web-render-hint=FULL_RENDER",
                     "search.source-catalog.families.github.expected-block-types[0]=RELEASE_NOTES",
                     "search.source-catalog.families.github.expected-block-types[1]=JSON_LD_METADATA",
@@ -124,6 +128,13 @@ class SearchPropertiesBindingTest {
                     .containsExactly("ARTICLE_BODY", "JSON_LD_METADATA");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("news").getUpdatePolicy().getMode())
                     .isEqualTo("REALTIME_RSS_AND_SCHEDULED_SWEEP");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("news").getPrimaryTools())
+                    .containsExactly("RSS");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("news").getAuxiliaryTools())
+                    .containsExactly("PUBLIC_SEARCH");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("news").getToolProviderKeys())
+                    .containsEntry("RSS", "rss")
+                    .containsEntry("PUBLIC_SEARCH", "qianfan");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("github").getPreferredWebRenderHint())
                     .isEqualTo("FULL_RENDER");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("github").getExpectedBlockTypes())

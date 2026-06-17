@@ -50,7 +50,9 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
 
     @Override
     public boolean supports(CollectionTaskPackage taskPackage) {
-        return taskPackage != null && !"GITHUB_API".equalsIgnoreCase(taskPackage.getPrimaryTool());
+        return taskPackage != null
+                && ("JINA_READER".equalsIgnoreCase(taskPackage.getPrimaryTool())
+                || "WEB_SCRAPER".equalsIgnoreCase(taskPackage.getPrimaryTool()));
     }
 
     @Override

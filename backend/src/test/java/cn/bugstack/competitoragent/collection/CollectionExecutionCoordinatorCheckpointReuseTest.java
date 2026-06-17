@@ -174,6 +174,45 @@ class CollectionExecutionCoordinatorCheckpointReuseTest {
                 "collect_sources_docs#001".equals(readStringAccessor(pkg, "packageKey"))));
     }
 
+    @Test
+    void shouldFastFailWhenRssPackageHasNoAvailableExecutor() throws Exception {
+        CollectionExecutor webExecutor = mock(CollectionExecutor.class);
+        when(webExecutor.supports(argThat(pkg -> "JINA_READER".equalsIgnoreCase(readStringAccessor(pkg, "primaryTool")))))
+                .thenReturn(true);
+
+        CollectionExecutionCoordinator coordinator = new CollectionExecutionCoordinator(
+                new CollectionTaskPackageBuilder(),
+                new CollectionExecutorRegistry(List.of(webExecutor))
+        );
+
+        SearchCollectionTarget rssTarget = SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://blog.example.com/feed.xml")
+                        .title("Acme Feed")
+                        .sourceType("NEWS")
+                        .sourceFamilyKey("news")
+                        .providerKey("http")
+                        .sourceUrls(List.of("https://blog.example.com/feed.xml"))
+                        .build())
+                .build();
+
+        Object report = CollectionExecutionCoordinator.class
+                .getMethod("execute", Long.class, String.class, Long.class, String.class, List.class)
+                .invoke(coordinator, 41L, "collect_sources_news", 9L, "Acme AI", List.of(rssTarget));
+
+        @SuppressWarnings("unchecked")
+        List<Object> results = (List<Object>) readAccessor(report, "results");
+        assertThat(results).hasSize(1);
+        assertThat(readStringAccessor(results.get(0), "status")).isEqualTo("FAILED");
+        assertThat(readAccessor(results.get(0), "qualitySignals").toString()).contains("TOOL_UNAVAILABLE_FAST_FAIL");
+
+        Object auditSnapshot = readAccessor(report, "auditSnapshot");
+        @SuppressWarnings("unchecked")
+        List<Object> replayTimeline = (List<Object>) readAccessor(auditSnapshot, "replayTimeline");
+        assertThat(replayTimeline).hasSize(1);
+        assertThat(readStringAccessor(replayTimeline.get(0), "errorMessage")).contains("no collection executor matched task package");
+    }
+
     private Method resolveCheckpointAwareExecuteMethod(Class<?> checkpointClass) {
         return java.util.Arrays.stream(CollectionExecutionCoordinator.class.getMethods())
                 .filter(method -> "execute".equals(method.getName()))

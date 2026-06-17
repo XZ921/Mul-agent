@@ -5,6 +5,7 @@ import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -148,5 +149,40 @@ class NodeExecutionRecoveryPolicyTest {
         assertEquals(TaskNodeStatus.PENDING, runningCollector.getStatus());
         assertTrue(runningCollector.getNodeConfig().contains("searchAuditCheckpoint"));
         assertTrue(runningCollector.getNodeConfig().contains("SELECT_TARGETS"));
+    }
+
+    @Test
+    void shouldRespectExplicitNullSearchAuditCheckpointWhenResettingInterruptedCollector() throws Exception {
+        TaskNode runningCollector = TaskNode.builder()
+                .taskId(3L)
+                .nodeName("collect_sources_news")
+                .displayName("collect_sources_news")
+                .agentType(AgentType.COLLECTOR)
+                .status(TaskNodeStatus.RUNNING)
+                .nodeConfig("""
+                        {
+                          "competitorName":"RSS Smoke",
+                          "sourceType":"NEWS",
+                          "searchAuditCheckpoint":null,
+                          "collectionAuditCheckpoint":null
+                        }
+                        """)
+                .outputData("""
+                        {
+                          "searchAudit":{
+                            "executionTrace":{"recoveryCheckpoint":"SELECT_TARGETS","degraded":true}
+                          }
+                        }
+                        """)
+                .build();
+
+        recoveryPolicy.resetInterruptedNodes(List.of(runningCollector));
+
+        JsonNode updatedConfig = new ObjectMapper().readTree(runningCollector.getNodeConfig());
+        assertEquals(TaskNodeStatus.PENDING, runningCollector.getStatus());
+        assertTrue(updatedConfig.has("searchAuditCheckpoint"));
+        assertTrue(updatedConfig.path("searchAuditCheckpoint").isNull());
+        assertTrue(updatedConfig.has("collectionAuditCheckpoint"));
+        assertTrue(updatedConfig.path("collectionAuditCheckpoint").isNull());
     }
 }

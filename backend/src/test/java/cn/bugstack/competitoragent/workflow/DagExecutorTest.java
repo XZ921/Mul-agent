@@ -43,6 +43,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -724,6 +725,66 @@ class DagExecutorTest {
         assertEquals("SEARCH_SHARED_PROJECTION_V1",
                 context.getSharedOutputEnvelope("collect_sources_web").getProjectionType());
         assertTrue(context.getSharedOutput("collect_sources_web").contains("sourceUrls"));
+    }
+
+    @Test
+    void shouldIgnoreNullPayloadWhenSeedingLegacySharedEnvelopeDuringResume() {
+        Long taskId = 1607L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode collector = TaskNode.builder()
+                .id(152L)
+                .taskId(taskId)
+                .nodeName("collect_sources_web")
+                .displayName("collect_sources_web")
+                .agentType(AgentType.COLLECTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .maxRetries(0)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        TaskSnapshotCacheService snapshotCacheService = mock(TaskSnapshotCacheService.class);
+        TaskExecutionLockService lockService = mock(TaskExecutionLockService.class);
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(collector));
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(lockService.tryAcquireNodeExecutionLock(any(), any(), any(), any())).thenReturn(Boolean.TRUE);
+        when(snapshotCacheService.getCachedSharedOutputEnvelopes(taskId)).thenReturn(Map.of(
+                "collect_sources_web",
+                SharedNodeOutputEnvelope.builder()
+                        .taskId(taskId)
+                        .nodeName("collect_sources_web")
+                        .projectionType("SEARCH_SHARED_PROJECTION_V1")
+                        .payloadJson(null)
+                        .sourceUrls(List.of("https://docs.example.com"))
+                        .build()
+        ));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new ResumeCollectorAgent()),
+                snapshotCacheService,
+                lockService
+        );
+
+        AgentContext context = AgentContext.builder().taskId(taskId).taskName("legacy-envelope-resume").build();
+
+        assertDoesNotThrow(() -> executor.execute(taskId, context));
+        assertEquals("SEARCH_SHARED_PROJECTION_V1",
+                context.getSharedOutputEnvelope("collect_sources_web").getProjectionType());
+        assertEquals("{\"node\":\"collect_sources_web\"}", context.getSharedOutput("collect_sources_web"));
+        verify(snapshotCacheService).cacheNodeOutput(taskId, "collect_sources_web", "{\"node\":\"collect_sources_web\"}");
     }
 
     @Test

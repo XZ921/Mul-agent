@@ -75,11 +75,17 @@ public class SearchSourceCatalogProperties {
                 SearchProviderRole.PRIMARY_VERTICAL.name(),
                 List.of("NEWS"),
                 List.of("PRODUCT_RELEASE", "FUNDING", "PARTNERSHIP"),
-                List.of("NEWS_API", "RSS"),
+                List.of("RSS"),
                 List.of("PUBLIC_SEARCH"),
                 new UpdatePolicyProperties("REALTIME_RSS_AND_SCHEDULED_SWEEP", "PT1H"),
                 List.of("search-news-primary", "search-news-secondary")
         );
+        /**
+         * news 家族在这一轮显式收敛为“RSS 正式采集 + 公网搜索发现辅助”。
+         * 普通新闻文章 URL 继续走网页采集主链路，News API 不再作为当前 wave 的正式 owner。
+         */
+        family.getToolProviderKeys().put("RSS", "rss");
+        family.getToolProviderKeys().put("PUBLIC_SEARCH", "qianfan");
         family.setPreferredWebRenderHint("LIGHTWEIGHT");
         family.setExpectedBlockTypes(List.of("ARTICLE_BODY", "JSON_LD_METADATA"));
         return family;

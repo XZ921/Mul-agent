@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.task;
 
 import cn.bugstack.competitoragent.config.RedisConfig;
 import cn.bugstack.competitoragent.search.SearchSharedProjection;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,7 +11,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -154,7 +157,7 @@ public class TaskSnapshotCacheService {
         rawOutputs.forEach((nodeName, rawValue) -> {
             try {
                 SharedNodeOutputEnvelope envelope = objectMapper.readValue(rawValue, SharedNodeOutputEnvelope.class);
-                envelopes.put(nodeName, envelope);
+                envelopes.put(nodeName, normalizeSharedOutputEnvelope(taskId, nodeName, rawValue, envelope));
             } catch (Exception ignored) {
                 envelopes.put(nodeName, SharedNodeOutputEnvelope.builder()
                         .taskId(taskId)
@@ -216,5 +219,132 @@ public class TaskSnapshotCacheService {
             return false;
         }
         return nodeName.startsWith("collect");
+    }
+
+    /**
+     * 历史 runtime 缓存里可能直接存的是 SearchSharedProjection JSON，
+     * 此时按 SharedNodeOutputEnvelope 反序列化虽然不会抛错，
+     * 但 nodeName / payloadJson 等关键字段会变成 null，恢复期继续写入 sharedState 就会触发 NPE。
+     * 所以这里统一把“像 envelope 的新格式”和“像 projection 的旧格式”都归一成可恢复的信封对象。
+     */
+    private SharedNodeOutputEnvelope normalizeSharedOutputEnvelope(Long taskId,
+                                                                  String nodeName,
+                                                                  String rawValue,
+                                                                  SharedNodeOutputEnvelope envelope) {
+        JsonNode rawJson = readJsonSafely(rawValue);
+        boolean legacyProjectionPayload = looksLikeLegacySharedProjection(rawJson);
+
+        String resolvedProjectionType = normalizeText(envelope.getProjectionType());
+        if (resolvedProjectionType == null) {
+            resolvedProjectionType = legacyProjectionPayload
+                    ? resolveLegacyProjectionType(rawJson)
+                    : "LEGACY_STRING_OUTPUT";
+        }
+
+        List<String> resolvedSourceUrls = normalizeSourceUrls(envelope.getSourceUrls());
+        if (resolvedSourceUrls.isEmpty()) {
+            resolvedSourceUrls = extractSourceUrls(rawJson);
+        }
+
+        String resolvedPayloadJson = normalizeText(envelope.getPayloadJson());
+        if (resolvedPayloadJson == null && legacyProjectionPayload) {
+            resolvedPayloadJson = rawValue;
+        }
+
+        return SharedNodeOutputEnvelope.builder()
+                .taskId(envelope.getTaskId() == null ? taskId : envelope.getTaskId())
+                .nodeName(normalizeText(envelope.getNodeName()) == null ? nodeName : envelope.getNodeName())
+                .planVersionId(envelope.getPlanVersionId())
+                .projectionType(resolvedProjectionType)
+                .payloadJson(resolvedPayloadJson)
+                .sourceUrls(resolvedSourceUrls)
+                .createdAt(envelope.getCreatedAt())
+                .build();
+    }
+
+    /**
+     * 旧版共享输出没有 envelope 外壳，通常只会保留 projectionType/sourceUrls/selectedUrls 等稳定投影字段。
+     * 识别出这类结构后，需要把原始 JSON 直接回填为 payloadJson，确保恢复和 replay 仍能消费历史事实。
+     */
+    private boolean looksLikeLegacySharedProjection(JsonNode rawJson) {
+        if (rawJson == null || !rawJson.isObject()) {
+            return false;
+        }
+        if (rawJson.has("payloadJson") || rawJson.has("nodeName")) {
+            return false;
+        }
+        return rawJson.has("projectionType")
+                || rawJson.has("sourceUrls")
+                || rawJson.has("selectedUrls")
+                || rawJson.has("selectedTargets")
+                || rawJson.has("recoveryCheckpoint")
+                || rawJson.has("issueFlags")
+                || rawJson.has("fallbackDecision")
+                || rawJson.has("degradationReason");
+    }
+
+    private String resolveLegacyProjectionType(JsonNode rawJson) {
+        if (rawJson == null || rawJson.isMissingNode() || rawJson.isNull()) {
+            return "SEARCH_SHARED_PROJECTION_V1";
+        }
+        JsonNode projectionType = rawJson.get("projectionType");
+        if (projectionType == null || projectionType.isNull()) {
+            return "SEARCH_SHARED_PROJECTION_V1";
+        }
+        String value = normalizeText(projectionType.asText(null));
+        return value == null ? "SEARCH_SHARED_PROJECTION_V1" : value;
+    }
+
+    private List<String> extractSourceUrls(JsonNode rawJson) {
+        if (rawJson == null || !rawJson.isObject()) {
+            return List.of();
+        }
+        JsonNode sourceUrlsNode = rawJson.get("sourceUrls");
+        if (sourceUrlsNode == null || !sourceUrlsNode.isArray()) {
+            return List.of();
+        }
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        sourceUrlsNode.forEach(node -> {
+            if (node != null && node.isValueNode()) {
+                String value = normalizeText(node.asText(null));
+                if (value != null) {
+                    sourceUrls.add(value);
+                }
+            }
+        });
+        return List.copyOf(sourceUrls);
+    }
+
+    private List<String> normalizeSourceUrls(List<String> sourceUrls) {
+        if (sourceUrls == null || sourceUrls.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        for (String sourceUrl : sourceUrls) {
+            String value = normalizeText(sourceUrl);
+            if (value != null) {
+                normalized.add(value);
+            }
+        }
+        return List.copyOf(normalized);
+    }
+
+    private JsonNode readJsonSafely(String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(rawValue);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String normalizeText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

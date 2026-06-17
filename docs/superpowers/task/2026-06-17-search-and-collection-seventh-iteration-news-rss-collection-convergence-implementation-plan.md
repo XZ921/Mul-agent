@@ -40,17 +40,17 @@
 - [x] 前六轮现状复核：已完成
 - [x] 第七轮原方案风险复核：已完成
 - [x] 新方案范围收敛：已完成
-- [ ] 第七轮实施计划落稿：执行中
-- [ ] 第七轮实现与验证：待执行
+- [x] 第七轮实施计划落稿：已完成
+- [x] 第七轮实现与验证：已完成（Task 1-6 已完成；自动化回归、dev live smoke 与文档回链均已收口）
 
 | 阶段 | 核心目标 | 预期耗时 | 依赖前置条件 | 当前状态 |
 | --- | --- | --- | --- | --- |
-| Phase K1 | 锁定“显式 feed 才走 RSS”的红灯契约 | 0.5 天 | 第六轮审计闭环已完成 | 待执行 |
-| Phase K2 | 收口 RSS 配置、news family 工具绑定与保守路由 | 0.5 天 | Phase K1 完成 | 待执行 |
-| Phase K3 | 实现 `RssFeedClient / RssFeedItem` 与 RSS 2.0 解析 | 1 天 | Phase K2 完成 | 待执行 |
-| Phase K4 | 落地 `RssFeedCollectionExecutor` 与 registry 接入 | 0.5-1 天 | Phase K3 完成 | 待执行 |
-| Phase K5 | 打通 coordinator / collector / replay / disabled 快速失败审计 | 0.5-1 天 | Phase K4 完成 | 待执行 |
-| Phase K6 | 聚合验证、文档回链与 dev live 验收 | 0.5 天 | Phase K1-K5 完成 | 待执行 |
+| Phase K1 | 锁定“显式 feed 才走 RSS”的红灯契约 | 0.5 天 | 第六轮审计闭环已完成 | 已完成 |
+| Phase K2 | 收口 RSS 配置、news family 工具绑定与保守路由 | 0.5 天 | Phase K1 完成 | 已完成 |
+| Phase K3 | 实现 `RssFeedClient / RssFeedItem` 与 RSS 2.0 解析 | 1 天 | Phase K2 完成 | 已完成 |
+| Phase K4 | 落地 `RssFeedCollectionExecutor` 与 registry 接入 | 0.5-1 天 | Phase K3 完成 | 已完成 |
+| Phase K5 | 打通 coordinator / collector / replay / disabled 快速失败审计 | 0.5-1 天 | Phase K4 完成 | 已完成 |
+| Phase K6 | 聚合验证、文档回链与 dev live 验收 | 0.5 天 | Phase K1-K5 完成 | 已完成 |
 
 ---
 
@@ -122,7 +122,7 @@
 - Modify: `backend/src/test/java/cn/bugstack/competitoragent/collection/CollectionExecutionCoordinatorCheckpointReuseTest.java`
 - Modify: `backend/src/test/java/cn/bugstack/competitoragent/agent/collector/CollectorAgentTest.java`
 
-- [ ] **Step 1: 先锁定“显式 feed 才走 RSS”的任务包路由红灯测试**
+- [x] **Step 1: 先锁定“显式 feed 才走 RSS”的任务包路由红灯测试**
 
 ```java
 package cn.bugstack.competitoragent.collection;
@@ -197,7 +197,7 @@ class CollectionTaskPackageBuilderTest {
 }
 ```
 
-- [ ] **Step 2: 锁定 RSS 2.0 解析、中文 fixture、截断与 HTML 快速失败红灯测试**
+- [x] **Step 2: 锁定 RSS 2.0 解析、中文 fixture、截断与 HTML 快速失败红灯测试**
 
 ```java
 package cn.bugstack.competitoragent.source;
@@ -258,7 +258,7 @@ class RssFeedClientTest {
 }
 ```
 
-- [ ] **Step 3: 锁定 RSS 执行器、disabled 门禁与 coordinator 快速失败红灯测试**
+- [x] **Step 3: 锁定 RSS 执行器、disabled 门禁与 coordinator 快速失败红灯测试**
 
 ```java
 package cn.bugstack.competitoragent.collection;
@@ -323,7 +323,7 @@ Implementation note:
 - `CollectionExecutionCoordinatorCheckpointReuseTest` 追加断言：当 `primaryTool=RSS` 且 `rss-feed.enabled=false` 时，结果必须快速失败并留下 `TOOL_UNAVAILABLE_FAST_FAIL` 审计标记，而不是进入无意义重试。
 - `CollectorAgentTest` 追加断言：RSS 结果即使正文较短，只要存在 `structuredPayload.items` 和 `sourceUrls`，仍应进入证据链。
 
-- [ ] **Step 4: 运行首批红灯测试**
+- [x] **Step 4: 运行首批红灯测试**
 
 Run:
 `mvn -pl backend "-Dtest=CollectionTaskPackageBuilderTest,RssFeedClientTest,RssFeedCollectionExecutorTest,CollectionExecutionCoordinatorCheckpointReuseTest,CollectorAgentTest" test`
@@ -347,7 +347,7 @@ Expected:
 - Modify: `backend/src/test/java/cn/bugstack/competitoragent/search/SearchPropertiesBindingTest.java`
 - Modify: `backend/src/test/java/cn/bugstack/competitoragent/collection/CollectionTaskPackageBuilderTest.java`
 
-- [ ] **Step 1: 新建 `RssFeedProperties`**
+- [x] **Step 1: 新建 `RssFeedProperties`**
 
 ```java
 package cn.bugstack.competitoragent.source;
@@ -372,7 +372,7 @@ public class RssFeedProperties {
 }
 ```
 
-- [ ] **Step 2: 在 `SearchSourceCatalogProperties` 中把 `news` 家族收敛为 `RSS + WEB`**
+- [x] **Step 2: 在 `SearchSourceCatalogProperties` 中把 `news` 家族收敛为 `RSS + WEB`**
 
 ```java
 private SourceFamilyProperties createNewsFamily() {
@@ -394,7 +394,7 @@ private SourceFamilyProperties createNewsFamily() {
 }
 ```
 
-- [ ] **Step 3: 让 `CollectionTaskPackageBuilder` 只为显式 feed URL 选择 `RSS`**
+- [x] **Step 3: 让 `CollectionTaskPackageBuilder` 只为显式 feed URL 选择 `RSS`**
 
 ```java
 private String resolvePrimaryTool(String sourceFamilyKey,
@@ -476,7 +476,7 @@ Implementation note:
 - `sourceType=NEWS` 在本轮只用于 `targetFields / renderHint`，不再触发 `NEWS_API` 路由。
 - `.xml` 后缀本身不构成 feed 证据；只有文件名本身就是 `feed.xml / rss.xml / atom.xml` 才允许进入 RSS。
 
-- [ ] **Step 4: 在 `application.yml` 中补齐 `rss-feed` 配置**
+- [x] **Step 4: 在 `application.yml` 中补齐 `rss-feed` 配置**
 
 ```yaml
 rss-feed:
@@ -487,7 +487,7 @@ rss-feed:
   fail-fast-on-non-feed-content: true
 ```
 
-- [ ] **Step 5: 运行路由与绑定测试**
+- [x] **Step 5: 运行路由与绑定测试**
 
 Run:
 `mvn -pl backend "-Dtest=SearchPropertiesBindingTest,CollectionTaskPackageBuilderTest" test`
@@ -505,7 +505,7 @@ Expected:
 - Create: `backend/src/main/java/cn/bugstack/competitoragent/source/RssFeedItem.java`
 - Modify: `backend/src/test/java/cn/bugstack/competitoragent/source/RssFeedClientTest.java`
 
-- [ ] **Step 1: 新建 `RssFeedItem` DTO**
+- [x] **Step 1: 新建 `RssFeedItem` DTO**
 
 ```java
 package cn.bugstack.competitoragent.source;
@@ -532,7 +532,7 @@ public class RssFeedItem {
 }
 ```
 
-- [ ] **Step 2: 实现字节流驱动的 `RssFeedClient`**
+- [x] **Step 2: 实现字节流驱动的 `RssFeedClient`**
 
 ```java
 package cn.bugstack.competitoragent.source;
@@ -677,7 +677,7 @@ Implementation note:
 - 这里故意使用 `BodyHandlers.ofByteArray()`，让 XML parser 按声明编码解析，避免把“中文 RSS fixture 看起来能过”误当成“远端编码真的稳健”。
 - 本轮不做 live 第三方 feed 集成测试，但 fixture 至少要覆盖中文内容、截断和 HTML 伪装 feed。
 
-- [ ] **Step 3: 运行 RSS 客户端测试**
+- [x] **Step 3: 运行 RSS 客户端测试**
 
 Run:
 `mvn -pl backend "-Dtest=RssFeedClientTest" test`
@@ -696,7 +696,7 @@ Expected:
 - Modify: `backend/src/test/java/cn/bugstack/competitoragent/collection/RssFeedCollectionExecutorTest.java`
 - Modify: `backend/src/test/java/cn/bugstack/competitoragent/collection/CollectionExecutorRegistryTest.java`
 
-- [ ] **Step 1: 实现 `RssFeedCollectionExecutor`**
+- [x] **Step 1: 实现 `RssFeedCollectionExecutor`**
 
 ```java
 package cn.bugstack.competitoragent.collection;
@@ -812,7 +812,7 @@ public class RssFeedCollectionExecutor extends ApiDataCollectionExecutor {
 }
 ```
 
-- [ ] **Step 2: 更新 registry 测试，确保只注册 `RSS` 专项 owner**
+- [x] **Step 2: 更新 registry 测试，确保只注册 `RSS` 专项 owner**
 
 ```java
 assertThat(registry.resolve(CollectionTaskPackage.builder()
@@ -826,7 +826,7 @@ assertThat(registry.resolve(CollectionTaskPackage.builder()
         .build()).executorType()).isNotEqualTo("API_DATA");
 ```
 
-- [ ] **Step 3: 运行执行器测试**
+- [x] **Step 3: 运行执行器测试**
 
 Run:
 `mvn -pl backend "-Dtest=CollectionExecutorRegistryTest,RssFeedCollectionExecutorTest" test`
@@ -846,7 +846,7 @@ Expected:
 - Modify: `backend/src/test/java/cn/bugstack/competitoragent/agent/collector/CollectorAgentTest.java`
 - Modify: `backend/src/test/java/cn/bugstack/competitoragent/task/TaskReplayProjectionServiceTest.java`
 
-- [ ] **Step 1: 让 coordinator 对 RSS unavailable 走快速失败而不是伪重试**
+- [x] **Step 1: 让 coordinator 对 RSS unavailable 走快速失败而不是伪重试**
 
 ```java
 private CollectionExecutionResult buildToolUnavailableResult(CollectionTaskPackage taskPackage, String reason) {
@@ -873,7 +873,7 @@ private CollectionExecutionResult buildToolUnavailableResult(CollectionTaskPacka
 Implementation note:
 - 这里**不做网页降级**。原因很简单：显式 feed URL 是 XML 资源，不等价于普通网页正文；对 RSS disabled 最合理的行为是“快速失败 + 清晰审计”，而不是伪装成网页采集成功。
 
-- [ ] **Step 2: 在 Coordinator / Collector / Replay 测试里锁定 RSS 成功与 disabled 失败审计**
+- [x] **Step 2: 在 Coordinator / Collector / Replay 测试里锁定 RSS 成功与 disabled 失败审计**
 
 ```java
 assertThat(audit.getReplayTimeline())
@@ -893,7 +893,7 @@ Implementation note:
   - `collectionReplays[*].collectionAudit.sourceUrls` 可见
   - disabled 快速失败场景的 `qualitySignals` 包含 `TOOL_UNAVAILABLE_FAST_FAIL`
 
-- [ ] **Step 3: 运行 coordinator / collector / replay 测试**
+- [x] **Step 3: 运行 coordinator / collector / replay 测试**
 
 Run:
 `mvn -pl backend "-Dtest=CollectionExecutionCoordinatorCheckpointReuseTest,CollectorAgentTest,TaskReplayProjectionServiceTest" test`
@@ -910,7 +910,7 @@ Expected:
 - Modify: `docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md`
 - Modify: `docs/superpowers/specs/2026-06-11-business-landscape-and-optimization-roadmap-design.md`
 
-- [ ] **Step 1: 运行第七轮聚合测试**
+- [x] **Step 1: 运行第七轮聚合测试**
 
 Run:
 `mvn -pl backend "-Dtest=SearchPropertiesBindingTest,CollectionTaskPackageBuilderTest,RssFeedClientTest,RssFeedCollectionExecutorTest,CollectionExecutorRegistryTest,CollectionExecutionCoordinatorCheckpointReuseTest,CollectorAgentTest,TaskReplayProjectionServiceTest" test`
@@ -918,7 +918,7 @@ Run:
 Expected:
 - PASS
 
-- [ ] **Step 2: 运行 backend 全量测试**
+- [x] **Step 2: 运行 backend 全量测试**
 
 Run:
 `mvn -pl backend test`
@@ -926,7 +926,7 @@ Run:
 Expected:
 - PASS
 
-- [ ] **Step 3: 执行第七轮 dev live 验收**
+- [x] **Step 3: 执行第七轮 dev live 验收**
 
 Manual API smoke:
 
@@ -950,7 +950,13 @@ Manual API smoke:
 Expected:
 - 第七轮验收重点不再是“News API 是否也接上”，而是“RSS 现在已经是正式专项 owner；普通新闻 URL 继续留在成熟的网页采集主链路；审计、回放、失败语义全部一致”。
 
-- [ ] **Step 4: 回写父计划与 specs 状态**
+Live result:
+- `collect_sources_01_01` 在正常配置下已验证显式 feed URL 走 `RSS` owner，`searchExecutionTrace.selectedUrls=["http://127.0.0.1:18080/feed.xml"]`，`collectionAudit.summary.status="SUCCESS"`，`collectionAudit.results[0].executorType="API_DATA"`，`structuredPayload.feedUrl="http://127.0.0.1:18080/feed.xml"`，`structuredPayload.items` 含 2 条 RSS item，`sourceUrls` 同时保留 `feedUrl + itemUrl`。
+- 针对“普通 news article URL 不应误走 RSS”的 live smoke，`collect_sources_01_02` 改配为 `https://openai.com/index/introducing-gpt-4o/` 后，`selectedTargets[0].url` 与 `collectionAudit.results[0].resourceLocator` 均保持 article URL，`collectionAudit.results[0].executorType="WEB_PAGE"`，证明路由留在网页采集主链路；该 smoke 因 `Playwright content empty` 进入 `WAITING_INTERVENTION`，但不影响 owner 路由结论。
+- 针对 `rss-feed.enabled=false` 的 live smoke，使用正确覆盖键 `--collection.rss-feed.enabled=false` 重启 backend 后再次执行 `collect_sources_01_01`，结果为 `executorType="API_DATA"`、`resourceLocator="rss://feed/http%3A%2F%2F127.0.0.1%3A18080%2Ffeed.xml"`、`qualitySignals=["TOOL_UNAVAILABLE_FAST_FAIL"]`，确认显式 feed URL 在 RSS owner 不可用时会快速失败，而不是降级到网页采集。
+- 额外 live 修复确认：`config-rerun` 显式传入 `searchAuditCheckpoint=null` / `collectionAuditCheckpoint=null` 后，不再被旧 `outputData` 回填；`CanonicalUrlResolver` 对 `http://127.0.0.1:18080/feed.xml` 这类本地显式端口 feed URL 不再错误改写为 `https://127.0.0.1/feed.xml`。
+
+- [x] **Step 4: 回写父计划与 specs 状态**
 
 Update parent plan wording like:
 
@@ -968,7 +974,7 @@ Update specs wording like:
   News API 因不适合按 URL 精确提取正文，被后移到后续独立 news discovery 专题。
 ```
 
-- [ ] **Step 5: 完成后给出下一轮建议**
+- [x] **Step 5: 完成后给出下一轮建议**
 
 Completion note should say:
 
@@ -977,6 +983,10 @@ Completion note should say:
 1. 若当前瓶颈在“持续 feed 增量摄取”：进入 `Wave 11`，为 `RssFeedCollectionExecutor` 增加 subscription / cursor / dedupe，并在那一轮决定是否补 Atom。
 2. 若当前瓶颈在“主动新闻发现能力缺失”：单开新的 `news discovery` 专题，为 News API / Bing News Search 设计关键词 + 时间窗查询、rate limit、provider schema 适配与集成测试。
 ```
+
+Completion note:
+- 建议 1：若当前瓶颈在“持续 feed 增量摄取”，进入 `Wave 11`，为 `RssFeedCollectionExecutor` 增加 subscription / cursor / dedupe，并在同轮决定是否补 `Atom`。
+- 建议 2：若当前瓶颈在“主动新闻发现能力缺失”，单开新的 `news discovery` 专题，为 `News API / Bing News Search` 设计关键词 + 时间窗查询、rate limit、provider schema 适配与集成测试。
 
 ---
 

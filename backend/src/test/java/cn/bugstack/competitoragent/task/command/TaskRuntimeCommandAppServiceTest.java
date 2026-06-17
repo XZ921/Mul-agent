@@ -649,6 +649,85 @@ class TaskRuntimeCommandAppServiceTest {
     }
 
     @Test
+    void shouldRespectExplicitNullCheckpointsWhenUpdatingCollectorConfigBeforeRerun() throws Exception {
+        Long taskId = 1061L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.FAILED)
+                .build();
+        TaskNode collectorNode = successfulNode(taskId, "collect_sources_web", AgentType.COLLECTOR, "[]", 0);
+        collectorNode.setNodeConfig("""
+                {"competitorName":"RSS Smoke","sourceType":"NEWS"}
+                """);
+        collectorNode.setOutputData("""
+                {
+                  "searchAudit": {
+                    "executionTrace": {
+                      "traceVersion": "v1",
+                      "recoveryCheckpoint": "SELECT_TARGETS"
+                    }
+                  },
+                  "collectionAudit": {
+                    "summary": {
+                      "totalPackages": 1,
+                      "successCount": 1,
+                      "status": "SUCCESS",
+                      "recoveryCheckpoint": "collect_sources_web#001",
+                      "sourceUrls": ["http://127.0.0.1:18080/feed.xml"]
+                    },
+                    "status": "SUCCESS",
+                    "results": [
+                      {
+                        "taskPackageKey": "collect_sources_web#001",
+                        "targetIndex": 1,
+                        "status": "SUCCESS",
+                        "executorType": "RSS",
+                        "sourceUrls": ["http://127.0.0.1:18080/feed.xml"]
+                      }
+                    ],
+                    "replayTimeline": [
+                      {
+                        "taskPackageKey": "collect_sources_web#001",
+                        "targetIndex": 1,
+                        "status": "SUCCESS",
+                        "executorType": "RSS",
+                        "sourceUrls": ["http://127.0.0.1:18080/feed.xml"]
+                      }
+                    ],
+                    "recoveryCheckpoint": "collect_sources_web#001",
+                    "sourceUrls": ["http://127.0.0.1:18080/feed.xml"]
+                  }
+                }
+                """);
+        TaskNode extractNode = successfulNode(taskId, "extract_schema", AgentType.EXTRACTOR, "[\"collect_sources_web\"]", 1);
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId))
+                .thenReturn(List.of(collectorNode, extractNode));
+
+        taskRuntimeCommandAppService.updateNodeConfigAndRerun(taskId, "collect_sources_web",
+                UpdateNodeConfigRequest.builder()
+                        .nodeConfig("""
+                                {
+                                  "competitorName":"RSS Smoke",
+                                  "sourceType":"NEWS",
+                                  "primaryTools":["RSS"],
+                                  "searchAuditCheckpoint":null,
+                                  "collectionAuditCheckpoint":null
+                                }
+                                """)
+                        .build());
+
+        JsonNode updatedConfig = objectMapper.readTree(collectorNode.getNodeConfig());
+        assertTrue(updatedConfig.has("searchAuditCheckpoint"));
+        assertTrue(updatedConfig.path("searchAuditCheckpoint").isNull());
+        assertTrue(updatedConfig.has("collectionAuditCheckpoint"));
+        assertTrue(updatedConfig.path("collectionAuditCheckpoint").isNull());
+        assertPendingCleared(collectorNode);
+        assertPendingCleared(extractNode);
+    }
+
+    @Test
     void shouldMarkRunningTaskStoppedAndDelegateNodeStopHandling() {
         Long taskId = 107L;
         AnalysisTask task = AnalysisTask.builder()

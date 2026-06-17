@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status Note (2026-06-17):** 本文档保留为第五轮实施期的历史快照。下文“执行中 / 待执行”勾选未随落地结果逐条回写，不代表当前工程现状。第五轮 `Wave 8` 已在父方案中回写为“实现与自动化收口完成”；现状请以 [2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md) 为准。
+
 **Goal:** 承接父方案 `Wave 8`，把网页采集从“`PlaywrightPageCollector` 单路径 + HTTP 先行短路”升级为“`JinaReader` 主路径 + `Playwright` `FULL_RENDER` 兜底”，并把网页采集真实暴露出的失败模式、结构块与质量信号收口成正式最小契约。
 
 **Architecture:** 本计划直接继承 [2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/plans/2026-06-12-search-and-collection-execution-engine.md) 中 `Wave 8` 的目标，以及 [CollectionExecution.md](/E:/java_study/Mul-agnet/docs/problem/CollectionExecution.md) 对“采集执行层已成为现实 blocker”的专项诊断。实现顺序固定为 `红灯契约 -> 采集契约扩展 -> JinaReader 主路径 -> Playwright FULL_RENDER 兜底 -> 分层提取 / 结构块 / 质量评分 -> Collector 兼容映射与文档回链`。本轮默认第四轮最小采集接缝已存在；若当前工作树尚未完成第四轮，则先以第四轮接缝为前置，不允许把 GitHub/API owner 问题重新塞回第五轮。

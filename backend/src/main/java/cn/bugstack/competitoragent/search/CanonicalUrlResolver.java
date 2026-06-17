@@ -55,7 +55,9 @@ public class CanonicalUrlResolver {
             String host = normalizeHost(uri.getHost());
             String path = normalizePath(uri.getPath());
             String query = normalizeQuery(uri.getRawQuery());
-            return buildCanonicalUrl(host, path, query);
+            String scheme = resolveCanonicalScheme(uri, host);
+            int port = resolveCanonicalPort(uri, scheme, host);
+            return buildCanonicalUrl(scheme, host, port, path, query);
         } catch (Exception ignored) {
             return trimmed;
         }
@@ -77,9 +79,73 @@ public class CanonicalUrlResolver {
         }
     }
 
-    private String buildCanonicalUrl(String host, String path, String query) throws URISyntaxException {
-        URI canonical = new URI("https", null, host, -1, path, StringUtils.hasText(query) ? query : null, null);
+    /**
+     * canonical URL 既要承担“同页去重 key”的职责，也不能把真实可访问地址改坏。
+     * 因此这里对标准站点仍尽量收敛到 https，但对本地/IP 或显式端口场景要保留网络身份，
+     * 避免把 http://127.0.0.1:18080/feed.xml 这类 RSS/开发地址错误改写成 https 默认端口。
+     */
+    private String buildCanonicalUrl(String scheme,
+                                     String host,
+                                     int port,
+                                     String path,
+                                     String query) throws URISyntaxException {
+        URI canonical = new URI(scheme, null, host, port, path, StringUtils.hasText(query) ? query : null, null);
         return canonical.toString();
+    }
+
+    private String resolveCanonicalScheme(URI uri, String host) {
+        String scheme = StringUtils.hasText(uri.getScheme())
+                ? uri.getScheme().trim().toLowerCase(Locale.ROOT)
+                : "https";
+        if (!"http".equals(scheme) && !"https".equals(scheme)) {
+            return scheme;
+        }
+        if (shouldPreserveNetworkIdentity(uri, host)) {
+            return scheme;
+        }
+        return "https";
+    }
+
+    private int resolveCanonicalPort(URI uri, String scheme, String host) {
+        if (!shouldPreserveNetworkIdentity(uri, host)) {
+            return -1;
+        }
+        int port = uri.getPort();
+        if (port < 0) {
+            return -1;
+        }
+        if (("http".equalsIgnoreCase(scheme) && port == 80)
+                || ("https".equalsIgnoreCase(scheme) && port == 443)) {
+            return -1;
+        }
+        return port;
+    }
+
+    private boolean shouldPreserveNetworkIdentity(URI uri, String host) {
+        return uri.getPort() > 0 || isLocalOrIpHost(host);
+    }
+
+    private boolean isLocalOrIpHost(String host) {
+        if (!StringUtils.hasText(host)) {
+            return false;
+        }
+        String normalizedHost = host.trim().toLowerCase(Locale.ROOT);
+        if ("localhost".equals(normalizedHost) || normalizedHost.endsWith(".local")) {
+            return true;
+        }
+        if (normalizedHost.contains(":")) {
+            return true;
+        }
+        String[] segments = normalizedHost.split("\\.");
+        if (segments.length != 4) {
+            return false;
+        }
+        for (String segment : segments) {
+            if (!segment.chars().allMatch(Character::isDigit)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String normalizeHost(String host) {

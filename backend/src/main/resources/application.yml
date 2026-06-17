@@ -136,6 +136,12 @@ collection:
     timeout-seconds: 20
     max-retries: 2
     minimum-content-length: 160
+  rss-feed:
+    enabled: true
+    timeout-seconds: 15
+    max-retries: 2
+    max-items-per-feed: 5
+    fail-fast-on-non-feed-content: true
 
 source-discovery:
   search:
@@ -223,10 +229,12 @@ search:
           - FUNDING
           - PARTNERSHIP
         primary-tools:
-          - NEWS_API
           - RSS
         auxiliary-tools:
           - PUBLIC_SEARCH
+        tool-provider-keys:
+          RSS: rss
+          PUBLIC_SEARCH: qianfan
         update-policy:
           mode: REALTIME_RSS_AND_SCHEDULED_SWEEP
           interval: PT1H

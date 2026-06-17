@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.collection;
 
+import cn.bugstack.competitoragent.search.SearchPolicyResolver;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import org.junit.jupiter.api.Test;
 
@@ -63,5 +64,67 @@ class CollectionTaskPackageBuilderTest {
         assertThat(taskPackage.getRenderHint()).isEqualTo(WebPageRenderHint.LIGHTWEIGHT);
         assertThat(taskPackage.getExpectedBlockTypes())
                 .contains("DOCUMENTATION_OUTLINE", "JSON_LD_METADATA");
+    }
+
+    @Test
+    void shouldBuildRssTaskPackageForExplicitFeedUrl() {
+        CollectionTaskPackageBuilder builder = new CollectionTaskPackageBuilder(new SearchPolicyResolver());
+        SourceCandidate candidate = SourceCandidate.builder()
+                .url("https://blog.example.com/feed.xml")
+                .title("Acme feed")
+                .sourceType("NEWS")
+                .sourceFamilyKey("news")
+                .providerKey("http")
+                .sourceUrls(List.of("https://blog.example.com/feed.xml"))
+                .build();
+
+        CollectionTaskPackage taskPackage = builder.build(41L, "collect_sources_news", 9L, "Acme AI", candidate, 1);
+
+        assertThat(taskPackage.getPrimaryTool()).isEqualTo("RSS");
+        assertThat(taskPackage.getResourceLocator()).startsWith("rss://feed/");
+    }
+
+    @Test
+    void shouldKeepNewsArticleUrlOnWebPathEvenWhenSourceTypeIsNews() {
+        CollectionTaskPackageBuilder builder = new CollectionTaskPackageBuilder(new SearchPolicyResolver());
+        SourceCandidate candidate = SourceCandidate.builder()
+                .url("https://news.example.com/releases/acme-launches-agent")
+                .title("Acme launches agent")
+                .sourceType("NEWS")
+                .sourceFamilyKey("news")
+                .providerKey("serpapi")
+                .sourceUrls(List.of("https://news.example.com/releases/acme-launches-agent"))
+                .build();
+
+        CollectionTaskPackage taskPackage = builder.build(41L, "collect_sources_news", 9L, "Acme AI", candidate, 2);
+
+        assertThat(taskPackage.getPrimaryTool()).isEqualTo("JINA_READER");
+        assertThat(taskPackage.getResourceLocator()).isEqualTo("https://news.example.com/releases/acme-launches-agent");
+    }
+
+    @Test
+    void shouldNotTreatFeedbackOrSitemapXmlAsFeed() {
+        CollectionTaskPackageBuilder builder = new CollectionTaskPackageBuilder(new SearchPolicyResolver());
+
+        CollectionTaskPackage feedbackPackage = builder.build(41L, "collect_sources_news", 9L, "Acme AI",
+                SourceCandidate.builder()
+                        .url("https://example.com/blog/feedback/2026/agent-launch")
+                        .sourceType("NEWS")
+                        .sourceFamilyKey("news")
+                        .sourceUrls(List.of("https://example.com/blog/feedback/2026/agent-launch"))
+                        .build(),
+                3);
+
+        CollectionTaskPackage sitemapPackage = builder.build(41L, "collect_sources_news", 9L, "Acme AI",
+                SourceCandidate.builder()
+                        .url("https://example.com/sitemap.xml")
+                        .sourceType("NEWS")
+                        .sourceFamilyKey("news")
+                        .sourceUrls(List.of("https://example.com/sitemap.xml"))
+                        .build(),
+                4);
+
+        assertThat(feedbackPackage.getPrimaryTool()).isEqualTo("JINA_READER");
+        assertThat(sitemapPackage.getPrimaryTool()).isEqualTo("JINA_READER");
     }
 }

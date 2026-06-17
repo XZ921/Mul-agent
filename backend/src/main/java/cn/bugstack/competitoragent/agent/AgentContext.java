@@ -79,7 +79,12 @@ public class AgentContext {
     public void putSharedOutputEnvelope(String nodeName, SharedNodeOutputEnvelope envelope) {
         if (nodeName != null && !nodeName.isBlank() && envelope != null) {
             sharedOutputEnvelopes.put(nodeName, envelope);
-            sharedState.put(nodeName, envelope.getPayloadJson());
+            // 兼容恢复历史缓存时可能出现“只有 envelope 元数据、暂时没有 payloadJson”的场景。
+            // sharedState 基于 ConcurrentHashMap，写入 null 会直接触发 NPE，
+            // 因此这里只在 payloadJson 非空时回填字符串视图，避免恢复链路被空值打断。
+            if (envelope.getPayloadJson() != null) {
+                sharedState.put(nodeName, envelope.getPayloadJson());
+            }
         }
     }
 

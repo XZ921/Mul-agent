@@ -168,4 +168,28 @@ class TaskSnapshotCacheServiceTest {
         assertEquals("{\"sourceUrls\":[\"https://docs.example.com\"]}",
                 cachedEnvelopes.get("collect_sources_web").getPayloadJson());
     }
+
+    @Test
+    void shouldReloadLegacyProjectionCacheAsEnvelopeWithPayloadJson() {
+        when(hashOperations.entries("competitor-agent:task:runtime:29"))
+                .thenReturn(Map.of(
+                        "collect_sources_web",
+                        """
+                        {
+                          "projectionType":"SEARCH_SHARED_PROJECTION_V1",
+                          "recoveryCheckpoint":"SELECT_TARGETS",
+                          "sourceUrls":["https://docs.example.com"],
+                          "selectedUrls":["https://docs.example.com"],
+                          "issueFlags":[]
+                        }
+                        """
+                ));
+
+        Map<String, SharedNodeOutputEnvelope> cachedEnvelopes = cacheService.getCachedSharedOutputEnvelopes(29L);
+
+        assertEquals(1, cachedEnvelopes.size());
+        assertEquals("SEARCH_SHARED_PROJECTION_V1", cachedEnvelopes.get("collect_sources_web").getProjectionType());
+        assertEquals("collect_sources_web", cachedEnvelopes.get("collect_sources_web").getNodeName());
+        assertTrue(cachedEnvelopes.get("collect_sources_web").getPayloadJson().contains("https://docs.example.com"));
+    }
 }

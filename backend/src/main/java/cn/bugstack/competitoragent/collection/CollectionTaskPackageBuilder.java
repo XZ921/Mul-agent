@@ -6,7 +6,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.net.URLEncoder;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -38,7 +40,7 @@ public class CollectionTaskPackageBuilder {
         String sourceType = candidate == null ? null : candidate.getSourceType();
         String url = candidate == null ? null : candidate.getUrl();
         WebPageRenderHint renderHint = resolveRenderHint(sourceFamilyKey, sourceType);
-        String primaryTool = resolvePrimaryTool(sourceFamilyKey, sourceType, renderHint);
+        String primaryTool = resolvePrimaryTool(sourceFamilyKey, sourceType, url, renderHint);
         return CollectionTaskPackage.builder()
                 .taskId(taskId)
                 .nodeName(nodeName)
@@ -73,10 +75,14 @@ public class CollectionTaskPackageBuilder {
      */
     private String resolvePrimaryTool(String sourceFamilyKey,
                                       String sourceType,
+                                      String url,
                                       WebPageRenderHint renderHint) {
         if ("github".equalsIgnoreCase(sourceFamilyKey)
                 || "GITHUB".equalsIgnoreCase(sourceType)) {
             return "GITHUB_API";
+        }
+        if (isExplicitFeedUrl(sourceFamilyKey, sourceType, url)) {
+            return "RSS";
         }
         return renderHint == WebPageRenderHint.FULL_RENDER ? "WEB_SCRAPER" : "JINA_READER";
     }
@@ -105,6 +111,9 @@ public class CollectionTaskPackageBuilder {
      * 让 collection owner 直接消费仓库定位符，而不是重新按竞品名称搜索一遍。
      */
     private String resolveResourceLocator(String primaryTool, String url) {
+        if ("RSS".equalsIgnoreCase(primaryTool) && StringUtils.hasText(url)) {
+            return "rss://feed/" + URLEncoder.encode(url.trim(), StandardCharsets.UTF_8);
+        }
         if (!"GITHUB_API".equalsIgnoreCase(primaryTool) || !StringUtils.hasText(url)) {
             return url;
         }
@@ -121,5 +130,45 @@ public class CollectionTaskPackageBuilder {
             // 解析失败时保留原始 URL，避免任务包构建阶段直接中断主链路。
         }
         return url;
+    }
+
+    /**
+     * 只有“显式就是 feed 的 URL”才允许走 RSS 专项执行器。
+     * 普通新闻正文 URL 即使 sourceType=NEWS，也必须继续留在网页采集主链路。
+     */
+    private boolean isExplicitFeedUrl(String sourceFamilyKey, String sourceType, String url) {
+        if (!StringUtils.hasText(url)) {
+            return false;
+        }
+        boolean newsFamily = "news".equalsIgnoreCase(sourceFamilyKey) || "NEWS".equalsIgnoreCase(sourceType);
+        if (!newsFamily) {
+            return false;
+        }
+        try {
+            URI uri = URI.create(url.trim());
+            String path = uri.getPath();
+            if (!StringUtils.hasText(path)) {
+                return false;
+            }
+            String normalizedPath = path.trim().toLowerCase(java.util.Locale.ROOT);
+            String[] segments = normalizedPath.split("/");
+            for (String segment : segments) {
+                if (!StringUtils.hasText(segment)) {
+                    continue;
+                }
+                // 只接受明确的 feed 段名，避免把 feedback 之类普通路径误判成 RSS。
+                if ("feed".equals(segment) || "rss".equals(segment) || "atom".equals(segment)) {
+                    return true;
+                }
+            }
+            int lastSlashIndex = normalizedPath.lastIndexOf('/');
+            String filename = lastSlashIndex >= 0 ? normalizedPath.substring(lastSlashIndex + 1) : normalizedPath;
+            // .xml 后缀只有在文件名本身就是 feed/rss/atom.xml 时才算显式 feed 信号。
+            return "feed.xml".equals(filename)
+                    || "rss.xml".equals(filename)
+                    || "atom.xml".equals(filename);
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 }

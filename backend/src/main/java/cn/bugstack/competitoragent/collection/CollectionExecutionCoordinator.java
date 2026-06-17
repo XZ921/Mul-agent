@@ -10,6 +10,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -94,8 +95,12 @@ public class CollectionExecutionCoordinator {
                 results.add(markReused(reusedResult, taskPackage));
                 continue;
             }
-            CollectionExecutor executor = executorRegistry.resolve(taskPackage);
-            results.add(normalize(executor.execute(taskPackage), taskPackage));
+            try {
+                CollectionExecutor executor = executorRegistry.resolve(taskPackage);
+                results.add(normalize(executor.execute(taskPackage), taskPackage));
+            } catch (IllegalStateException noExecutorMatched) {
+                results.add(buildToolUnavailableResult(taskPackage, noExecutorMatched.getMessage()));
+            }
         }
         return buildReport(results);
     }
@@ -277,6 +282,30 @@ public class CollectionExecutionCoordinator {
                         ? (taskPackage.getSourceUrls() == null ? List.of() : taskPackage.getSourceUrls())
                         : result.getSourceUrls())
                 .reusedFromCheckpoint(Boolean.TRUE.equals(result.getReusedFromCheckpoint()))
+                .build()
+                .normalize();
+    }
+
+    /**
+     * 当显式 feed URL 没有可用 RSS executor 时，必须快速失败并留下清晰审计事实。
+     * 这里不做网页降级，因为 RSS feed URL 和普通正文页面不是同一种资源语义。
+     */
+    private CollectionExecutionResult buildToolUnavailableResult(CollectionTaskPackage taskPackage, String reason) {
+        return CollectionExecutionResult.builder()
+                .taskPackageKey(taskPackage.getPackageKey())
+                .targetIndex(taskPackage.getTargetIndex())
+                .executorType("API_DATA")
+                .success(false)
+                .status("FAILED")
+                .resourceLocator(taskPackage.getResourceLocator())
+                .sourceUrls(taskPackage.getSourceUrls() == null ? List.of() : taskPackage.getSourceUrls())
+                .errorMessage(reason)
+                .failureKind(CollectionFailureKind.RUNTIME_FAILURE.name())
+                .qualitySignals(List.of("TOOL_UNAVAILABLE_FAST_FAIL"))
+                .qualityScore(0.0D)
+                .structuredBlocks(List.of())
+                .collectedAt(Instant.now())
+                .durationMillis(0L)
                 .build()
                 .normalize();
     }
