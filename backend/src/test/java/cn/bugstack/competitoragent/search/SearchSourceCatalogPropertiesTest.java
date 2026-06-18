@@ -12,6 +12,8 @@ class SearchSourceCatalogPropertiesTest {
 
         assertThat(properties.getFamilies()).containsKeys("official", "news", "github");
         assertThat(properties.getFamilies().get("official").getRole()).isEqualTo("PRIMARY_VERTICAL");
+        assertThat(properties.getFamilies().get("official").getDirectPathTemplates())
+                .containsExactly("/", "/pricing", "/docs", "/documentation", "/help");
         assertThat(properties.getFamilies().get("official").getPrimaryTools())
                 .contains("WEB_SCRAPER", "JINA_READER");
         assertThat(properties.getFamilies().get("official").getAuxiliaryTools())

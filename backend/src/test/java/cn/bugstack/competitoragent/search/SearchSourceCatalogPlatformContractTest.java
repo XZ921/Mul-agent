@@ -15,8 +15,11 @@ class SearchSourceCatalogPlatformContractTest {
 
         assertThat(official.getSourceTypes()).contains("OFFICIAL", "PRICING", "DOCS");
         assertThat(official.getContentScopes()).contains("PRODUCT_PAGE", "PRICING", "DOCUMENTATION");
+        assertThat(official.getDirectPathTemplates())
+                .containsExactly("/", "/pricing", "/docs", "/documentation", "/help");
         assertThat(official.getPrimaryTools()).contains("WEB_SCRAPER", "JINA_READER");
         assertThat(official.getAuxiliaryTools()).contains("PUBLIC_SEARCH");
+        assertThat(github.getDirectPathTemplates()).isEmpty();
         assertThat(github.getPrimaryTools()).contains("GITHUB_API");
         assertThat(github.getQueryTemplates()).contains("search-github-repository", "search-github-release");
     }

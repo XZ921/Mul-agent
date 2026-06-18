@@ -41,6 +41,11 @@ class SearchPropertiesBindingTest {
                     "search.source-catalog.families.official.expected-block-types[0]=PRICING_BLOCK",
                     "search.source-catalog.families.official.expected-block-types[1]=DOCUMENTATION_OUTLINE",
                     "search.source-catalog.families.official.expected-block-types[2]=JSON_LD_METADATA",
+                    "search.source-catalog.families.official.direct-path-templates[0]=/",
+                    "search.source-catalog.families.official.direct-path-templates[1]=/pricing",
+                    "search.source-catalog.families.official.direct-path-templates[2]=/docs",
+                    "search.source-catalog.families.official.direct-path-templates[3]=/documentation",
+                    "search.source-catalog.families.official.direct-path-templates[4]=/help",
                     "search.source-catalog.families.official.primary-tools[0]=WEB_SCRAPER",
                     "search.source-catalog.families.official.primary-tools[1]=JINA_READER",
                     "search.source-catalog.families.news.update-policy.mode=REALTIME_RSS_AND_SCHEDULED_SWEEP",
@@ -136,6 +141,8 @@ class SearchPropertiesBindingTest {
                     .isEqualTo("LIGHTWEIGHT");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getExpectedBlockTypes())
                     .containsExactly("PRICING_BLOCK", "DOCUMENTATION_OUTLINE", "JSON_LD_METADATA");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getDirectPathTemplates())
+                    .containsExactly("/", "/pricing", "/docs", "/documentation", "/help");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getPrimaryTools())
                     .containsExactly("WEB_SCRAPER", "JINA_READER");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("news").getPreferredWebRenderHint())
