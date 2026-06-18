@@ -113,6 +113,8 @@ class SearchPropertiesBindingTest {
             assertThat(githubApiProperties.getApiToken()).isEqualTo("test-github-token");
             assertThat(githubApiProperties.getTimeoutSeconds()).isEqualTo(20);
             assertThat(githubApiProperties.getMaxRetries()).isEqualTo(3);
+            assertThat(githubApiProperties.isConfigured()).isTrue();
+            assertThat(githubApiProperties.isReady()).isTrue();
             assertThat(searchProperties.getSourceCatalog().getFamilies()).containsKeys("official", "news", "github");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getRole())
                     .isEqualTo("PRIMARY_VERTICAL");
@@ -144,6 +146,27 @@ class SearchPropertiesBindingTest {
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("github").getToolProviderKeys())
                     .containsEntry("GITHUB_API", "github");
         });
+    }
+
+    @Test
+    void shouldTreatEnabledGithubApiWithoutTokenAsNotReady() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(TestConfiguration.class)
+                .withPropertyValues(
+                        "github-api.enabled=true",
+                        "github-api.endpoint=https://api.github.com",
+                        "github-api.api-token="
+                )
+                .run(context -> {
+                    cn.bugstack.competitoragent.source.GithubApiProperties githubApiProperties =
+                            context.getBean(cn.bugstack.competitoragent.source.GithubApiProperties.class);
+
+                    assertThat(githubApiProperties.isEnabled()).isTrue();
+                    assertThat(githubApiProperties.isConfigured()).isFalse();
+                    assertThat(githubApiProperties.isReady()).isFalse();
+                    assertThat(githubApiProperties.resolveReadinessFailureMessage())
+                            .isEqualTo("github api token missing");
+                });
     }
 
     @Test

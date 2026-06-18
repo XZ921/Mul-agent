@@ -129,6 +129,13 @@ collector:
   page-timeout-seconds: 30
   user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
+github-api:
+  enabled: ${GITHUB_API_ENABLED:false}
+  endpoint: ${GITHUB_API_ENDPOINT:https://api.github.com}
+  api-token: ${GITHUB_API_TOKEN:}
+  timeout-seconds: 15
+  max-retries: 2
+
 collection:
   jina-reader:
     enabled: true

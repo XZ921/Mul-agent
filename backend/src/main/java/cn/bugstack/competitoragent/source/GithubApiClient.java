@@ -42,10 +42,37 @@ public class GithubApiClient {
     }
 
     /**
+     * 判断当前客户端是否真正可用。
+     * 这里把 GitHub API 允许开关、endpoint 与 token 一并作为 readiness 门槛，
+     * 避免 executor 在未配置时仍然继续把它当成正式能力调用。
+     */
+    public boolean isReady() {
+        return properties != null && properties.isReady();
+    }
+
+    /**
+     * 对外暴露 GitHub API 不可用时的统一原因。
+     * 这样启动期 guard、执行期 fail-fast 和日志输出都能复用同一套语义。
+     */
+    public String resolveReadinessFailureMessage() {
+        if (properties == null) {
+            return "github api properties unavailable";
+        }
+        return properties.resolveReadinessFailureMessage();
+    }
+
+    /**
      * 所有 GitHub API 请求都必须带异常保护与重试。
      * 当前阶段先统一做固定次数重试，避免 provider / executor 各自复制一份外呼容错。
      */
     private JsonNode exchange(String path) {
+        if (properties == null) {
+            throw new IllegalStateException("github api properties unavailable");
+        }
+        String readinessFailureMessage = resolveReadinessFailureMessage();
+        if (StringUtils.hasText(readinessFailureMessage)) {
+            throw new IllegalStateException(readinessFailureMessage);
+        }
         int maxAttempts = Math.max(1, properties.getMaxRetries() + 1);
         RuntimeException lastError = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {

@@ -26,7 +26,10 @@ public class GithubApiCollectionExecutor extends ApiDataCollectionExecutor {
 
     @Override
     public boolean supports(CollectionTaskPackage taskPackage) {
-        return taskPackage != null && "GITHUB_API".equalsIgnoreCase(taskPackage.getPrimaryTool());
+        return taskPackage != null
+                && githubApiClient != null
+                && githubApiClient.isReady()
+                && "GITHUB_API".equalsIgnoreCase(taskPackage.getPrimaryTool());
     }
 
     @Override
@@ -55,6 +58,20 @@ public class GithubApiCollectionExecutor extends ApiDataCollectionExecutor {
                     .resourceLocator(taskPackage.getResourceLocator())
                     .sourceUrls(taskPackage.getSourceUrls())
                     .errorMessage("github api client unavailable")
+                    .build()
+                    .normalize();
+        }
+        if (!githubApiClient.isReady()) {
+            String errorMessage = githubApiClient.resolveReadinessFailureMessage();
+            return CollectionExecutionResult.builder()
+                    .taskPackageKey(taskPackage.getPackageKey())
+                    .targetIndex(taskPackage.getTargetIndex())
+                    .executorType(executorType())
+                    .success(false)
+                    .status("FAILED")
+                    .resourceLocator(taskPackage.getResourceLocator())
+                    .sourceUrls(taskPackage.getSourceUrls())
+                    .errorMessage(StringUtils.hasText(errorMessage) ? errorMessage : "github api not ready")
                     .build()
                     .normalize();
         }
@@ -127,4 +144,5 @@ public class GithubApiCollectionExecutor extends ApiDataCollectionExecutor {
         }
         return new String(Base64.getMimeDecoder().decode(encoded), StandardCharsets.UTF_8);
     }
+
 }

@@ -1,10 +1,14 @@
 package cn.bugstack.competitoragent.collection;
 
+import cn.bugstack.competitoragent.source.GithubApiClient;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * 第四轮 Task 1 的执行器注册表红灯测试。
@@ -15,7 +19,9 @@ class CollectionExecutorRegistryTest {
 
     @Test
     void shouldResolveGithubApiExecutorByPrimaryTool() {
-        CollectionExecutor githubExecutor = new GithubApiCollectionExecutor(null);
+        GithubApiClient githubApiClient = mock(GithubApiClient.class);
+        when(githubApiClient.isReady()).thenReturn(true);
+        CollectionExecutor githubExecutor = new GithubApiCollectionExecutor(githubApiClient);
         CollectionExecutor webExecutor = new WebPageCollectionExecutor(null);
         CollectionExecutorRegistry registry = new CollectionExecutorRegistry(List.of(githubExecutor, webExecutor));
 
@@ -28,8 +34,41 @@ class CollectionExecutorRegistryTest {
     }
 
     @Test
+    void shouldIgnoreGithubApiExecutorWhenItDoesNotSupportTheTaskPackage() {
+        CollectionExecutor githubExecutor = new CollectionExecutor() {
+            @Override
+            public String executorType() {
+                return "API_DATA";
+            }
+
+            @Override
+            public boolean supports(CollectionTaskPackage taskPackage) {
+                return false;
+            }
+
+            @Override
+            public CollectionExecutionResult execute(CollectionTaskPackage taskPackage) {
+                throw new IllegalStateException("should not be called");
+            }
+        };
+        CollectionExecutor webExecutor = new WebPageCollectionExecutor(null);
+        CollectionExecutorRegistry registry = new CollectionExecutorRegistry(List.of(githubExecutor, webExecutor));
+
+        CollectionTaskPackage taskPackage = CollectionTaskPackage.builder()
+                .primaryTool("GITHUB_API")
+                .resourceLocator("github://repo/acme/rocket")
+                .build();
+
+        assertThatThrownBy(() -> registry.resolve(taskPackage))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("no collection executor matched task package");
+    }
+
+    @Test
     void shouldResolveWebPageExecutorForJinaReaderPrimaryTool() {
-        CollectionExecutor githubExecutor = new GithubApiCollectionExecutor(null);
+        GithubApiClient githubApiClient = mock(GithubApiClient.class);
+        when(githubApiClient.isReady()).thenReturn(false);
+        CollectionExecutor githubExecutor = new GithubApiCollectionExecutor(githubApiClient);
         CollectionExecutor webExecutor = new WebPageCollectionExecutor(null, null);
         CollectionExecutorRegistry registry = new CollectionExecutorRegistry(List.of(githubExecutor, webExecutor));
 
@@ -44,7 +83,9 @@ class CollectionExecutorRegistryTest {
 
     @Test
     void shouldResolveRssExecutorForRssPrimaryTool() {
-        CollectionExecutor githubExecutor = new GithubApiCollectionExecutor(null);
+        GithubApiClient githubApiClient = mock(GithubApiClient.class);
+        when(githubApiClient.isReady()).thenReturn(false);
+        CollectionExecutor githubExecutor = new GithubApiCollectionExecutor(githubApiClient);
         CollectionExecutor rssExecutor = new RssFeedCollectionExecutor(null, new cn.bugstack.competitoragent.source.RssFeedProperties());
         CollectionExecutor webExecutor = new WebPageCollectionExecutor(null, null);
         CollectionExecutorRegistry registry = new CollectionExecutorRegistry(List.of(githubExecutor, rssExecutor, webExecutor));

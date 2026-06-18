@@ -17,6 +17,7 @@ class GithubApiCollectionExecutorTest {
     @Test
     void shouldReturnStructuredGithubEvidenceFromRepoLocator() throws Exception {
         GithubApiClient client = mock(GithubApiClient.class);
+        when(client.isReady()).thenReturn(true);
         ObjectMapper objectMapper = new ObjectMapper();
         when(client.fetchRepository("acme", "rocket")).thenReturn(objectMapper.readTree("""
                 {
@@ -52,5 +53,34 @@ class GithubApiCollectionExecutorTest {
         assertThat(result.getStructuredPayload()).containsEntry("latestReleaseTag", "v1.2.3");
         assertThat(result.getStructuredPayload()).containsEntry("defaultBranch", "main");
         assertThat(result.getStructuredPayload().get("readme")).isEqualTo("Acme README");
+    }
+
+    @Test
+    void shouldFailFastWhenGithubApiClientIsNotReady() {
+        GithubApiClient client = mock(GithubApiClient.class);
+        when(client.isReady()).thenReturn(false);
+
+        GithubApiCollectionExecutor executor = new GithubApiCollectionExecutor(client);
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("GITHUB_API")
+                .resourceLocator("github://repo/acme/rocket")
+                .sourceUrls(List.of("https://github.com/acme/rocket"))
+                .build());
+
+        assertThat(result.isSuccess()).isFalse();
+        assertThat(result.getErrorMessage()).contains("github api");
+    }
+
+    @Test
+    void shouldNotSupportExecutorWhenGithubApiClientIsNotReady() {
+        GithubApiClient client = mock(GithubApiClient.class);
+        when(client.isReady()).thenReturn(false);
+
+        GithubApiCollectionExecutor executor = new GithubApiCollectionExecutor(client);
+
+        assertThat(executor.supports(CollectionTaskPackage.builder()
+                .primaryTool("GITHUB_API")
+                .resourceLocator("github://repo/acme/rocket")
+                .build())).isFalse();
     }
 }
