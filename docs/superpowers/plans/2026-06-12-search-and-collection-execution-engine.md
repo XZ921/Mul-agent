@@ -34,7 +34,7 @@
 
 ## Current Stage
 
-当前阶段：搜索与采集前三轮 blocking 收口、第二轮自动化契约、第四轮 discovery/collection 联合实施已完成；`Wave 5` 对象瘦身、`Wave 6` 统一公网发现口径与 owner 边界收口、`Wave 7` 最小采集执行接缝、`Wave 8` 双路径网页采集加固、`Wave 9` 采集审计/回放/恢复闭环，以及 `Wave 10` 中 GitHub API 与显式 RSS feed 两类结构化采集 owner 的自动化收口均已落地。当前剩余重点已转为第七轮 dev live 验收、跨重启 replay 持久化与下游提取 / 报告业务质量闭环验收
+当前阶段：搜索与采集前三轮 blocking 收口、第二轮自动化契约、第四轮 discovery/collection 联合实施已完成；`Wave 5` 对象瘦身、`Wave 6` 统一公网发现口径与 owner 边界收口、`Wave 7` 最小采集执行接缝、`Wave 8` 双路径网页采集加固、`Wave 9` 采集审计/回放/恢复闭环，以及 `Wave 10` 中 GitHub API 与显式 RSS feed 两类结构化采集 owner 的自动化收口均已落地。另有一组 2026-06-17 配置 readiness 整改已完成：GitHub primary owner 启动期 hard fail、provider readiness 启动期摘要、Jina bearer token 与 official direct-path-templates YAML 显式化，以及 RSS 边界收口均已落地。当前剩余重点已转为跨重启 replay 持久化与下游提取 / 报告业务质量闭环验收
 
 - [x] 诊断证据归并：已完成
 - [x] 旧 Task 轴方案降级：已完成
@@ -48,6 +48,7 @@
 - [x] 首个 API 结构化采集执行器：已完成首个 GitHub 闭环，归属 `Wave 10`
 - [x] 统一公网发现口径与主辅语义闭环：已完成，归属 `Wave 6`
 - [x] `news / rss` 采集专项第七轮代码与定向自动化收口：已完成，归属 `Wave 10`
+- [x] 配置 readiness 收口：已完成，归属 2026-06-17 remediation
 - [ ] 第七轮跨重启 replay 持久化与下游质量闭环：待执行，归属 `Wave 12`
 - [x] 第七轮 dev live 验收：已完成，归属 `Wave 10`
 
@@ -249,6 +250,7 @@ search:
 这里对 `news` 家族有一条当前阶段的明确约束：`primaryTools: [RSS]` 只表达“显式 feed URL 的正式采集 owner 是 RSS”；普通新闻文章 URL 仍复用统一网页采集主链路，不在这一轮通过家族配置把 `JINA_READER / WEB_SCRAPER` 重新声明成 `news` 专属 owner。
 
 但这只是首轮收口边界，不是长期方案完成口径。`Source Family Catalog` 只解决“业务上采什么、主辅工具如何声明”的配置骨架问题；它不能替代真实运行链路与 owner 边界。按照最终架构 1，`PUBLIC_SEARCH` 只是 family 可选的 discovery 工具，而不是所有来源的必经前置；`GitHub API`、显式 `RSS` feed 等结构化 owner 一旦命中稳定 locator，就应直接承接正式采集，普通新闻文章与官网文档等公开网页则继续走统一网页采集路径。只有当后续出现“显式 feed 枚举 / 订阅监控 / 主动发现”这类公网搜索不能稳定覆盖的场景时，才允许另起专题建设专用 discovery 机制。
+截至 2026-06-18，这个配置骨架已经从“只声明语义”补到“显式表达配置真相”：`github-api` 主配置段、`collection.jina-reader.bearer-token`、`official.direct-path-templates` 已进入 `application.yml`。同时，启动期 `SearchCapabilityReadinessGuard` 会对 `github` family 的 primary owner readiness 做 hard fail，并输出 `qianfan / serpapi / http / browserpreview` 的 readiness 摘要；这里必须继续区分规划期 `browser-preview-enabled` 与运行期 `search.browser.enabled`，两者不是同一个开关。
 
 ---
 
@@ -1017,7 +1019,7 @@ API 执行器进入后，并不意味着网页兜底消失：
 
 目标：把网页采集从“Playwright 单路径”升级为“JinaReader 主路径 + Playwright 重型兜底路径”，并把网页执行器暴露出的真实失败模式反向收口成正式字段与状态分类。
 
-第五轮联合实施已完成本波次的实现收口：`CollectionTaskPackage / CollectionExecutionResult` 已补齐 `renderHint / failureKind / qualitySignals / qualityScore / structuredBlocks / collectedAt / durationMillis`；`SearchSourceCatalogProperties` 与 `SearchPolicyResolver` 已能表达 source family 级网页采集偏好；`WebPageCollectionExecutor` 已切换为 `JinaReader` 主路径 + `Playwright FULL_RENDER` 兜底；`PageContentExtractionSupport` 已正式返回分层提取结果；`CollectorAgent` 兼容映射已保留 `sourceUrls` 与新增采集元数据。自动化验证方面，第五轮聚合命令与 `mvn -pl backend test` 已于 2026-06-16 通过。本波次仍未宣称真实业务质量闭环升绿，后续还需结合任务实链继续验证采集证据质量与最终质检表现。
+第五轮联合实施已完成本波次的实现收口：`CollectionTaskPackage / CollectionExecutionResult` 已补齐 `renderHint / failureKind / qualitySignals / qualityScore / structuredBlocks / collectedAt / durationMillis`；`SearchSourceCatalogProperties` 与 `SearchPolicyResolver` 已能表达 source family 级网页采集偏好；`WebPageCollectionExecutor` 已切换为 `JinaReader` 主路径 + `Playwright FULL_RENDER` 兜底；`PageContentExtractionSupport` 已正式返回分层提取结果；`CollectorAgent` 兼容映射已保留 `sourceUrls` 与新增采集元数据。同时，`collection.jina-reader.bearer-token` 已显式暴露到 YAML / env，用于表达免费端点与带认证端点的差异。自动化验证方面，第五轮聚合命令与 `mvn -pl backend test` 已于 2026-06-16 通过。本波次仍未宣称真实业务质量闭环升绿，后续还需结合任务实链继续验证采集证据质量与最终质检表现。
 
 必须覆盖：
 
@@ -1057,7 +1059,7 @@ API 执行器进入后，并不意味着网页兜底消失：
 
 目标：让至少两类结构化来源进入统一采集执行体系，优先兑现 `github / news`。
 
-第四轮联合实施已提前完成本波次的首个最小落点：`ApiDataCollectionExecutor` 与 `GithubApiCollectionExecutor` 已接入统一采集执行体系，并通过 `github://repo/{owner}/{repo}` locator 直接返回结构化证据。第七轮进一步把“显式 RSS feed URL”正式接入统一采集执行体系，明确普通 news article URL 继续走网页采集，`News API` 因不适合承接“按 URL 精确提取单篇正文”被后移到独立 news discovery 专题。当前仍待补的是更完整的 dev live 验收、API-Web 补证策略与后续主动新闻发现能力。
+第四轮联合实施已提前完成本波次的首个最小落点：`ApiDataCollectionExecutor` 与 `GithubApiCollectionExecutor` 已接入统一采集执行体系，并通过 `github://repo/{owner}/{repo}` locator 直接返回结构化证据。第七轮进一步把“显式 RSS feed URL”正式接入统一采集执行体系，明确普通 news article URL 继续走网页采集，`News API` 因不适合承接“按 URL 精确提取单篇正文”被后移到独立 news discovery 专题。补充整改还把 GitHub owner 的配置真相正式收口：当 `github` family 启用且 `GITHUB_API` 仍是 primary owner 时，系统不再接受匿名公共 API 碰运气，而是要求 `github-api.enabled=true`、token 存在且 endpoint 为 HTTPS，否则启动期直接失败；`RSS` 边界继续保持为“仅显式 feed URL -> RSS owner”，订阅监控、feed seed、cursor、replay 仍归 `Wave 11`。当前仍待补的是更完整的 dev live 验收、API-Web 补证策略与后续主动新闻发现能力。
 
 必须覆盖：
 

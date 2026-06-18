@@ -212,8 +212,10 @@
 | --- | --- | --- |
 | `official` 家族优先围绕官网 / 定价 / 文档发现 | `🟡 部分成立` | 已有 `source family` 语义、official query template、provided URL/root/path heuristic，但默认 discovery 主链路仍以公网搜索 / 浏览器搜索为主，尚不能宣称已经完全不被搜索引擎排名牵着走。 |
 | `news` feed / article 分流 | `✅ 已成立` | 显式 feed URL 已进入 `RSS` owner；普通新闻文章 URL 继续走网页采集主链路。 |
-| `github` API owner，公网搜索仅补漏 | `🟡 部分成立` | collection owner 已由 `GITHUB_API` 正式承接；discovery 层仍缺默认启用的 GitHub 专用 provider，当前更多依赖公网搜索、显式 URL 或稳定 locator。 |
+| `github` API owner，公网搜索仅补漏 | `🟡 部分成立` | collection owner 已由 `GITHUB_API` 正式承接；当 `github` family 启用且 `GITHUB_API` 仍是 primary owner 时，启动期已强制要求 `github-api.enabled=true` 且 token / HTTPS endpoint 就绪，不再把匿名公共 API 误算为 ready；discovery 层当前仍更多依赖公网搜索、显式 URL 或稳定 locator。 |
 | `JinaReader` 主路，`Playwright` 兜底 | `✅ 已成立` | 网页采集已切到 `JinaReader -> Playwright` 双路径。 |
+| 搜索 provider readiness 启动期可观测 | `✅ 已成立` | 启动期已显式输出 `qianfan / serpapi / http / browserpreview` 的 readiness 摘要，并区分规划期 provider readiness 与运行期 `search.browser.enabled`。 |
+| 关键配置真相在 YAML 中显式可见 | `✅ 已成立` | `github-api`、`collection.jina-reader.bearer-token`、`official.direct-path-templates` 已显式写入 `application.yml`；RSS scope 也已明确收口为“仅显式 feed URL 进入 RSS owner”。 |
 | 失败结果可回指 `sourceUrls` + 原因 | `✅ 已成立` | 采集结果、审计与回放已保留来源回指和失败语义。 |
 | 发现 / 采集 / 审计 / 回放共享同一套家族语义 | `✅ 已成立` | `sourceFamilyKey / sourceFamilyRole / providerRole` 已进入预览、运行、采集与回放链路。 |
 
