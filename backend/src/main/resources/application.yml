@@ -172,6 +172,8 @@ source-discovery:
         fail-open: true
     primary-candidate-threshold: 1
     run-auxiliary-when-primary-satisfied: false
+    # 这里控制的是“规划期浏览器预览补源”是否参与 provider 栈，
+    # 不等于运行期 search.browser.enabled；即使这里关闭，运行期浏览器搜索仍可能可用。
     browser-preview-enabled: true
     endpoint: ${SEARCH_API_ENDPOINT:}
     request-method: ${SEARCH_API_REQUEST_METHOD:GET}
@@ -490,6 +492,8 @@ source-discovery:
         fail-open: true
     primary-candidate-threshold: 1
     run-auxiliary-when-primary-satisfied: false
+    # prod 这里显式关闭的是“规划期 browser preview provider”，
+    # 不是运行期浏览器搜索总开关；运行期是否可用仍由 search.browser.enabled 决定。
     browser-preview-enabled: false
     results-per-scope: 5
     timeout-seconds: 15
