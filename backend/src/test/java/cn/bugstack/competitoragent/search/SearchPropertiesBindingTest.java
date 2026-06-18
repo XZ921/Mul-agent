@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.search;
 
+import cn.bugstack.competitoragent.source.JinaReaderProperties;
 import cn.bugstack.competitoragent.source.SearchProviderProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -61,6 +62,12 @@ class SearchPropertiesBindingTest {
                     "github-api.api-token=test-github-token",
                     "github-api.timeout-seconds=20",
                     "github-api.max-retries=3",
+                    "collection.jina-reader.enabled=true",
+                    "collection.jina-reader.endpoint=https://r.jina.ai/http://",
+                    "collection.jina-reader.bearer-token=test-jina-token",
+                    "collection.jina-reader.timeout-seconds=25",
+                    "collection.jina-reader.max-retries=4",
+                    "collection.jina-reader.minimum-content-length=220",
                     "source-discovery.search.primary-candidate-threshold=1",
                     "source-discovery.search.run-auxiliary-when-primary-satisfied=false",
                     "serpapi.api-key=test-serp-key",
@@ -81,6 +88,7 @@ class SearchPropertiesBindingTest {
             QianfanSearchProperties qianfanSearchProperties = context.getBean(QianfanSearchProperties.class);
             cn.bugstack.competitoragent.source.GithubApiProperties githubApiProperties =
                     context.getBean(cn.bugstack.competitoragent.source.GithubApiProperties.class);
+            JinaReaderProperties jinaReaderProperties = context.getBean(JinaReaderProperties.class);
             SearchProperties searchProperties = context.getBean(SearchProperties.class);
 
             assertThat(searchProviderProperties.getProviderOrder()).containsExactly("serpapi", "qianfan");
@@ -115,6 +123,12 @@ class SearchPropertiesBindingTest {
             assertThat(githubApiProperties.getMaxRetries()).isEqualTo(3);
             assertThat(githubApiProperties.isConfigured()).isTrue();
             assertThat(githubApiProperties.isReady()).isTrue();
+            assertThat(jinaReaderProperties.isEnabled()).isTrue();
+            assertThat(jinaReaderProperties.getEndpoint()).isEqualTo("https://r.jina.ai/http://");
+            assertThat(jinaReaderProperties.getBearerToken()).isEqualTo("test-jina-token");
+            assertThat(jinaReaderProperties.getTimeoutSeconds()).isEqualTo(25);
+            assertThat(jinaReaderProperties.getMaxRetries()).isEqualTo(4);
+            assertThat(jinaReaderProperties.getMinimumContentLength()).isEqualTo(220);
             assertThat(searchProperties.getSourceCatalog().getFamilies()).containsKeys("official", "news", "github");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getRole())
                     .isEqualTo("PRIMARY_VERTICAL");
@@ -194,6 +208,7 @@ class SearchPropertiesBindingTest {
             SearchBrowserProperties.class,
             SearchProperties.class,
             cn.bugstack.competitoragent.source.GithubApiProperties.class,
+            JinaReaderProperties.class,
             SerpApiProperties.class,
             QianfanSearchProperties.class
     })

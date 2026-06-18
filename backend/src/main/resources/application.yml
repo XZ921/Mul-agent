@@ -140,6 +140,9 @@ collection:
   jina-reader:
     enabled: true
     endpoint: https://r.jina.ai/http://
+    # 为空时继续走 Jina Reader 免费端点；只有显式配置后才附带 Bearer 认证头，
+    # 该 token 只影响速率额度与访问权限，不改变轻量正文采集主逻辑。
+    bearer-token: ${JINA_READER_BEARER_TOKEN:}
     timeout-seconds: 20
     max-retries: 2
     minimum-content-length: 160

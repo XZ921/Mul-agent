@@ -2,6 +2,8 @@ package cn.bugstack.competitoragent.source;
 
 import org.junit.jupiter.api.Test;
 
+import java.net.http.HttpRequest;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -19,5 +21,38 @@ class JinaReaderClientTest {
         String resolved = client.resolveReaderUrl("https://docs.example.com/api/reference");
 
         assertThat(resolved).isEqualTo("https://r.jina.ai/http://docs.example.com/api/reference");
+    }
+
+    @Test
+    void shouldNotSendAuthorizationHeaderWhenBearerTokenMissing() {
+        JinaReaderProperties properties = new JinaReaderProperties();
+        properties.setEndpoint("https://r.jina.ai/http://");
+        properties.setBearerToken(" ");
+        JinaReaderClient client = new JinaReaderClient(properties, null);
+
+        HttpRequest request = client.buildRequest(SourceCollectRequest.builder()
+                .url("https://docs.example.com/api/reference")
+                .sourceUrls(java.util.List.of("https://docs.example.com/api/reference"))
+                .build());
+
+        assertThat(request.headers().firstValue("Authorization")).isEmpty();
+        assertThat(request.headers().firstValue("Accept")).hasValue("text/plain");
+    }
+
+    @Test
+    void shouldSendBearerAuthorizationHeaderWhenBearerTokenConfigured() {
+        JinaReaderProperties properties = new JinaReaderProperties();
+        properties.setEndpoint("https://r.jina.ai/http://");
+        properties.setBearerToken("premium-token");
+        JinaReaderClient client = new JinaReaderClient(properties, null);
+
+        HttpRequest request = client.buildRequest(SourceCollectRequest.builder()
+                .url("https://docs.example.com/api/reference")
+                .sourceUrls(java.util.List.of("https://docs.example.com/api/reference"))
+                .build());
+
+        assertThat(request.headers().firstValue("Authorization")).hasValue("Bearer premium-token");
+        assertThat(request.uri().toString())
+                .isEqualTo("https://r.jina.ai/http://docs.example.com/api/reference");
     }
 }

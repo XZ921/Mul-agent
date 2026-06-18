@@ -81,15 +81,7 @@ public class JinaReaderClient {
         RuntimeException lastError = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(resolveReaderUrl(request.getUrl())))
-                        .timeout(Duration.ofSeconds(Math.max(1, properties.getTimeoutSeconds())))
-                        .header("Accept", "text/plain")
-                        .GET();
-                if (StringUtils.hasText(properties.getBearerToken())) {
-                    builder.header("Authorization", "Bearer " + properties.getBearerToken());
-                }
-
-                HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> response = httpClient.send(buildRequest(request), HttpResponse.BodyHandlers.ofString());
                 if (response.statusCode() < 200 || response.statusCode() >= 300) {
                     return buildFailureResult(CollectionFailureKind.HTTP_STATUS_ERROR,
                             "jina reader status=" + response.statusCode(),
@@ -128,6 +120,21 @@ public class JinaReaderClient {
                 lastError == null ? "jina reader failed" : lastError.getMessage(),
                 startedAt,
                 List.of("LIGHTWEIGHT_RUNTIME_FAILURE"));
+    }
+
+    /**
+     * 统一构造 Jina Reader 请求，避免请求头与认证策略散落在 collect 流程里。
+     * 这里明确约束：只有 bearerToken 显式存在时才附带 Bearer 认证，否则继续走免费端点。
+     */
+    HttpRequest buildRequest(SourceCollectRequest request) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(resolveReaderUrl(request.getUrl())))
+                .timeout(Duration.ofSeconds(Math.max(1, properties.getTimeoutSeconds())))
+                .header("Accept", "text/plain")
+                .GET();
+        if (StringUtils.hasText(properties.getBearerToken())) {
+            builder.header("Authorization", "Bearer " + properties.getBearerToken().trim());
+        }
+        return builder.build();
     }
 
     /**
