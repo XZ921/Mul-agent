@@ -99,6 +99,15 @@ class SearchCapabilityReadinessGuardTest {
                 .isEqualTo("browser-preview-enabled=false");
     }
 
+    @Test
+    void shouldExposeRssOwnerBoundaryMessageForStartupReadiness() {
+        assertThat(SearchCapabilityReadinessGuard.RSS_OWNER_BOUNDARY_MESSAGE)
+                .contains("explicit feed urls only")
+                .contains("news article urls still go through webpage collection")
+                .contains("feed subscription monitoring")
+                .contains("cursor and replay are out of current scope");
+    }
+
     private SearchProperties createSearchProperties(boolean githubFamilyEnabled, boolean githubPrimaryToolEnabled) {
         SearchProperties searchProperties = new SearchProperties();
         SearchSourceCatalogProperties.SourceFamilyProperties githubFamily =

@@ -26,6 +26,14 @@ import java.util.Map;
 @Component
 public class SearchCapabilityReadinessGuard implements ApplicationRunner {
 
+    /**
+     * RSS owner readiness 的边界文案必须集中收口。
+     * 这样无论是启动期日志、后续测试还是排障说明，都不会再把当前能力误读成完整的 RSS 订阅体系。
+     */
+    static final String RSS_OWNER_BOUNDARY_MESSAGE =
+            "rss owner ready for explicit feed urls only; news article urls still go through webpage collection; "
+                    + "feed subscription monitoring, seed discovery, cursor and replay are out of current scope";
+
     private final SearchProperties searchProperties;
     private final SearchProviderProperties searchProviderProperties;
     private final SearchBrowserProperties searchBrowserProperties;
@@ -74,7 +82,7 @@ public class SearchCapabilityReadinessGuard implements ApplicationRunner {
                 summary.isBrowserPreviewRouteEnabled(),
                 summary.isBrowserPreviewFeatureEnabled(),
                 summary.isRuntimeBrowserEnabled());
-        log.info("rss owner ready for explicit feed urls only; feed subscription monitoring is out of current scope");
+        log.info("RSS owner readiness 边界: {}", RSS_OWNER_BOUNDARY_MESSAGE);
     }
 
     /**

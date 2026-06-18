@@ -147,6 +147,8 @@ collection:
     max-retries: 2
     minimum-content-length: 160
   rss-feed:
+    # 当前 RSS owner 只处理“显式 feed URL -> RSS executor”这一条链路，
+    # 普通新闻文章 URL 仍走网页采集主链路；feed seed、订阅监控、cursor、replay 不在当前整改范围，后续归 Wave 11。
     enabled: true
     timeout-seconds: 15
     max-retries: 2
@@ -246,6 +248,8 @@ search:
           - PRODUCT_RELEASE
           - FUNDING
           - PARTNERSHIP
+        # 这里声明的是“news family 遇到显式 feed URL 时由 RSS owner 处理”，
+        # 不是说当前系统已经具备完整的 RSS 订阅/主动发现体系；普通新闻 URL 仍走网页采集主链路。
         primary-tools:
           - RSS
         auxiliary-tools:
