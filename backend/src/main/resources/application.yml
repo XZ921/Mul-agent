@@ -458,6 +458,13 @@ collector:
 
 search:
   mode: HYBRID
+  source-catalog:
+    families:
+      github:
+        # test profile 的主目标是验证工作流、控制器与编排语义，
+        # 这批用例不验证真实 GitHub owner，因此显式关闭 github family，
+        # 避免 SearchCapabilityReadinessGuard 因缺少正式 token 在启动阶段诚实失败。
+        enabled: false
   browser:
     enabled: true
     engine: bing

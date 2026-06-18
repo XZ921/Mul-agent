@@ -53,3 +53,11 @@ logging:
     root: INFO
     cn.bugstack.competitoragent: INFO
     org.apache.rocketmq: WARN
+
+search:
+  source-catalog:
+    families:
+      github:
+        # phase5 集成回归关注治理、统一对话与正式交付链路，
+        # 不验证真实 GitHub owner，因此显式关闭 github family，避免测试环境被 readiness hard-fail 阻断。
+        enabled: false
