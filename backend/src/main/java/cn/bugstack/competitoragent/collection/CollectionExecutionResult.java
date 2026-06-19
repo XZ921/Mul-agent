@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.collection;
 
+import cn.bugstack.competitoragent.source.SourceCandidate;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
@@ -30,6 +31,8 @@ public class CollectionExecutionResult {
     String title;
     String content;
     List<String> sourceUrls;
+    List<SourceCandidate> discoveredCandidates;
+    Integer discoveryDepth;
     Map<String, Object> structuredPayload;
     String errorMessage;
     String failureKind;
@@ -49,10 +52,14 @@ public class CollectionExecutionResult {
         String normalizedStatus = normalizeStatus(status, success);
         boolean normalizedSuccess = "SUCCESS".equals(normalizedStatus);
         List<String> normalizedSourceUrls = sourceUrls == null ? List.of() : sourceUrls;
+        List<SourceCandidate> normalizedDiscoveredCandidates = discoveredCandidates == null ? List.of() : discoveredCandidates;
+        Integer normalizedDiscoveryDepth = discoveryDepth == null ? 0 : Math.max(0, discoveryDepth);
         return this.toBuilder()
                 .success(normalizedSuccess)
                 .status(normalizedStatus)
                 .sourceUrls(normalizedSourceUrls)
+                .discoveredCandidates(normalizedDiscoveredCandidates)
+                .discoveryDepth(normalizedDiscoveryDepth)
                 .build();
     }
 

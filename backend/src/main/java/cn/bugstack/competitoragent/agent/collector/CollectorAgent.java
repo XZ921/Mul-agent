@@ -116,6 +116,21 @@ public class CollectorAgent extends BaseAgent {
         List<SearchCollectionTarget> targets = searchExecutionResult.getSelectedTargets() == null
                 ? List.of()
                 : searchExecutionResult.getSelectedTargets();
+        List<SearchCollectionTarget> failedPrefetchedAttemptTargets =
+                resolveFailedPrefetchedAttemptTargets(searchExecutionResult);
+        if (targets.isEmpty() && !failedPrefetchedAttemptTargets.isEmpty()) {
+            return executePrefetchedAttemptFailurePhase(
+                    context,
+                    config,
+                    sourceType,
+                    searchExecutionResult,
+                    executionPlan,
+                    progressSnapshots,
+                    failedPrefetchedAttemptTargets,
+                    results,
+                    successCounterRef
+            );
+        }
         if (targets.isEmpty()) {
             markCollectStep(executionPlan, SearchExecutionStep.StepStatus.SKIPPED, "未选出可采集来源，跳过页面抓取");
             progressSnapshots.add(buildProgressSnapshot(executionPlan,
@@ -145,6 +160,20 @@ public class CollectorAgent extends BaseAgent {
                     .reasoningSummary(searchExecutionResult.getReasoningSummary())
                     .errorMessage(actionableError)
                     .build();
+        }
+
+        if (useRecursiveCollectionResultConsumption()) {
+            return executeCollectionPhaseWithRecursiveResults(
+                    context,
+                    config,
+                    sourceType,
+                    searchExecutionResult,
+                    executionPlan,
+                    progressSnapshots,
+                    targets,
+                    results,
+                    successCounterRef
+            );
         }
 
         int evidenceCounter = 0;
@@ -367,6 +396,310 @@ public class CollectorAgent extends BaseAgent {
                 update.getExecutionTrace(),
                 results,
                 successCounter);
+    }
+
+    private boolean useRecursiveCollectionResultConsumption() {
+        return true;
+    }
+
+    /**
+     * 当运行期验证没有产出正式 selectedTargets，但 attemptedTargets 里已经留下了预抓取失败页时，
+     * 仍然要把这些失败事实收口到正式 collectionAudit。
+     * 这样节点 FAILED、collectionAudit FAILED、replayTimeline FAILED 才能保持同一份事实语义。
+     */
+    private AgentResult executePrefetchedAttemptFailurePhase(AgentContext context,
+                                                             CollectorNodeConfig config,
+                                                             String sourceType,
+                                                             SearchExecutionResult searchExecutionResult,
+                                                             SearchExecutionPlan executionPlan,
+                                                             List<SearchProgressSnapshot> progressSnapshots,
+                                                             List<SearchCollectionTarget> failedPrefetchedAttemptTargets,
+                                                             List<Map<String, Object>> results,
+                                                             int[] successCounterRef) {
+        List<CollectionExecutionResult> auditResults = new ArrayList<>();
+        int[] evidenceCounterRef = new int[] {0};
+        int[] processedPageCounterRef = new int[] {0};
+        int totalCollectedPages = failedPrefetchedAttemptTargets.size();
+
+        markCollectStep(executionPlan, SearchExecutionStep.StepStatus.RUNNING,
+                "候选验证阶段捕获到 " + totalCollectedPages + " 个预抓取失败页，正在收口正式采集审计");
+        progressSnapshots.add(buildProgressSnapshot(executionPlan,
+                "COLLECT_PAGES",
+                "候选验证阶段捕获到 " + totalCollectedPages + " 个预抓取失败页，正在收口正式采集审计",
+                Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
+                readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
+        persistRunningOutput(context, config, sourceType, executionPlan, progressSnapshots,
+                searchExecutionResult.getSourceCandidates(), List.of(), searchExecutionResult.getExecutionTrace(),
+                results, successCounterRef[0]);
+
+        for (int index = 0; index < failedPrefetchedAttemptTargets.size(); index++) {
+            SearchCollectionTarget target = failedPrefetchedAttemptTargets.get(index);
+            SourceCandidate matchedCandidate = target == null ? null : target.getCandidate();
+            String url = matchedCandidate == null ? null : matchedCandidate.getUrl();
+            if (!StringUtils.hasText(url) || target == null || target.getCollectedPage() == null) {
+                continue;
+            }
+            CollectionExecutionResult prefetchedAuditResult = buildAuditResultFromPrefetchedPage(
+                    context,
+                    config,
+                    sourceType,
+                    index + 1,
+                    target,
+                    target.getCollectedPage());
+            auditResults.add(prefetchedAuditResult);
+            processedPageCounterRef[0]++;
+            appendCollectedResultEntry(context, config, sourceType, searchExecutionResult, executionPlan,
+                    progressSnapshots, List.of(), results, successCounterRef, evidenceCounterRef,
+                    processedPageCounterRef[0], totalCollectedPages, prefetchedAuditResult,
+                    target.getCollectedPage(), matchedCandidate, url);
+        }
+
+        CollectionExecutionReport collectionReport = collectionExecutionCoordinator.summarize(auditResults);
+        try {
+            markCollectStep(executionPlan, SearchExecutionStep.StepStatus.FAILED, "未采集到可用页面内容");
+            progressSnapshots.add(buildProgressSnapshot(executionPlan,
+                    "COLLECT_PAGES",
+                    "未采集到可用页面内容",
+                    Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
+                    readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
+            String outputJson = buildCollectorOutput(
+                    config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, collectionReport,
+                    progressSnapshots, results, successCounterRef[0], List.of());
+            String actionableError = buildNoContentFailureMessage(
+                    config, sourceType, searchExecutionResult.getExecutionTrace(), results);
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.FAILED)
+                    .outputData(outputJson)
+                    .outputSummary(actionableError)
+                    .reasoningSummary(searchExecutionResult.getReasoningSummary())
+                    .errorMessage(actionableError)
+                    .build();
+        } catch (JsonProcessingException e) {
+            return AgentResult.failed("采集结果序列化失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 递归采集开启后，collection coordinator 返回的结果集合不再与 selected targets 一一对应。
+     * 这里显式把入口页结果和内部发现页结果拆开消费，确保 documents / collectionAudit / progress 都包含递归子页。
+     */
+    private AgentResult executeCollectionPhaseWithRecursiveResults(AgentContext context,
+                                                                  CollectorNodeConfig config,
+                                                                  String sourceType,
+                                                                  SearchExecutionResult searchExecutionResult,
+                                                                  SearchExecutionPlan executionPlan,
+                                                                  List<SearchProgressSnapshot> progressSnapshots,
+                                                                  List<SearchCollectionTarget> targets,
+                                                                  List<Map<String, Object>> results,
+                                                                  int[] successCounterRef) {
+        if (targets.isEmpty()) {
+            markCollectStep(executionPlan, SearchExecutionStep.StepStatus.SKIPPED, "未选出可采集来源，跳过页面抓取");
+            progressSnapshots.add(buildProgressSnapshot(executionPlan,
+                    "COLLECT_PAGES",
+                    "未选出可采集来源，跳过页面抓取",
+                    Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
+                    readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
+            try {
+                String outputJson = buildCollectorOutput(
+                        config,
+                        sourceType,
+                        context.getTaskRagPromptContext(),
+                        searchExecutionResult,
+                        null,
+                        progressSnapshots,
+                        List.of(),
+                        0,
+                        targets
+                );
+                String actionableError = buildNoTargetFailureMessage(config, sourceType, searchExecutionResult);
+                return AgentResult.builder()
+                        .status(TaskNodeStatus.FAILED)
+                        .outputData(outputJson)
+                        .outputSummary(actionableError)
+                        .reasoningSummary(searchExecutionResult.getReasoningSummary())
+                        .errorMessage(actionableError)
+                        .build();
+            } catch (JsonProcessingException e) {
+                return AgentResult.failed("采集结果序列化失败：" + e.getMessage());
+            }
+        }
+
+        int reusedTargetCount = (int) targets.stream()
+                .filter(target -> target != null && target.getCollectedPage() != null)
+                .count();
+        List<SearchCollectionTarget> executableTargets = targets.stream()
+                .filter(this::requiresCoordinatorExecution)
+                .toList();
+        CollectionExecutionReport collectionReport = collectionExecutionCoordinator.execute(
+                context.getTaskId(),
+                context.getCurrentNodeName(),
+                context.getPlanVersionId(),
+                config.getCompetitorName(),
+                executableTargets,
+                config.getCollectionAuditCheckpoint()
+        );
+        List<CollectionExecutionResult> collectionResults = collectionReport == null || collectionReport.getResults() == null
+                ? List.of()
+                : collectionReport.getResults();
+        List<CollectionExecutionResult> auditResults = new ArrayList<>();
+        Map<String, SourceCandidate> executableCandidateIndex = indexExecutableCandidates(targets);
+        Map<String, CollectionExecutionResult> entryResultByIdentity = new LinkedHashMap<>();
+        List<CollectionExecutionResult> unmatchedEntryResults = new ArrayList<>();
+        List<CollectionExecutionResult> discoveredChildResults = new ArrayList<>();
+        for (CollectionExecutionResult collectionResult : collectionResults) {
+            if (isEntryCollectionResult(collectionResult)) {
+                String stableIdentity = resolveStableCollectionIdentity(
+                        collectionResult.getResourceLocator(),
+                        collectionResult.getSourceUrls()
+                );
+                if (StringUtils.hasText(stableIdentity)
+                        && executableCandidateIndex.containsKey(stableIdentity)
+                        && !entryResultByIdentity.containsKey(stableIdentity)) {
+                    entryResultByIdentity.put(stableIdentity, collectionResult);
+                } else {
+                    unmatchedEntryResults.add(collectionResult);
+                }
+                continue;
+            }
+            discoveredChildResults.add(collectionResult);
+        }
+
+        int prefetchedTargetCount = (int) targets.stream()
+                .filter(target -> target != null
+                        && target.getCollectedPage() != null
+                        && target.getCandidate() != null
+                        && StringUtils.hasText(target.getCandidate().getUrl()))
+                .count();
+        int totalCollectedPages = prefetchedTargetCount + collectionResults.size();
+        int[] evidenceCounterRef = new int[] {0};
+        int[] processedPageCounterRef = new int[] {0};
+
+        markCollectStep(executionPlan, SearchExecutionStep.StepStatus.RUNNING,
+                "正在通过采集协调器处理页面，总页面数 " + totalCollectedPages + "，其中复用已验证页面 "
+                        + reusedTargetCount + " 个");
+        progressSnapshots.add(buildProgressSnapshot(executionPlan,
+                "COLLECT_PAGES",
+                "已进入采集阶段，待处理页面 " + totalCollectedPages + " 个，复用已验证页面 "
+                        + reusedTargetCount + " 个",
+                Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
+                readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
+        persistRunningOutput(context, config, sourceType, executionPlan, progressSnapshots,
+                searchExecutionResult.getSourceCandidates(), targets, searchExecutionResult.getExecutionTrace(),
+                results, successCounterRef[0]);
+
+        for (int index = 0; index < targets.size(); index++) {
+            SearchCollectionTarget target = targets.get(index);
+            SourceCandidate matchedCandidate = target == null ? null : target.getCandidate();
+            String url = matchedCandidate == null ? null : matchedCandidate.getUrl();
+            if (!StringUtils.hasText(url)) {
+                continue;
+            }
+            if (target.getCollectedPage() != null) {
+                CollectionExecutionResult prefetchedAuditResult = buildAuditResultFromPrefetchedPage(
+                        context,
+                        config,
+                        sourceType,
+                        index + 1,
+                        target,
+                        target.getCollectedPage());
+                auditResults.add(prefetchedAuditResult);
+                processedPageCounterRef[0]++;
+                appendCollectedResultEntry(context, config, sourceType, searchExecutionResult, executionPlan,
+                        progressSnapshots, targets, results, successCounterRef, evidenceCounterRef,
+                        processedPageCounterRef[0], totalCollectedPages, prefetchedAuditResult,
+                        target.getCollectedPage(), matchedCandidate, url);
+                continue;
+            }
+
+            String stableIdentity = resolveStableCollectionIdentity(url,
+                    matchedCandidate == null ? null : matchedCandidate.getSourceUrls());
+            CollectionExecutionResult entryResult = StringUtils.hasText(stableIdentity)
+                    ? entryResultByIdentity.remove(stableIdentity)
+                    : null;
+            if (entryResult == null && !unmatchedEntryResults.isEmpty()) {
+                entryResult = unmatchedEntryResults.remove(0);
+            }
+            if (entryResult == null) {
+                entryResult = buildMissingCollectionExecutionResult(context, index + 1, matchedCandidate);
+            }
+            auditResults.add(entryResult);
+            processedPageCounterRef[0]++;
+            appendCollectedResultEntry(context, config, sourceType, searchExecutionResult, executionPlan,
+                    progressSnapshots, targets, results, successCounterRef, evidenceCounterRef,
+                    processedPageCounterRef[0], totalCollectedPages, entryResult,
+                    null, matchedCandidate, url);
+        }
+
+        for (CollectionExecutionResult unmatchedEntryResult : unmatchedEntryResults) {
+            if (unmatchedEntryResult == null) {
+                continue;
+            }
+            auditResults.add(unmatchedEntryResult);
+            processedPageCounterRef[0]++;
+            appendCollectedResultEntry(context, config, sourceType, searchExecutionResult, executionPlan,
+                    progressSnapshots, targets, results, successCounterRef, evidenceCounterRef,
+                    processedPageCounterRef[0], totalCollectedPages, unmatchedEntryResult,
+                    null, buildSyntheticCandidateFromCollectionResult(unmatchedEntryResult, sourceType),
+                    resolveCollectionResultPageUrl(unmatchedEntryResult));
+        }
+
+        for (CollectionExecutionResult discoveredChildResult : discoveredChildResults) {
+            if (discoveredChildResult == null) {
+                continue;
+            }
+            auditResults.add(discoveredChildResult);
+            processedPageCounterRef[0]++;
+            appendCollectedResultEntry(context, config, sourceType, searchExecutionResult, executionPlan,
+                    progressSnapshots, targets, results, successCounterRef, evidenceCounterRef,
+                    processedPageCounterRef[0], totalCollectedPages, discoveredChildResult,
+                    null, buildSyntheticCandidateFromCollectionResult(discoveredChildResult, sourceType),
+                    resolveCollectionResultPageUrl(discoveredChildResult));
+        }
+
+        collectionReport = collectionExecutionCoordinator.summarize(auditResults);
+
+        try {
+            if (successCounterRef[0] == 0) {
+                markCollectStep(executionPlan, SearchExecutionStep.StepStatus.FAILED, "未采集到可用页面内容");
+                progressSnapshots.add(buildProgressSnapshot(executionPlan,
+                        "COLLECT_PAGES",
+                        "未采集到可用页面内容",
+                        Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
+                        readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
+                String outputJson = buildCollectorOutput(
+                        config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, collectionReport,
+                        progressSnapshots, results, successCounterRef[0], targets);
+                String actionableError = buildNoContentFailureMessage(
+                        config, sourceType, searchExecutionResult.getExecutionTrace(), results);
+                return AgentResult.builder()
+                        .status(TaskNodeStatus.FAILED)
+                        .outputData(outputJson)
+                        .outputSummary(actionableError)
+                        .reasoningSummary(searchExecutionResult.getReasoningSummary())
+                        .errorMessage(actionableError)
+                        .build();
+            }
+
+            markCollectStep(executionPlan, SearchExecutionStep.StepStatus.SUCCESS,
+                    "页面采集完成，可用来源 " + successCounterRef[0] + "/" + results.size() + " 条");
+            progressSnapshots.add(buildProgressSnapshot(executionPlan,
+                    "COLLECT_PAGES",
+                    "页面采集完成，可用来源 " + successCounterRef[0] + "/" + results.size() + " 条",
+                    Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
+                    readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
+            String outputJson = buildCollectorOutput(
+                    config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, collectionReport,
+                    progressSnapshots, results, successCounterRef[0], targets);
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData(outputJson)
+                    .outputSummary("已完成 " + config.getCompetitorName() + " 的 " + sourceType + " 采集，可用来源 "
+                            + successCounterRef[0] + "/" + results.size() + " 条")
+                    .reasoningSummary(searchExecutionResult.getReasoningSummary())
+                    .build();
+        } catch (JsonProcessingException e) {
+            return AgentResult.failed("采集结果序列化失败：" + e.getMessage());
+        }
     }
 
     private void persistRunningOutput(AgentContext context,
@@ -876,6 +1209,236 @@ public class CollectorAgent extends BaseAgent {
                 && StringUtils.hasText(target.getCandidate().getUrl());
     }
 
+    private Map<String, SourceCandidate> indexExecutableCandidates(List<SearchCollectionTarget> targets) {
+        Map<String, SourceCandidate> indexedCandidates = new LinkedHashMap<>();
+        if (targets == null || targets.isEmpty()) {
+            return indexedCandidates;
+        }
+        for (SearchCollectionTarget target : targets) {
+            if (!requiresCoordinatorExecution(target) || target.getCandidate() == null) {
+                continue;
+            }
+            String stableIdentity = resolveStableCollectionIdentity(
+                    target.getCandidate().getUrl(),
+                    target.getCandidate().getSourceUrls()
+            );
+            if (StringUtils.hasText(stableIdentity)) {
+                indexedCandidates.putIfAbsent(stableIdentity, target.getCandidate());
+            }
+        }
+        return indexedCandidates;
+    }
+
+    private boolean isEntryCollectionResult(CollectionExecutionResult result) {
+        return result != null
+                && (result.getDiscoveryDepth() == null || result.getDiscoveryDepth() <= 0);
+    }
+
+    /**
+     * 这里统一承接入口页和递归子页的证据落库、结果组装和进度写回，
+     * 避免递归采集引入第二套并行输出逻辑，导致 documents / audit / replay 语义再次分叉。
+     */
+    private void appendCollectedResultEntry(AgentContext context,
+                                            CollectorNodeConfig config,
+                                            String defaultSourceType,
+                                            SearchExecutionResult searchExecutionResult,
+                                            SearchExecutionPlan executionPlan,
+                                            List<SearchProgressSnapshot> progressSnapshots,
+                                            List<SearchCollectionTarget> targets,
+                                            List<Map<String, Object>> results,
+                                            int[] successCounterRef,
+                                            int[] evidenceCounterRef,
+                                            int processedPageCount,
+                                            int totalCollectedPages,
+                                            CollectionExecutionResult collectionResult,
+                                            SourceCollector.CollectedPage prefetchedPage,
+                                            SourceCandidate matchedCandidate,
+                                            String fallbackUrl) {
+        SourceCandidate effectiveCandidate = enrichMatchedCandidate(matchedCandidate, collectionResult, defaultSourceType);
+        String effectiveSourceType = effectiveCandidate == null || !StringUtils.hasText(effectiveCandidate.getSourceType())
+                ? defaultSourceType
+                : effectiveCandidate.getSourceType();
+        SourceCollector.CollectedPage page = prefetchedPage != null
+                ? prefetchedPage
+                : mapCollectionResultToCollectedPage(collectionResult, config.getCompetitorName(), effectiveSourceType);
+        List<String> collectedSourceUrls = resolveCollectedSourceUrls(page, effectiveCandidate, fallbackUrl);
+        String effectiveUrl = resolveEffectiveCollectedUrl(page, collectionResult, collectedSourceUrls, fallbackUrl);
+        evidenceCounterRef[0]++;
+        String evidenceId = generateEvidenceId(context.getTaskId(), context.getCurrentNodeName(), evidenceCounterRef[0]);
+        String pageMetadata = mergePageMetadata(page, effectiveCandidate);
+
+        TaskRetrievalIndexingResult retrievalIndexingResult = null;
+        String knowledgeFailureReason = null;
+        if (isUsableCollectedPage(page)) {
+            EvidenceSource evidence = EvidenceSource.builder()
+                    .taskId(context.getTaskId())
+                    .competitorName(config.getCompetitorName())
+                    .evidenceId(evidenceId)
+                    .title(page.getTitle() != null ? page.getTitle() : effectiveUrl)
+                    .url(effectiveUrl)
+                    .contentSnippet(page.getSnippet())
+                    .fullContent(page.getContent())
+                    .pageMetadata(pageMetadata)
+                    .sourceType(effectiveSourceType)
+                    .discoveryMethod(effectiveCandidate == null ? null : effectiveCandidate.getDiscoveryMethod())
+                    .sourceCategory(resolveSourceCategory(effectiveCandidate))
+                    .sourceDomain(effectiveCandidate == null ? null : effectiveCandidate.getDomain())
+                    .discoveryReason(effectiveCandidate == null ? config.getDiscoveryNotes() : effectiveCandidate.getReason())
+                    .publishedAt(effectiveCandidate == null ? null : effectiveCandidate.getPublishedAt())
+                    .sourceScore(effectiveCandidate == null ? null : effectiveCandidate.getTotalScore())
+                    .collectedAt(LocalDateTime.now())
+                    .build();
+            evidenceRepository.save(evidence);
+            successCounterRef[0]++;
+            try {
+                retrievalIndexingResult = taskRetrievalIndexService.indexEvidence(evidence);
+            } catch (Exception e) {
+                knowledgeFailureReason = e.getMessage();
+                log.warn("index collected evidence failed, taskId={}, evidenceId={}",
+                        context.getTaskId(), evidenceId, e);
+            }
+        }
+
+        Map<String, Object> resultEntry = new LinkedHashMap<>();
+        List<String> collectionIssueFlags = new ArrayList<>(buildCollectionIssueFlags(page));
+        if (retrievalIndexingResult != null && retrievalIndexingResult.issueFlags() != null) {
+            collectionIssueFlags = mergeIssueFlags(collectionIssueFlags, retrievalIndexingResult.issueFlags());
+        }
+        if (knowledgeFailureReason != null && !knowledgeFailureReason.isBlank()) {
+            collectionIssueFlags = mergeIssueFlags(collectionIssueFlags, List.of("KNOWLEDGE_INDEX_FAILED"));
+        }
+        resultEntry.put("competitor", config.getCompetitorName());
+        resultEntry.put("sourceType", effectiveSourceType);
+        resultEntry.put("sourceCategory", resolveSourceCategory(effectiveCandidate));
+        resultEntry.put("url", effectiveUrl);
+        resultEntry.put("evidenceId", evidenceId);
+        resultEntry.put("success", page.isSuccess());
+        resultEntry.put("title", page.getTitle());
+        resultEntry.put("contentLength", page.getContent() != null ? page.getContent().length() : 0);
+        resultEntry.put("errorMessage", page.getErrorMessage());
+        resultEntry.put("persisted", isUsableCollectedPage(page));
+        resultEntry.put("publishedAt", effectiveCandidate == null ? null : effectiveCandidate.getPublishedAt());
+        resultEntry.put("discoveryMethod", effectiveCandidate == null ? null : effectiveCandidate.getDiscoveryMethod());
+        resultEntry.put("reason", effectiveCandidate == null ? config.getDiscoveryNotes() : effectiveCandidate.getReason());
+        resultEntry.put("domain", effectiveCandidate == null ? null : effectiveCandidate.getDomain());
+        resultEntry.put("score", effectiveCandidate == null ? null : effectiveCandidate.getTotalScore());
+        resultEntry.put("trustTier", effectiveCandidate == null || effectiveCandidate.getTrustTier() == null
+                ? null
+                : effectiveCandidate.getTrustTier().name());
+        resultEntry.put("trustTierLabel", effectiveCandidate == null ? null : effectiveCandidate.getTrustTierLabel());
+        resultEntry.put("rankingReasons", effectiveCandidate == null ? null : effectiveCandidate.getRankingReasons());
+        resultEntry.put("rankingSummary", effectiveCandidate == null ? null : effectiveCandidate.getRankingSummary());
+        resultEntry.put("browserTraceId", effectiveCandidate == null ? null : effectiveCandidate.getBrowserTraceId());
+        resultEntry.put("selectionStage", effectiveCandidate == null ? null : effectiveCandidate.getSelectionStage());
+        resultEntry.put("selectionReason", effectiveCandidate == null ? null : effectiveCandidate.getSelectionReason());
+        resultEntry.put("selectionSummary", effectiveCandidate == null ? null : effectiveCandidate.getSelectionSummary());
+        resultEntry.put("sourceUrls", collectedSourceUrls);
+        resultEntry.put("issueFlags", collectionIssueFlags);
+        resultEntry.put("evidenceFragments", buildCollectedEvidenceFragments(
+                config, effectiveSourceType, page, effectiveCandidate, evidenceId, effectiveUrl));
+        if (retrievalIndexingResult != null) {
+            resultEntry.put("knowledgeDocument", toKnowledgeDocumentPayload(retrievalIndexingResult.knowledgeDocument()));
+            resultEntry.put("retrievalChunks", toRetrievalChunkPayloads(retrievalIndexingResult.retrievalChunks()));
+            resultEntry.put("retrievalIndex", toRetrievalIndexPayload(retrievalIndexingResult.retrievalIndex()));
+            resultEntry.put("knowledgeFailureReason", retrievalIndexingResult.failureReason());
+        } else if (knowledgeFailureReason != null && !knowledgeFailureReason.isBlank()) {
+            resultEntry.put("knowledgeFailureReason", knowledgeFailureReason);
+        }
+        results.add(resultEntry);
+
+        progressSnapshots.add(buildProgressSnapshot(executionPlan,
+                "COLLECT_PAGES",
+                buildCollectionProgressMessage(collectionResult, page, fallbackUrl, processedPageCount, totalCollectedPages),
+                Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
+                readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
+        persistRunningOutput(context, config, defaultSourceType, executionPlan, progressSnapshots,
+                searchExecutionResult.getSourceCandidates(), targets, searchExecutionResult.getExecutionTrace(),
+                results, successCounterRef[0]);
+    }
+
+    private String buildCollectionProgressMessage(CollectionExecutionResult collectionResult,
+                                                  SourceCollector.CollectedPage page,
+                                                  String fallbackUrl,
+                                                  int processedPageCount,
+                                                  int totalCollectedPages) {
+        String pageStageLabel = collectionResult != null
+                && collectionResult.getDiscoveryDepth() != null
+                && collectionResult.getDiscoveryDepth() > 0
+                ? "内部发现页面"
+                : "入口页面";
+        String pageLabel = firstNonBlank(page == null ? null : page.getTitle(),
+                firstNonBlank(page == null ? null : page.getUrl(), fallbackUrl));
+        return "正在抓取" + pageStageLabel + " " + processedPageCount + "/" + totalCollectedPages
+                + "：" + pageLabel;
+    }
+
+    private SourceCandidate enrichMatchedCandidate(SourceCandidate matchedCandidate,
+                                                   CollectionExecutionResult collectionResult,
+                                                   String defaultSourceType) {
+        if (matchedCandidate == null) {
+            return buildSyntheticCandidateFromCollectionResult(collectionResult, defaultSourceType);
+        }
+        String effectiveUrl = firstNonBlank(matchedCandidate.getUrl(), resolveCollectionResultPageUrl(collectionResult));
+        List<String> effectiveSourceUrls = matchedCandidate.getSourceUrls() == null || matchedCandidate.getSourceUrls().isEmpty()
+                ? (collectionResult == null || collectionResult.getSourceUrls() == null ? List.of() : collectionResult.getSourceUrls())
+                : matchedCandidate.getSourceUrls();
+        return matchedCandidate.toBuilder()
+                .url(effectiveUrl)
+                .title(firstNonBlank(matchedCandidate.getTitle(), collectionResult == null ? null : collectionResult.getTitle()))
+                .sourceType(firstNonBlank(matchedCandidate.getSourceType(), defaultSourceType))
+                .domain(firstNonBlank(matchedCandidate.getDomain(), canonicalUrlResolver.canonicalDomain(effectiveUrl)))
+                .sourceUrls(effectiveSourceUrls)
+                .build();
+    }
+
+    private SourceCandidate buildSyntheticCandidateFromCollectionResult(CollectionExecutionResult result,
+                                                                        String defaultSourceType) {
+        if (result == null) {
+            return null;
+        }
+        String effectiveUrl = resolveCollectionResultPageUrl(result);
+        String discoveryMethod = result.getDiscoveryDepth() != null && result.getDiscoveryDepth() > 0
+                ? "INTERNAL_LINK_DISCOVERY"
+                : "COLLECTION_EXECUTION_RESULT";
+        return SourceCandidate.builder()
+                .url(effectiveUrl)
+                .title(result.getTitle())
+                .sourceType(StringUtils.hasText(defaultSourceType) ? defaultSourceType : "OFFICIAL")
+                .discoveryMethod(discoveryMethod)
+                .reason("INTERNAL_LINK_DISCOVERY".equals(discoveryMethod)
+                        ? "internally discovered child page collected through recursive collection"
+                        : "collection result returned without selected target metadata")
+                .domain(canonicalUrlResolver.canonicalDomain(effectiveUrl))
+                .sourceUrls(result.getSourceUrls() == null ? List.of() : result.getSourceUrls())
+                .qualitySignals(result.getQualitySignals() == null ? List.of() : result.getQualitySignals())
+                .qualityScore(result.getQualityScore() == null ? 0.0D : result.getQualityScore())
+                .build();
+    }
+
+    private CollectionExecutionResult buildMissingCollectionExecutionResult(AgentContext context,
+                                                                            int targetIndex,
+                                                                            SourceCandidate matchedCandidate) {
+        String resourceLocator = matchedCandidate == null ? null : matchedCandidate.getUrl();
+        List<String> sourceUrls = matchedCandidate == null || matchedCandidate.getSourceUrls() == null
+                ? (StringUtils.hasText(resourceLocator) ? List.of(resourceLocator) : List.of())
+                : matchedCandidate.getSourceUrls();
+        return CollectionExecutionResult.builder()
+                .taskPackageKey(context.getCurrentNodeName() + "#" + String.format("%03d", targetIndex))
+                .targetIndex(targetIndex)
+                .executorType("UNKNOWN")
+                .success(false)
+                .status("FAILED")
+                .resourceLocator(resourceLocator)
+                .sourceUrls(sourceUrls)
+                .discoveryDepth(0)
+                .errorMessage("collection executor returned no result")
+                .failureKind("COLLECTION_RESULT_MISSING")
+                .qualitySignals(List.of("COLLECTION_RESULT_MISSING"))
+                .reusedFromCheckpoint(false)
+                .build()
+                .normalize();
+    }
+
     /**
      * 将新的采集执行结果兼容映射回旧的 CollectedPage 契约，确保证据入库、CollectResult 组装、
      * 以及 Task RAG 索引都还能复用现有逻辑。如果 structured payload 序列化失败，只记录日志并降级为 null。
@@ -886,9 +1449,7 @@ public class CollectorAgent extends BaseAgent {
         if (result == null) {
             return buildMissingCollectionResultPage(competitorName, sourceType, null);
         }
-        String effectiveUrl = result.getSourceUrls() != null && !result.getSourceUrls().isEmpty()
-                ? result.getSourceUrls().get(0)
-                : result.getResourceLocator();
+        String effectiveUrl = resolveCollectionResultPageUrl(result);
         String content = result.getContent();
         String snippet = content == null ? null : content.substring(0, Math.min(500, content.length()));
         return SourceCollector.CollectedPage.builder()
@@ -953,6 +1514,7 @@ public class CollectorAgent extends BaseAgent {
                         candidate == null ? null : candidate.getTitle()))
                 .content(content)
                 .sourceUrls(sourceUrls)
+                .discoveryDepth(0)
                 .errorMessage(page == null ? "prefetched page missing" : page.getErrorMessage())
                 .failureKind(failureKind)
                 .qualitySignals(page != null && page.isSuccess() && isUsableCollectedPage(page)
@@ -962,6 +1524,25 @@ public class CollectorAgent extends BaseAgent {
                 .reusedFromCheckpoint(reusedFromCheckpoint)
                 .build()
                 .normalize();
+    }
+
+    /**
+     * 这里只提取“验证阶段已经预抓取过，但内容仍不可用”的 attemptedTargets。
+     * 这样在 selectedTargets 为空时，Collector 仍能把失败页纳入正式 collectionAudit，而不是直接丢成空审计。
+     */
+    private List<SearchCollectionTarget> resolveFailedPrefetchedAttemptTargets(SearchExecutionResult searchExecutionResult) {
+        if (searchExecutionResult == null
+                || searchExecutionResult.getAttemptedTargets() == null
+                || searchExecutionResult.getAttemptedTargets().isEmpty()) {
+            return List.of();
+        }
+        return searchExecutionResult.getAttemptedTargets().stream()
+                .filter(target -> target != null
+                        && target.getCollectedPage() != null
+                        && target.getCandidate() != null
+                        && StringUtils.hasText(target.getCandidate().getUrl())
+                        && !isUsableCollectedPage(target.getCollectedPage()))
+                .toList();
     }
 
     /**
@@ -1026,6 +1607,7 @@ public class CollectorAgent extends BaseAgent {
         metadata.put("executorType", result.getExecutorType());
         metadata.put("resourceLocator", result.getResourceLocator());
         metadata.put("sourceUrls", result.getSourceUrls() == null ? List.of() : result.getSourceUrls());
+        metadata.put("discoveryDepth", result.getDiscoveryDepth() == null ? 0 : result.getDiscoveryDepth());
         metadata.put("qualitySignals", result.getQualitySignals() == null ? List.of() : result.getQualitySignals());
         metadata.put("qualityScore", result.getQualityScore());
         metadata.put("failureKind", result.getFailureKind());
@@ -1073,6 +1655,55 @@ public class CollectorAgent extends BaseAgent {
             sourceUrls.add(fallbackUrl);
         }
         return new ArrayList<>(sourceUrls);
+    }
+
+    private String resolveEffectiveCollectedUrl(SourceCollector.CollectedPage page,
+                                                CollectionExecutionResult collectionResult,
+                                                List<String> collectedSourceUrls,
+                                                String fallbackUrl) {
+        String pageUrl = page == null ? null : page.getUrl();
+        if (StringUtils.hasText(pageUrl)) {
+            return pageUrl;
+        }
+        String collectionResultUrl = resolveCollectionResultPageUrl(collectionResult);
+        if (StringUtils.hasText(collectionResultUrl)) {
+            return collectionResultUrl;
+        }
+        if (collectedSourceUrls != null) {
+            for (int index = collectedSourceUrls.size() - 1; index >= 0; index--) {
+                String sourceUrl = collectedSourceUrls.get(index);
+                if (StringUtils.hasText(sourceUrl)) {
+                    return sourceUrl;
+                }
+            }
+        }
+        return fallbackUrl;
+    }
+
+    private String resolveCollectionResultPageUrl(CollectionExecutionResult result) {
+        if (result == null) {
+            return null;
+        }
+        if (isHttpUrl(result.getResourceLocator())) {
+            return result.getResourceLocator();
+        }
+        if (result.getSourceUrls() != null) {
+            for (int index = result.getSourceUrls().size() - 1; index >= 0; index--) {
+                String sourceUrl = result.getSourceUrls().get(index);
+                if (StringUtils.hasText(sourceUrl)) {
+                    return sourceUrl;
+                }
+            }
+        }
+        return result.getResourceLocator();
+    }
+
+    private boolean isHttpUrl(String url) {
+        if (!StringUtils.hasText(url)) {
+            return false;
+        }
+        String normalized = url.trim().toLowerCase(java.util.Locale.ROOT);
+        return normalized.startsWith("http://") || normalized.startsWith("https://");
     }
 
     private boolean hasStructuredPayloadMetadata(SourceCollector.CollectedPage page) {

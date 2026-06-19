@@ -49,6 +49,9 @@ public class CollectionTargetSelector {
                 .toList();
 
         for (SourceCandidate candidate : rankedCandidates) {
+            if ("DISCARDED".equalsIgnoreCase(candidate.getSelectionStage())) {
+                continue;
+            }
             String normalizedUrl = normalizeUrl(candidate.getUrl());
             if (!StringUtils.hasText(normalizedUrl) || !selectedUrls.add(normalizedUrl)) {
                 continue;

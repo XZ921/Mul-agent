@@ -154,6 +154,11 @@ collection:
     max-retries: 2
     max-items-per-feed: 5
     fail-fast-on-non-feed-content: true
+  internal-link-discovery:
+    enabled: true
+    max-depth: 2
+    max-links-per-entry: 10
+    max-links-per-node: 30
 
 source-discovery:
   search:
@@ -198,6 +203,19 @@ source-discovery:
 
 search:
   mode: HYBRID
+  discovery:
+    domain:
+      llm-enabled: true
+      llm-timeout-millis: 8000
+      max-llm-candidates: 8
+      verification-timeout-millis: 3000
+      max-retries: 1
+    sitemap:
+      enabled: true
+      timeout-millis: 3000
+      max-sitemaps-per-domain: 3
+      max-urls-per-sitemap: 80
+      max-retries: 1
   source-catalog:
     families:
       official:
@@ -264,7 +282,9 @@ search:
           - search-news-primary
           - search-news-secondary
       github:
-        enabled: true
+        # 默认关闭 GitHub 家族，避免本地 / CI 在没有 GITHUB_API_TOKEN 时被 readiness hard-fail 卡住。
+        # 只有显式提供 GitHub 凭证并手动打开家族开关时，才允许走 GitHub API 正式采集 owner。
+        enabled: ${SEARCH_SOURCE_CATALOG_FAMILIES_GITHUB_ENABLED:false}
         role: PRIMARY_VERTICAL
         preferred-web-render-hint: FULL_RENDER
         expected-block-types:
@@ -394,6 +414,11 @@ spring:
   config:
     activate:
       on-profile: test
+  autoconfigure:
+    # test profile 关闭内部工作流 MQ 通道时，也必须排除 RocketMQ starter 自动配置；
+    # 否则 starter 会在 rocketmq.enabled=false 且 name-server 为空时仍尝试创建 DefaultMQProducer。
+    exclude:
+      - org.apache.rocketmq.spring.autoconfigure.RocketMQAutoConfiguration
   datasource:
     driver-class-name: org.h2.Driver
     type: com.zaxxer.hikari.HikariDataSource
@@ -445,8 +470,8 @@ playwright:
   executable-path:
   headless: true
   timeout-millis: 10000
-  startup-warmup-enabled: false
-  health-check-warmup-enabled: false
+  startup-warmup-enabled: true
+  health-check-warmup-enabled: true
   screenshot-on-collect: false
   health-check-interval-millis: 60000
   health-check-initial-delay-millis: 60000

@@ -33,6 +33,9 @@ public class SearchExecutionCoordinator {
     private final CollectionTargetSelector collectionTargetSelector;
     private final SearchPolicyResolver searchPolicyResolver;
     private final CanonicalUrlResolver canonicalUrlResolver;
+    private final SourceFamilyDirectDiscoveryPlanner directDiscoveryPlanner;
+    private final SitemapDiscoveryService sitemapDiscoveryService;
+    private final CandidateOwnershipPolicy candidateOwnershipPolicy;
 
     public SearchExecutionCoordinator(CandidateVerifier candidateVerifier,
                                       BrowserSearchRuntimeService browserSearchRuntimeService,
@@ -46,7 +49,9 @@ public class SearchExecutionCoordinator {
                 sourceCandidateRanker,
                 collectionTargetSelector,
                 searchPolicyResolver,
-                new CanonicalUrlResolver());
+                new CanonicalUrlResolver(),
+                new SitemapDiscoveryService(new SitemapDiscoveryProperties()),
+                new CandidateOwnershipPolicy());
     }
 
     @Autowired
@@ -56,7 +61,28 @@ public class SearchExecutionCoordinator {
                                       SourceCandidateRanker sourceCandidateRanker,
                                       CollectionTargetSelector collectionTargetSelector,
                                       SearchPolicyResolver searchPolicyResolver,
-                                      CanonicalUrlResolver canonicalUrlResolver) {
+                                      CanonicalUrlResolver canonicalUrlResolver,
+                                      SitemapDiscoveryService sitemapDiscoveryService) {
+        this(candidateVerifier,
+                browserSearchRuntimeService,
+                searchSourceProvider,
+                sourceCandidateRanker,
+                collectionTargetSelector,
+                searchPolicyResolver,
+                canonicalUrlResolver,
+                sitemapDiscoveryService,
+                new CandidateOwnershipPolicy());
+    }
+
+    public SearchExecutionCoordinator(CandidateVerifier candidateVerifier,
+                                      BrowserSearchRuntimeService browserSearchRuntimeService,
+                                      SearchSourceProvider searchSourceProvider,
+                                      SourceCandidateRanker sourceCandidateRanker,
+                                      CollectionTargetSelector collectionTargetSelector,
+                                      SearchPolicyResolver searchPolicyResolver,
+                                      CanonicalUrlResolver canonicalUrlResolver,
+                                      SitemapDiscoveryService sitemapDiscoveryService,
+                                      CandidateOwnershipPolicy candidateOwnershipPolicy) {
         this.candidateVerifier = candidateVerifier;
         this.browserSearchRuntimeService = browserSearchRuntimeService;
         this.searchSourceProvider = searchSourceProvider;
@@ -64,6 +90,13 @@ public class SearchExecutionCoordinator {
         this.collectionTargetSelector = collectionTargetSelector;
         this.searchPolicyResolver = searchPolicyResolver;
         this.canonicalUrlResolver = canonicalUrlResolver;
+        this.directDiscoveryPlanner = new SourceFamilyDirectDiscoveryPlanner(this.searchPolicyResolver);
+        this.sitemapDiscoveryService = sitemapDiscoveryService == null
+                ? new SitemapDiscoveryService(new SitemapDiscoveryProperties())
+                : sitemapDiscoveryService;
+        this.candidateOwnershipPolicy = candidateOwnershipPolicy == null
+                ? new CandidateOwnershipPolicy()
+                : candidateOwnershipPolicy;
     }
 
     public SearchExecutionResult execute(CollectorNodeConfig config) {
@@ -156,7 +189,7 @@ public class SearchExecutionCoordinator {
                     "正在验证高优先级候选来源", false, null, progressListener, allCandidates, List.of(), null);
             List<SourceCandidate> verifyCandidates = allCandidates.stream()
                     .sorted(Comparator.comparingDouble(SourceCandidate::getTotalScore).reversed())
-                    .limit(Math.max(minVerifiedCount, Math.min(targetCount, allCandidates.size())))
+                    .limit(resolveVerificationCandidateLimit(config, allCandidates, targetCount, minVerifiedCount))
                     .toList();
             CandidateVerificationResult verificationResult = candidateVerifier.verify(
                     config.getCompetitorName(),
@@ -224,7 +257,12 @@ public class SearchExecutionCoordinator {
                                     config.getSourceType(),
                                     supplementedCandidates.stream().limit(needed).toList()
                             );
-                            allCandidates = mergeCandidateUpdates(allCandidates, supplementVerification.getUpdatedCandidates());
+                            List<SourceCandidate> updatedSupplementCandidates = retainUnverifiedHttpFallbackCandidatesIfNeeded(
+                                    config,
+                                    supplementOutcome,
+                                    supplementVerification
+                            );
+                            allCandidates = mergeCandidateUpdates(allCandidates, updatedSupplementCandidates);
                             appendAttemptedTargets(attemptedTargets, supplementVerification.getAttemptedTargets());
                             verifiedCount += supplementVerification.getVerifiedTargets().size();
                         }
@@ -252,7 +290,9 @@ public class SearchExecutionCoordinator {
             markStepSkipped(executionPlan, "BROWSER_SUPPLEMENT_SEARCH", "现有候选已满足最小验证目标，无需补源");
             appendSnapshotAndPublish(progressSnapshots, executionPlan, "BROWSER_SUPPLEMENT_SEARCH",
                     "现有候选已满足最小验证目标，无需补源", false, null, progressListener, allCandidates, List.of(), null);
-            fallbackDecision = "SKIP_SUPPLEMENT_ENOUGH_VERIFIED";
+            fallbackDecision = shouldSkipSupplementForDirectDiscovery(config, verifiedCount, minVerifiedCount)
+                    ? "SKIP_SUPPLEMENT_DIRECT_DISCOVERY_ENOUGH"
+                    : "SKIP_SUPPLEMENT_ENOUGH_VERIFIED";
         }
 
         // 职责边界 3：目标选择永远发生在验证/补源之后，只从已经收束完的候选集合中挑选最终采集目标。
@@ -260,6 +300,15 @@ public class SearchExecutionCoordinator {
         appendSnapshotAndPublish(progressSnapshots, executionPlan, "SELECT_TARGETS",
                 "正在汇总候选并选择最终采集目标", circuitBroken, degradationReason,
                 progressListener, allCandidates, List.of(), null);
+        List<SourceCandidate> sitemapCandidates = normalizeCandidates(
+                discoverCandidatesFromSitemaps(config, allCandidates),
+                "SUPPLEMENTED",
+                config
+        );
+        if (!sitemapCandidates.isEmpty()) {
+            allCandidates = sourceCandidateRanker.rankAndDeduplicate(concat(allCandidates, sitemapCandidates));
+        }
+
         SearchSelectionDecision selectionDecision = collectionTargetSelector.selectTargets(
                 allCandidates,
                 attemptedTargets,
@@ -399,6 +448,16 @@ public class SearchExecutionCoordinator {
         if (config.getCompetitorUrls() == null || config.getCompetitorUrls().isEmpty()) {
             return List.of();
         }
+        List<SourceCandidate> directCandidates = directDiscoveryPlanner.buildInitialCandidates(
+                config.getCompetitorName(),
+                safeSourceType(config.getSourceType()),
+                config.getCompetitorUrls()
+        ).stream()
+                .filter(candidate -> candidate != null && safeSourceType(config.getSourceType()).equals(candidate.getSourceType()))
+                .toList();
+        if (!directCandidates.isEmpty()) {
+            return directCandidates;
+        }
         List<SourceCandidate> fallbackCandidates = new ArrayList<>();
         for (String url : config.getCompetitorUrls()) {
             if (!StringUtils.hasText(url)) {
@@ -413,6 +472,7 @@ public class SearchExecutionCoordinator {
                             ? config.getDiscoveryNotes()
                             : "节点配置直接提供采集 URL")
                     .domain(extractDomain(url))
+                    .sourceUrls(List.of(url))
                     .relevanceScore(0.82)
                     .freshnessScore(0.55)
                     .qualityScore(0.80)
@@ -524,7 +584,14 @@ public class SearchExecutionCoordinator {
                 browserSearchResult = browserSearchRuntimeService.search(config);
                 browserExecuted = true;
                 List<SourceCandidate> browserCandidates = removeExistingCandidates(
-                        normalizeCandidates(browserSearchResult.getCandidates(), "BROWSER", config),
+                        concat(
+                                normalizeCandidates(browserSearchResult.getCandidates(), "BROWSER", config),
+                                expandSearchCandidatesThroughDirectDiscovery(
+                                        config,
+                                        browserSearchResult.getCandidates(),
+                                        concat(existingCandidates, supplementedCandidates)
+                                )
+                        ),
                         concat(existingCandidates, supplementedCandidates)
                 );
                 if (!browserCandidates.isEmpty()) {
@@ -536,11 +603,18 @@ public class SearchExecutionCoordinator {
             }
 
             if ("HTTP".equals(stage) && httpModeEnabled && !httpExecuted) {
+                List<SourceCandidate> httpSearchCandidates = searchSourceProvider.search(
+                        config.getCompetitorName(),
+                        List.of(config.getSourceType())
+                );
                 List<SourceCandidate> httpCandidates = removeExistingCandidates(
-                        normalizeCandidates(
-                                searchSourceProvider.search(config.getCompetitorName(), List.of(config.getSourceType())),
-                                "HTTP",
-                                config
+                        concat(
+                                normalizeCandidates(httpSearchCandidates, "HTTP", config),
+                                expandSearchCandidatesThroughDirectDiscovery(
+                                        config,
+                                        httpSearchCandidates,
+                                        concat(existingCandidates, supplementedCandidates)
+                                )
                         ),
                         concat(existingCandidates, supplementedCandidates)
                 );
@@ -637,6 +711,104 @@ public class SearchExecutionCoordinator {
         return "planned";
     }
 
+    /**
+     * 运行期 public search 命中根域或入口页后，再把根域回灌给 direct discovery，
+     * 补齐 docs/pricing/help/open 等模板入口，避免“搜到了官网但不会继续扩展”的断点。
+     */
+    private List<SourceCandidate> expandSearchCandidatesThroughDirectDiscovery(CollectorNodeConfig config,
+                                                                               List<SourceCandidate> searchCandidates,
+                                                                               List<SourceCandidate> existingCandidates) {
+        if (config == null || searchCandidates == null || searchCandidates.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> existingUrls = new LinkedHashSet<>();
+        for (SourceCandidate existingCandidate : existingCandidates == null ? List.<SourceCandidate>of() : existingCandidates) {
+            SourceCandidate normalizedCandidate = normalizeCandidateCanonicalUrl(existingCandidate);
+            if (normalizedCandidate != null && StringUtils.hasText(normalizedCandidate.getUrl())) {
+                existingUrls.add(normalizedCandidate.getUrl());
+            }
+        }
+        LinkedHashSet<String> rootUrls = new LinkedHashSet<>();
+        for (SourceCandidate candidate : searchCandidates) {
+            SourceCandidate normalizedCandidate = normalizeCandidateCanonicalUrl(candidate);
+            if (normalizedCandidate != null && existingUrls.contains(normalizedCandidate.getUrl())) {
+                continue;
+            }
+            if (!shouldExpandSearchCandidateThroughDirectDiscovery(config, candidate)) {
+                continue;
+            }
+            String rootUrl = toRootUrl(candidate == null ? null : candidate.getUrl());
+            if (StringUtils.hasText(rootUrl)) {
+                rootUrls.add(rootUrl);
+            }
+        }
+        if (rootUrls.isEmpty()) {
+            return List.of();
+        }
+        return directDiscoveryPlanner.buildInitialCandidates(
+                        config.getCompetitorName(),
+                        safeSourceType(config.getSourceType()),
+                        new ArrayList<>(rootUrls)
+                ).stream()
+                .filter(candidate -> candidate != null
+                        && !"DIRECT_LOCATOR".equalsIgnoreCase(candidate.getDiscoveryMethod()))
+                .map(candidate -> {
+                    SourceCandidate normalizedCandidate = normalizeCandidateCanonicalUrl(candidate);
+                    if (normalizedCandidate == null) {
+                        return null;
+                    }
+                    return normalizedCandidate.toBuilder()
+                            .discoveryMethod("SEARCH_ROOT_TEMPLATE")
+                            .reason("search result root expanded through direct discovery templates")
+                            .relevanceScore(0.74D)
+                            .freshnessScore(0.55D)
+                            .qualityScore(0.80D)
+                            .sourceUrls(resolveSearchExpansionSourceUrls(normalizedCandidate, searchCandidates))
+                            .build();
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    /**
+     * 把 direct discovery 扩出来的候选回指到触发它的搜索结果 URL，
+     * 这样 sourceUrls 既能说明“搜索从哪来”，也能保留最终入口的可追溯性。
+     */
+    private List<String> resolveSearchExpansionSourceUrls(SourceCandidate expandedCandidate,
+                                                          List<SourceCandidate> searchCandidates) {
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        String expandedDomain = canonicalUrlResolver.canonicalDomain(
+                expandedCandidate == null ? null : expandedCandidate.getUrl()
+        );
+        for (SourceCandidate searchCandidate : searchCandidates == null ? List.<SourceCandidate>of() : searchCandidates) {
+            if (searchCandidate == null || !StringUtils.hasText(searchCandidate.getUrl())) {
+                continue;
+            }
+            String searchDomain = canonicalUrlResolver.canonicalDomain(searchCandidate.getUrl());
+            if (isSameSearchExpansionDomain(expandedDomain, searchDomain)) {
+                sourceUrls.add(searchCandidate.getUrl());
+            }
+        }
+        if (sourceUrls.isEmpty() && expandedCandidate != null && expandedCandidate.getSourceUrls() != null) {
+            sourceUrls.addAll(expandedCandidate.getSourceUrls());
+        }
+        if (sourceUrls.isEmpty() && expandedCandidate != null && StringUtils.hasText(expandedCandidate.getUrl())) {
+            sourceUrls.add(expandedCandidate.getUrl());
+        }
+        return new ArrayList<>(sourceUrls);
+    }
+
+    private boolean isSameSearchExpansionDomain(String expandedDomain, String searchDomain) {
+        if (!StringUtils.hasText(expandedDomain) || !StringUtils.hasText(searchDomain)) {
+            return false;
+        }
+        String normalizedExpandedDomain = expandedDomain.toLowerCase(Locale.ROOT);
+        String normalizedSearchDomain = searchDomain.toLowerCase(Locale.ROOT);
+        return normalizedExpandedDomain.equals(normalizedSearchDomain)
+                || normalizedExpandedDomain.endsWith("." + normalizedSearchDomain)
+                || normalizedSearchDomain.endsWith("." + normalizedExpandedDomain);
+    }
+
     private List<String> resolveSearchFallbackOrder(CollectorNodeConfig config) {
         return searchPolicyResolver.resolveFallbackOrder(
                 config.getSearchMode(),
@@ -693,6 +865,104 @@ public class SearchExecutionCoordinator {
         return targetCount;
     }
 
+    /**
+     * direct discovery 会从一个 stable locator 扩出 docs/open/developer/help 等多个高价值入口。
+     * 这些入口本身同属一批可信候选，不能只验证排序第一名；否则第一个模板页不可达时会误触 public search，
+     * 反而掩盖同批次里真实可用的 /docs 或 open 平台入口。
+     */
+    private int resolveVerificationCandidateLimit(CollectorNodeConfig config,
+                                                  List<SourceCandidate> candidates,
+                                                  int targetCount,
+                                                  int minVerifiedCount) {
+        int candidateCount = candidates == null ? 0 : candidates.size();
+        int defaultLimit = Math.max(minVerifiedCount, Math.min(targetCount, candidateCount));
+        if (!isDirectDiscoveryCandidatePool(config, candidates)) {
+            return defaultLimit;
+        }
+        return Math.min(candidateCount, Math.max(defaultLimit, Math.min(candidateCount, 8)));
+    }
+
+    private boolean isDirectDiscoveryCandidatePool(CollectorNodeConfig config, List<SourceCandidate> candidates) {
+        if (config == null || candidates == null || candidates.isEmpty()) {
+            return false;
+        }
+        if (config.getSourceCandidates() != null && !config.getSourceCandidates().isEmpty()) {
+            return false;
+        }
+        if (config.getCompetitorUrls() == null || config.getCompetitorUrls().isEmpty()) {
+            return false;
+        }
+        return candidates.stream().anyMatch(candidate -> {
+            String discoveryMethod = candidate == null ? null : candidate.getDiscoveryMethod();
+            return "DIRECT_LOCATOR".equalsIgnoreCase(discoveryMethod)
+                    || "FAMILY_TEMPLATE".equalsIgnoreCase(discoveryMethod)
+                    || "FAMILY_SUBDOMAIN_TEMPLATE".equalsIgnoreCase(discoveryMethod);
+        });
+    }
+
+    /**
+     * public search 命中根域或泛官网页时才需要模板扩展。
+     * 如果搜索结果本身已经是 DOCS/PRICING 深链，继续扩根域模板会让 open/developer 等猜测入口抢过真实命中页。
+     */
+    private boolean shouldExpandSearchCandidateThroughDirectDiscovery(CollectorNodeConfig config,
+                                                                      SourceCandidate candidate) {
+        if (!isTrustedSearchExpansionRoot(config, candidate)) {
+            return false;
+        }
+        SourceCandidate normalizedCandidate = normalizeCandidateCanonicalUrl(candidate);
+        if (normalizedCandidate == null || !StringUtils.hasText(normalizedCandidate.getUrl())) {
+            return false;
+        }
+        String rootUrl = toRootUrl(normalizedCandidate.getUrl());
+        if (!StringUtils.hasText(rootUrl)) {
+            return false;
+        }
+        boolean rootHit = normalizedCandidate.getUrl().equals(rootUrl);
+        boolean officialHit = "OFFICIAL".equalsIgnoreCase(normalizedCandidate.getSourceType());
+        return rootHit || officialHit;
+    }
+
+    /**
+     * 当浏览器补源被显式关闭时，HTTP provider 是运行期唯一补源来源。
+     * 这类候选即使结果页验证暂时抓不到正文，也应该保留为“可采集兜底”，
+     * 否则会出现“HTTP 已返回高价值 URL，但搜索阶段最终空选源”的断链。
+     */
+    private List<SourceCandidate> retainUnverifiedHttpFallbackCandidatesIfNeeded(CollectorNodeConfig config,
+                                                                                 SupplementExecutionOutcome supplementOutcome,
+                                                                                 CandidateVerificationResult verificationResult) {
+        List<SourceCandidate> updatedCandidates = verificationResult == null || verificationResult.getUpdatedCandidates() == null
+                ? List.of()
+                : verificationResult.getUpdatedCandidates();
+        if (!shouldRetainUnverifiedHttpFallback(config, supplementOutcome, verificationResult)) {
+            return updatedCandidates;
+        }
+        return updatedCandidates.stream()
+                .map(candidate -> candidate == null ? null : candidate.toBuilder()
+                        .selectionStage("SUPPLEMENTED")
+                        .selectionReason("浏览器补源关闭，HTTP fallback 候选验证未通过但保留为采集兜底")
+                        .selectionSummary("HTTP fallback 候选将进入正式采集阶段再次抓取")
+                        .build())
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    private boolean shouldRetainUnverifiedHttpFallback(CollectorNodeConfig config,
+                                                       SupplementExecutionOutcome supplementOutcome,
+                                                       CandidateVerificationResult verificationResult) {
+        if (config == null || !Boolean.FALSE.equals(config.getBrowserSearchEnabled())) {
+            return false;
+        }
+        if (supplementOutcome == null || !supplementOutcome.isProviderFallbackUsed()) {
+            return false;
+        }
+        if (verificationResult == null
+                || verificationResult.getUpdatedCandidates() == null
+                || verificationResult.getUpdatedCandidates().isEmpty()) {
+            return false;
+        }
+        return verificationResult.getVerifiedTargets() == null || verificationResult.getVerifiedTargets().isEmpty();
+    }
+
     private boolean isBlockedDomain(SourceCandidate candidate, List<String> blockedDomains) {
         if (candidate == null || !StringUtils.hasText(candidate.getDomain())
                 || blockedDomains == null || blockedDomains.isEmpty()) {
@@ -713,12 +983,31 @@ public class SearchExecutionCoordinator {
         return canonicalUrlResolver.canonicalDomain(url);
     }
 
+    private String toRootUrl(String url) {
+        String canonicalUrl = canonicalUrlResolver.canonicalize(url);
+        if (!StringUtils.hasText(canonicalUrl)) {
+            return null;
+        }
+        try {
+            java.net.URI uri = java.net.URI.create(canonicalUrl);
+            if (!StringUtils.hasText(uri.getScheme()) || !StringUtils.hasText(uri.getHost())) {
+                return null;
+            }
+            return uri.getScheme().toLowerCase(Locale.ROOT) + "://" + uri.getHost().toLowerCase(Locale.ROOT);
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
     private boolean shouldSupplement(CollectorNodeConfig config,
                                      int verifiedCount,
                                      int minVerifiedCount,
                                      int candidateCount,
                                      int targetCount,
                                      boolean resultPageVerificationEnabled) {
+        if (shouldSkipSupplementForDirectDiscovery(config, verifiedCount, minVerifiedCount)) {
+            return false;
+        }
         boolean runtimeSearchEnabled = !"HEURISTIC_ONLY".equalsIgnoreCase(config.getSearchMode());
         if (!runtimeSearchEnabled) {
             return false;
@@ -729,6 +1018,33 @@ public class SearchExecutionCoordinator {
             return verifiedCount < minVerifiedCount;
         }
         return candidateCount < targetCount;
+    }
+
+    /**
+     * direct discovery 已经把 stable locator 展开成当前 sourceType 的正式候选时，
+     * 只要最小验真目标已经满足，就直接结束 search supplement，避免再走 public search 噪音补源。
+     */
+    private boolean shouldSkipSupplementForDirectDiscovery(CollectorNodeConfig config,
+                                                           int verifiedCount,
+                                                           int minVerifiedCount) {
+        if (config == null) {
+            return false;
+        }
+        if (config.getSourceCandidates() != null && !config.getSourceCandidates().isEmpty()) {
+            return false;
+        }
+        if (verifiedCount < minVerifiedCount) {
+            return false;
+        }
+        if (config.getCompetitorUrls() == null || config.getCompetitorUrls().isEmpty()) {
+            return false;
+        }
+        return directDiscoveryPlanner.buildInitialCandidates(
+                config.getCompetitorName(),
+                safeSourceType(config.getSourceType()),
+                config.getCompetitorUrls()
+        ).stream().anyMatch(candidate ->
+                candidate != null && safeSourceType(config.getSourceType()).equals(candidate.getSourceType()));
     }
 
     private boolean isResultPageVerificationEnabled(CollectorNodeConfig config) {
@@ -798,6 +1114,52 @@ public class SearchExecutionCoordinator {
                 .map(this::normalizeCandidateCanonicalUrl)
                 .filter(candidate -> candidate != null && !existingUrls.contains(candidate.getUrl()))
                 .toList();
+    }
+
+    /**
+     * sitemap/robots 发现依赖当前候选池里已经识别出的根域。
+     * 这里统一抽取根域并去重，发现结果仍复用现有排序与去重链路，避免产生旁路候选池。
+     */
+    private List<SourceCandidate> discoverCandidatesFromSitemaps(CollectorNodeConfig config,
+                                                                 List<SourceCandidate> existingCandidates) {
+        if (config == null || sitemapDiscoveryService == null || existingCandidates == null || existingCandidates.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> rootUrls = new LinkedHashSet<>();
+        for (SourceCandidate candidate : existingCandidates) {
+            if (!isTrustedSearchExpansionRoot(config, candidate)) {
+                continue;
+            }
+            String rootUrl = toRootUrl(candidate == null ? null : candidate.getUrl());
+            if (StringUtils.hasText(rootUrl)) {
+                rootUrls.add(rootUrl);
+            }
+        }
+        if (rootUrls.isEmpty()) {
+            return List.of();
+        }
+        return removeExistingCandidates(
+                sitemapDiscoveryService.discover(
+                        config.getCompetitorName(),
+                        safeSourceType(config.getSourceType()),
+                        new ArrayList<>(rootUrls)
+                ),
+                existingCandidates
+        );
+    }
+
+    /**
+     * 只有明确属于竞品自身的搜索候选，才允许继续向根域模板扩展或做 sitemap/robots 发现。
+     * 否则一旦把爱企查、企查查这类中介站当成 root，就会错误扩出 /docs、/pricing 等伪入口。
+     */
+    private boolean isTrustedSearchExpansionRoot(CollectorNodeConfig config, SourceCandidate candidate) {
+        if (candidate == null) {
+            return false;
+        }
+        return candidateOwnershipPolicy.isTrustedSearchRoot(
+                config == null ? null : config.getCompetitorName(),
+                candidate
+        );
     }
 
     /**

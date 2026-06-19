@@ -84,4 +84,29 @@ class SearchPolicyResolverTest {
                 resolver.resolveExpectedBlockTypes("github", "GITHUB")
         );
     }
+
+    @Test
+    void shouldResolveDirectPathTemplatesFromSourceFamilyCatalog() {
+        SearchPolicyResolver resolver = new SearchPolicyResolver();
+        resolver.setSearchProperties(new SearchProperties());
+
+        assertIterableEquals(
+                List.of("/", "/pricing", "/docs", "/documentation", "/help"),
+                resolver.resolveDirectPathTemplates("official")
+        );
+        assertIterableEquals(
+                List.of(),
+                resolver.resolveDirectPathTemplates("github")
+        );
+    }
+
+    @Test
+    void shouldRecognizeStableLocatorForOfficialAndGithubFamilies() {
+        SearchPolicyResolver resolver = new SearchPolicyResolver();
+        resolver.setSearchProperties(new SearchProperties());
+
+        assertEquals(true, resolver.isStableLocatorForSourceFamily("official", "https://www.acme.ai"));
+        assertEquals(true, resolver.isStableLocatorForSourceFamily("github", "https://github.com/acme/rocket"));
+        assertEquals(false, resolver.isStableLocatorForSourceFamily("github", "https://www.acme.ai/docs"));
+    }
 }

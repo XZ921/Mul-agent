@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -27,6 +28,7 @@ public class CollectionExecutionCoordinator {
     private final CollectionTaskPackageBuilder packageBuilder;
     private final CollectionExecutorRegistry executorRegistry;
     private final CanonicalUrlResolver canonicalUrlResolver;
+    private final InternalLinkDiscoveryProperties internalLinkDiscoveryProperties;
 
     /**
      * 运行时正式 Bean 只应通过这个主构造器注入依赖。
@@ -35,16 +37,26 @@ public class CollectionExecutionCoordinator {
      */
     @Autowired
     public CollectionExecutionCoordinator(CollectionTaskPackageBuilder packageBuilder,
+                                          CollectionExecutorRegistry executorRegistry,
+                                          CanonicalUrlResolver canonicalUrlResolver,
+                                          InternalLinkDiscoveryProperties internalLinkDiscoveryProperties) {
+        this.packageBuilder = packageBuilder;
+        this.executorRegistry = executorRegistry;
+        this.canonicalUrlResolver = canonicalUrlResolver == null ? new CanonicalUrlResolver() : canonicalUrlResolver;
+        this.internalLinkDiscoveryProperties = internalLinkDiscoveryProperties == null
+                ? new InternalLinkDiscoveryProperties()
+                : internalLinkDiscoveryProperties;
+    }
+
+    public CollectionExecutionCoordinator(CollectionTaskPackageBuilder packageBuilder,
                                           CollectionExecutorRegistry executorRegistry) {
-        this(packageBuilder, executorRegistry, new CanonicalUrlResolver());
+        this(packageBuilder, executorRegistry, new CanonicalUrlResolver(), new InternalLinkDiscoveryProperties());
     }
 
     CollectionExecutionCoordinator(CollectionTaskPackageBuilder packageBuilder,
                                    CollectionExecutorRegistry executorRegistry,
                                    CanonicalUrlResolver canonicalUrlResolver) {
-        this.packageBuilder = packageBuilder;
-        this.executorRegistry = executorRegistry;
-        this.canonicalUrlResolver = canonicalUrlResolver == null ? new CanonicalUrlResolver() : canonicalUrlResolver;
+        this(packageBuilder, executorRegistry, canonicalUrlResolver, new InternalLinkDiscoveryProperties());
     }
 
     public CollectionExecutionReport execute(Long taskId,
@@ -71,10 +83,28 @@ public class CollectionExecutionCoordinator {
         Map<String, CollectionExecutionResult> checkpointResultMap = indexReusableCheckpointResults(checkpoint);
         Map<String, CollectionExecutionResult> checkpointIdentityMap = indexReusableCheckpointResultsByIdentity(checkpoint);
         Set<String> consumedCheckpointKeys = new HashSet<>();
-        for (int index = 0; index < targets.size(); index++) {
-            SearchCollectionTarget target = targets.get(index);
+        ArrayDeque<QueuedCollectionTask> queue = new ArrayDeque<>();
+        LinkedHashSet<String> scheduledCanonicalUrls = new LinkedHashSet<>();
+        Map<String, Integer> discoveredCountByEntry = new LinkedHashMap<>();
+        int nextTargetIndex = 1;
+        int totalDiscoveredLinks = 0;
+
+        for (SearchCollectionTarget target : targets) {
             SourceCandidate candidate = target == null ? null : target.getCandidate();
             if (candidate == null) {
+                continue;
+            }
+            String canonicalUrl = canonicalize(resolveCandidateIdentity(candidate));
+            if (StringUtils.hasText(canonicalUrl) && !scheduledCanonicalUrls.add(canonicalUrl)) {
+                continue;
+            }
+            queue.addLast(new QueuedCollectionTask(candidate, nextTargetIndex++, 0,
+                    StringUtils.hasText(canonicalUrl) ? canonicalUrl : resolveCandidateIdentity(candidate), false));
+        }
+
+        while (!queue.isEmpty()) {
+            QueuedCollectionTask queuedTask = queue.pollFirst();
+            if (queuedTask == null || queuedTask.candidate() == null) {
                 continue;
             }
             CollectionTaskPackage taskPackage = packageBuilder.build(
@@ -82,8 +112,9 @@ public class CollectionExecutionCoordinator {
                     nodeName,
                     planVersionId,
                     competitorName,
-                    candidate,
-                    index + 1
+                    queuedTask.candidate(),
+                    queuedTask.targetIndex(),
+                    queuedTask.discoveryDepth()
             );
             CollectionExecutionResult reusedResult = resolveReusableCheckpointResult(
                     taskPackage,
@@ -91,15 +122,58 @@ public class CollectionExecutionCoordinator {
                     checkpointIdentityMap,
                     consumedCheckpointKeys
             );
+            CollectionExecutionResult executionResult;
             if (reusedResult != null) {
-                results.add(markReused(reusedResult, taskPackage));
+                executionResult = markReused(reusedResult, taskPackage);
+            } else {
+                executionResult = executeTaskPackage(taskPackage);
+            }
+            results.add(executionResult);
+
+            if (!internalLinkDiscoveryProperties.isEnabled()
+                    || executionResult == null
+                    || executionResult.getDiscoveredCandidates() == null
+                    || executionResult.getDiscoveredCandidates().isEmpty()) {
                 continue;
             }
-            try {
-                CollectionExecutor executor = executorRegistry.resolve(taskPackage);
-                results.add(normalize(executor.execute(taskPackage), taskPackage));
-            } catch (IllegalStateException noExecutorMatched) {
-                results.add(buildToolUnavailableResult(taskPackage, noExecutorMatched.getMessage()));
+            if (queuedTask.discoveryDepth() >= Math.max(0, internalLinkDiscoveryProperties.getMaxDepth())) {
+                continue;
+            }
+
+            for (SourceCandidate discoveredCandidate : executionResult.getDiscoveredCandidates()) {
+                if (discoveredCandidate == null || !StringUtils.hasText(discoveredCandidate.getUrl())) {
+                    continue;
+                }
+                if (totalDiscoveredLinks >= Math.max(0, internalLinkDiscoveryProperties.getMaxLinksPerNode())) {
+                    break;
+                }
+                int entryDiscoveredCount = discoveredCountByEntry.getOrDefault(queuedTask.entryKey(), 0);
+                if (entryDiscoveredCount >= Math.max(0, internalLinkDiscoveryProperties.getMaxLinksPerEntry())) {
+                    break;
+                }
+
+                String canonicalUrl = canonicalize(resolveCandidateIdentity(discoveredCandidate));
+                if (StringUtils.hasText(canonicalUrl) && !scheduledCanonicalUrls.add(canonicalUrl)) {
+                    continue;
+                }
+
+                SourceCandidate normalizedChildCandidate = discoveredCandidate.toBuilder()
+                        .sourceFamilyKey(StringUtils.hasText(discoveredCandidate.getSourceFamilyKey())
+                                ? discoveredCandidate.getSourceFamilyKey()
+                                : queuedTask.candidate().getSourceFamilyKey())
+                        .sourceType(StringUtils.hasText(discoveredCandidate.getSourceType())
+                                ? discoveredCandidate.getSourceType()
+                                : queuedTask.candidate().getSourceType())
+                        .build();
+                queue.addLast(new QueuedCollectionTask(
+                        normalizedChildCandidate,
+                        nextTargetIndex++,
+                        queuedTask.discoveryDepth() + 1,
+                        queuedTask.entryKey(),
+                        true
+                ));
+                discoveredCountByEntry.put(queuedTask.entryKey(), entryDiscoveredCount + 1);
+                totalDiscoveredLinks++;
             }
         }
         return buildReport(results);
@@ -268,6 +342,7 @@ public class CollectionExecutionCoordinator {
                     .success(false)
                     .status("FAILED")
                     .resourceLocator(taskPackage.getResourceLocator())
+                    .discoveryDepth(taskPackage.getDiscoveryDepth())
                     .sourceUrls(taskPackage.getSourceUrls() == null ? List.of() : taskPackage.getSourceUrls())
                     .errorMessage("collection executor returned null result")
                     .checkpointSource(null)
@@ -278,12 +353,43 @@ public class CollectionExecutionCoordinator {
         return result.toBuilder()
                 .taskPackageKey(taskPackage.getPackageKey())
                 .targetIndex(taskPackage.getTargetIndex())
+                .resourceLocator(StringUtils.hasText(result.getResourceLocator())
+                        ? result.getResourceLocator()
+                        : taskPackage.getResourceLocator())
+                .discoveryDepth(result.getDiscoveryDepth() == null
+                        ? (taskPackage.getDiscoveryDepth() == null ? 0 : taskPackage.getDiscoveryDepth())
+                        : result.getDiscoveryDepth())
                 .sourceUrls(result.getSourceUrls() == null || result.getSourceUrls().isEmpty()
                         ? (taskPackage.getSourceUrls() == null ? List.of() : taskPackage.getSourceUrls())
                         : result.getSourceUrls())
                 .reusedFromCheckpoint(Boolean.TRUE.equals(result.getReusedFromCheckpoint()))
                 .build()
                 .normalize();
+    }
+
+    /**
+     * 协调器统一兜住 executor 缺失的失败语义，确保递归追加的 child package 也能进入正式 audit/replay。
+     */
+    private CollectionExecutionResult executeTaskPackage(CollectionTaskPackage taskPackage) {
+        try {
+            CollectionExecutor executor = executorRegistry.resolve(taskPackage);
+            return normalize(executor.execute(taskPackage), taskPackage);
+        } catch (IllegalStateException noExecutorMatched) {
+            return buildToolUnavailableResult(taskPackage, noExecutorMatched.getMessage());
+        }
+    }
+
+    private String resolveCandidateIdentity(SourceCandidate candidate) {
+        if (candidate == null) {
+            return null;
+        }
+        if (StringUtils.hasText(candidate.getUrl())) {
+            return candidate.getUrl();
+        }
+        if (candidate.getSourceUrls() == null || candidate.getSourceUrls().isEmpty()) {
+            return null;
+        }
+        return candidate.getSourceUrls().get(0);
     }
 
     /**
@@ -389,5 +495,16 @@ public class CollectionExecutionCoordinator {
         }
         CollectionExecutionResult lastResult = results.get(results.size() - 1);
         return lastResult == null ? null : lastResult.getTaskPackageKey();
+    }
+
+    /**
+     * 递归队列需要把“源自哪个入口页”与“当前是否为内部发现页”分开维护。
+     * entryKey 用于 per-entry 限量，discovered 用于后续进度文案区分入口页与内部发现页。
+     */
+    private record QueuedCollectionTask(SourceCandidate candidate,
+                                        int targetIndex,
+                                        int discoveryDepth,
+                                        String entryKey,
+                                        boolean discovered) {
     }
 }

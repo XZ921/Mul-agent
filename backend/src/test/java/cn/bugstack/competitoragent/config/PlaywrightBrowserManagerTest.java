@@ -199,6 +199,32 @@ class PlaywrightBrowserManagerTest {
     }
 
     @Test
+    void shouldRetrySameLaunchStrategyWhenBrowserLaunchTimesOutOnce() throws Exception {
+        Playwright playwright = mock(Playwright.class);
+        PlaywrightRuntimeFactory runtimeFactory = mock(PlaywrightRuntimeFactory.class);
+        BrowserType chromium = mock(BrowserType.class);
+        Browser browser = mock(Browser.class);
+        Path chromiumExecutable = Files.createFile(tempDir.resolve("chrome-timeout-retry.exe"));
+        PlaywrightConfig.PlaywrightProperties properties = new PlaywrightConfig.PlaywrightProperties();
+        properties.setBrowser("chromium");
+        properties.setHeadless(true);
+        properties.setExecutablePath(chromiumExecutable.toString());
+        properties.setTimeoutMillis(15000);
+
+        when(playwright.chromium()).thenReturn(chromium);
+        when(chromium.launch(any(BrowserType.LaunchOptions.class)))
+                .thenThrow(new RuntimeException("Timeout 15000ms exceeded."))
+                .thenReturn(browser);
+
+        PlaywrightBrowserManager manager = new PlaywrightBrowserManager(playwright, runtimeFactory, properties);
+
+        Browser launchedBrowser = manager.getBrowser();
+
+        assertSame(browser, launchedBrowser);
+        verify(chromium, times(2)).launch(any(BrowserType.LaunchOptions.class));
+    }
+
+    @Test
     void shouldRecreateRuntimeAgainBeforeExecutablePathFallbackAfterRepeatedPipeClosedLaunchFailure() throws Exception {
         Playwright initialPlaywright = mock(Playwright.class);
         Playwright recreatedForPrimaryRetry = mock(Playwright.class);

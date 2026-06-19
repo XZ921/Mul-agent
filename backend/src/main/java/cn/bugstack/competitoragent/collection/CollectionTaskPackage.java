@@ -29,5 +29,10 @@ public class CollectionTaskPackage {
     List<String> expectedBlockTypes;
     List<String> targetFields;
     Integer priority;
+    /**
+     * 发现深度用于区分“入口页采集”和“站内递归采集”。
+     * 入口页固定从 0 开始，子页面每下钻一层加 1，供递归限深与进度文案统一消费。
+     */
+    Integer discoveryDepth;
     List<String> sourceUrls;
 }

@@ -1,6 +1,8 @@
 package cn.bugstack.competitoragent.integration;
 
 import cn.bugstack.competitoragent.agent.collector.CollectorNodeConfig;
+import cn.bugstack.competitoragent.collection.WebPageRenderHint;
+import cn.bugstack.competitoragent.config.CollectorProperties;
 import cn.bugstack.competitoragent.config.PlaywrightBrowserManager;
 import cn.bugstack.competitoragent.config.PlaywrightConfig;
 import cn.bugstack.competitoragent.config.PlaywrightRuntimeFactory;
@@ -12,6 +14,10 @@ import cn.bugstack.competitoragent.search.BrowserSearchRuntimeService;
 import cn.bugstack.competitoragent.search.SearchBrowserProperties;
 import cn.bugstack.competitoragent.search.SearchEngineProperties;
 import cn.bugstack.competitoragent.search.SearchRuntimeFallbackPolicy;
+import cn.bugstack.competitoragent.source.PlaywrightPageCollector;
+import cn.bugstack.competitoragent.source.SourceCollectRequest;
+import cn.bugstack.competitoragent.source.SourceCollector;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
@@ -33,7 +39,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -65,6 +73,8 @@ class PlaywrightAntiBotMockIntegrationTest {
         mockServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         mockServer.createContext("/search", new HtmlHandler(exchange -> ok(buildSearchResultsHtml())));
         mockServer.createContext("/ok-docs", new HtmlHandler(exchange -> ok(buildOkDocsHtml())));
+        mockServer.createContext("/bilibili-docs", new HtmlHandler(exchange -> ok(buildBilibiliDocsHtml())));
+        mockServer.createContext("/douyin-docs", new HtmlHandler(exchange -> ok(buildDouyinDocsHtml())));
         mockServer.createContext("/captcha", new HtmlHandler(exchange -> ok(buildCaptchaHtml())));
         mockServer.createContext("/deny", new HtmlHandler(exchange -> html(403, buildDenyHtml())));
         mockServer.createContext("/login-redirect", exchange -> {
@@ -153,6 +163,48 @@ class PlaywrightAntiBotMockIntegrationTest {
         assertTrue(manager.restartBrowserCount() > 0);
     }
 
+    @Test
+    void shouldCollectBilibiliAndDouyinFullRenderPagesConcurrentlyWithSharedBrowser() throws Exception {
+        LocalRealBrowserFixture fixture = openRealBrowserFixture(serverBaseUrl + "/search");
+        try {
+            PlaywrightPageCollector collector = new PlaywrightPageCollector(
+                    fixture.manager(),
+                    collectorProperties(),
+                    new SearchRuntimeFallbackPolicy(browserProperties("bing")),
+                    new BrowserFailureClassifier(),
+                    new AntiBotSignalDetector(browserProperties("bing")),
+                    new BrowserRuntimeDiagnosticLogger(new ObjectMapper())
+            );
+
+            CompletableFuture<SourceCollector.CollectedPage> bilibiliFuture = CompletableFuture.supplyAsync(() ->
+                    collector.collect(fullRenderRequest(
+                            serverBaseUrl + "/bilibili-docs",
+                            "哔哩哔哩",
+                            "https://open.bilibili.com/doc/"
+                    )));
+            CompletableFuture<SourceCollector.CollectedPage> douyinFuture = CompletableFuture.supplyAsync(() ->
+                    collector.collect(fullRenderRequest(
+                            serverBaseUrl + "/douyin-docs",
+                            "抖音",
+                            "https://open.douyin.com/docs/"
+                    )));
+
+            SourceCollector.CollectedPage bilibiliPage = bilibiliFuture.get(30, TimeUnit.SECONDS);
+            SourceCollector.CollectedPage douyinPage = douyinFuture.get(30, TimeUnit.SECONDS);
+
+            assertTrue(bilibiliPage.isSuccess(), bilibiliPage.getErrorMessage());
+            assertTrue(douyinPage.isSuccess(), douyinPage.getErrorMessage());
+            assertTrue(bilibiliPage.getContent().contains("Bilibili open platform"));
+            assertTrue(douyinPage.getContent().contains("Douyin open platform"));
+            assertMetadataSourceUrl(bilibiliPage, "https://open.bilibili.com/doc/");
+            assertMetadataSourceUrl(douyinPage, "https://open.douyin.com/docs/");
+            assertEquals(0, fixture.manager().restartBrowserCount());
+            assertEquals(0, fixture.manager().recreateRuntimeCount());
+        } finally {
+            fixture.close();
+        }
+    }
+
     /**
      * 真实浏览器场景需要和本地 mock server 一起跑。
      * 这里统一组装 Playwright runtime、浏览器管理器和搜索服务，避免每条测试各自拼装导致配置漂移。
@@ -209,6 +261,34 @@ class PlaywrightAntiBotMockIntegrationTest {
         properties.setMinimumPrimaryResultCount(1);
         properties.setSuspectBlockedBodyThreshold(40);
         return properties;
+    }
+
+    private CollectorProperties collectorProperties() {
+        CollectorProperties properties = new CollectorProperties();
+        properties.setPageTimeoutSeconds(8);
+        return properties;
+    }
+
+    /**
+     * 并发采集冒烟必须强制走 FULL_RENDER，避免 HTTP-first 路径绕开真实 Playwright。
+     * sourceUrls 则显式模拟上游搜索/规划结果，验证采集 metadata 不丢可追溯来源。
+     */
+    private SourceCollectRequest fullRenderRequest(String url, String competitorName, String sourceUrl) {
+        return SourceCollectRequest.builder()
+                .url(url)
+                .competitorName(competitorName)
+                .sourceType("DOCS")
+                .renderHint(WebPageRenderHint.FULL_RENDER)
+                .expectedBlockTypes(List.of("DOCUMENTATION_OUTLINE", "JSON_LD_METADATA"))
+                .sourceUrls(List.of(sourceUrl))
+                .build();
+    }
+
+    private void assertMetadataSourceUrl(SourceCollector.CollectedPage page, String expectedSourceUrl) throws Exception {
+        JsonNode metadata = new ObjectMapper().readTree(page.getMetadata());
+        assertTrue(metadata.path("sourceUrls").isArray());
+        assertEquals(expectedSourceUrl, metadata.path("sourceUrls").get(0).asText());
+        assertTrue(metadata.path("qualitySignals").toString().contains("MAIN_CONTENT_READY"));
     }
 
     /**
@@ -289,6 +369,72 @@ class PlaywrightAntiBotMockIntegrationTest {
                           The guide also covers API access, change management, onboarding plans,
                           rollout checklists, and reference examples so analysts can trace product
                           capabilities back to stable source pages instead of marketing summaries.
+                        </p>
+                      </article>
+                    </main>
+                  </body>
+                </html>
+                """;
+    }
+
+    private static String buildBilibiliDocsHtml() {
+        return """
+                <html>
+                  <head>
+                    <title>Bilibili Open Platform Docs</title>
+                    <script type="application/ld+json">
+                      {"@type":"TechArticle","name":"Bilibili Open Platform"}
+                    </script>
+                  </head>
+                  <body>
+                    <main>
+                      <article class="docs-content">
+                        <h1>Bilibili open platform documentation</h1>
+                        <nav class="docs-outline">
+                          <a href="/auth">Account authorization</a>
+                          <a href="/sdk">SDK integration</a>
+                        </nav>
+                        <p>
+                          Bilibili open platform documentation explains account authorization, content API access,
+                          client SDK setup, callback verification, application review, and operational guidance
+                          for teams building integrations that require traceable product capability evidence.
+                        </p>
+                        <p>
+                          The page includes stable source material for collectors, analysts, and report writers
+                          to compare developer ecosystem coverage without relying on generated summaries alone.
+                        </p>
+                      </article>
+                    </main>
+                  </body>
+                </html>
+                """;
+    }
+
+    private static String buildDouyinDocsHtml() {
+        return """
+                <html>
+                  <head>
+                    <title>Douyin Open Platform Docs</title>
+                    <script type="application/ld+json">
+                      {"@type":"TechArticle","name":"Douyin Open Platform"}
+                    </script>
+                  </head>
+                  <body>
+                    <main>
+                      <article class="docs-content">
+                        <h1>Douyin open platform documentation</h1>
+                        <nav class="docs-outline">
+                          <a href="/guide">Developer guide</a>
+                          <a href="/data">Data capability</a>
+                        </nav>
+                        <p>
+                          Douyin open platform documentation covers mini app onboarding, account authorization,
+                          data capability access, webhook callbacks, security review requirements, and SDK
+                          integration steps that help product teams validate available developer surfaces.
+                        </p>
+                        <p>
+                          The content is intentionally rich enough for browser extraction, quality scoring,
+                          source URL persistence, and downstream evidence audit checks during concurrent smoke tests.
                         </p>
                       </article>
                     </main>

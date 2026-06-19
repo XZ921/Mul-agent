@@ -249,6 +249,16 @@ public class PlaywrightPageCollector implements SourceCollector {
      * 浏览器路径统一消费 request，保证 FULL_RENDER 相关的执行提示都不会丢。
      */
     private CollectedPage collectByBrowser(SourceCollectRequest request, String fallbackReason) {
+        synchronized (browserManager) {
+            return collectByBrowserLocked(request, fallbackReason);
+        }
+    }
+
+    /**
+     * Playwright Java API 不是线程安全的。
+     * 这里把一次完整的页面采集放在浏览器管理器的独占执行区里，避免和搜索补源线程并发操作同一个 Browser。
+     */
+    private CollectedPage collectByBrowserLocked(SourceCollectRequest request, String fallbackReason) {
         String url = request.getUrl();
         String competitorName = request.getCompetitorName();
         String sourceType = request.getSourceType();
@@ -277,7 +287,7 @@ public class PlaywrightPageCollector implements SourceCollector {
                 log.warn("检测到 Playwright 浏览器疑似失活，准备自动重启后重试: url={}, error={}",
                         UrlSecurityUtils.maskForLog(url), e.getMessage());
                 browserManager.restartBrowserIfCurrent(browser, "page collect failure: " + e.getMessage());
-                return retryCollectByBrowser(request, fallbackReason, e);
+                return retryCollectByBrowserLocked(request, fallbackReason, e);
             }
             log.error("页面采集失败: url={}, error={}", UrlSecurityUtils.maskForLog(url), e.getMessage());
             String failureCode = resolveFailureCode(decision, e);
@@ -291,6 +301,14 @@ public class PlaywrightPageCollector implements SourceCollector {
     private CollectedPage retryCollectByBrowser(SourceCollectRequest request,
                                                 String fallbackReason,
                                                 Exception originalException) {
+        synchronized (browserManager) {
+            return retryCollectByBrowserLocked(request, fallbackReason, originalException);
+        }
+    }
+
+    private CollectedPage retryCollectByBrowserLocked(SourceCollectRequest request,
+                                                      String fallbackReason,
+                                                      Exception originalException) {
         String url = request.getUrl();
         String competitorName = request.getCompetitorName();
         String sourceType = request.getSourceType();

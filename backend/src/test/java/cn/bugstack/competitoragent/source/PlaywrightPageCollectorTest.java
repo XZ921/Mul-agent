@@ -18,6 +18,7 @@ import org.mockito.ArgumentCaptor;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -379,5 +380,62 @@ class PlaywrightPageCollectorTest {
         verify(batchCollector, times(1)).collect("https://example.com/challenge-a", "Notion AI", "DOCS");
         verify(batchCollector, times(1)).collect("https://example.com/challenge-b", "Notion AI", "DOCS");
         verify(batchCollector, never()).collect("https://example.com/docs", "Notion AI", "DOCS");
+    }
+
+    @Test
+    void shouldAccessPlaywrightBrowserUnderManagerMonitorDuringCollection() {
+        PlaywrightBrowserManager lockedBrowserManager = mock(PlaywrightBrowserManager.class);
+        PlaywrightPageCollector lockedCollector = new PlaywrightPageCollector(
+                lockedBrowserManager,
+                collectorProperties,
+                fallbackPolicy,
+                browserFailureClassifier,
+                antiBotSignalDetector,
+                diagnosticLogger
+        );
+        Browser browser = mock(Browser.class);
+        Page page = mock(Page.class);
+        AtomicBoolean heldMonitorWhenCreatingPage = new AtomicBoolean(false);
+
+        when(lockedBrowserManager.getBrowser()).thenReturn(browser);
+        when(browser.newPage()).thenAnswer(invocation -> {
+            heldMonitorWhenCreatingPage.set(Thread.holdsLock(lockedBrowserManager));
+            return page;
+        });
+        when(page.title()).thenReturn("Pricing");
+        when(page.url()).thenReturn("https://example.com/pricing");
+        when(page.content()).thenReturn("""
+                <html>
+                  <body>
+                    <main>
+                      <section class="pricing-card">Pro 199 / month</section>
+                    </main>
+                  </body>
+                </html>
+                """);
+        when(page.evaluate(anyString())).thenReturn(List.of(
+                Map.of(
+                        "selector", "main",
+                        "tagName", "MAIN",
+                        "className", "pricing-card",
+                        "idName", "main-content",
+                        "text", """
+                                Acme AI pricing explains plan tiers, seat limits, enterprise support,
+                                rollout guidance, and API onboarding details for evaluation teams.
+                                """,
+                        "linkTextLength", 8
+                )
+        ));
+
+        SourceCollector.CollectedPage collectedPage = lockedCollector.collect(SourceCollectRequest.builder()
+                .url("https://example.com/pricing")
+                .competitorName("Notion AI")
+                .sourceType("PRICING")
+                .renderHint(WebPageRenderHint.FULL_RENDER)
+                .sourceUrls(List.of("https://example.com/pricing"))
+                .build());
+
+        assertTrue(collectedPage.isSuccess());
+        assertTrue(heldMonitorWhenCreatingPage.get());
     }
 }

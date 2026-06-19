@@ -45,6 +45,44 @@ class SourceCandidateRankerTest {
     }
 
     @Test
+    void shouldTreatSingularDocPathAsHighValueDocsEntry() {
+        List<SourceCandidate> ranked = ranker.rankAndDeduplicate(List.of(
+                SourceCandidate.builder()
+                        .url("https://open.bilibili.com")
+                        .title("哔哩哔哩开放平台")
+                        .sourceType("DOCS")
+                        .discoveryMethod("DOMAIN_DISCOVERY_LLM")
+                        .relevanceScore(0.94)
+                        .freshnessScore(0.60)
+                        .qualityScore(0.94)
+                        .build(),
+                SourceCandidate.builder()
+                        .url("https://open.bilibili.com/wiki/")
+                        .title("哔哩哔哩旧文档入口")
+                        .sourceType("DOCS")
+                        .discoveryMethod("DOMAIN_DISCOVERY_LLM")
+                        .relevanceScore(0.94)
+                        .freshnessScore(0.60)
+                        .qualityScore(0.94)
+                        .build(),
+                SourceCandidate.builder()
+                        .url("https://open.bilibili.com/doc/")
+                        .title("哔哩哔哩开放平台文档")
+                        .sourceType("DOCS")
+                        .discoveryMethod("DOMAIN_DISCOVERY_LLM")
+                        .relevanceScore(0.90)
+                        .freshnessScore(0.60)
+                        .qualityScore(0.90)
+                        .build()
+        ));
+
+        SourceCandidate firstCandidate = ranked.get(0);
+
+        assertEquals("https://open.bilibili.com/doc/", firstCandidate.getUrl());
+        assertTrue(firstCandidate.getQualitySignals().contains("DOCS_HIGH_VALUE_PATH"));
+    }
+
+    @Test
     void shouldDemoteUtilityPagesEvenWhenRawScoresLookHigh() {
         // 这里先把“登录页、招聘页不应因为原始分高就排到前面”固化成红灯，
         // 后续实现时需要在排序器里补充页面价值识别与淘汰原因。

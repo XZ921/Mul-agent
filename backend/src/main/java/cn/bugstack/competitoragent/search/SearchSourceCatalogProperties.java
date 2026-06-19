@@ -12,22 +12,22 @@ import java.util.Map;
 /**
  * 数据源家族目录配置。
  * <p>
- * 这里描述的是“要采什么业务来源”，而不是“具体由哪个 provider 调用哪个接口”。
- * 首轮先固化 official / news / github 三类家族的正式配置骨架，
- * 让后续主采集链路与公网补源链路有稳定的语义落点。
+ * 这里描述的是“要采什么业务来源”，而不是“具体由哪个 provider 调哪个接口”。
+ * 当前阶段先把 official / news / github 三类家族显式建模，保证 preview、runtime、audit
+ * 都能复用同一套 source family 语义。
  */
 @Data
 public class SearchSourceCatalogProperties {
 
     /**
      * 数据源家族配置集合。
-     * key 使用稳定的小写家族标识，便于配置文件、审计对象与前端展示共用同一套名字。
+     * key 使用稳定的小写家族标识，方便配置文件、审计对象与前端展示共用同一套名字。
      */
     private Map<String, SourceFamilyProperties> families = createDefaultFamilies();
 
     /**
      * 按家族标识解析配置。
-     * 统一做大小写与空白标准化，避免后续消费方各自处理字符串细节。
+     * 统一处理大小写与空白，避免调用方各自散落字符串清洗逻辑。
      */
     public SourceFamilyProperties resolveFamily(String familyKey) {
         if (!StringUtils.hasText(familyKey)) {
@@ -66,6 +66,10 @@ public class SearchSourceCatalogProperties {
                 "DOCUMENTATION_OUTLINE",
                 "JSON_LD_METADATA"
         ));
+        family.setDirectPathTemplates(List.of("/", "/pricing", "/docs", "/documentation", "/help"));
+        family.setDirectSubdomainTemplates(List.of("docs.{domain}", "developer.{domain}", "open.{domain}", "help.{domain}"));
+        family.setStableLocatorHosts(List.of());
+        family.setStableLocatorSchemes(List.of("https"));
         return family;
     }
 
@@ -81,8 +85,8 @@ public class SearchSourceCatalogProperties {
                 List.of("search-news-primary", "search-news-secondary")
         );
         /**
-         * news 家族在这一轮显式收敛为“RSS 正式采集 + 公网搜索发现辅助”。
-         * 普通新闻文章 URL 继续走网页采集主链路，News API 不再作为当前 wave 的正式 owner。
+         * news 家族当前的正式语义是“RSS 正式采集 + public search 辅助发现”。
+         * 普通新闻正文 URL 仍走网页采集主链路，不把 News API 当作当前波次的正式 owner。
          */
         family.getToolProviderKeys().put("RSS", "rss");
         family.getToolProviderKeys().put("PUBLIC_SEARCH", "qianfan");
@@ -103,13 +107,16 @@ public class SearchSourceCatalogProperties {
                 List.of("search-github-repository", "search-github-release")
         );
         /**
-         * 第四轮开始显式绑定 GitHub 家族的工具与 provider 身份。
-         * 这样 discovery 路由与 collection 路由都能基于同一份家族语义做判断。
+         * GitHub 家族显式绑定正式 owner 与 provider 语义。
+         * 这样 discovery 路由与 collection 路由都能基于同一份家族配置判断是否进入 API 路径。
          */
         family.getToolProviderKeys().put("GITHUB_API", "github");
         family.getToolProviderKeys().put("PUBLIC_SEARCH", "qianfan");
         family.setPreferredWebRenderHint("FULL_RENDER");
         family.setExpectedBlockTypes(List.of("RELEASE_NOTES", "JSON_LD_METADATA"));
+        family.setDirectPathTemplates(List.of());
+        family.setStableLocatorHosts(List.of("github.com"));
+        family.setStableLocatorSchemes(List.of("https", "github"));
         return family;
     }
 
@@ -134,9 +141,29 @@ public class SearchSourceCatalogProperties {
         private String preferredWebRenderHint;
         private List<String> expectedBlockTypes = new ArrayList<>();
         /**
+         * source family 级别的稳定直达路径模板。
+         * 这里只声明命中根域后可以稳定展开的入口，不承担站点爬虫规则职责。
+         */
+        private List<String> directPathTemplates = new ArrayList<>();
+        /**
+         * source family 级别的稳定直达子域模板。
+         * 这里只声明命中根域后可以稳定展开的入口，不承担站点爬虫规则职责。
+         */
+        private List<String> directSubdomainTemplates = new ArrayList<>();
+        /**
+         * 稳定 locator 允许的宿主集合。
+         * 为空表示不限制具体 host，只要求 host 本身存在。
+         */
+        private List<String> stableLocatorHosts = new ArrayList<>();
+        /**
+         * 稳定 locator 允许的 scheme 集合。
+         * 例如 official 只接受 https，github 同时接受 https 与 github locator。
+         */
+        private List<String> stableLocatorSchemes = new ArrayList<>();
+        /**
          * 工具到 provider key 的可选绑定。
          * Source Family Catalog 只声明业务家族与工具语义；
-         * 真实 provider 是否启用、是否 fail-open，继续由 SearchProviderProperties 管理。
+         * 真实 provider 是否启用、是否 fail-open，仍由 SearchProviderProperties 管理。
          */
         private Map<String, String> toolProviderKeys = new LinkedHashMap<>();
 
@@ -163,7 +190,7 @@ public class SearchSourceCatalogProperties {
 
         /**
          * 根据主辅角色解析当前家族绑定到哪些 provider key。
-         * 本轮只建立配置字段和解析语义，不要求这些 provider 一定有真实实现。
+         * 当前波次只要求配置字段和解析语义稳定，不要求这些 provider 一定全部有真实实现。
          */
         public List<String> resolveProviderKeys(SearchProviderRole role) {
             List<String> toolKeys = role == SearchProviderRole.PRIMARY_VERTICAL ? primaryTools : auxiliaryTools;
@@ -178,7 +205,7 @@ public class SearchSourceCatalogProperties {
 
         /**
          * 统一解析网页采集提示。
-         * 当配置缺失时安全回退为 LIGHTWEIGHT，避免调用方继续散落默认值。
+         * 配置缺失时安全回退为 LIGHTWEIGHT，避免调用方继续散落默认值。
          */
         public String resolvePreferredWebRenderHint() {
             return StringUtils.hasText(preferredWebRenderHint)

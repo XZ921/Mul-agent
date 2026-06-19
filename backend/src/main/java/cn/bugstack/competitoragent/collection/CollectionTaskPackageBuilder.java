@@ -36,6 +36,21 @@ public class CollectionTaskPackageBuilder {
                                        String competitorName,
                                        SourceCandidate candidate,
                                        int priority) {
+        return build(taskId, nodeName, planVersionId, competitorName, candidate, priority, 0);
+    }
+
+    /**
+     * 递归采集场景需要显式透传 discoveryDepth。
+     * 这样执行器、协调器与 CollectorAgent 才能共享统一的“入口页/内部发现页”语义，
+     * 避免各层各自重新推断当前页面来自第几层发现。
+     */
+    public CollectionTaskPackage build(Long taskId,
+                                       String nodeName,
+                                       Long planVersionId,
+                                       String competitorName,
+                                       SourceCandidate candidate,
+                                       int priority,
+                                       int discoveryDepth) {
         String sourceFamilyKey = candidate == null ? null : candidate.getSourceFamilyKey();
         String sourceType = candidate == null ? null : candidate.getSourceType();
         String url = candidate == null ? null : candidate.getUrl();
@@ -57,6 +72,7 @@ public class CollectionTaskPackageBuilder {
                 .expectedBlockTypes(searchPolicyResolver.resolveExpectedBlockTypes(sourceFamilyKey, sourceType))
                 .targetFields(List.of())
                 .priority(priority)
+                .discoveryDepth(Math.max(0, discoveryDepth))
                 .sourceUrls(resolveSourceUrls(candidate, url))
                 .build();
     }

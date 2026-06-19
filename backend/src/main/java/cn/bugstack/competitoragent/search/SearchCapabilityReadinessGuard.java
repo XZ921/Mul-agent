@@ -1,11 +1,13 @@
 package cn.bugstack.competitoragent.search;
 
+import cn.bugstack.competitoragent.llm.LlmClient;
 import cn.bugstack.competitoragent.security.UrlSecurityUtils;
 import cn.bugstack.competitoragent.source.GithubApiProperties;
 import cn.bugstack.competitoragent.source.SearchProviderProperties;
 import lombok.Builder;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
@@ -40,19 +42,28 @@ public class SearchCapabilityReadinessGuard implements ApplicationRunner {
     private final GithubApiProperties githubApiProperties;
     private final SerpApiProperties serpApiProperties;
     private final QianfanSearchProperties qianfanSearchProperties;
+    private final DomainDiscoveryProperties domainDiscoveryProperties;
+    private final SitemapDiscoveryProperties sitemapDiscoveryProperties;
+    private final ObjectProvider<LlmClient> llmClientProvider;
 
     public SearchCapabilityReadinessGuard(SearchProperties searchProperties,
                                           SearchProviderProperties searchProviderProperties,
                                           SearchBrowserProperties searchBrowserProperties,
                                           GithubApiProperties githubApiProperties,
                                           SerpApiProperties serpApiProperties,
-                                          QianfanSearchProperties qianfanSearchProperties) {
+                                          QianfanSearchProperties qianfanSearchProperties,
+                                          DomainDiscoveryProperties domainDiscoveryProperties,
+                                          SitemapDiscoveryProperties sitemapDiscoveryProperties,
+                                          ObjectProvider<LlmClient> llmClientProvider) {
         this.searchProperties = searchProperties;
         this.searchProviderProperties = searchProviderProperties;
         this.searchBrowserProperties = searchBrowserProperties;
         this.githubApiProperties = githubApiProperties;
         this.serpApiProperties = serpApiProperties;
         this.qianfanSearchProperties = qianfanSearchProperties;
+        this.domainDiscoveryProperties = domainDiscoveryProperties;
+        this.sitemapDiscoveryProperties = sitemapDiscoveryProperties;
+        this.llmClientProvider = llmClientProvider;
     }
 
     @Override
@@ -108,6 +119,22 @@ public class SearchCapabilityReadinessGuard implements ApplicationRunner {
                         && searchProviderProperties.isBrowserPreviewEnabled())
                 .runtimeBrowserEnabled(searchBrowserProperties != null && searchBrowserProperties.isEnabled())
                 .runtimeBrowserEngine(searchBrowserProperties == null ? null : searchBrowserProperties.getEngine())
+                .domainDiscoveryLlmEnabled(domainDiscoveryProperties != null && domainDiscoveryProperties.isLlmEnabled())
+                .domainDiscoveryLlmAvailable(isDomainDiscoveryLlmAvailable())
+                .domainDiscoveryLlmUnavailableReason(resolveDomainDiscoveryLlmReason())
+                .domainDiscoveryVerificationTimeoutMillis(domainDiscoveryProperties == null
+                        ? 0
+                        : domainDiscoveryProperties.getVerificationTimeoutMillis())
+                .domainDiscoveryMaxRetries(domainDiscoveryProperties == null ? 0 : domainDiscoveryProperties.getMaxRetries())
+                .sitemapDiscoveryEnabled(sitemapDiscoveryProperties != null && sitemapDiscoveryProperties.isEnabled())
+                .sitemapTimeoutMillis(sitemapDiscoveryProperties == null ? 0 : sitemapDiscoveryProperties.getTimeoutMillis())
+                .sitemapMaxSitemapsPerDomain(sitemapDiscoveryProperties == null
+                        ? 0
+                        : sitemapDiscoveryProperties.getMaxSitemapsPerDomain())
+                .sitemapMaxUrlsPerSitemap(sitemapDiscoveryProperties == null
+                        ? 0
+                        : sitemapDiscoveryProperties.getMaxUrlsPerSitemap())
+                .sitemapReadinessWarning(resolveSitemapReadinessWarning())
                 .build();
     }
 
@@ -209,6 +236,55 @@ public class SearchCapabilityReadinessGuard implements ApplicationRunner {
         return routeProperties.getEnabled();
     }
 
+    private boolean isDomainDiscoveryLlmAvailable() {
+        return llmClientProvider != null && llmClientProvider.getIfAvailable() != null;
+    }
+
+    /**
+     * 域名发现属于辅助能力，只做摘要提示，不做启动 hard fail。
+     */
+    private String resolveDomainDiscoveryLlmReason() {
+        if (domainDiscoveryProperties == null) {
+            return "domain discovery properties unavailable";
+        }
+        if (!domainDiscoveryProperties.isLlmEnabled()) {
+            return "domain discovery llm disabled";
+        }
+        if (!isDomainDiscoveryLlmAvailable()) {
+            return "llm client unavailable";
+        }
+        if (domainDiscoveryProperties.getVerificationTimeoutMillis() <= 0) {
+            return "verification timeout invalid";
+        }
+        if (domainDiscoveryProperties.getMaxRetries() < 0) {
+            return "max retries invalid";
+        }
+        return null;
+    }
+
+    /**
+     * sitemap/robots 发现属于辅助能力，只输出配置健康度摘要，不作为启动 hard fail 条件。
+     */
+    private String resolveSitemapReadinessWarning() {
+        if (sitemapDiscoveryProperties == null) {
+            return "sitemap discovery properties unavailable";
+        }
+        List<String> warnings = new java.util.ArrayList<>();
+        if (sitemapDiscoveryProperties.getTimeoutMillis() <= 0) {
+            warnings.add("timeout invalid");
+        }
+        if (sitemapDiscoveryProperties.getMaxSitemapsPerDomain() <= 0) {
+            warnings.add("max sitemaps per domain invalid");
+        }
+        if (sitemapDiscoveryProperties.getMaxUrlsPerSitemap() <= 0) {
+            warnings.add("max urls per sitemap invalid");
+        }
+        if (sitemapDiscoveryProperties.getMaxRetries() < 0) {
+            warnings.add("max retries invalid");
+        }
+        return warnings.isEmpty() ? null : String.join("; ", warnings);
+    }
+
     @Value
     @Builder
     static class ReadinessSummary {
@@ -220,6 +296,16 @@ public class SearchCapabilityReadinessGuard implements ApplicationRunner {
         boolean browserPreviewFeatureEnabled;
         boolean runtimeBrowserEnabled;
         String runtimeBrowserEngine;
+        boolean domainDiscoveryLlmEnabled;
+        boolean domainDiscoveryLlmAvailable;
+        String domainDiscoveryLlmUnavailableReason;
+        int domainDiscoveryVerificationTimeoutMillis;
+        int domainDiscoveryMaxRetries;
+        boolean sitemapDiscoveryEnabled;
+        int sitemapTimeoutMillis;
+        int sitemapMaxSitemapsPerDomain;
+        int sitemapMaxUrlsPerSitemap;
+        String sitemapReadinessWarning;
 
         boolean isAnyPlanningProviderAvailable() {
             return providers != null && providers.values().stream().anyMatch(ProviderReadiness::isAvailable);

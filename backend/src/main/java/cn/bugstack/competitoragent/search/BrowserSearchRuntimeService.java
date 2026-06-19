@@ -133,21 +133,6 @@ public class BrowserSearchRuntimeService {
                     .build();
         }
 
-        Browser browser = browserManager.getBrowser();
-        if (browser == null) {
-            String summary = fallbackPolicy.buildSearchFallbackSummary("browser_unavailable",
-                    "请检查 Playwright 浏览器依赖、系统内存或稍后重试");
-            return BrowserSearchRuntimeResult.builder()
-                    .candidates(List.of())
-                    .executedQueries(List.of())
-                    .searchEngine(getSearchEngineName())
-                    .summary(summary)
-                    .fallbackSuggested(fallbackPolicy.shouldContinueOnBrowserUnavailable(config.getSearchRuntimePolicy()))
-                    .blockedReason("browser_unavailable")
-                    .browserTraceId(null)
-                    .build();
-        }
-
         List<String> queries = resolveQueries(config);
         if (queries.isEmpty()) {
             return BrowserSearchRuntimeResult.builder()
@@ -241,37 +226,40 @@ public class BrowserSearchRuntimeService {
             for (int attempt = 1; attempt <= attempts; attempt++) {
                 Browser runtimeBrowser = null;
                 try {
-                    runtimeBrowser = browserManager.getBrowser();
-                    if (runtimeBrowser == null) {
-                        BrowserDiagnosticSnapshot diagnostic = diagnosticSnapshot(
-                                "BROWSER_UNAVAILABLE",
-                                "NONE",
-                                "HTTP_FALLBACK",
-                                "browser_unavailable",
-                                List.of()
-                        );
-                        logSearchDiagnostic("search_browser_unavailable",
+                    SearchAttemptResult result;
+                    synchronized (browserManager) {
+                        runtimeBrowser = browserManager.getBrowser();
+                        if (runtimeBrowser == null) {
+                            BrowserDiagnosticSnapshot diagnostic = diagnosticSnapshot(
+                                    "BROWSER_UNAVAILABLE",
+                                    "NONE",
+                                    "HTTP_FALLBACK",
+                                    "browser_unavailable",
+                                    List.of()
+                            );
+                            logSearchDiagnostic("search_browser_unavailable",
+                                    config,
+                                    query,
+                                    buildSearchUrl(engineKey, query),
+                                    engineKey,
+                                    diagnostic);
+                            return new SearchAttemptResult(List.of(), diagnosticSnapshot(
+                                    "BROWSER_UNAVAILABLE",
+                                    "NONE",
+                                    "HTTP_FALLBACK",
+                                    "browser_unavailable",
+                                    List.of()
+                            ));
+                        }
+                        result = searchOnce(
+                                runtimeBrowser,
                                 config,
                                 query,
-                                buildSearchUrl(engineKey, query),
-                                engineKey,
-                                diagnostic);
-                        return new SearchAttemptResult(List.of(), diagnosticSnapshot(
-                                "BROWSER_UNAVAILABLE",
-                                "NONE",
-                                "HTTP_FALLBACK",
-                                "browser_unavailable",
-                                List.of()
-                        ));
+                                browserTraceId,
+                                openedResultPages,
+                                engineKey
+                        );
                     }
-                    SearchAttemptResult result = searchOnce(
-                            runtimeBrowser,
-                            config,
-                            query,
-                            browserTraceId,
-                            openedResultPages,
-                            engineKey
-                    );
                     if (result.diagnostic() != null && result.diagnostic().blockedReason() != null) {
                         browserDiagnosticSnapshot = result.diagnostic();
                         if ("ANTI_BOT_BLOCKED".equals(result.diagnostic().failureKind())) {
@@ -301,17 +289,19 @@ public class BrowserSearchRuntimeService {
                      * 如果直接重启共享浏览器，会把其他并发中的搜索线程和页面采集线程一起打断，
                      * 形成连锁报错。只有明确识别为浏览器实例失活时，才允许重启共享浏览器。
                      */
-                    if (decision.recreateRuntime()) {
-                        browserManager.recreateRuntimeForFailure(
-                                "browser runtime search failed: " + e.getMessage(),
-                                e
-                        );
-                    }
-                    if (decision.restartSharedBrowser()) {
-                        browserManager.restartBrowserIfCurrent(
-                                runtimeBrowser,
-                                "browser runtime search failed: " + e.getMessage()
-                        );
+                    synchronized (browserManager) {
+                        if (decision.recreateRuntime()) {
+                            browserManager.recreateRuntimeForFailure(
+                                    "browser runtime search failed: " + e.getMessage(),
+                                    e
+                            );
+                        }
+                        if (decision.restartSharedBrowser()) {
+                            browserManager.restartBrowserIfCurrent(
+                                    runtimeBrowser,
+                                    "browser runtime search failed: " + e.getMessage()
+                            );
+                        }
                     }
                 }
             }

@@ -291,9 +291,9 @@ public class ModelGateway implements LlmClient, EmbeddingClient, RerankClient {
         return "统一网关调用失败，备用 Provider 也未成功" + suffix;
     }
 
-    private AuditEvent.AuditEventBuilder baseAuditEvent(ModelInvocationContextHolder.ModelInvocationContext invocationContext,
-                                                        AiCapability capability,
-                                                        String providerKey) {
+    private AIAuditLogger.AuditEvent.AuditEventBuilder baseAuditEvent(ModelInvocationContextHolder.ModelInvocationContext invocationContext,
+                                                                      AiCapability capability,
+                                                                      String providerKey) {
         return AuditEvent.builder()
                 .taskId(invocationContext == null ? null : invocationContext.taskId())
                 .nodeName(invocationContext == null ? null : invocationContext.nodeName())

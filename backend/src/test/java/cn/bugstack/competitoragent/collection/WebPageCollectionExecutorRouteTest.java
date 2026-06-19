@@ -50,6 +50,41 @@ class WebPageCollectionExecutorRouteTest {
     }
 
     @Test
+    void shouldAttachDiscoveredCandidatesWhenCollectedContentContainsInternalDocsLinks() {
+        JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(jinaReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(true)
+                .title("Open Docs")
+                .mainContent("""
+                        [账户授权](/open/doc/auth)
+                        [外部帮助](https://outside.example.net/help)
+                        """)
+                .qualityScore(0.92D)
+                .qualitySignals(List.of("LIGHTWEIGHT_CONTENT_READY"))
+                .build());
+
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(jinaReaderClient, sourceCollector);
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("JINA_READER")
+                .renderHint(WebPageRenderHint.LIGHTWEIGHT)
+                .url("https://docs.example.com/open/doc")
+                .resourceLocator("https://docs.example.com/open/doc")
+                .sourceType("DOCS")
+                .sourceUrls(List.of("https://docs.example.com/open/doc"))
+                .build());
+
+        assertThat(readListAccessor(result, "discoveredCandidates")).hasSize(1);
+        Object discoveredCandidate = readListAccessor(result, "discoveredCandidates").get(0);
+        assertThat(readStringAccessor(discoveredCandidate, "url"))
+                .isEqualTo("https://docs.example.com/open/doc/auth");
+        assertThat(readStringAccessor(discoveredCandidate, "discoveryMethod"))
+                .isEqualTo("INTERNAL_LINK_DISCOVERY");
+        assertThat(readListAccessor(discoveredCandidate, "sourceUrls"))
+                .contains("https://docs.example.com/open/doc", "https://docs.example.com/open/doc/auth");
+    }
+
+    @Test
     void shouldFallbackToPlaywrightWhenJinaReaderReturnsThinContent() {
         JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
         SourceCollector sourceCollector = mock(SourceCollector.class);
@@ -110,5 +145,34 @@ class WebPageCollectionExecutorRouteTest {
                 .contains("PRICING_BLOCK", "DOCUMENTATION_OUTLINE");
         assertThat(result.getDurationMillis()).isEqualTo(120L);
         verify(sourceCollector).collect(any(SourceCollectRequest.class));
+    }
+
+    private Object readAccessor(Object target, String fieldName) {
+        if (target == null) {
+            return null;
+        }
+        try {
+            String suffix = Character.toUpperCase(fieldName.charAt(0)) + fieldName.substring(1);
+            try {
+                return target.getClass().getMethod("get" + suffix).invoke(target);
+            } catch (NoSuchMethodException ignored) {
+                java.lang.reflect.Field field = target.getClass().getDeclaredField(fieldName);
+                field.setAccessible(true);
+                return field.get(target);
+            }
+        } catch (Exception exception) {
+            throw new IllegalStateException("read accessor failed: " + target.getClass().getSimpleName() + "." + fieldName, exception);
+        }
+    }
+
+    private String readStringAccessor(Object target, String fieldName) {
+        Object value = readAccessor(target, fieldName);
+        return value == null ? null : String.valueOf(value);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Object> readListAccessor(Object target, String fieldName) {
+        Object value = readAccessor(target, fieldName);
+        return value instanceof List<?> list ? (List<Object>) list : List.of();
     }
 }

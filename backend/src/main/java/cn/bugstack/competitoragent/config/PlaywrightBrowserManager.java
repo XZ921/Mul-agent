@@ -25,6 +25,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @Component
 public class PlaywrightBrowserManager {
 
+    private static final int MAX_TRANSIENT_LAUNCH_RETRIES_PER_STRATEGY = 1;
+
     private final Playwright initialPlaywright;
     private final PlaywrightRuntimeFactory runtimeFactory;
     private final PlaywrightConfig.PlaywrightProperties props;
@@ -62,19 +64,20 @@ public class PlaywrightBrowserManager {
         }
     }
 
-    public Browser getBrowser() {
-        return ensureBrowser("runtime acquire");
+    public synchronized Browser getBrowser() {
+        synchronized (monitor) {
+            return ensureBrowserLocked("runtime acquire");
+        }
     }
 
-    public Browser restartBrowser(String reason) {
+    /**
+     * Playwright Java API 不是线程安全的。
+     * 搜索补源、页面采集和健康检查都必须通过同一把锁串行访问 Browser/Context/Page，
+     * 避免并发触摸同一个 Browser 实例导致对象句柄失效。
+     */
+    public synchronized Browser restartBrowser(String reason) {
         synchronized (monitor) {
-            Browser current = browserRef.getAndSet(null);
-            closeQuietly(current, reason);
-            Browser relaunched = launchBrowser(reason);
-            if (relaunched != null) {
-                browserRef.set(relaunched);
-            }
-            return relaunched;
+            return restartBrowserLocked(reason);
         }
     }
 
@@ -82,11 +85,11 @@ public class PlaywrightBrowserManager {
      * 只有当“当前托管中的浏览器实例”仍然等于调用方手里的故障实例时，才执行真正的关闭与重建。
      * 这样可以避免多个并发线程同时感知到旧浏览器失活时，后到达的线程把前一个线程刚重建好的新实例再次关掉。
      */
-    public Browser restartBrowserIfCurrent(Browser expectedBrowser, String reason) {
-        if (expectedBrowser == null) {
-            return ensureBrowser(reason);
-        }
+    public synchronized Browser restartBrowserIfCurrent(Browser expectedBrowser, String reason) {
         synchronized (monitor) {
+            if (expectedBrowser == null) {
+                return ensureBrowserLocked(reason);
+            }
             Browser current = browserRef.get();
             if (current != null && current != expectedBrowser) {
                 if (isHealthy(current)) {
@@ -94,14 +97,7 @@ public class PlaywrightBrowserManager {
                     return current;
                 }
             }
-
-            Browser currentToReplace = browserRef.getAndSet(null);
-            closeQuietly(currentToReplace, reason);
-            Browser relaunched = launchBrowser(reason);
-            if (relaunched != null) {
-                browserRef.set(relaunched);
-            }
-            return relaunched;
+            return restartBrowserLocked(reason);
         }
     }
 
@@ -110,38 +106,42 @@ public class PlaywrightBrowserManager {
      * 搜索运行时和页面采集在命中“管道断开”类故障时必须先重建 runtime，
      * 不能只做 browser 级重启，否则后续 launch/newPage 仍会继续失败。
      */
-    public boolean recreateRuntimeForFailure(String reason, Exception cause) {
+    public synchronized boolean recreateRuntimeForFailure(String reason, Exception cause) {
         synchronized (monitor) {
             return recreatePlaywrightRuntime(reason, cause);
         }
     }
 
-    public boolean isBrowserHealthy() {
-        return isHealthy(browserRef.get());
+    public synchronized boolean isBrowserHealthy() {
+        synchronized (monitor) {
+            return isHealthy(browserRef.get());
+        }
     }
 
     @Scheduled(
             fixedDelayString = "${playwright.health-check-interval-millis:60000}",
             initialDelayString = "${playwright.health-check-initial-delay-millis:15000}"
     )
-    public void maintainBrowserHealth() {
-        Browser current = browserRef.get();
-        if (current == null) {
-            if (!props.isHealthCheckWarmupEnabled()) {
-                log.debug("Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动");
+    public synchronized void maintainBrowserHealth() {
+        synchronized (monitor) {
+            Browser current = browserRef.get();
+            if (current == null) {
+                if (!props.isHealthCheckWarmupEnabled()) {
+                    log.debug("Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动");
+                    return;
+                }
+                ensureBrowserLocked("scheduled warmup");
                 return;
             }
-            ensureBrowser("scheduled warmup");
-            return;
-        }
-        if (!isHealthy(current)) {
-            log.warn("检测到 Playwright 浏览器实例失活，准备自动重建");
-            restartBrowser("scheduled health check");
+            if (!isHealthy(current)) {
+                log.warn("检测到 Playwright 浏览器实例失活，准备自动重建");
+                restartBrowserLocked("scheduled health check");
+            }
         }
     }
 
     @PreDestroy
-    public void shutdown() {
+    public synchronized void shutdown() {
         synchronized (monitor) {
             closeQuietly(browserRef.getAndSet(null), "application shutdown");
             closePlaywrightQuietly(playwrightRef.getAndSet(null), "application shutdown");
@@ -149,21 +149,35 @@ public class PlaywrightBrowserManager {
     }
 
     private Browser ensureBrowser(String reason) {
+        synchronized (monitor) {
+            return ensureBrowserLocked(reason);
+        }
+    }
+
+    private Browser ensureBrowserLocked(String reason) {
         Browser current = browserRef.get();
         if (isHealthy(current)) {
             return current;
         }
-        synchronized (monitor) {
-            Browser rechecked = browserRef.get();
-            if (isHealthy(rechecked)) {
-                return rechecked;
-            }
-            Browser relaunched = launchBrowser(reason);
-            if (relaunched != null) {
-                browserRef.set(relaunched);
-            }
-            return relaunched;
+        Browser rechecked = browserRef.get();
+        if (isHealthy(rechecked)) {
+            return rechecked;
         }
+        Browser relaunched = launchBrowser(reason);
+        if (relaunched != null) {
+            browserRef.set(relaunched);
+        }
+        return relaunched;
+    }
+
+    private Browser restartBrowserLocked(String reason) {
+        Browser current = browserRef.getAndSet(null);
+        closeQuietly(current, reason);
+        Browser relaunched = launchBrowser(reason);
+        if (relaunched != null) {
+            browserRef.set(relaunched);
+        }
+        return relaunched;
     }
 
     private Browser launchBrowser(String reason) {
@@ -173,6 +187,7 @@ public class PlaywrightBrowserManager {
         for (int index = 0; index < attempts.size(); ) {
             LaunchAttempt attempt = attempts.get(index);
             boolean retriedCurrentAttemptAfterRuntimeRecreate = false;
+            int transientLaunchRetries = 0;
             while (true) {
                 try {
                     log.info("启动 Playwright 浏览器: browser={}, channel={}, executablePath={}, headless={}, reason={}, attempt={}/{}",
@@ -202,6 +217,18 @@ public class PlaywrightBrowserManager {
                     );
                     if (runtimeRecreated && !retriedCurrentAttemptAfterRuntimeRecreate) {
                         retriedCurrentAttemptAfterRuntimeRecreate = true;
+                        continue;
+                    }
+                    if (isTransientLaunchTimeout(e)
+                            && transientLaunchRetries < MAX_TRANSIENT_LAUNCH_RETRIES_PER_STRATEGY) {
+                        transientLaunchRetries++;
+                        log.warn("Playwright 浏览器启动握手超时，准备在当前策略下做有限重试, browser={}, strategy={}, reason={}, retry={}/{}, error={}",
+                                browserType,
+                                attempt.label(),
+                                reason,
+                                transientLaunchRetries,
+                                MAX_TRANSIENT_LAUNCH_RETRIES_PER_STRATEGY,
+                                e.getMessage());
                         continue;
                     }
                     if (index < attempts.size() - 1) {
@@ -397,6 +424,21 @@ public class PlaywrightBrowserManager {
                 || message.contains("connection closed")
                 || message.contains("transport closed")
                 || message.contains("pipe closed");
+    }
+
+    /**
+     * Chromium 在 Windows 上偶发出现“进程已拉起但 Playwright 握手超时”的冷启动抖动。
+     * 这类失败不是 runtime 管道断开，也不代表 executablePath/channel 配置错误，
+     * 因此优先在同一启动策略下有限重试一次，避免把可恢复抖动误判成浏览器不可用。
+     */
+    private boolean isTransientLaunchTimeout(Exception e) {
+        if (e == null || e.getMessage() == null) {
+            return false;
+        }
+        String message = e.getMessage().toLowerCase();
+        return message.contains("timeout")
+                && message.contains("exceeded")
+                && !shouldRecreateRuntime(e);
     }
 
     /**

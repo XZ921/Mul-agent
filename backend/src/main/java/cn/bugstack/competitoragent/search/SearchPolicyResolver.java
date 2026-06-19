@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -14,14 +15,14 @@ import java.util.Map;
 /**
  * 搜索策略解析器。
  * <p>
- * 规划期、预览期与运行期都通过这里推导正式搜索策略，
- * 避免 fallback 顺序、目标数量、超时预算和搜索引擎解析继续散落在多处。
+ * 规划期、预览期与运行期都通过这里解释正式搜索与 source family 策略，
+ * 避免 fallback 顺序、候选家族语义、render hint 和直达路径模板继续散落在多个类里。
  */
 @Component
 public class SearchPolicyResolver {
 
     /**
-     * resolver 既会被 Spring 注入，也会在测试里被直接 new。
+     * resolver 既会被 Spring 注入，也会在测试里直接 new。
      * 因此这里保留一份默认 catalog，保证没有容器参与时仍然能解释首轮家族语义。
      */
     private final SearchSourceCatalogProperties defaultSourceCatalog = new SearchSourceCatalogProperties();
@@ -34,7 +35,7 @@ public class SearchPolicyResolver {
 
     /**
      * 根据搜索模式与浏览器能力推导正式 fallback 顺序。
-     * 旧的 HEURISTIC_ONLY 只作为兼容输入保留，正式执行语义统一收口到 HTTP 兜底阶段。
+     * 历史 HEURISTIC_ONLY 只作为兼容输入保留，正式执行统一收口为 HTTP 兜底阶段。
      */
     public List<String> resolveFallbackOrder(String searchMode, boolean browserSearchEnabled) {
         String normalizedMode = searchMode == null ? "HYBRID" : searchMode.trim().toUpperCase(Locale.ROOT);
@@ -53,9 +54,8 @@ public class SearchPolicyResolver {
 
     /**
      * 统一清洗显式配置的 fallback 顺序。
-     * <p>
-     * 这里会处理三件事：
-     * 1. 把历史遗留的 HEURISTIC 阶段映射到正式 HTTP 兜底；
+     * 这里同时处理：
+     * 1. 把历史遗留的 HEURISTIC 阶段映射成正式 HTTP 兜底；
      * 2. 过滤掉当前 searchMode / browser 能力下不合法的阶段；
      * 3. 保证 PLANNED 始终作为正式链路的起点被保留。
      */
@@ -84,7 +84,7 @@ public class SearchPolicyResolver {
     }
 
     /**
-     * 最小验证数既要尊重节点显式配置，也不能超过当前计划要选出的目标数。
+     * 最小验证数既要尊重节点显式配置，也不能超过当前计划目标数量。
      */
     public int resolveMinVerifiedCandidates(Integer configuredValue, int plannedUrlCount, int targetCount) {
         if (configuredValue != null && configuredValue > 0) {
@@ -94,7 +94,7 @@ public class SearchPolicyResolver {
     }
 
     /**
-     * 目标数量优先取显式上限，其次复用规划期 URL 数量，最后再回退到候选数兜底。
+     * 目标数量优先取显式上限，其次复用规划期 URL 数量，最后再回退到候选数量兜底。
      */
     public int resolveTargetCount(Integer configuredMaxSearchResults,
                                   List<String> plannedUrls,
@@ -113,7 +113,7 @@ public class SearchPolicyResolver {
     }
 
     /**
-     * 搜索超时优先使用节点显式配置；未配置时按执行计划预计时长折算出搜索预算。
+     * 搜索超时优先使用节点显式配置；未配置时按执行计划预计时长折算搜索预算。
      */
     public long resolveSearchTimeoutMillis(Long configuredValue, SearchExecutionPlan executionPlan) {
         if (configuredValue != null && configuredValue >= 0) {
@@ -142,8 +142,8 @@ public class SearchPolicyResolver {
     }
 
     /**
-     * 首轮只把现有 provider 正式归类为公网辅助能力，
-     * 避免把 qianfan / serpapi / browser / http 误写成业务家族本身。
+     * 现有 provider 在首轮架构里先被正式归类为 public supplement 能力，
+     * 避免把 qianfan / serpapi / browser / http 混写成业务家族本身。
      */
     public SearchProviderRole resolveProviderRole(String providerKey) {
         if (!StringUtils.hasText(providerKey)) {
@@ -166,7 +166,7 @@ public class SearchPolicyResolver {
 
     /**
      * 根据业务 sourceType 反查数据源家族 key。
-     * preview、runtime、replay 都依赖同一套解释，避免 DOCS / NEWS 等类型在不同阶段被打上不同家族语义。
+     * preview、runtime、replay 都依赖这套解释，避免同一 sourceType 在不同阶段被打上不同家族语义。
      */
     public String resolveSourceFamilyKeyForSourceType(String sourceType) {
         if (!StringUtils.hasText(sourceType)) {
@@ -194,7 +194,7 @@ public class SearchPolicyResolver {
 
     /**
      * “采什么”由 Source Family Catalog 统一解释。
-     * 若家族角色缺失或非法，则安全回退为辅助公网角色，避免解析异常打断主链路。
+     * 若家族角色缺失或非法，则安全回退为辅助公网页角色，避免解析异常打断主链路。
      */
     public SearchProviderRole resolveSourceFamilyRole(String familyKey) {
         SearchSourceCatalogProperties.SourceFamilyProperties family = resolveSourceCatalog().resolveFamily(familyKey);
@@ -209,7 +209,7 @@ public class SearchPolicyResolver {
     }
 
     /**
-     * 统一从 Source Family Catalog 解析工具绑定到的 provider key。
+     * 统一供 Source Family Catalog 解析工具绑定到的 provider key。
      * 这样后续路由器不需要自己理解家族配置内部结构。
      */
     public List<String> resolveProviderKeysForSourceFamily(String familyKey, SearchProviderRole role) {
@@ -241,6 +241,81 @@ public class SearchPolicyResolver {
         return family == null || family.getExpectedBlockTypes() == null
                 ? List.of()
                 : family.getExpectedBlockTypes();
+    }
+
+    /**
+     * 统一解析 source family 的直达路径模板。
+     * planner、preview 与 runtime 都只消费这里的输出，避免 /pricing、/docs 推断规则散落多处。
+     */
+    public List<String> resolveDirectPathTemplates(String familyKey) {
+        SearchSourceCatalogProperties.SourceFamilyProperties family = resolveSourceCatalog().resolveFamily(familyKey);
+        return family == null || family.getDirectPathTemplates() == null
+                ? List.of()
+                : family.getDirectPathTemplates().stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .toList();
+    }
+
+    /**
+     * 统一解析 source family 的直达子域模板。
+     * planner、preview 与 runtime 都只消费这里的输出，避免 docs/open/developer/help 的扩展逻辑散落多处。
+     */
+    public List<String> resolveDirectSubdomainTemplates(String familyKey) {
+        SearchSourceCatalogProperties.SourceFamilyProperties family = resolveSourceCatalog().resolveFamily(familyKey);
+        return family == null || family.getDirectSubdomainTemplates() == null
+                ? List.of()
+                : family.getDirectSubdomainTemplates().stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .toList();
+    }
+
+    /**
+     * 判断某个 URL 或 locator 是否已经足够稳定，可以直接进入该 source family 的正式 owner 路径。
+     * 这一层只回答“它是不是稳定 locator”，不负责生成 direct candidate。
+     */
+    public boolean isStableLocatorForSourceFamily(String familyKey, String rawUrl) {
+        if (!StringUtils.hasText(familyKey) || !StringUtils.hasText(rawUrl)) {
+            return false;
+        }
+        SearchSourceCatalogProperties.SourceFamilyProperties family = resolveSourceCatalog().resolveFamily(familyKey);
+        if (family == null) {
+            return false;
+        }
+        try {
+            URI uri = URI.create(rawUrl.trim());
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().trim().toLowerCase(Locale.ROOT);
+            List<String> allowedSchemes = family.getStableLocatorSchemes() == null
+                    ? List.of()
+                    : family.getStableLocatorSchemes().stream()
+                    .filter(StringUtils::hasText)
+                    .map(value -> value.trim().toLowerCase(Locale.ROOT))
+                    .toList();
+            if (!allowedSchemes.isEmpty() && !allowedSchemes.contains(scheme)) {
+                return false;
+            }
+            if ("github".equals(scheme)) {
+                return StringUtils.hasText(uri.getHost())
+                        && uri.getPath() != null
+                        && uri.getPath().split("/").length >= 3;
+            }
+            if (!StringUtils.hasText(uri.getHost())) {
+                return false;
+            }
+            List<String> allowedHosts = family.getStableLocatorHosts() == null
+                    ? List.of()
+                    : family.getStableLocatorHosts().stream()
+                    .filter(StringUtils::hasText)
+                    .map(value -> value.trim().toLowerCase(Locale.ROOT))
+                    .toList();
+            if (allowedHosts.isEmpty()) {
+                return true;
+            }
+            return allowedHosts.contains(uri.getHost().trim().toLowerCase(Locale.ROOT));
+        } catch (Exception exception) {
+            return false;
+        }
     }
 
     private String normalizeFallbackStage(String stage) {

@@ -246,6 +246,49 @@ class CollectorAgentTest {
     }
 
     @Test
+    void shouldExposeInternallyDiscoveredChildPagesInCollectorOutput() throws Exception {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of())
+                .summary("mock browser search disabled")
+                .fallbackSuggested(true)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        mockCollectedPage("https://example.com/docs", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/docs")
+                .title("Docs Home")
+                .content("[账户授权](https://example.com/docs/auth)")
+                .snippet("docs home")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(true)
+                .build());
+        mockCollectedPage("https://example.com/docs/auth", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/docs/auth")
+                .title("账户授权")
+                .content("auth details")
+                .snippet("auth details")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(true)
+                .build());
+
+        AgentResult result = collectorAgent.execute(buildSingleCandidateContext(
+                "https://example.com/docs",
+                "Docs Home",
+                "DOCS"
+        ));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name(), result.getErrorMessage());
+        assertEquals(2, output.path("documents").size());
+        assertEquals(2, output.path("collectionAudit").path("results").size());
+        assertEquals(2, output.path("collectionAudit").path("replayTimeline").size());
+        assertTrue(output.toString().contains("https://example.com/docs/auth"));
+        assertTrue(output.toString().contains("内部发现页面"));
+    }
+
+    @Test
     void shouldExposeTaskKnowledgeDocumentsAndRetrievalChunksAfterSuccessfulCollection() throws Exception {
         when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
                 .candidates(List.of())
@@ -409,6 +452,7 @@ class CollectorAgentTest {
         AgentResult result = collectorAgent.execute(buildContextWithVerification("[\"https://example.com/docs\"]"));
 
         assertEquals("SUCCESS", result.getStatus().name(), result.getErrorMessage());
+        // 该场景命中验证成功后复用预抓取页面，后续 collection 阶段不应再次重复抓取。
         verify(sourceCollector, times(1)).collect("https://example.com/docs", "Feishu", "DOCS");
     }
 
@@ -440,7 +484,9 @@ class CollectorAgentTest {
         assertEquals(1, output.path("collectionAudit").path("results").size());
         assertEquals("FAILED", output.path("collectionAudit").path("results").get(0).path("status").asText());
         assertEquals(1, output.path("collectionAudit").path("replayTimeline").size());
-        verify(sourceCollector, times(1)).collect("https://example.com/docs", "Feishu", "DOCS");
+        // 候选验证阶段已经统一接入外部抓取重试策略，失败页应按最大重试次数尝试抓取，
+        // 这样 collection audit 才能稳定反映“验证失败后仍无法恢复”的真实执行事实。
+        verify(sourceCollector, times(3)).collect("https://example.com/docs", "Feishu", "DOCS");
     }
 
     @Test
@@ -849,6 +895,35 @@ class CollectorAgentTest {
                           }
                         }
                         """)
+                .build();
+    }
+
+    private AgentContext buildSingleCandidateContext(String url, String title, String sourceType) {
+        return AgentContext.builder()
+                .taskId(6L)
+                .taskName("task")
+                .currentNodeName("collect_sources_01_03")
+                .currentNodeConfig("""
+                        {
+                          "competitorName": "Feishu",
+                          "competitorUrls": ["%s"],
+                          "sourceType": "%s",
+                          "discoveryNotes": "test",
+                          "sourceCandidates": [
+                            {
+                              "url": "%s",
+                              "title": "%s",
+                              "sourceType": "%s",
+                              "discoveryMethod": "CONFIG",
+                              "reason": "test",
+                              "domain": "example.com",
+                              "browserTraceId": "trace-collector-002",
+                              "selectionStage": "PLANNED",
+                              "selectionReason": "配置提供"
+                            }
+                          ]
+                        }
+                        """.formatted(url, sourceType, url, title, sourceType))
                 .build();
     }
 

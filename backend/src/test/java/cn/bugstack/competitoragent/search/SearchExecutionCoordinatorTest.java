@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -227,6 +228,36 @@ class SearchExecutionCoordinatorTest {
     }
 
     @Test
+    void shouldSkipPublicSearchSupplementWhenOfficialDirectCandidatesAlreadyVerified() {
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        when(sourceCollector.collect("https://www.acme.ai/docs", "Acme AI", "DOCS"))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://www.acme.ai/docs")
+                        .title("Acme Docs")
+                        .content("documentation api reference guide")
+                        .snippet("api reference guide")
+                        .competitorName("Acme AI")
+                        .sourceType("DOCS")
+                        .success(true)
+                        .build());
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Acme AI")
+                .sourceType("DOCS")
+                .competitorUrls(List.of("https://www.acme.ai"))
+                .verifyCandidates(Boolean.TRUE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .build());
+
+        verify(searchSourceProvider, never()).search(any(), any());
+        assertEquals("SKIP_SUPPLEMENT_DIRECT_DISCOVERY_ENOUGH",
+                result.getExecutionTrace().getFallbackDecision());
+    }
+
+    @Test
     void shouldCarryAttemptedDiscardedAndTimelineIntoExecutionResultAndAudit() {
         CandidateVerifier candidateVerifier = mock(CandidateVerifier.class);
         BrowserSearchRuntimeService browserRuntimeService = mock(BrowserSearchRuntimeService.class);
@@ -414,6 +445,139 @@ class SearchExecutionCoordinatorTest {
     }
 
     @Test
+    void shouldExpandSearchResultRootThroughDirectDiscoveryTemplates() {
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of(
+                SourceCandidate.builder()
+                        .url("https://www.bilibili.com")
+                        .title("Bilibili")
+                        .sourceType("OFFICIAL")
+                        .discoveryMethod("SEARCH")
+                        .reason("HTTP 搜索补源")
+                        .domain("www.bilibili.com")
+                        .sourceUrls(List.of("https://www.bilibili.com"))
+                        .relevanceScore(0.90)
+                        .freshnessScore(0.60)
+                        .qualityScore(0.86)
+                        .build()
+        ));
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩")
+                .sourceType("DOCS")
+                .sourceCandidates(List.of())
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .maxSearchResults(5)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertTrue(result.getSourceCandidates().stream()
+                .anyMatch(candidate -> "SEARCH_ROOT_TEMPLATE".equals(candidate.getDiscoveryMethod())));
+        assertTrue(result.getSourceCandidates().stream()
+                .anyMatch(candidate -> "https://open.bilibili.com".equals(candidate.getUrl())
+                        && candidate.getSourceUrls() != null
+                        && candidate.getSourceUrls().contains("https://www.bilibili.com")));
+    }
+
+    @Test
+    void shouldExpandDouyinSearchResultRootToOpenPlatformDocsEntry() {
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of(
+                SourceCandidate.builder()
+                        .url("https://www.douyin.com")
+                        .title("抖音")
+                        .sourceType("OFFICIAL")
+                        .discoveryMethod("SEARCH")
+                        .reason("HTTP 搜索补源命中抖音根域")
+                        .domain("www.douyin.com")
+                        .sourceUrls(List.of("https://www.douyin.com"))
+                        .relevanceScore(0.90)
+                        .freshnessScore(0.60)
+                        .qualityScore(0.86)
+                        .build()
+        ));
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("抖音")
+                .sourceType("DOCS")
+                .sourceCandidates(List.of())
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .maxSearchResults(5)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertTrue(result.getSourceCandidates().stream()
+                .anyMatch(candidate -> "https://open.douyin.com".equals(candidate.getUrl())
+                        && "SEARCH_ROOT_TEMPLATE".equals(candidate.getDiscoveryMethod())
+                        && candidate.getSourceUrls() != null
+                        && candidate.getSourceUrls().contains("https://www.douyin.com")));
+        assertTrue(result.getSelectedTargets().stream()
+                .anyMatch(target -> target.getCandidate() != null
+                        && "https://open.douyin.com".equals(target.getCandidate().getUrl())));
+    }
+
+    @Test
+    void shouldAppendSitemapDiscoveredCandidatesBeforeFinalSelection() {
+        SitemapDiscoveryService sitemapDiscoveryService = mock(SitemapDiscoveryService.class);
+        SearchExecutionCoordinator searchCoordinator = new SearchExecutionCoordinator(
+                new CandidateVerifier(sourceCollector),
+                browserSearchRuntimeService,
+                searchSourceProvider,
+                new SourceCandidateRanker(),
+                new CollectionTargetSelector(),
+                new SearchPolicyResolver(),
+                new CanonicalUrlResolver(),
+                sitemapDiscoveryService
+        );
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        when(sitemapDiscoveryService.discover(eq("Acme AI"), eq("DOCS"), any())).thenReturn(List.of(
+                SourceCandidate.builder()
+                        .url("https://acme.ai/docs/getting-started")
+                        .title("Acme Docs")
+                        .sourceType("DOCS")
+                        .discoveryMethod("SITEMAP_DISCOVERY")
+                        .reason("sitemap discovered docs entry")
+                        .domain("acme.ai")
+                        .sourceUrls(List.of("https://acme.ai/sitemap.xml"))
+                        .relevanceScore(0.93)
+                        .freshnessScore(0.60)
+                        .qualityScore(0.90)
+                        .build()
+        ));
+
+        SearchExecutionResult result = searchCoordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Acme AI")
+                .sourceType("DOCS")
+                .sourceCandidates(List.of(SourceCandidate.builder()
+                        .url("https://acme.ai/platform")
+                        .title("Acme Platform")
+                        .sourceType("DOCS")
+                        .discoveryMethod("HEURISTIC")
+                        .reason("planned entry")
+                        .domain("acme.ai")
+                        .relevanceScore(0.84)
+                        .freshnessScore(0.62)
+                        .qualityScore(0.82)
+                        .build()))
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .maxSearchResults(2)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertTrue(result.getSourceCandidates().stream()
+                .anyMatch(candidate -> "https://acme.ai/docs/getting-started".equals(candidate.getUrl())
+                        && "SITEMAP_DISCOVERY".equals(candidate.getDiscoveryMethod())
+                        && candidate.getSourceUrls() != null
+                        && candidate.getSourceUrls().contains("https://acme.ai/sitemap.xml")));
+        verify(sitemapDiscoveryService).discover(eq("Acme AI"), eq("DOCS"),
+                argThat(rootUrls -> rootUrls != null && rootUrls.contains("https://acme.ai")));
+    }
+
+    @Test
     void shouldSkipSupplementWhenSearchTimeoutExceeded() {
         when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
 
@@ -551,7 +715,10 @@ class SearchExecutionCoordinatorTest {
 
         assertEquals("HTTP_FALLBACK", result.getExecutionTrace().getSupplementMethod());
         assertEquals("BROWSER_DISABLED_USE_HTTP_FALLBACK", result.getExecutionTrace().getFallbackDecision());
-        assertEquals("https://http.example.com/docs", result.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertTrue(result.getSelectedTargets().stream()
+                .anyMatch(target -> target.getCandidate() != null
+                        && List.of("https://http.example.com/docs", "https://http.example.com/documentation")
+                        .contains(target.getCandidate().getUrl())));
         assertNull(result.getExecutionTrace().getBrowserTraceId());
         verify(browserSearchRuntimeService, never()).search(any());
     }
@@ -841,5 +1008,58 @@ class SearchExecutionCoordinatorTest {
                 .anyMatch(candidate -> "http://127.0.0.1:18080/feed.xml".equals(candidate.getUrl())));
         verify(browserSearchRuntimeService, never()).search(any());
         verify(searchSourceProvider, never()).search(any(), any());
+    }
+
+    @Test
+    void shouldRejectMediatorSearchCandidateAndAvoidDirectExpansionSelection() {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of(SourceCandidate.builder()
+                        .url("https://aiqicha.baidu.com/feedback/official?from=baidu&type=gw")
+                        .title("哔哩哔哩 (゜-゜)つロ 干杯~-bilibili")
+                        .sourceType("OFFICIAL")
+                        .discoveryMethod("BROWSER")
+                        .reason("浏览器搜索命中官网认证页")
+                        .domain("aiqicha.baidu.com")
+                        .relevanceScore(0.95)
+                        .freshnessScore(0.55)
+                        .qualityScore(0.88)
+                        .build()))
+                .executedQueries(List.of("哔哩哔哩 官方网站"))
+                .searchEngine("baidu")
+                .summary("browser returned mediator page")
+                .fallbackSuggested(false)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        when(sourceCollector.collect("https://aiqicha.baidu.com/feedback/official", "哔哩哔哩", "OFFICIAL"))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://aiqicha.baidu.com/feedback/official?from=baidu&type=gw")
+                        .title("哔哩哔哩 (゜-゜)つロ 干杯~-bilibili")
+                        .content("官网认证是百度对网站展示官方标识的增值服务认证。产品介绍 官网认证可以帮助网民识别官方站点。")
+                        .snippet("官网认证 产品介绍")
+                        .competitorName("哔哩哔哩")
+                        .sourceType("OFFICIAL")
+                        .success(true)
+                        .build());
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩")
+                .sourceType("OFFICIAL")
+                .sourceCandidates(List.of())
+                .verifyCandidates(Boolean.TRUE)
+                .browserSearchEnabled(Boolean.TRUE)
+                .searchMode("HYBRID")
+                .searchQueries(List.of("哔哩哔哩 官方网站"))
+                .searchFallbackOrder(List.of("PLANNED", "BROWSER", "HTTP"))
+                .maxSearchResults(3)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertEquals(0, result.getSelectedTargets().size());
+        assertTrue(result.getSourceCandidates().stream()
+                .noneMatch(candidate -> candidate.getUrl() != null
+                        && candidate.getUrl().contains("aiqicha.baidu.com/docs")));
+        assertTrue(result.getDiscardedCandidates().stream()
+                .anyMatch(candidate -> candidate.getUrl() != null
+                        && candidate.getUrl().contains("aiqicha.baidu.com/feedback/official")));
     }
 }

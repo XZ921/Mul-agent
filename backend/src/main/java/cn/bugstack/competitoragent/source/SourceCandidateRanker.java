@@ -274,9 +274,21 @@ public class SourceCandidateRanker {
         String sourceType = defaultText(candidate.getSourceType()).toUpperCase(Locale.ROOT);
         String url = defaultText(candidate.getUrl()).toLowerCase(Locale.ROOT);
         String domain = defaultText(normalizedDomain).toLowerCase(Locale.ROOT);
-        if ("DOCS".equals(sourceType) && (domain.startsWith("docs.") || url.contains("/docs")
+        if ("DOCS".equals(sourceType) && (domain.startsWith("docs.")
+                || domain.startsWith("developer.")
+                || domain.startsWith("open.")
+                || domain.startsWith("help.")
+                || url.contains("/doc")
+                || url.contains("/docs")
                 || url.contains("/documentation") || url.contains("/api") || url.contains("/reference"))) {
             signals.add("DOCS_HIGH_VALUE_PATH");
+        }
+        if ("DOCS".equals(sourceType) && (url.contains("/doc")
+                || url.contains("/docs")
+                || url.contains("/documentation")
+                || url.contains("/api")
+                || url.contains("/reference"))) {
+            signals.add("DOCS_EXACT_PATH_HIT");
         }
         if ("PRICING".equals(sourceType) && (url.contains("/pricing") || url.contains("/plans")
                 || url.contains("价格") || url.contains("定价"))) {
@@ -304,6 +316,7 @@ public class SourceCandidateRanker {
         for (String signal : qualitySignals) {
             switch (signal) {
                 case "DOCS_HIGH_VALUE_PATH" -> reasons.add("命中文档高价值路径，优先级高于泛官网首页");
+                case "DOCS_EXACT_PATH_HIT" -> reasons.add("命中明确文档路径，优先级高于开放平台根页");
                 case "PRICING_HIGH_VALUE_PATH" -> reasons.add("命中定价高价值路径，适合优先采集价格与套餐信息");
                 case "NEWS_HIGH_VALUE_PATH" -> reasons.add("命中新闻高价值路径，适合优先采集发布、更新与动态信息");
                 default -> reasons.add("命中质量信号：" + signal);

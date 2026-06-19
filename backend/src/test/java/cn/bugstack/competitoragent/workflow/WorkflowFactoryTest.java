@@ -93,7 +93,11 @@ class WorkflowFactoryTest {
         assertTrue(config.has("searchExecutionPlan"));
         assertTrue(config.path("browserSearchEnabled").asBoolean());
         assertEquals("HYBRID", config.path("searchMode").asText());
-        assertEquals(1, config.path("maxSearchResults").asInt());
+        /**
+         * 当前正式规划策略会优先复用 collector 全局上限；
+         * 只有没有显式上限时，才会退回到 planned url / candidate 数量。
+         */
+        assertEquals(5, config.path("maxSearchResults").asInt());
         assertEquals(List.of("PLANNED", "BROWSER", "HTTP"),
                 objectMapper.convertValue(config.path("searchFallbackOrder"), new TypeReference<List<String>>() {
                 }));

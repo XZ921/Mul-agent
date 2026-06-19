@@ -19,12 +19,15 @@ class CollectionAuditContractTest {
 
         assertFieldPresent(CollectionTaskPackage.class, "packageKey", softly);
         assertFieldPresent(CollectionTaskPackage.class, "targetIndex", softly);
+        assertFieldPresent(CollectionTaskPackage.class, "discoveryDepth", softly);
 
         assertFieldPresent(CollectionExecutionResult.class, "taskPackageKey", softly);
         assertFieldPresent(CollectionExecutionResult.class, "targetIndex", softly);
         assertFieldPresent(CollectionExecutionResult.class, "status", softly);
         assertFieldPresent(CollectionExecutionResult.class, "reusedFromCheckpoint", softly);
         assertFieldPresent(CollectionExecutionResult.class, "checkpointSource", softly);
+        assertFieldPresent(CollectionExecutionResult.class, "discoveredCandidates", softly);
+        assertFieldPresent(CollectionExecutionResult.class, "discoveryDepth", softly);
 
         Class<?> reportClass = assertClassPresent(
                 "cn.bugstack.competitoragent.collection.CollectionExecutionReport",

@@ -112,14 +112,17 @@ class RocketMqPropertiesTest {
         assertThat(rocketMqComposeYaml).contains("10911:10911");
     }
 
-    private RocketMqProperties bindDefaultDocumentProperties() throws IOException {
-        String applicationYaml = new ClassPathResource("application.yml")
-                .getContentAsString(StandardCharsets.UTF_8);
-        List<String> documents = List.of(applicationYaml.split("(?m)^---\\s*$"));
+    @Test
+    void shouldExcludeRocketMqAutoConfigurationInTestProfileWhenWorkflowTransportIsDisabled() throws IOException {
+        Properties testProfileProperties = loadYamlDocumentProperties(1);
 
-        Properties properties = loadYamlProperties(
-                new ByteArrayResource(documents.get(0).getBytes(StandardCharsets.UTF_8))
-        );
+        assertThat(testProfileProperties.getProperty("rocketmq.enabled")).isEqualTo("false");
+        assertThat(testProfileProperties.getProperty("spring.autoconfigure.exclude[0]"))
+                .isEqualTo("org.apache.rocketmq.spring.autoconfigure.RocketMQAutoConfiguration");
+    }
+
+    private RocketMqProperties bindDefaultDocumentProperties() throws IOException {
+        Properties properties = loadYamlDocumentProperties(0);
 
         MutablePropertySources propertySources = new MutablePropertySources();
         propertySources.addFirst(new PropertiesPropertySource("defaultApplicationYaml", properties));
@@ -142,6 +145,13 @@ class RocketMqPropertiesTest {
         Binder binder = new Binder(org.springframework.boot.context.properties.source.ConfigurationPropertySources.from(resolvedPropertySources));
         return binder.bind("rocketmq", Bindable.of(RocketMqProperties.class))
                 .orElseThrow(() -> new IllegalStateException("rocketmq properties should exist in default application.yml"));
+    }
+
+    private Properties loadYamlDocumentProperties(int documentIndex) throws IOException {
+        String applicationYaml = new ClassPathResource("application.yml")
+                .getContentAsString(StandardCharsets.UTF_8);
+        List<String> documents = List.of(applicationYaml.split("(?m)^---\\s*$"));
+        return loadYamlProperties(new ByteArrayResource(documents.get(documentIndex).getBytes(StandardCharsets.UTF_8)));
     }
 
     private Properties loadYamlProperties(org.springframework.core.io.Resource resource) {

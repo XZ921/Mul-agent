@@ -1,8 +1,10 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.search.CompetitorDomainDiscoveryService;
 import cn.bugstack.competitoragent.search.SearchPolicyResolver;
 import cn.bugstack.competitoragent.search.SearchProviderRole;
 import cn.bugstack.competitoragent.search.SearchSourceCatalogProperties;
+import cn.bugstack.competitoragent.search.SourceFamilyDirectDiscoveryPlanner;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -29,19 +31,30 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
     private final SearchSourceProvider searchSourceProvider;
     private final SourceCandidateRanker candidateRanker;
     private final SearchPolicyResolver searchPolicyResolver;
+    private final SourceFamilyDirectDiscoveryPlanner directDiscoveryPlanner;
+    private final CompetitorDomainDiscoveryService competitorDomainDiscoveryService;
 
     public HeuristicSourceDiscoveryService(SearchSourceProvider searchSourceProvider,
                                            SourceCandidateRanker candidateRanker) {
-        this(searchSourceProvider, candidateRanker, new SearchPolicyResolver());
+        this(searchSourceProvider, candidateRanker, new SearchPolicyResolver(), null);
     }
 
     @Autowired
     public HeuristicSourceDiscoveryService(SearchSourceProvider searchSourceProvider,
                                            SourceCandidateRanker candidateRanker,
-                                           SearchPolicyResolver searchPolicyResolver) {
+                                           SearchPolicyResolver searchPolicyResolver,
+                                           CompetitorDomainDiscoveryService competitorDomainDiscoveryService) {
         this.searchSourceProvider = searchSourceProvider;
         this.candidateRanker = candidateRanker;
         this.searchPolicyResolver = searchPolicyResolver == null ? new SearchPolicyResolver() : searchPolicyResolver;
+        this.directDiscoveryPlanner = new SourceFamilyDirectDiscoveryPlanner(this.searchPolicyResolver);
+        this.competitorDomainDiscoveryService = competitorDomainDiscoveryService;
+    }
+
+    public HeuristicSourceDiscoveryService(SearchSourceProvider searchSourceProvider,
+                                           SourceCandidateRanker candidateRanker,
+                                           SearchPolicyResolver searchPolicyResolver) {
+        this(searchSourceProvider, candidateRanker, searchPolicyResolver, null);
     }
 
     @Override
@@ -66,13 +79,27 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
         List<String> normalizedRoots = normalizeRoots(competitorName, providedUrls);
         List<String> scopes = normalizeScopes(requestedScopes);
         List<SourcePlan> plans = new ArrayList<>();
+        List<SourceCandidate> domainDiscoveredCandidates = normalizedRoots.isEmpty()
+                ? discoverDomains(competitorName)
+                : List.of();
+        List<SourceCandidate> directCandidates = directDiscoveryPlanner.buildInitialCandidates(
+                competitorName,
+                scopes.isEmpty() ? "OFFICIAL" : scopes.get(0),
+                providedUrls
+        );
         List<SourceCandidate> searchCandidates = previewOnly
                 ? List.of()
                 : searchSourceProvider.search(competitorName, scopes);
 
         for (String scope : scopes) {
             List<SourceCandidate> mergedCandidates = mergeCandidates(
-                    buildHeuristicCandidates(scope, normalizedRoots, competitorName, providedUrls),
+                    mergeCandidates(
+                            mergeCandidates(
+                                    filterDirectCandidates(scope, directCandidates),
+                                    filterDomainDiscoveredCandidates(scope, domainDiscoveredCandidates)
+                            ),
+                            buildHeuristicCandidates(scope, normalizedRoots, competitorName, providedUrls)
+                    ),
                     filterSearchCandidates(scope, searchCandidates)
             );
             if (mergedCandidates.isEmpty()) {
@@ -91,7 +118,13 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
 
         // 如果 scope 没有扩展出额外路径，至少保留根域名作为兜底采集入口。
         if (plans.isEmpty() && !normalizedRoots.isEmpty()) {
-            List<SourceCandidate> fallbackCandidates = buildHeuristicCandidates("OFFICIAL", normalizedRoots, competitorName, providedUrls);
+            List<SourceCandidate> fallbackCandidates = mergeCandidates(
+                    mergeCandidates(
+                            filterDirectCandidates("OFFICIAL", directCandidates),
+                            filterDomainDiscoveredCandidates("OFFICIAL", domainDiscoveredCandidates)
+                    ),
+                    buildHeuristicCandidates("OFFICIAL", normalizedRoots, competitorName, providedUrls)
+            );
             plans.add(buildSourcePlan(
                     "OFFICIAL",
                     fallbackCandidates.stream().map(SourceCandidate::getUrl).toList(),
@@ -349,6 +382,44 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
             return List.of();
         }
         return searchCandidates.stream()
+                .filter(candidate -> scope.equals(candidate.getSourceType()))
+                .toList();
+    }
+
+    /**
+     * direct discovery 先按 source family 生成整池候选，再在具体 SourcePlan 落地前按 scope 做一次过滤。
+     * 这样 preview 与 runtime 可以共享同一套 family template / direct locator 语义，而不用各自维护路径推断规则。
+     */
+    private List<SourceCandidate> filterDirectCandidates(String scope, List<SourceCandidate> directCandidates) {
+        if (directCandidates == null || directCandidates.isEmpty()) {
+            return List.of();
+        }
+        return directCandidates.stream()
+                .filter(candidate -> scope.equals(candidate.getSourceType()))
+                .toList();
+    }
+
+    /**
+     * 只有在用户没有提供可靠 URL 时，才让域名发现候选参与规划。
+     * 这样可以保证显式输入的官方入口优先级始终高于辅助猜测结果。
+     */
+    private List<SourceCandidate> discoverDomains(String competitorName) {
+        if (competitorDomainDiscoveryService == null || !StringUtils.hasText(competitorName)) {
+            return List.of();
+        }
+        List<SourceCandidate> discoveredCandidates = competitorDomainDiscoveryService.discover(competitorName);
+        return discoveredCandidates == null ? List.of() : discoveredCandidates;
+    }
+
+    /**
+     * 域名发现返回的是整池候选，这里在按 scope 落到具体 SourcePlan 时再做一次类型过滤。
+     */
+    private List<SourceCandidate> filterDomainDiscoveredCandidates(String scope,
+                                                                   List<SourceCandidate> domainDiscoveredCandidates) {
+        if (domainDiscoveredCandidates == null || domainDiscoveredCandidates.isEmpty()) {
+            return List.of();
+        }
+        return domainDiscoveredCandidates.stream()
                 .filter(candidate -> scope.equals(candidate.getSourceType()))
                 .toList();
     }

@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -626,6 +627,59 @@ class BrowserSearchRuntimeServiceTest {
         assertEquals("baidu", properties.getEngine());
         assertFalse(properties.getFallbackEngines().contains("baidu"));
         assertEquals("baidu", service.getSearchEngineName());
+    }
+
+    @Test
+    void shouldAccessPlaywrightBrowserUnderManagerMonitorDuringSearch() {
+        SearchBrowserProperties properties = new SearchBrowserProperties();
+        properties.setEnabled(true);
+        properties.setMaxOpenResultPages(0);
+        SearchEngineProperties engines = defaultEngines();
+
+        PlaywrightBrowserManager lockedBrowserManager = mock(PlaywrightBrowserManager.class);
+        Browser browser = mock(Browser.class);
+        BrowserContext context = mock(BrowserContext.class);
+        Page searchPage = mock(Page.class);
+        AtomicBoolean heldMonitorWhenCreatingContext = new AtomicBoolean(false);
+
+        when(lockedBrowserManager.getBrowser()).thenReturn(browser);
+        when(browser.newContext(any(Browser.NewContextOptions.class))).thenAnswer(invocation -> {
+            heldMonitorWhenCreatingContext.set(Thread.holdsLock(lockedBrowserManager));
+            return context;
+        });
+        when(context.newPage()).thenReturn(searchPage);
+        when(searchPage.url()).thenReturn("https://www.bing.com/search?q=notion");
+        when(searchPage.title()).thenReturn("Search");
+        when(searchPage.content()).thenReturn("<html><body>search results</body></html>");
+        when(searchPage.evalOnSelectorAll(anyString(), anyString(), any())).thenReturn(List.of(
+                Map.of(
+                        "title", "Docs One",
+                        "url", "https://docs.example.com/guide",
+                        "snippet", "guide content",
+                        "resultRank", 1
+                )
+        ));
+
+        BrowserSearchRuntimeService service = new BrowserSearchRuntimeService(
+                lockedBrowserManager,
+                properties,
+                engines,
+                new ObjectMapper(),
+                new SearchRuntimeFallbackPolicy(properties),
+                browserFailureClassifier,
+                new AntiBotSignalDetector(properties),
+                diagnosticLogger
+        );
+
+        service.search(CollectorNodeConfig.builder()
+                .competitorName("Notion AI")
+                .sourceType("DOCS")
+                .browserSearchEnabled(Boolean.TRUE)
+                .searchQueries(List.of("Notion AI docs"))
+                .maxSearchResults(1)
+                .build());
+
+        assertTrue(heldMonitorWhenCreatingContext.get());
     }
 
     private SearchEngineProperties defaultEngines() {

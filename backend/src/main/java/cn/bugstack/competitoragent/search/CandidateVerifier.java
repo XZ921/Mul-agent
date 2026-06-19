@@ -25,19 +25,29 @@ public class CandidateVerifier {
 
     private final SourceCollector sourceCollector;
     private final SearchKeywordPolicy searchKeywordPolicy;
+    private final CandidateOwnershipPolicy candidateOwnershipPolicy;
 
     /**
      * 运行时必须显式注入 SourceCollector 与 SearchKeywordPolicy，
      * 否则 Spring 在某些集成测试装配路径下会退回到默认构造尝试并直接失败。
      */
     @Autowired
-    public CandidateVerifier(SourceCollector sourceCollector, SearchKeywordPolicy searchKeywordPolicy) {
+    public CandidateVerifier(SourceCollector sourceCollector,
+                             SearchKeywordPolicy searchKeywordPolicy,
+                             CandidateOwnershipPolicy candidateOwnershipPolicy) {
         this.sourceCollector = sourceCollector;
         this.searchKeywordPolicy = searchKeywordPolicy;
+        this.candidateOwnershipPolicy = candidateOwnershipPolicy == null
+                ? new CandidateOwnershipPolicy()
+                : candidateOwnershipPolicy;
+    }
+
+    public CandidateVerifier(SourceCollector sourceCollector, SearchKeywordPolicy searchKeywordPolicy) {
+        this(sourceCollector, searchKeywordPolicy, new CandidateOwnershipPolicy());
     }
 
     public CandidateVerifier(SourceCollector sourceCollector) {
-        this(sourceCollector, new SearchKeywordPolicy());
+        this(sourceCollector, new SearchKeywordPolicy(), new CandidateOwnershipPolicy());
     }
 
     public CandidateVerificationResult verify(String competitorName,
@@ -60,8 +70,19 @@ public class CandidateVerifier {
             SourceCollector.CollectedPage page = collectWithRetry(candidate, competitorName, sourceType);
             List<String> matchedSignals = collectMatchedSignals(candidate, page, sourceType);
             boolean marketingPage = isMarketingLandingPage(page, sourceType);
-            boolean verified = isVerified(page, matchedSignals, marketingPage);
-            String verificationReason = buildVerificationReason(page, sourceType, matchedSignals, verified, marketingPage);
+            boolean rejectedMediator = candidateOwnershipPolicy.isRejectedMediator(candidate, page);
+            boolean ownershipMatched = !candidateOwnershipPolicy.shouldRequireOwnershipValidation(candidate, sourceType)
+                    || candidateOwnershipPolicy.hasCompetitorOwnershipSignal(competitorName, candidate, page);
+            boolean verified = isVerified(page, matchedSignals, marketingPage, rejectedMediator, ownershipMatched);
+            String verificationReason = buildVerificationReason(
+                    page,
+                    sourceType,
+                    matchedSignals,
+                    verified,
+                    marketingPage,
+                    rejectedMediator,
+                    ownershipMatched
+            );
 
             SourceCandidate updatedCandidate = candidate.toBuilder()
                     .verified(verified)
@@ -141,8 +162,13 @@ public class CandidateVerifier {
      */
     private boolean isVerified(SourceCollector.CollectedPage page,
                                List<String> matchedSignals,
-                               boolean marketingPage) {
+                               boolean marketingPage,
+                               boolean rejectedMediator,
+                               boolean ownershipMatched) {
         if (!isUsableCollectedPage(page)) {
+            return false;
+        }
+        if (rejectedMediator || !ownershipMatched) {
             return false;
         }
         if (marketingPage) {
@@ -155,9 +181,17 @@ public class CandidateVerifier {
                                            String sourceType,
                                            List<String> matchedSignals,
                                            boolean verified,
-                                           boolean marketingPage) {
+                                           boolean marketingPage,
+                                           boolean rejectedMediator,
+                                           boolean ownershipMatched) {
         if (!isUsableCollectedPage(page)) {
             return page == null ? "采集器未返回页面结果" : safe(page.getErrorMessage(), "页面无可用正文");
+        }
+        if (rejectedMediator) {
+            return "页面命中搜索引擎认证/企业信息中介特征，不能作为竞品正式采集入口";
+        }
+        if (!ownershipMatched) {
+            return "页面缺少竞品归属信号，无法确认属于目标竞品";
         }
         if (marketingPage) {
             return "页面疑似营销落地页，缺少可用于分析的高价值信息，已按营销页丢弃";
@@ -205,11 +239,16 @@ public class CandidateVerifier {
                                                            String competitorName,
                                                            String sourceType) {
         RuntimeException lastError = null;
-        for (int attempt = 1; attempt <= MAX_COLLECT_ATTEMPTS; attempt++) {
-            try {
-                return sourceCollector.collect(candidate.getUrl(), competitorName, sourceType);
-            } catch (RuntimeException ex) {
-                lastError = ex;
+        for (String attemptUrl : resolveAttemptUrls(candidate)) {
+            for (int attempt = 1; attempt <= MAX_COLLECT_ATTEMPTS; attempt++) {
+                try {
+                    SourceCollector.CollectedPage page = sourceCollector.collect(attemptUrl, competitorName, sourceType);
+                    if (isUsableCollectedPage(page)) {
+                        return page;
+                    }
+                } catch (RuntimeException ex) {
+                    lastError = ex;
+                }
             }
         }
         return SourceCollector.CollectedPage.builder()
@@ -227,6 +266,28 @@ public class CandidateVerifier {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * sourceUrls 保存了候选的原始发现入口。
+     * 当 canonical URL 无法抓到可用页面时，继续按原始入口回退尝试，避免因为统一协议或去掉 www 丢失真实可访问地址。
+     */
+    private List<String> resolveAttemptUrls(SourceCandidate candidate) {
+        if (candidate == null) {
+            return List.of();
+        }
+        Set<String> attemptUrls = new LinkedHashSet<>();
+        if (StringUtils.hasText(candidate.getUrl())) {
+            attemptUrls.add(candidate.getUrl());
+        }
+        if (candidate.getSourceUrls() != null) {
+            for (String sourceUrl : candidate.getSourceUrls()) {
+                if (StringUtils.hasText(sourceUrl)) {
+                    attemptUrls.add(sourceUrl);
+                }
+            }
+        }
+        return new ArrayList<>(attemptUrls);
     }
 
     private String safe(String value) {

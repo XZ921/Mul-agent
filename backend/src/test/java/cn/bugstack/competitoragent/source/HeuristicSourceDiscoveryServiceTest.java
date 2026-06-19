@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.search.CompetitorDomainDiscoveryService;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -8,6 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class HeuristicSourceDiscoveryServiceTest {
 
@@ -159,5 +162,92 @@ class HeuristicSourceDiscoveryServiceTest {
         assertFalse(plans.stream()
                 .flatMap(plan -> plan.getUrls().stream())
                 .anyMatch(url -> url.contains("notionai.com") || url.contains("notionai.ai") || url.contains("notionai.io")));
+    }
+
+    @Test
+    void shouldUseDomainDiscoveryCandidatesBeforeCreatingSearchOnlyPlaceholderPlan() {
+        CompetitorDomainDiscoveryService competitorDomainDiscoveryService = mock(CompetitorDomainDiscoveryService.class);
+        when(competitorDomainDiscoveryService.discover("Bilibili")).thenReturn(List.of(
+                SourceCandidate.builder()
+                        .url("https://www.bilibili.com")
+                        .title("Bilibili Official")
+                        .sourceType("OFFICIAL")
+                        .discoveryMethod("DOMAIN_DISCOVERY_LLM")
+                        .reason("LLM 发现官网")
+                        .domain("www.bilibili.com")
+                        .sourceUrls(List.of("llm://domain-discovery/Bilibili"))
+                        .relevanceScore(0.95)
+                        .freshnessScore(0.60)
+                        .qualityScore(0.93)
+                        .build(),
+                SourceCandidate.builder()
+                        .url("https://open.bilibili.com/doc/")
+                        .title("Bilibili Docs")
+                        .sourceType("DOCS")
+                        .discoveryMethod("DOMAIN_DISCOVERY_LLM")
+                        .reason("LLM 发现开放平台文档")
+                        .domain("open.bilibili.com")
+                        .sourceUrls(List.of("llm://domain-discovery/Bilibili"))
+                        .relevanceScore(0.94)
+                        .freshnessScore(0.60)
+                        .qualityScore(0.94)
+                        .build()
+        ));
+
+        HeuristicSourceDiscoveryService discoveryService = new HeuristicSourceDiscoveryService(
+                (competitorName, requestedScopes) -> List.of(),
+                candidateRanker,
+                null,
+                competitorDomainDiscoveryService
+        );
+
+        List<SourcePlan> plans = discoveryService.discover(
+                "Bilibili",
+                List.of(),
+                List.of("官网", "产品文档")
+        );
+
+        assertEquals(2, plans.size());
+        assertTrue(plans.stream().noneMatch(plan -> plan.getNotes().contains("跳过域名猜测")));
+        assertTrue(plans.stream()
+                .flatMap(plan -> plan.getCandidates().stream())
+                .anyMatch(candidate -> "DOMAIN_DISCOVERY_LLM".equals(candidate.getDiscoveryMethod())));
+        assertTrue(plans.stream()
+                .flatMap(plan -> plan.getCandidates().stream())
+                .allMatch(candidate -> candidate.getSourceUrls() != null && !candidate.getSourceUrls().isEmpty()));
+    }
+
+    @Test
+    void shouldExposeFamilyTemplateCandidatesInPreviewPlan() {
+        HeuristicSourceDiscoveryService previewService = new HeuristicSourceDiscoveryService(
+                (competitorName, requestedScopes) -> List.of(),
+                candidateRanker
+        );
+
+        List<SourcePlan> plans = previewService.discoverForPreview(
+                "Acme AI",
+                List.of("https://www.acme.ai"),
+                List.of("产品文档", "定价页面")
+        );
+
+        SourcePlan docsPlan = plans.stream()
+                .filter(plan -> "DOCS".equals(plan.getSourceType()))
+                .findFirst()
+                .orElseThrow();
+        SourcePlan pricingPlan = plans.stream()
+                .filter(plan -> "PRICING".equals(plan.getSourceType()))
+                .findFirst()
+                .orElseThrow();
+
+        assertTrue(docsPlan.getCandidates().stream().allMatch(candidate ->
+                "DOCS".equals(candidate.getSourceType())));
+        assertTrue(pricingPlan.getCandidates().stream().allMatch(candidate ->
+                "PRICING".equals(candidate.getSourceType())));
+        assertTrue(docsPlan.getCandidates().stream().anyMatch(candidate ->
+                "FAMILY_TEMPLATE".equals(candidate.getDiscoveryMethod())
+                        && "https://www.acme.ai/docs".equals(candidate.getUrl())));
+        assertTrue(pricingPlan.getCandidates().stream().anyMatch(candidate ->
+                "FAMILY_TEMPLATE".equals(candidate.getDiscoveryMethod())
+                        && "https://www.acme.ai/pricing".equals(candidate.getUrl())));
     }
 }

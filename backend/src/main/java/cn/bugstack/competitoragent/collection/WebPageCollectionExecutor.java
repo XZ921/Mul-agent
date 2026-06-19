@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.collection;
 
+import cn.bugstack.competitoragent.search.CanonicalUrlResolver;
 import cn.bugstack.competitoragent.source.JinaReaderClient;
 import cn.bugstack.competitoragent.source.PageContentExtractionResult;
 import cn.bugstack.competitoragent.source.SourceCollectRequest;
@@ -7,6 +8,7 @@ import cn.bugstack.competitoragent.source.SourceCollector;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -26,21 +28,40 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
 
     private final JinaReaderClient jinaReaderClient;
     private final SourceCollector sourceCollector;
+    private final InternalLinkDiscoveryService internalLinkDiscoveryService;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     public WebPageCollectionExecutor(SourceCollector sourceCollector) {
-        this(null, sourceCollector);
+        this(null, sourceCollector, defaultInternalLinkDiscoveryService());
+    }
+
+    public WebPageCollectionExecutor(JinaReaderClient jinaReaderClient, SourceCollector sourceCollector) {
+        this(jinaReaderClient, sourceCollector, defaultInternalLinkDiscoveryService());
     }
 
     /**
-     * Spring 容器中必须显式使用双依赖构造器。
-     * 第五轮引入 JinaReader 主路径后，这个执行器已经不再是“只有一个浏览器依赖”的单构造器 bean，
-     * 如果不明确声明注入入口，集成上下文会退回到寻找默认无参构造器并在启动阶段失败。
+     * Spring 容器中的正式执行器需要同时接入轻量正文抓取、完整渲染抓取和站内链接发现。
+     * 这里对内部链接发现保留 ObjectProvider 兜底，避免测试场景没有显式注册该 Bean 时影响执行器装配。
      */
     @Autowired
-    public WebPageCollectionExecutor(JinaReaderClient jinaReaderClient, SourceCollector sourceCollector) {
+    public WebPageCollectionExecutor(JinaReaderClient jinaReaderClient,
+                                     SourceCollector sourceCollector,
+                                     ObjectProvider<InternalLinkDiscoveryService> internalLinkDiscoveryServiceProvider) {
+        this(jinaReaderClient,
+                sourceCollector,
+                internalLinkDiscoveryServiceProvider == null
+                        ? null
+                        : internalLinkDiscoveryServiceProvider.getIfAvailable());
+    }
+
+    private WebPageCollectionExecutor(JinaReaderClient jinaReaderClient,
+                                      SourceCollector sourceCollector,
+                                      InternalLinkDiscoveryService internalLinkDiscoveryService) {
         this.jinaReaderClient = jinaReaderClient;
         this.sourceCollector = sourceCollector;
+        this.internalLinkDiscoveryService = internalLinkDiscoveryService == null
+                ? defaultInternalLinkDiscoveryService()
+                : internalLinkDiscoveryService;
     }
 
     @Override
@@ -133,7 +154,7 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
 
             JsonNode pageMetadata = readMetadata(page.getMetadata());
             boolean success = page.isSuccess();
-            return CollectionExecutionResult.builder()
+            CollectionExecutionResult collectedResult = CollectionExecutionResult.builder()
                     .taskPackageKey(taskPackage.getPackageKey())
                     .targetIndex(taskPackage.getTargetIndex())
                     .executorType(executorType())
@@ -152,6 +173,7 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
                     .durationMillis(resolveDurationMillis(pageMetadata, startedAt))
                     .build()
                     .normalize();
+            return attachInternalDiscovery(taskPackage, collectedResult);
         } catch (RuntimeException exception) {
             return buildFailureResult(taskPackage,
                     resolveFailureKind(lightweightResult, exception.getMessage()),
@@ -167,7 +189,7 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
     private CollectionExecutionResult mapLightweightResult(CollectionTaskPackage taskPackage,
                                                            PageContentExtractionResult lightweightResult,
                                                            long startedAt) {
-        return CollectionExecutionResult.builder()
+        CollectionExecutionResult collectedResult = CollectionExecutionResult.builder()
                 .taskPackageKey(taskPackage.getPackageKey())
                 .targetIndex(taskPackage.getTargetIndex())
                 .executorType(executorType())
@@ -188,6 +210,7 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
                         : lightweightResult.getDurationMillis())
                 .build()
                 .normalize();
+        return attachInternalDiscovery(taskPackage, collectedResult);
     }
 
     /**
@@ -355,6 +378,7 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
                 .success(false)
                 .status("FAILED")
                 .resourceLocator(taskPackage == null ? null : taskPackage.getResourceLocator())
+                .discoveryDepth(taskPackage == null ? 0 : taskPackage.getDiscoveryDepth())
                 .sourceUrls(taskPackage == null ? List.of() : resolveSourceUrls(taskPackage))
                 .errorMessage(errorMessage)
                 .failureKind(failureKind)
@@ -365,5 +389,39 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
                 .durationMillis(Math.max(0L, System.currentTimeMillis() - startedAt))
                 .build()
                 .normalize();
+    }
+
+    /**
+     * 站内链接发现只在单页采集成功后执行，并把发现深度显式写回结果对象。
+     * 这样协调器后续可以直接消费 discoveredCandidates 做递归调度，而不需要重新读取页面正文再次解析。
+     */
+    private CollectionExecutionResult attachInternalDiscovery(CollectionTaskPackage taskPackage,
+                                                              CollectionExecutionResult result) {
+        CollectionExecutionResult normalizedResult = result == null ? null : result.normalize();
+        if (normalizedResult == null) {
+            return null;
+        }
+        List<cn.bugstack.competitoragent.source.SourceCandidate> discoveredCandidates =
+                internalLinkDiscoveryService.discover(
+                        taskPackage,
+                        normalizedResult,
+                        taskPackage == null || taskPackage.getDiscoveryDepth() == null
+                                ? 0
+                                : taskPackage.getDiscoveryDepth()
+                );
+        return normalizedResult.toBuilder()
+                .discoveredCandidates(discoveredCandidates)
+                .discoveryDepth(taskPackage == null || taskPackage.getDiscoveryDepth() == null
+                        ? 0
+                        : taskPackage.getDiscoveryDepth())
+                .build()
+                .normalize();
+    }
+
+    private static InternalLinkDiscoveryService defaultInternalLinkDiscoveryService() {
+        return new InternalLinkDiscoveryService(
+                new InternalLinkDiscoveryProperties(),
+                new CanonicalUrlResolver()
+        );
     }
 }
