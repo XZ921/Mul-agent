@@ -1,8 +1,13 @@
 package cn.bugstack.competitoragent.search;
 
+import cn.bugstack.competitoragent.collection.WebPageRenderHint;
+import cn.bugstack.competitoragent.source.DirectHtmlReaderClient;
+import cn.bugstack.competitoragent.source.PageContentExtractionResult;
 import cn.bugstack.competitoragent.source.SourceCandidate;
+import cn.bugstack.competitoragent.source.SourceCollectRequest;
 import cn.bugstack.competitoragent.source.SourceCollector;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -12,6 +17,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 候选来源验证器。
@@ -26,6 +35,8 @@ public class CandidateVerifier {
     private final SourceCollector sourceCollector;
     private final SearchKeywordPolicy searchKeywordPolicy;
     private final CandidateOwnershipPolicy candidateOwnershipPolicy;
+    private final SearchBrowserProperties searchBrowserProperties;
+    private final DirectHtmlReaderClient directHtmlReaderClient;
 
     /**
      * 运行时必须显式注入 SourceCollector 与 SearchKeywordPolicy，
@@ -34,12 +45,33 @@ public class CandidateVerifier {
     @Autowired
     public CandidateVerifier(SourceCollector sourceCollector,
                              SearchKeywordPolicy searchKeywordPolicy,
-                             CandidateOwnershipPolicy candidateOwnershipPolicy) {
+                             CandidateOwnershipPolicy candidateOwnershipPolicy,
+                             SearchBrowserProperties searchBrowserProperties,
+                             ObjectProvider<DirectHtmlReaderClient> directHtmlReaderClientProvider) {
         this.sourceCollector = sourceCollector;
         this.searchKeywordPolicy = searchKeywordPolicy;
         this.candidateOwnershipPolicy = candidateOwnershipPolicy == null
                 ? new CandidateOwnershipPolicy()
                 : candidateOwnershipPolicy;
+        this.searchBrowserProperties = searchBrowserProperties == null
+                ? new SearchBrowserProperties()
+                : searchBrowserProperties;
+        this.directHtmlReaderClient = directHtmlReaderClientProvider == null
+                ? null
+                : directHtmlReaderClientProvider.getIfAvailable();
+    }
+
+    public CandidateVerifier(SourceCollector sourceCollector,
+                             SearchKeywordPolicy searchKeywordPolicy,
+                             CandidateOwnershipPolicy candidateOwnershipPolicy,
+                             SearchBrowserProperties searchBrowserProperties) {
+        this(sourceCollector, searchKeywordPolicy, candidateOwnershipPolicy, searchBrowserProperties, null);
+    }
+
+    public CandidateVerifier(SourceCollector sourceCollector,
+                             SearchKeywordPolicy searchKeywordPolicy,
+                             CandidateOwnershipPolicy candidateOwnershipPolicy) {
+        this(sourceCollector, searchKeywordPolicy, candidateOwnershipPolicy, new SearchBrowserProperties(), null);
     }
 
     public CandidateVerifier(SourceCollector sourceCollector, SearchKeywordPolicy searchKeywordPolicy) {
@@ -53,60 +85,215 @@ public class CandidateVerifier {
     public CandidateVerificationResult verify(String competitorName,
                                               String sourceType,
                                               List<SourceCandidate> candidates) {
+        long startedAt = System.currentTimeMillis();
         List<SourceCandidate> uniqueCandidates = deduplicateCandidates(candidates);
         if (uniqueCandidates.isEmpty()) {
             return CandidateVerificationResult.builder()
                     .updatedCandidates(List.of())
                     .attemptedTargets(List.of())
                     .verifiedTargets(List.of())
+                    .inputCandidateCount(candidates == null ? 0 : candidates.size())
+                    .uniqueCandidateCount(0)
+                    .attemptedCandidateCount(0)
+                    .verifiedCandidateCount(0)
+                    .reusedCollectedPageCount(0)
+                    .directVerificationAttemptCount(0)
+                    .directVerificationUsableCount(0)
+                    .directVerificationShortcutCount(0)
+                    .verificationConcurrency(1)
+                    .verificationElapsedMillis(Math.max(0L, System.currentTimeMillis() - startedAt))
                     .build();
         }
 
         List<SourceCandidate> updatedCandidates = new ArrayList<>();
         List<SearchCollectionTarget> attemptedTargets = new ArrayList<>();
         List<SearchCollectionTarget> verifiedTargets = new ArrayList<>();
+        DirectVerificationCounters directCounters = new DirectVerificationCounters();
+        int concurrency = Math.max(1, searchBrowserProperties.getVerificationConcurrency());
 
-        for (SourceCandidate candidate : uniqueCandidates) {
-            SourceCollector.CollectedPage page = collectWithRetry(candidate, competitorName, sourceType);
-            List<String> matchedSignals = collectMatchedSignals(candidate, page, sourceType);
-            boolean marketingPage = isMarketingLandingPage(page, sourceType);
-            boolean rejectedMediator = candidateOwnershipPolicy.isRejectedMediator(candidate, page);
-            boolean ownershipMatched = !candidateOwnershipPolicy.shouldRequireOwnershipValidation(candidate, sourceType)
-                    || candidateOwnershipPolicy.hasCompetitorOwnershipSignal(competitorName, candidate, page);
-            boolean verified = isVerified(page, matchedSignals, marketingPage, rejectedMediator, ownershipMatched);
-            String verificationReason = buildVerificationReason(
-                    page,
-                    sourceType,
-                    matchedSignals,
-                    verified,
-                    marketingPage,
-                    rejectedMediator,
-                    ownershipMatched
-            );
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(concurrency, uniqueCandidates.size()));
+        try {
+            List<CompletableFuture<SearchCollectionTarget>> futures = uniqueCandidates.stream()
+                    .map(candidate -> CompletableFuture.supplyAsync(
+                            () -> verifyOneCandidate(candidate, competitorName, sourceType, directCounters),
+                            executor
+                    ))
+                    .toList();
 
-            SourceCandidate updatedCandidate = candidate.toBuilder()
-                    .verified(verified)
-                    .verificationReason(verificationReason)
-                    .matchedSignals(matchedSignals)
-                    .selectionStage(verified ? "VERIFIED" : "DISCARDED")
-                    .selectionReason(verified ? "运行期验证通过，允许直接进入正式采集" : "运行期验证未通过，降级为候选兜底")
-                    .build();
-            SearchCollectionTarget target = SearchCollectionTarget.builder()
-                    .candidate(updatedCandidate)
-                    .collectedPage(page)
-                    .build();
-
-            updatedCandidates.add(updatedCandidate);
-            attemptedTargets.add(target);
-            if (verified) {
-                verifiedTargets.add(target);
+            for (CompletableFuture<SearchCollectionTarget> future : futures) {
+                SearchCollectionTarget target = future.join();
+                SourceCandidate updatedCandidate = target.getCandidate();
+                updatedCandidates.add(updatedCandidate);
+                attemptedTargets.add(target);
+                if (updatedCandidate != null && Boolean.TRUE.equals(updatedCandidate.getVerified())) {
+                    verifiedTargets.add(target);
+                }
             }
+        } finally {
+            executor.shutdownNow();
         }
 
         return CandidateVerificationResult.builder()
                 .updatedCandidates(updatedCandidates)
                 .attemptedTargets(attemptedTargets)
                 .verifiedTargets(verifiedTargets)
+                .inputCandidateCount(candidates == null ? 0 : candidates.size())
+                .uniqueCandidateCount(uniqueCandidates.size())
+                .attemptedCandidateCount(attemptedTargets.size())
+                .verifiedCandidateCount(verifiedTargets.size())
+                .reusedCollectedPageCount(0)
+                .directVerificationAttemptCount(directCounters.attemptCount.get())
+                .directVerificationUsableCount(directCounters.usableCount.get())
+                .directVerificationShortcutCount(directCounters.shortcutCount.get())
+                .verificationConcurrency(concurrency)
+                .verificationElapsedMillis(Math.max(0L, System.currentTimeMillis() - startedAt))
+                .build();
+    }
+
+    private SearchCollectionTarget verifyOneCandidate(SourceCandidate candidate,
+                                                      String competitorName,
+                                                      String sourceType,
+                                                      DirectVerificationCounters directCounters) {
+        SourceCollector.CollectedPage directPage = collectByDirectForPositiveShortcut(
+                candidate,
+                competitorName,
+                sourceType,
+                directCounters
+        );
+        if (directPage != null) {
+            List<String> directMatchedSignals = collectMatchedSignals(candidate, directPage, sourceType);
+            boolean directMarketingPage = isMarketingLandingPage(directPage, sourceType);
+            boolean directRejectedMediator = candidateOwnershipPolicy.isRejectedMediator(candidate, directPage);
+            boolean directOwnershipMatched = !candidateOwnershipPolicy.shouldRequireOwnershipValidation(candidate, sourceType)
+                    || candidateOwnershipPolicy.hasCompetitorOwnershipSignal(competitorName, candidate, directPage);
+            boolean directVerified = isVerified(
+                    directPage,
+                    directMatchedSignals,
+                    directMarketingPage,
+                    directRejectedMediator,
+                    directOwnershipMatched
+            );
+            if (directVerified && searchBrowserProperties.isVerificationDirectPositiveShortcutEnabled()) {
+                directCounters.shortcutCount.incrementAndGet();
+                return buildVerificationTarget(
+                        candidate,
+                        directPage,
+                        sourceType,
+                        directMatchedSignals,
+                        directMarketingPage,
+                        directRejectedMediator,
+                        directOwnershipMatched,
+                        "DIRECT_HTML_VERIFICATION_SHORTCUT"
+                );
+            }
+        }
+
+        SourceCollector.CollectedPage page = collectWithRetry(candidate, competitorName, sourceType);
+        List<String> matchedSignals = collectMatchedSignals(candidate, page, sourceType);
+        boolean marketingPage = isMarketingLandingPage(page, sourceType);
+        boolean rejectedMediator = candidateOwnershipPolicy.isRejectedMediator(candidate, page);
+        boolean ownershipMatched = !candidateOwnershipPolicy.shouldRequireOwnershipValidation(candidate, sourceType)
+                || candidateOwnershipPolicy.hasCompetitorOwnershipSignal(competitorName, candidate, page);
+        return buildVerificationTarget(
+                candidate,
+                page,
+                sourceType,
+                matchedSignals,
+                marketingPage,
+                rejectedMediator,
+                ownershipMatched,
+                null
+        );
+    }
+
+    private SearchCollectionTarget buildVerificationTarget(SourceCandidate candidate,
+                                                           SourceCollector.CollectedPage page,
+                                                           String sourceType,
+                                                           List<String> matchedSignals,
+                                                           boolean marketingPage,
+                                                           boolean rejectedMediator,
+                                                           boolean ownershipMatched,
+                                                           String extraQualitySignal) {
+        boolean verified = isVerified(page, matchedSignals, marketingPage, rejectedMediator, ownershipMatched);
+        String verificationReason = buildVerificationReason(
+                page,
+                sourceType,
+                matchedSignals,
+                verified,
+                marketingPage,
+                rejectedMediator,
+                ownershipMatched
+        );
+        List<String> qualitySignals = new ArrayList<>();
+        if (candidate.getQualitySignals() != null) {
+            qualitySignals.addAll(candidate.getQualitySignals());
+        }
+        if (StringUtils.hasText(extraQualitySignal)) {
+            qualitySignals.add(extraQualitySignal);
+        }
+        SourceCandidate updatedCandidate = candidate.toBuilder()
+                .verified(verified)
+                .verificationReason(verificationReason)
+                .matchedSignals(matchedSignals)
+                .qualitySignals(qualitySignals)
+                .selectionStage(verified ? "VERIFIED" : "DISCARDED")
+                .selectionReason(verified ? "运行期验证通过，允许直接进入正式采集" : "运行期验证未通过，降级为候选兜底")
+                .build();
+        return SearchCollectionTarget.builder()
+                .candidate(updatedCandidate)
+                .collectedPage(page)
+                .build();
+    }
+
+    private SourceCollector.CollectedPage collectByDirectForPositiveShortcut(SourceCandidate candidate,
+                                                                             String competitorName,
+                                                                             String sourceType,
+                                                                             DirectVerificationCounters directCounters) {
+        if (directHtmlReaderClient == null
+                || !searchBrowserProperties.isVerificationDirectFirstEnabled()
+                || candidate == null
+                || !StringUtils.hasText(candidate.getUrl())) {
+            return null;
+        }
+        try {
+            directCounters.attemptCount.incrementAndGet();
+            PageContentExtractionResult directResult = directHtmlReaderClient.collect(SourceCollectRequest.builder()
+                    .url(candidate.getUrl())
+                    .competitorName(competitorName)
+                    .sourceType(sourceType)
+                    .renderHint(WebPageRenderHint.LIGHTWEIGHT)
+                    .sourceUrls(resolveAttemptUrls(candidate))
+                    .build());
+            SourceCollector.CollectedPage page = toCollectedPage(candidate, competitorName, sourceType, directResult);
+            if (page != null) {
+                directCounters.usableCount.incrementAndGet();
+            }
+            return page;
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
+
+    private SourceCollector.CollectedPage toCollectedPage(SourceCandidate candidate,
+                                                          String competitorName,
+                                                          String sourceType,
+                                                          PageContentExtractionResult directResult) {
+        if (candidate == null || directResult == null || !directResult.isUsable()) {
+            return null;
+        }
+        String content = directResult.getMainContent();
+        if (!StringUtils.hasText(content)) {
+            return null;
+        }
+        return SourceCollector.CollectedPage.builder()
+                .url(candidate.getUrl())
+                .title(StringUtils.hasText(directResult.getTitle()) ? directResult.getTitle() : candidate.getTitle())
+                .content(content)
+                .snippet(content.length() > 500 ? content.substring(0, 500) : content)
+                .competitorName(competitorName)
+                .sourceType(sourceType)
+                .success(true)
+                .metadata("{\"collector\":\"direct-html-verification\",\"qualitySignals\":[\"DIRECT_HTML_VERIFICATION_READY\"]}")
                 .build();
     }
 
@@ -310,5 +497,16 @@ public class CandidateVerifier {
         } catch (Exception e) {
             return url == null ? null : url.trim().toLowerCase(Locale.ROOT);
         }
+    }
+
+    /**
+     * Direct 验证计数会在后续并发化中被多个候选任务共享，
+     * 因此从一开始就使用 AtomicInteger，避免并发改造时重新定义统计语义。
+     */
+    private static class DirectVerificationCounters {
+
+        private final AtomicInteger attemptCount = new AtomicInteger();
+        private final AtomicInteger usableCount = new AtomicInteger();
+        private final AtomicInteger shortcutCount = new AtomicInteger();
     }
 }

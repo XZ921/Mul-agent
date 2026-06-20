@@ -33,6 +33,14 @@ public class SearchExecutionTrace {
     private Integer verifiedCandidateCount;
     private Integer supplementedCandidateCount;
     private Integer selectedCandidateCount;
+    private Long candidateVerificationElapsedMillis;
+    private Integer candidateVerificationConcurrency;
+    private Integer candidateVerificationInputCount;
+    private Integer candidateVerificationUniqueCount;
+    private Integer candidateVerificationReusedPageCount;
+    private Integer candidateVerificationDirectAttemptCount;
+    private Integer candidateVerificationDirectUsableCount;
+    private Integer candidateVerificationDirectShortcutCount;
     private List<String> selectedUrls;
     private String supplementMethod;
     private String browserSearchEngine;

@@ -14,7 +14,7 @@ import java.util.List;
  * 与单包的 CollectionExecutionResult 区分开，专门表达整轮采集执行的状态与审计快照。
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -25,4 +25,5 @@ public class CollectionExecutionReport {
     private List<CollectionExecutionResult> results;
     private CollectionAuditSnapshot auditSnapshot;
     private List<String> sourceUrls;
+    private CollectionExecutionStats stats;
 }

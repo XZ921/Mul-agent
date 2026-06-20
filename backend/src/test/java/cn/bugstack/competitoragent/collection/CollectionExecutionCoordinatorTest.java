@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.collection;
 
 import cn.bugstack.competitoragent.search.SearchCollectionTarget;
 import cn.bugstack.competitoragent.source.SourceCandidate;
+import cn.bugstack.competitoragent.source.SourceCollector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -12,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -97,6 +99,148 @@ class CollectionExecutionCoordinatorTest {
 
         verify(executor, times(1)).execute(argThat(pkg ->
                 "collect_sources_docs#002".equals(readStringAccessor(pkg, "packageKey"))));
+    }
+
+    @Test
+    void shouldReusePrefetchedSearchVerificationPageWithoutCallingExecutor() {
+        CollectionExecutor executor = mock(CollectionExecutor.class);
+        when(executor.supports(any())).thenReturn(true);
+        CollectionExecutionProperties properties = new CollectionExecutionProperties();
+        properties.setReusePrefetchedPage(true);
+
+        CollectionExecutionCoordinator coordinator = new CollectionExecutionCoordinator(
+                new CollectionTaskPackageBuilder(),
+                new CollectionExecutorRegistry(List.of(executor)),
+                new cn.bugstack.competitoragent.search.CanonicalUrlResolver(),
+                new InternalLinkDiscoveryProperties(),
+                properties
+        );
+
+        SearchCollectionTarget target = SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://docs.example.com/open/doc")
+                        .title("Open Docs")
+                        .sourceType("DOCS")
+                        .sourceFamilyKey("official")
+                        .sourceUrls(List.of("https://docs.example.com/open/doc"))
+                        .build())
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url("https://docs.example.com/open/doc")
+                        .title("Open Docs")
+                        .content("Open API 文档 OAuth SDK guide reference")
+                        .success(true)
+                        .build())
+                .build();
+
+        CollectionExecutionReport report = coordinator.execute(41L, "collect_sources_docs", 9L, "Acme AI", List.of(target));
+
+        assertThat(report.getResults()).hasSize(1);
+        assertThat(report.getResults().get(0).getQualitySignals()).contains("SEARCH_VERIFICATION_PAGE_REUSED");
+        assertThat(report.getResults().get(0).getContent()).contains("Open API 文档");
+        assertThat(report.getResults().get(0).getCheckpointSource()).isEqualTo("searchVerification");
+        assertThat(report.getResults().get(0).getReusedFromCheckpoint()).isFalse();
+        assertThat(report.getStats().getTotalPackageCount()).isEqualTo(1);
+        assertThat(report.getStats().getPrefetchedReuseCount()).isEqualTo(1);
+        assertThat(report.getStats().getExecutorCallCount()).isEqualTo(0);
+        assertThat(report.getStats().getElapsedMillis()).isNotNull();
+        verify(executor, never()).execute(any());
+    }
+
+    @Test
+    void shouldCallExecutorWhenPrefetchedReuseDisabled() {
+        CollectionExecutor executor = mock(CollectionExecutor.class);
+        when(executor.supports(any())).thenReturn(true);
+        when(executor.execute(any())).thenReturn(CollectionExecutionResult.builder()
+                .executorType("WEB_PAGE")
+                .success(true)
+                .status("SUCCESS")
+                .resourceLocator("https://docs.example.com/open/doc")
+                .content("fresh collection result")
+                .sourceUrls(List.of("https://docs.example.com/open/doc"))
+                .build());
+        CollectionExecutionProperties properties = new CollectionExecutionProperties();
+        properties.setReusePrefetchedPage(false);
+
+        CollectionExecutionCoordinator coordinator = new CollectionExecutionCoordinator(
+                new CollectionTaskPackageBuilder(),
+                new CollectionExecutorRegistry(List.of(executor)),
+                new cn.bugstack.competitoragent.search.CanonicalUrlResolver(),
+                new InternalLinkDiscoveryProperties(),
+                properties
+        );
+
+        SearchCollectionTarget target = SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://docs.example.com/open/doc")
+                        .sourceType("DOCS")
+                        .sourceFamilyKey("official")
+                        .sourceUrls(List.of("https://docs.example.com/open/doc"))
+                        .build())
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url("https://docs.example.com/open/doc")
+                        .content("prefetched")
+                        .success(true)
+                        .build())
+                .build();
+
+        CollectionExecutionReport report = coordinator.execute(41L, "collect_sources_docs", 9L, "Acme AI", List.of(target));
+
+        assertThat(report.getResults().get(0).getContent()).isEqualTo("fresh collection result");
+        verify(executor, times(1)).execute(any());
+    }
+
+    @Test
+    void shouldCollectSameDepthTargetsConcurrentlyWithoutChangingResultOrder() {
+        CollectionExecutor executor = mock(CollectionExecutor.class);
+        when(executor.supports(any())).thenReturn(true);
+        when(executor.execute(any())).thenAnswer(invocation -> {
+            CollectionTaskPackage taskPackage = invocation.getArgument(0);
+            Thread.sleep(200);
+            return CollectionExecutionResult.builder()
+                    .executorType("WEB_PAGE")
+                    .success(true)
+                    .status("SUCCESS")
+                    .resourceLocator(taskPackage.getResourceLocator())
+                    .content("content " + taskPackage.getTargetIndex())
+                    .sourceUrls(taskPackage.getSourceUrls())
+                    .build();
+        });
+        CollectionExecutionProperties properties = new CollectionExecutionProperties();
+        properties.setConcurrency(3);
+
+        CollectionExecutionCoordinator coordinator = new CollectionExecutionCoordinator(
+                new CollectionTaskPackageBuilder(),
+                new CollectionExecutorRegistry(List.of(executor)),
+                new cn.bugstack.competitoragent.search.CanonicalUrlResolver(),
+                new InternalLinkDiscoveryProperties(),
+                properties
+        );
+
+        List<SearchCollectionTarget> targets = List.of(
+                target("https://docs.example.com/a"),
+                target("https://docs.example.com/b"),
+                target("https://docs.example.com/c")
+        );
+
+        long startedAt = System.currentTimeMillis();
+        CollectionExecutionReport report = coordinator.execute(41L, "collect_sources_docs", 9L, "Acme AI", targets);
+        long elapsedMillis = System.currentTimeMillis() - startedAt;
+
+        assertThat(report.getResults()).extracting(CollectionExecutionResult::getResourceLocator)
+                .containsExactly("https://docs.example.com/a", "https://docs.example.com/b", "https://docs.example.com/c");
+        assertThat(report.getStats().getConfiguredConcurrency()).isEqualTo(3);
+        assertThat(elapsedMillis).isLessThan(550L);
+    }
+
+    private SearchCollectionTarget target(String url) {
+        return SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url(url)
+                        .sourceType("DOCS")
+                        .sourceFamilyKey("official")
+                        .sourceUrls(List.of(url))
+                        .build())
+                .build();
     }
 
     private Object readAccessor(Object target, String fieldName) {

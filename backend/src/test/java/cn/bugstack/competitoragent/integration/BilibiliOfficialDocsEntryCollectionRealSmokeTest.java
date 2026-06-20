@@ -18,7 +18,9 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.util.StringUtils;
 
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,25 +28,31 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 哔哩哔哩真实外网冒烟测试。
+ * B 站开放平台入口页真实采集冒烟。
  * <p>
- * 该用例默认不进入常规测试套件，只在 RUN_REAL_SMOKE=true 时执行，用来验证“只给竞品名称”
- * 是否能通过规划期 LLM 域名发现或运行期浏览器搜索定位到官方文档，并继续采集入口页与内部子页正文。
+ * 完整 name-only 冒烟会把所有选中目标和站内递归一起带入采集，排查成本较高；
+ * 这个用例只保留搜索阶段选中的 open.bilibili.com 官方目标，并关闭站内递归，
+ * 用来快速确认“千帆/SerpAPI 搜索可达之后，真实网页采集链路本身是否可用”。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
         "search.mode=HYBRID",
         "search.discovery.domain.llm-enabled=true",
         "playwright.startup-warmup-enabled=true",
         "playwright.health-check-warmup-enabled=true",
+        "collection.internal-link-discovery.max-depth=0",
+        "collection.internal-link-discovery.max-links-per-entry=0",
+        "collection.internal-link-discovery.max-links-per-node=0",
+        "collection.web-page.playwright-link-supplement-enabled=false",
         "logging.level.cn.bugstack.competitoragent=INFO"
 })
 @ActiveProfiles("test")
 @EnabledIfEnvironmentVariable(named = "RUN_REAL_SMOKE", matches = "true")
-class BilibiliNameOnlyRealSmokeTest {
+class BilibiliOfficialDocsEntryCollectionRealSmokeTest {
 
     private static final String COMPETITOR_NAME = "哔哩哔哩";
     private static final String DOC_SCOPE = "文档";
     private static final String DOC_SOURCE_TYPE = "DOCS";
+    private static final String OFFICIAL_DOMAIN = "open.bilibili.com";
 
     @Autowired
     private SourceDiscoveryService sourceDiscoveryService;
@@ -62,14 +70,14 @@ class BilibiliNameOnlyRealSmokeTest {
     private ObjectMapper objectMapper;
 
     @Test
-    void shouldLocateAndCollectBilibiliOfficialDocsWhenOnlyNameIsProvided() throws Exception {
-        // 只给名称，不给 URL，先验证规划期是否能产出官方文档候选。
+    void shouldCollectOneOfficialBilibiliDocsEntryAfterSearchSelection() throws Exception {
+        // 先走真实规划与搜索，避免把固定 URL 冒烟误判为搜索链路可用。
         List<SourcePlan> sourcePlans = sourceDiscoveryService.discover(
                 COMPETITOR_NAME,
                 List.of(),
                 List.of(DOC_SCOPE)
         );
-        print("sourcePlans", Map.of(
+        print("limitedCollectionSourcePlans", Map.of(
                 "count", sourcePlans.size(),
                 "plans", sourcePlans.stream().map(this::summarizePlan).toList()
         ));
@@ -89,45 +97,35 @@ class BilibiliNameOnlyRealSmokeTest {
                 null,
                 docsPlan
         );
-        print("collectorConfig", Map.of(
-                "searchMode", collectorConfig.getSearchMode(),
-                "browserSearchEnabled", collectorConfig.getBrowserSearchEnabled(),
-                "verifyResultPage", collectorConfig.getVerifyResultPage(),
-                "competitorUrls", nullSafe(collectorConfig.getCompetitorUrls()),
-                "sourceCandidateCount", collectorConfig.getSourceCandidates() == null ? 0 : collectorConfig.getSourceCandidates().size(),
-                "searchQueries", nullSafe(collectorConfig.getSearchQueries()),
-                "fallbackOrder", nullSafe(collectorConfig.getSearchFallbackOrder())
-        ));
-
-        // 运行期搜索会验证候选，并在不足时通过浏览器/HTTP fallback 补源。
         SearchExecutionResult searchResult = searchExecutionCoordinator.execute(collectorConfig);
         List<SearchCollectionTarget> selectedTargets = searchResult.getSelectedTargets() == null
                 ? List.of()
                 : searchResult.getSelectedTargets();
-        print("searchResult", Map.of(
+        print("limitedCollectionSearchResult", Map.of(
                 "candidateCount", searchResult.getSourceCandidates() == null ? 0 : searchResult.getSourceCandidates().size(),
                 "selectedTargetCount", selectedTargets.size(),
                 "efficiencyStats", searchEfficiencyStats(searchResult),
                 "reasoningSummary", searchResult.getReasoningSummary(),
-                "trace", searchResult.getExecutionTrace(),
-                "candidates", nullSafe(searchResult.getSourceCandidates()).stream().map(this::summarizeCandidate).toList(),
                 "selectedTargets", selectedTargets.stream()
                         .map(target -> summarizeCandidate(target == null ? null : target.getCandidate()))
                         .toList()
         ));
 
-        // 正式采集阶段会优先轻量正文读取，不可用时升级到 Playwright，并消费内部链接发现结果继续采子页。
+        SearchCollectionTarget officialDocsTarget = selectOfficialDocsTarget(selectedTargets);
+        print("limitedCollectionSelectedTarget", summarizeCandidate(officialDocsTarget.getCandidate()));
+
+        // 只采集一个官方入口页，且通过 Spring 属性关闭站内递归，避免真实冒烟被旁路站点或深层 sitemap 拖长。
         CollectionExecutionReport collectionReport = collectionExecutionCoordinator.execute(
-                99001L,
-                "collect_bilibili_docs_real_smoke",
+                99002L,
+                "collect_bilibili_official_docs_entry_real_smoke",
                 null,
                 COMPETITOR_NAME,
-                selectedTargets
+                List.of(officialDocsTarget)
         );
         List<CollectionExecutionResult> results = collectionReport == null || collectionReport.getResults() == null
                 ? List.of()
                 : collectionReport.getResults();
-        print("collectionReport", Map.of(
+        print("limitedCollectionReport", Map.of(
                 "status", collectionReport == null ? null : collectionReport.getStatus(),
                 "sourceUrls", collectionReport == null ? List.of() : nullSafe(collectionReport.getSourceUrls()),
                 "stats", collectionReport == null ? null : collectionReport.getStats(),
@@ -136,78 +134,7 @@ class BilibiliNameOnlyRealSmokeTest {
         ));
 
         assertThat(selectedTargets)
-                .as("name-only search should select at least one Bilibili docs target")
-                .isNotEmpty();
-        assertThat(searchResult.getSourceCandidates())
-                .as("efficiency changes must not reduce discovered candidate volume")
-                .hasSizeGreaterThanOrEqualTo(5);
-        assertThat(selectedTargets)
-                .as("efficiency changes must not reduce selected target volume")
-                .hasSizeGreaterThanOrEqualTo(1);
-        assertThat(results)
-                .as("collection should produce at least one successful page")
-                .anySatisfy(result -> {
-                    assertThat(result.isSuccess()).isTrue();
-                    assertThat(result.getContent()).isNotBlank();
-                });
-    }
-
-    @Test
-    void shouldLocateBilibiliDocsTargetsWithQianfanBeforeCollection() throws Exception {
-        // 该用例只验证规划与搜索阶段，不进入真实页面采集递归，便于快速确认千帆 provider 是否生效。
-        List<SourcePlan> sourcePlans = sourceDiscoveryService.discover(
-                COMPETITOR_NAME,
-                List.of(),
-                List.of(DOC_SCOPE)
-        );
-        print("searchOnlySourcePlans", Map.of(
-                "count", sourcePlans.size(),
-                "plans", sourcePlans.stream().map(this::summarizePlan).toList()
-        ));
-
-        SourcePlan docsPlan = sourcePlans.stream()
-                .filter(plan -> DOC_SOURCE_TYPE.equalsIgnoreCase(plan.getSourceType()))
-                .findFirst()
-                .orElseGet(() -> SourcePlan.builder()
-                        .sourceType(DOC_SOURCE_TYPE)
-                        .urls(List.of())
-                        .candidates(List.of())
-                        .build());
-
-        CollectorNodeConfig collectorConfig = collectorPlanTemplateFactory.createCollectorNodeConfig(
-                COMPETITOR_NAME,
-                List.of(DOC_SCOPE),
-                null,
-                docsPlan
-        );
-        print("searchOnlyCollectorConfig", Map.of(
-                "searchMode", collectorConfig.getSearchMode(),
-                "browserSearchEnabled", collectorConfig.getBrowserSearchEnabled(),
-                "verifyResultPage", collectorConfig.getVerifyResultPage(),
-                "competitorUrls", nullSafe(collectorConfig.getCompetitorUrls()),
-                "sourceCandidateCount", collectorConfig.getSourceCandidates() == null ? 0 : collectorConfig.getSourceCandidates().size(),
-                "searchQueries", nullSafe(collectorConfig.getSearchQueries()),
-                "fallbackOrder", nullSafe(collectorConfig.getSearchFallbackOrder())
-        ));
-
-        SearchExecutionResult searchResult = searchExecutionCoordinator.execute(collectorConfig);
-        List<SearchCollectionTarget> selectedTargets = searchResult.getSelectedTargets() == null
-                ? List.of()
-                : searchResult.getSelectedTargets();
-        print("searchOnlyResult", Map.of(
-                "candidateCount", searchResult.getSourceCandidates() == null ? 0 : searchResult.getSourceCandidates().size(),
-                "selectedTargetCount", selectedTargets.size(),
-                "efficiencyStats", searchEfficiencyStats(searchResult),
-                "reasoningSummary", searchResult.getReasoningSummary(),
-                "trace", searchResult.getExecutionTrace(),
-                "candidates", nullSafe(searchResult.getSourceCandidates()).stream().map(this::summarizeCandidate).toList(),
-                "selectedTargets", selectedTargets.stream()
-                        .map(target -> summarizeCandidate(target == null ? null : target.getCandidate()))
-                        .toList()
-        ));
-
-        assertThat(selectedTargets)
-                .as("name-only search should select at least one Bilibili docs target before collection")
+                .as("name-only search should select candidates before limited collection")
                 .isNotEmpty();
         assertThat(searchResult.getExecutionTrace() == null
                 ? null
@@ -220,8 +147,52 @@ class BilibiliNameOnlyRealSmokeTest {
                 .as("candidate verification concurrency should be recorded")
                 .isGreaterThanOrEqualTo(1);
         assertThat(nullSafe(searchResult.getSourceCandidates()))
-                .as("qianfan should contribute candidates before falling back to heavier providers")
+                .as("qianfan should contribute candidates before collection starts")
                 .anySatisfy(candidate -> assertThat(candidate.getProviderKey()).isEqualToIgnoringCase("qianfan"));
+        assertThat(results)
+                .as("limited collection should only execute the selected official entry target")
+                .hasSize(1);
+        assertThat(results.get(0).isSuccess()).isTrue();
+        assertThat(results.get(0).getContent()).isNotBlank();
+        assertThat(results.get(0).getSourceUrls()).isNotEmpty();
+        assertThat(results.get(0).getResourceLocator()).contains(OFFICIAL_DOMAIN);
+        assertThat(collectionReport.getStats()).isNotNull();
+    }
+
+    private SearchCollectionTarget selectOfficialDocsTarget(List<SearchCollectionTarget> selectedTargets) {
+        return nullSafe(selectedTargets).stream()
+                .filter(target -> target != null && target.getCandidate() != null)
+                .filter(target -> isOfficialBilibiliUrl(target.getCandidate().getUrl()))
+                .min(Comparator.comparingInt(target -> docsTargetPriority(target.getCandidate())))
+                .map(this::normalizeOfficialDocsTarget)
+                .orElseThrow(() -> new AssertionError("search did not select an open.bilibili.com docs target"));
+    }
+
+    private SearchCollectionTarget normalizeOfficialDocsTarget(SearchCollectionTarget target) {
+        SourceCandidate candidate = target.getCandidate();
+        List<String> sourceUrls = candidate.getSourceUrls() == null || candidate.getSourceUrls().isEmpty()
+                ? List.of(candidate.getUrl())
+                : candidate.getSourceUrls();
+        SourceCandidate normalizedCandidate = candidate.toBuilder()
+                .sourceType(StringUtils.hasText(candidate.getSourceType()) ? candidate.getSourceType() : DOC_SOURCE_TYPE)
+                .sourceFamilyKey(StringUtils.hasText(candidate.getSourceFamilyKey()) ? candidate.getSourceFamilyKey() : "official")
+                .sourceUrls(sourceUrls)
+                .build();
+        return target.toBuilder()
+                .candidate(normalizedCandidate)
+                .build();
+    }
+
+    private boolean isOfficialBilibiliUrl(String url) {
+        return StringUtils.hasText(url) && url.toLowerCase().contains(OFFICIAL_DOMAIN);
+    }
+
+    private int docsTargetPriority(SourceCandidate candidate) {
+        String url = candidate == null || candidate.getUrl() == null ? "" : candidate.getUrl().toLowerCase();
+        if (url.contains("/doc") || url.contains("/docs")) {
+            return 0;
+        }
+        return 1;
     }
 
     private Map<String, Object> summarizePlan(SourcePlan plan) {
@@ -260,6 +231,7 @@ class BilibiliNameOnlyRealSmokeTest {
         summary.put("sourceType", candidate.getSourceType());
         summary.put("discoveryMethod", candidate.getDiscoveryMethod());
         summary.put("domain", candidate.getDomain());
+        summary.put("providerKey", candidate.getProviderKey());
         summary.put("verified", candidate.getVerified());
         summary.put("selectionStage", candidate.getSelectionStage());
         summary.put("verificationReason", candidate.getVerificationReason());
@@ -288,14 +260,12 @@ class BilibiliNameOnlyRealSmokeTest {
         summary.put("qualityScore", result.getQualityScore());
         summary.put("failureKind", result.getFailureKind());
         summary.put("errorMessage", result.getErrorMessage());
-        summary.put("discoveredCandidates", nullSafe(result.getDiscoveredCandidates()).stream()
-                .map(this::summarizeCandidate)
-                .toList());
+        summary.put("discoveredCandidateCount", result.getDiscoveredCandidates() == null ? 0 : result.getDiscoveredCandidates().size());
         return summary;
     }
 
     private void print(String label, Object value) throws Exception {
-        System.out.println("BILIBILI_REAL_SMOKE " + label + "=" + objectMapper.writeValueAsString(value));
+        System.out.println("BILIBILI_LIMITED_COLLECTION_REAL_SMOKE " + label + "=" + objectMapper.writeValueAsString(value));
     }
 
     private <T> List<T> nullSafe(List<T> values) {

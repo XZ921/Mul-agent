@@ -152,6 +152,7 @@ public class SearchExecutionCoordinator {
 
         int verifiedCount = 0;
         int supplementedCount = 0;
+        VerificationStatsAggregate verificationStats = new VerificationStatsAggregate();
         boolean resultPageVerificationEnabled = isResultPageVerificationEnabled(config);
         String supplementMethod = "NONE";
         boolean providerFallbackUsed = false;
@@ -198,6 +199,7 @@ public class SearchExecutionCoordinator {
             );
             allCandidates = mergeCandidateUpdates(allCandidates, verificationResult.getUpdatedCandidates());
             appendAttemptedTargets(attemptedTargets, verificationResult.getAttemptedTargets());
+            verificationStats.add(verificationResult);
             verifiedCount = verificationResult.getVerifiedTargets().size();
             markStepSuccess(executionPlan, "VERIFY_TOP_CANDIDATES",
                     "已验证 " + verificationResult.getAttemptedTargets().size() + " 条候选，验证通过 "
@@ -257,6 +259,7 @@ public class SearchExecutionCoordinator {
                                     config.getSourceType(),
                                     supplementedCandidates.stream().limit(needed).toList()
                             );
+                            verificationStats.add(supplementVerification);
                             List<SourceCandidate> updatedSupplementCandidates = retainUnverifiedHttpFallbackCandidatesIfNeeded(
                                     config,
                                     supplementOutcome,
@@ -340,6 +343,14 @@ public class SearchExecutionCoordinator {
                 .discardedCandidateCount(discardedCandidates.size())
                 .verifiedCandidateCount(verifiedCount)
                 .supplementedCandidateCount(supplementedCount)
+                .candidateVerificationElapsedMillis(verificationStats.getElapsedMillis())
+                .candidateVerificationConcurrency(verificationStats.getMaxConcurrency())
+                .candidateVerificationInputCount(verificationStats.getInputCount())
+                .candidateVerificationUniqueCount(verificationStats.getUniqueCount())
+                .candidateVerificationReusedPageCount(verificationStats.getReusedCollectedPageCount())
+                .candidateVerificationDirectAttemptCount(verificationStats.getDirectAttemptCount())
+                .candidateVerificationDirectUsableCount(verificationStats.getDirectUsableCount())
+                .candidateVerificationDirectShortcutCount(verificationStats.getDirectShortcutCount())
                 .supplementMethod(supplementMethod)
                 .browserSearchEngine(browserSearchResult.getSearchEngine())
                 .browserTraceId(browserSearchResult.getBrowserTraceId())
@@ -1415,6 +1426,76 @@ public class SearchExecutionCoordinator {
             return "候选不足，" + prefix + "，Query：" + queries.get(0);
         }
         return "候选不足，" + prefix + "，共 " + queries.size() + " 个 Query，当前首个 Query：" + queries.get(0);
+    }
+
+    /**
+     * 候选验证可能发生在规划期候选和补源候选两个阶段。
+     * 这里统一做可空累加，避免 trace 只记录最后一次验证而丢失前一次耗时和输入规模。
+     */
+    private static class VerificationStatsAggregate {
+
+        private long elapsedMillis;
+        private int maxConcurrency;
+        private int inputCount;
+        private int uniqueCount;
+        private int reusedCollectedPageCount;
+        private int directAttemptCount;
+        private int directUsableCount;
+        private int directShortcutCount;
+
+        private void add(CandidateVerificationResult result) {
+            if (result == null) {
+                return;
+            }
+            elapsedMillis += value(result.getVerificationElapsedMillis());
+            maxConcurrency = Math.max(maxConcurrency, Math.max(1, value(result.getVerificationConcurrency())));
+            inputCount += value(result.getInputCandidateCount());
+            uniqueCount += value(result.getUniqueCandidateCount());
+            reusedCollectedPageCount += value(result.getReusedCollectedPageCount());
+            directAttemptCount += value(result.getDirectVerificationAttemptCount());
+            directUsableCount += value(result.getDirectVerificationUsableCount());
+            directShortcutCount += value(result.getDirectVerificationShortcutCount());
+        }
+
+        private long getElapsedMillis() {
+            return elapsedMillis;
+        }
+
+        private int getMaxConcurrency() {
+            return maxConcurrency;
+        }
+
+        private int getInputCount() {
+            return inputCount;
+        }
+
+        private int getUniqueCount() {
+            return uniqueCount;
+        }
+
+        private int getReusedCollectedPageCount() {
+            return reusedCollectedPageCount;
+        }
+
+        private int getDirectAttemptCount() {
+            return directAttemptCount;
+        }
+
+        private int getDirectUsableCount() {
+            return directUsableCount;
+        }
+
+        private int getDirectShortcutCount() {
+            return directShortcutCount;
+        }
+
+        private int value(Integer value) {
+            return value == null ? 0 : value;
+        }
+
+        private long value(Long value) {
+            return value == null ? 0L : value;
+        }
     }
 
     /**

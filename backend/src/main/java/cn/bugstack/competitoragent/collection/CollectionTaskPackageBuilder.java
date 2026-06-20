@@ -9,6 +9,8 @@ import org.springframework.util.StringUtils;
 import java.net.URLEncoder;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
@@ -116,10 +118,19 @@ public class CollectionTaskPackageBuilder {
     }
 
     private List<String> resolveSourceUrls(SourceCandidate candidate, String url) {
-        if (candidate != null && candidate.getSourceUrls() != null && !candidate.getSourceUrls().isEmpty()) {
-            return candidate.getSourceUrls();
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        if (candidate != null && candidate.getSourceUrls() != null) {
+            for (String sourceUrl : candidate.getSourceUrls()) {
+                if (StringUtils.hasText(sourceUrl)) {
+                    sourceUrls.add(sourceUrl.trim());
+                }
+            }
         }
-        return StringUtils.hasText(url) ? List.of(url) : List.of();
+        // 候选来源可能只记录了 LLM/规划阶段证据；正式采集包必须额外保留真实 URL，保证 collection audit 可回溯到实际页面。
+        if (StringUtils.hasText(url)) {
+            sourceUrls.add(url.trim());
+        }
+        return new ArrayList<>(sourceUrls);
     }
 
     /**

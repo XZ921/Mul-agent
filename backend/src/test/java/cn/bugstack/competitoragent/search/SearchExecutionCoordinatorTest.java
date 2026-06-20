@@ -89,6 +89,10 @@ class SearchExecutionCoordinatorTest {
         assertTrue(result.getReasoningSummary().contains("最终选中 1 条"));
         assertNotNull(result.getExecutionTrace());
         assertEquals("v1", result.getExecutionTrace().getTraceVersion());
+        assertNotNull(result.getExecutionTrace().getCandidateVerificationElapsedMillis());
+        assertTrue(result.getExecutionTrace().getCandidateVerificationInputCount() >= 1);
+        assertTrue(result.getExecutionTrace().getCandidateVerificationUniqueCount() >= 1);
+        assertTrue(result.getExecutionTrace().getCandidateVerificationConcurrency() >= 1);
         assertEquals("SKIP_SUPPLEMENT_ENOUGH_VERIFIED", result.getExecutionTrace().getFallbackDecision());
         assertNotNull(result.getAuditSnapshot());
     }

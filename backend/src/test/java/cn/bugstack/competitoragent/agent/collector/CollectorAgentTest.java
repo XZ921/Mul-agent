@@ -457,6 +457,31 @@ class CollectorAgentTest {
     }
 
     @Test
+    void shouldNotDuplicateCollectSelectedTargetWhenPrefetchedPageExists() {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of())
+                .summary("browser search unused")
+                .fallbackSuggested(true)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        mockCollectedPage("https://docs.example.com/prefetched", "Acme", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://docs.example.com/prefetched")
+                .title("Prefetched Docs")
+                .content("Open API 文档 OAuth SDK guide reference")
+                .snippet("Open API 文档")
+                .competitorName("Acme")
+                .sourceType("DOCS")
+                .success(true)
+                .build());
+
+        AgentResult result = collectorAgent.execute(buildPrefetchedDocsContext());
+
+        assertEquals("SUCCESS", result.getStatus().name(), result.getErrorMessage());
+        verify(sourceCollector, times(1)).collect("https://docs.example.com/prefetched", "Acme", "DOCS");
+    }
+
+    @Test
     void shouldReflectFailedPrefetchedPageInsideCollectionAudit() throws Exception {
         when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
                 .candidates(List.of())
@@ -683,6 +708,42 @@ class CollectorAgentTest {
                           ]
                         }
                         """.formatted(competitorUrlsJson))
+                .build();
+    }
+
+    private AgentContext buildPrefetchedDocsContext() {
+        return AgentContext.builder()
+                .taskId(7L)
+                .taskName("task")
+                .currentNodeName("collect_sources_docs")
+                .currentNodeConfig("""
+                        {
+                          "competitorName": "Acme",
+                          "competitorUrls": ["https://docs.example.com/prefetched"],
+                          "sourceType": "DOCS",
+                          "discoveryNotes": "test",
+                          "verifyCandidates": true,
+                          "verifyResultPage": true,
+                          "browserSearchEnabled": false,
+                          "searchMode": "HTTP_ONLY",
+                          "minVerifiedCandidates": 1,
+                          "maxSearchResults": 1,
+                          "sourceCandidates": [
+                            {
+                              "url": "https://docs.example.com/prefetched",
+                              "title": "Prefetched Docs",
+                              "sourceType": "DOCS",
+                              "sourceFamilyKey": "official",
+                              "sourceUrls": ["https://docs.example.com/prefetched"],
+                              "discoveryMethod": "CONFIG",
+                              "reason": "test",
+                              "domain": "docs.example.com",
+                              "selectionStage": "PLANNED",
+                              "selectionReason": "配置提供"
+                            }
+                          ]
+                        }
+                        """)
                 .build();
     }
 

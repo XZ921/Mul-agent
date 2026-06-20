@@ -67,6 +67,30 @@ class CollectionTaskPackageBuilderTest {
     }
 
     @Test
+    void shouldAppendCandidateUrlWhenSourceUrlsOnlyContainPlanningEvidence() {
+        SourceCandidate candidate = SourceCandidate.builder()
+                .url("https://open.bilibili.com/doc")
+                .sourceType("DOCS")
+                .sourceFamilyKey("official")
+                .providerKey("planned")
+                .sourceUrls(List.of("llm://domain-discovery/哔哩哔哩"))
+                .build();
+
+        CollectionTaskPackageBuilder builder = new CollectionTaskPackageBuilder(null);
+        CollectionTaskPackage taskPackage = builder.build(
+                41L,
+                "collect_sources_docs",
+                9L,
+                "哔哩哔哩",
+                candidate,
+                1
+        );
+
+        assertThat(taskPackage.getSourceUrls())
+                .containsExactly("llm://domain-discovery/哔哩哔哩", "https://open.bilibili.com/doc");
+    }
+
+    @Test
     void shouldBuildRssTaskPackageForExplicitFeedUrl() {
         CollectionTaskPackageBuilder builder = new CollectionTaskPackageBuilder(new SearchPolicyResolver());
         SourceCandidate candidate = SourceCandidate.builder()

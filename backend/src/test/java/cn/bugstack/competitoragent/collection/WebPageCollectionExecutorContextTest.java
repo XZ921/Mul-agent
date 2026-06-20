@@ -2,6 +2,8 @@ package cn.bugstack.competitoragent.collection;
 
 import cn.bugstack.competitoragent.source.JinaReaderClient;
 import cn.bugstack.competitoragent.source.JinaReaderProperties;
+import cn.bugstack.competitoragent.source.DirectHtmlReaderClient;
+import cn.bugstack.competitoragent.source.DirectHtmlReaderProperties;
 import cn.bugstack.competitoragent.source.SourceCollector;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -35,6 +37,16 @@ class WebPageCollectionExecutorContextTest {
     static class TestConfiguration {
 
         @Bean
+        DirectHtmlReaderProperties directHtmlReaderProperties() {
+            return new DirectHtmlReaderProperties();
+        }
+
+        @Bean
+        DirectHtmlReaderClient directHtmlReaderClient(DirectHtmlReaderProperties properties) {
+            return new DirectHtmlReaderClient(properties, null);
+        }
+
+        @Bean
         JinaReaderProperties jinaReaderProperties() {
             return new JinaReaderProperties();
         }
@@ -47,6 +59,11 @@ class WebPageCollectionExecutorContextTest {
         @Bean
         SourceCollector sourceCollector() {
             return mock(SourceCollector.class);
+        }
+
+        @Bean
+        WebPageCollectionProperties webPageCollectionProperties() {
+            return new WebPageCollectionProperties();
         }
     }
 }

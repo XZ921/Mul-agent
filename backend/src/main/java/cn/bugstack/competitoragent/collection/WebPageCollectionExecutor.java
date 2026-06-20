@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.collection;
 
 import cn.bugstack.competitoragent.search.CanonicalUrlResolver;
+import cn.bugstack.competitoragent.source.DirectHtmlReaderClient;
 import cn.bugstack.competitoragent.source.JinaReaderClient;
 import cn.bugstack.competitoragent.source.PageContentExtractionResult;
 import cn.bugstack.competitoragent.source.SourceCollectRequest;
@@ -26,17 +27,25 @@ import java.util.Locale;
 @Component
 public class WebPageCollectionExecutor implements CollectionExecutor {
 
+    private final DirectHtmlReaderClient directHtmlReaderClient;
     private final JinaReaderClient jinaReaderClient;
     private final SourceCollector sourceCollector;
     private final InternalLinkDiscoveryService internalLinkDiscoveryService;
+    private final WebPageCollectionProperties webPageCollectionProperties;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     public WebPageCollectionExecutor(SourceCollector sourceCollector) {
-        this(null, sourceCollector, defaultInternalLinkDiscoveryService());
+        this(null, null, sourceCollector, defaultInternalLinkDiscoveryService(), new WebPageCollectionProperties());
     }
 
     public WebPageCollectionExecutor(JinaReaderClient jinaReaderClient, SourceCollector sourceCollector) {
-        this(jinaReaderClient, sourceCollector, defaultInternalLinkDiscoveryService());
+        this(null, jinaReaderClient, sourceCollector, defaultInternalLinkDiscoveryService(), new WebPageCollectionProperties());
+    }
+
+    public WebPageCollectionExecutor(DirectHtmlReaderClient directHtmlReaderClient,
+                                     JinaReaderClient jinaReaderClient,
+                                     SourceCollector sourceCollector) {
+        this(directHtmlReaderClient, jinaReaderClient, sourceCollector, defaultInternalLinkDiscoveryService(), new WebPageCollectionProperties());
     }
 
     /**
@@ -44,24 +53,36 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
      * 这里对内部链接发现保留 ObjectProvider 兜底，避免测试场景没有显式注册该 Bean 时影响执行器装配。
      */
     @Autowired
-    public WebPageCollectionExecutor(JinaReaderClient jinaReaderClient,
+    public WebPageCollectionExecutor(ObjectProvider<DirectHtmlReaderClient> directHtmlReaderClientProvider,
+                                     ObjectProvider<JinaReaderClient> jinaReaderClientProvider,
                                      SourceCollector sourceCollector,
-                                     ObjectProvider<InternalLinkDiscoveryService> internalLinkDiscoveryServiceProvider) {
-        this(jinaReaderClient,
+                                     ObjectProvider<InternalLinkDiscoveryService> internalLinkDiscoveryServiceProvider,
+                                     ObjectProvider<WebPageCollectionProperties> webPageCollectionPropertiesProvider) {
+        this(directHtmlReaderClientProvider == null ? null : directHtmlReaderClientProvider.getIfAvailable(),
+                jinaReaderClientProvider == null ? null : jinaReaderClientProvider.getIfAvailable(),
                 sourceCollector,
                 internalLinkDiscoveryServiceProvider == null
                         ? null
-                        : internalLinkDiscoveryServiceProvider.getIfAvailable());
+                        : internalLinkDiscoveryServiceProvider.getIfAvailable(),
+                webPageCollectionPropertiesProvider == null
+                        ? null
+                        : webPageCollectionPropertiesProvider.getIfAvailable());
     }
 
-    private WebPageCollectionExecutor(JinaReaderClient jinaReaderClient,
-                                      SourceCollector sourceCollector,
-                                      InternalLinkDiscoveryService internalLinkDiscoveryService) {
+    WebPageCollectionExecutor(DirectHtmlReaderClient directHtmlReaderClient,
+                              JinaReaderClient jinaReaderClient,
+                              SourceCollector sourceCollector,
+                              InternalLinkDiscoveryService internalLinkDiscoveryService,
+                              WebPageCollectionProperties webPageCollectionProperties) {
+        this.directHtmlReaderClient = directHtmlReaderClient;
         this.jinaReaderClient = jinaReaderClient;
         this.sourceCollector = sourceCollector;
         this.internalLinkDiscoveryService = internalLinkDiscoveryService == null
                 ? defaultInternalLinkDiscoveryService()
                 : internalLinkDiscoveryService;
+        this.webPageCollectionProperties = webPageCollectionProperties == null
+                ? new WebPageCollectionProperties()
+                : webPageCollectionProperties;
     }
 
     @Override
@@ -91,21 +112,52 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
             return collectByPlaywright(taskPackage, List.of("FULL_RENDER_REQUIRED"), null, startedAt);
         }
 
-        PageContentExtractionResult lightweightResult = collectByJinaReader(taskPackage);
-        if (lightweightResult != null && lightweightResult.isUsable()) {
-            return mapLightweightResult(taskPackage, lightweightResult, startedAt);
+        PageContentExtractionResult directResult = collectByDirectHtmlReader(taskPackage);
+        if (directResult != null && directResult.isUsable()) {
+            CollectionExecutionResult mappedDirect = mapLightweightResult(taskPackage, directResult, startedAt);
+            return maybeSupplementLinksWithPlaywright(taskPackage, mappedDirect, startedAt);
+        }
+
+        PageContentExtractionResult jinaResult = collectByJinaReader(taskPackage);
+        if (jinaResult != null && jinaResult.isUsable()) {
+            CollectionExecutionResult mappedJina = mapLightweightResult(taskPackage, jinaResult, startedAt);
+            return maybeSupplementLinksWithPlaywright(taskPackage, mappedJina, startedAt);
         }
 
         return collectByPlaywright(taskPackage,
-                mergeSignals(lightweightResult == null ? List.of("LIGHTWEIGHT_RUNTIME_FAILURE") : lightweightResult.getQualitySignals(),
-                        List.of("UPGRADED_TO_FULL_RENDER")),
-                lightweightResult,
+                mergeSignals(mergeLightweightFailureSignals(directResult, jinaResult), List.of("UPGRADED_TO_FULL_RENDER")),
+                jinaResult == null ? directResult : jinaResult,
                 startedAt);
     }
 
     /**
-     * 轻量页面优先走 JinaReader。
-     * 如果这里拿不到可用正文，再统一升级到 Playwright 兜底，避免旧的单路径采集重新回流。
+     * 第一轻量路径：Direct HTTP+Jsoup。
+     * 该路径直接访问目标站点，成功时能避开 r.jina.ai 的跨境转发与页面空壳问题；
+     * 失败时只返回质量信号，不在这里做 Playwright 兜底，避免轻量客户端承担路由职责。
+     */
+    private PageContentExtractionResult collectByDirectHtmlReader(CollectionTaskPackage taskPackage) {
+        if (directHtmlReaderClient == null) {
+            return null;
+        }
+        try {
+            return directHtmlReaderClient.collect(buildCollectRequest(taskPackage, WebPageRenderHint.LIGHTWEIGHT));
+        } catch (RuntimeException exception) {
+            return PageContentExtractionResult.builder()
+                    .success(false)
+                    .failureKind(CollectionFailureKind.RUNTIME_FAILURE.name())
+                    .errorMessage(exception.getMessage())
+                    .qualitySignals(List.of("DIRECT_HTML_RUNTIME_FAILURE"))
+                    .qualityScore(0.0D)
+                    .structuredBlocks(List.of())
+                    .collectedAt(Instant.now())
+                    .durationMillis(0L)
+                    .build();
+        }
+    }
+
+    /**
+     * 第二轻量路径：JinaReader。
+     * Direct 不可用或正文质量不足时再进入该路径，保留原有 Jina -> Playwright 兜底语义。
      */
     private PageContentExtractionResult collectByJinaReader(CollectionTaskPackage taskPackage) {
         if (jinaReaderClient == null) {
@@ -125,6 +177,21 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
                     .durationMillis(0L)
                     .build();
         }
+    }
+
+    private List<String> resolveLightweightFailureSignals(PageContentExtractionResult lightweightResult, String fallbackSignal) {
+        if (lightweightResult == null || lightweightResult.getQualitySignals() == null || lightweightResult.getQualitySignals().isEmpty()) {
+            return List.of(fallbackSignal);
+        }
+        return lightweightResult.getQualitySignals();
+    }
+
+    private List<String> mergeLightweightFailureSignals(PageContentExtractionResult directResult,
+                                                        PageContentExtractionResult jinaResult) {
+        return mergeSignals(
+                resolveLightweightFailureSignals(directResult, "DIRECT_HTML_UNAVAILABLE"),
+                resolveLightweightFailureSignals(jinaResult, "LIGHTWEIGHT_RUNTIME_FAILURE")
+        );
     }
 
     /**
@@ -181,6 +248,99 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
                     qualitySignals,
                     startedAt);
         }
+    }
+
+    /**
+     * 入口页轻量正文已经可用时，Playwright 只作为“补链接”工具使用。
+     * 这里故意不把渲染后的标题、正文、评分覆盖回轻量结果，避免“补链接”路径被误解为完整渲染升级。
+     */
+    private CollectionExecutionResult maybeSupplementLinksWithPlaywright(CollectionTaskPackage taskPackage,
+                                                                         CollectionExecutionResult lightweightResult,
+                                                                         long startedAt) {
+        CollectionExecutionResult normalizedLightweight = lightweightResult == null ? null : lightweightResult.normalize();
+        if (!shouldSupplementLinks(taskPackage, normalizedLightweight)) {
+            return normalizedLightweight;
+        }
+        try {
+            SourceCollector.CollectedPage page = sourceCollector.collect(buildCollectRequest(taskPackage, WebPageRenderHint.FULL_RENDER));
+            if (page == null || !page.isSuccess()) {
+                return normalizedLightweight.toBuilder()
+                        .qualitySignals(mergeSignals(normalizedLightweight.getQualitySignals(), List.of("PLAYWRIGHT_LINK_SUPPLEMENT_FAILED")))
+                        .build()
+                        .normalize();
+            }
+
+            JsonNode metadata = readMetadata(page.getMetadata());
+            CollectionExecutionResult renderedLinkResult = CollectionExecutionResult.builder()
+                    .taskPackageKey(taskPackage.getPackageKey())
+                    .targetIndex(taskPackage.getTargetIndex())
+                    .executorType(executorType())
+                    .success(true)
+                    .status("SUCCESS")
+                    .resourceLocator(taskPackage.getResourceLocator())
+                    .title(page.getTitle())
+                    .content(page.getContent())
+                    .sourceUrls(resolveCollectedSourceUrls(taskPackage, metadata))
+                    .qualitySignals(resolveQualitySignals(List.of("PLAYWRIGHT_LINK_SUPPLEMENT_RENDERED"), true, metadata))
+                    .qualityScore(resolveQualityScore(true, metadata))
+                    .structuredBlocks(resolveStructuredBlocks(metadata))
+                    .collectedAt(resolveCollectedAt(metadata, startedAt))
+                    .durationMillis(resolveDurationMillis(metadata, startedAt))
+                    .build()
+                    .normalize();
+            CollectionExecutionResult renderedWithLinks = attachInternalDiscovery(taskPackage, renderedLinkResult);
+            return normalizedLightweight.toBuilder()
+                    .discoveredCandidates(renderedWithLinks.getDiscoveredCandidates())
+                    .qualitySignals(mergeSignals(normalizedLightweight.getQualitySignals(), List.of("PLAYWRIGHT_LINK_SUPPLEMENT_READY")))
+                    .build()
+                    .normalize();
+        } catch (RuntimeException exception) {
+            return normalizedLightweight.toBuilder()
+                    .qualitySignals(mergeSignals(normalizedLightweight.getQualitySignals(), List.of("PLAYWRIGHT_LINK_SUPPLEMENT_FAILED")))
+                    .build()
+                    .normalize();
+        }
+    }
+
+    /**
+     * 补链接只允许发生在配置允许的入口页上。
+     * 递归详情页即使链接少也不升级 Playwright，避免深层采集重新变成重渲染链路。
+     */
+    private boolean shouldSupplementLinks(CollectionTaskPackage taskPackage, CollectionExecutionResult lightweightResult) {
+        if (taskPackage == null || lightweightResult == null || !lightweightResult.isSuccess()) {
+            return false;
+        }
+        if (sourceCollector == null || !webPageCollectionProperties.isPlaywrightLinkSupplementEnabled()) {
+            return false;
+        }
+        // 兼容旧任务包或直接 builder 构造路径：缺省 discoveryDepth 按入口页 0 处理，避免补链接静默失效。
+        int depth = taskPackage.getDiscoveryDepth() == null
+                ? 0
+                : Math.max(0, taskPackage.getDiscoveryDepth());
+        if (depth > Math.max(0, webPageCollectionProperties.getPlaywrightLinkSupplementMaxDepth())) {
+            return false;
+        }
+        if (!isSupplementSourceTypeAllowed(taskPackage.getSourceType())) {
+            return false;
+        }
+        int discoveredCount = lightweightResult.getDiscoveredCandidates() == null
+                ? 0
+                : lightweightResult.getDiscoveredCandidates().size();
+        return discoveredCount < Math.max(0, webPageCollectionProperties.getPlaywrightLinkSupplementMinLinks());
+    }
+
+    private boolean isSupplementSourceTypeAllowed(String sourceType) {
+        if (!StringUtils.hasText(sourceType)) {
+            return false;
+        }
+        List<String> allowedSourceTypes = webPageCollectionProperties.getPlaywrightLinkSupplementSourceTypes();
+        if (allowedSourceTypes == null || allowedSourceTypes.isEmpty()) {
+            allowedSourceTypes = List.of("DOCS");
+        }
+        String normalizedSourceType = sourceType.trim();
+        return allowedSourceTypes.stream()
+                .filter(StringUtils::hasText)
+                .anyMatch(allowed -> allowed.trim().equalsIgnoreCase(normalizedSourceType));
     }
 
     /**

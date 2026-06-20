@@ -30,6 +30,24 @@ public class SearchBrowserProperties {
     private boolean continueOnSearchTimeout = true;
     private boolean continueOnPageCollectFailure = true;
     private boolean recoverPartialContentOnTimeout = true;
+    /**
+     * 候选页面验证的最大并发数。
+     * 该配置只改变验证执行方式，不改变候选数量、重试次数和最终选源规则。
+     */
+    private int verificationConcurrency = 3;
+    /**
+     * 是否在搜索 trace 中记录候选验证耗时拆分。
+     */
+    private boolean verificationTimingEnabled = true;
+    /**
+     * 是否在候选验证阶段优先尝试 DirectHtmlReader。
+     * Direct 只做正向捷径，不负责负向淘汰；Direct 不可用或未命中时仍继续原验证链路。
+     */
+    private boolean verificationDirectFirstEnabled = true;
+    /**
+     * Direct 验证命中并通过规则判断时，是否直接复用该页面并跳过浏览器验证。
+     */
+    private boolean verificationDirectPositiveShortcutEnabled = true;
     private boolean stealthEnabled = true;
     private String locale = "zh-CN";
     private String timezoneId = "Asia/Shanghai";

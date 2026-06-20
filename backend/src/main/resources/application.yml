@@ -137,6 +137,14 @@ github-api:
   max-retries: 2
 
 collection:
+  direct-html-reader:
+    enabled: true
+    timeout-seconds: 8
+    max-retries: 1
+    minimum-content-length: 160
+    readable-chinese-guard-chars: 80
+    max-extracted-links: 80
+    user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
   jina-reader:
     enabled: true
     endpoint: https://r.jina.ai/http://
@@ -159,6 +167,16 @@ collection:
     max-depth: 2
     max-links-per-entry: 10
     max-links-per-node: 30
+  execution:
+    reuse-prefetched-page: true
+    concurrency: 1
+    timing-enabled: true
+  web-page:
+    playwright-link-supplement-enabled: true
+    playwright-link-supplement-max-depth: 0
+    playwright-link-supplement-min-links: 1
+    playwright-link-supplement-source-types:
+      - DOCS
 
 source-discovery:
   search:
@@ -343,6 +361,10 @@ search:
     continue-on-search-timeout: true
     continue-on-page-collect-failure: true
     recover-partial-content-on-timeout: true
+    verification-concurrency: 3
+    verification-timing-enabled: true
+    verification-direct-first-enabled: true
+    verification-direct-positive-shortcut-enabled: true
     stealth-enabled: true
     locale: zh-CN
     timezone-id: Asia/Shanghai
@@ -481,6 +503,12 @@ collector:
   page-timeout-seconds: 15
   user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
+collection:
+  execution:
+    reuse-prefetched-page: true
+    concurrency: 1
+    timing-enabled: true
+
 search:
   mode: HYBRID
   source-catalog:
@@ -506,6 +534,10 @@ search:
     continue-on-search-timeout: true
     continue-on-page-collect-failure: true
     recover-partial-content-on-timeout: true
+    verification-concurrency: 3
+    verification-timing-enabled: true
+    verification-direct-first-enabled: true
+    verification-direct-positive-shortcut-enabled: true
     stealth-enabled: true
     locale: zh-CN
     timezone-id: Asia/Shanghai

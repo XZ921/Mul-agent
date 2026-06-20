@@ -1,9 +1,10 @@
 package cn.bugstack.competitoragent.collection;
 
 import cn.bugstack.competitoragent.model.dto.CollectionAuditSummary;
-import cn.bugstack.competitoragent.search.SearchCollectionTarget;
 import cn.bugstack.competitoragent.search.CanonicalUrlResolver;
+import cn.bugstack.competitoragent.search.SearchCollectionTarget;
 import cn.bugstack.competitoragent.source.SourceCandidate;
+import cn.bugstack.competitoragent.source.SourceCollector;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -17,6 +18,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 采集执行协调器。
@@ -29,6 +34,7 @@ public class CollectionExecutionCoordinator {
     private final CollectionExecutorRegistry executorRegistry;
     private final CanonicalUrlResolver canonicalUrlResolver;
     private final InternalLinkDiscoveryProperties internalLinkDiscoveryProperties;
+    private final CollectionExecutionProperties collectionExecutionProperties;
 
     /**
      * 运行时正式 Bean 只应通过这个主构造器注入依赖。
@@ -39,13 +45,28 @@ public class CollectionExecutionCoordinator {
     public CollectionExecutionCoordinator(CollectionTaskPackageBuilder packageBuilder,
                                           CollectionExecutorRegistry executorRegistry,
                                           CanonicalUrlResolver canonicalUrlResolver,
-                                          InternalLinkDiscoveryProperties internalLinkDiscoveryProperties) {
+                                          InternalLinkDiscoveryProperties internalLinkDiscoveryProperties,
+                                          CollectionExecutionProperties collectionExecutionProperties) {
         this.packageBuilder = packageBuilder;
         this.executorRegistry = executorRegistry;
         this.canonicalUrlResolver = canonicalUrlResolver == null ? new CanonicalUrlResolver() : canonicalUrlResolver;
         this.internalLinkDiscoveryProperties = internalLinkDiscoveryProperties == null
                 ? new InternalLinkDiscoveryProperties()
                 : internalLinkDiscoveryProperties;
+        this.collectionExecutionProperties = collectionExecutionProperties == null
+                ? new CollectionExecutionProperties()
+                : collectionExecutionProperties;
+    }
+
+    public CollectionExecutionCoordinator(CollectionTaskPackageBuilder packageBuilder,
+                                          CollectionExecutorRegistry executorRegistry,
+                                          CanonicalUrlResolver canonicalUrlResolver,
+                                          InternalLinkDiscoveryProperties internalLinkDiscoveryProperties) {
+        this(packageBuilder,
+                executorRegistry,
+                canonicalUrlResolver,
+                internalLinkDiscoveryProperties,
+                new CollectionExecutionProperties());
     }
 
     public CollectionExecutionCoordinator(CollectionTaskPackageBuilder packageBuilder,
@@ -76,18 +97,19 @@ public class CollectionExecutionCoordinator {
                                              String competitorName,
                                              List<SearchCollectionTarget> targets,
                                              CollectionAuditSnapshot checkpoint) {
+        long startedAt = System.currentTimeMillis();
         if (targets == null || targets.isEmpty()) {
             return emptyReport();
         }
         List<CollectionExecutionResult> results = new ArrayList<>();
+        MutableCollectionCounters counters = new MutableCollectionCounters();
         Map<String, CollectionExecutionResult> checkpointResultMap = indexReusableCheckpointResults(checkpoint);
         Map<String, CollectionExecutionResult> checkpointIdentityMap = indexReusableCheckpointResultsByIdentity(checkpoint);
-        Set<String> consumedCheckpointKeys = new HashSet<>();
+        Set<String> consumedCheckpointKeys = ConcurrentHashMap.newKeySet();
         ArrayDeque<QueuedCollectionTask> queue = new ArrayDeque<>();
         LinkedHashSet<String> scheduledCanonicalUrls = new LinkedHashSet<>();
         Map<String, Integer> discoveredCountByEntry = new LinkedHashMap<>();
-        int nextTargetIndex = 1;
-        int totalDiscoveredLinks = 0;
+        MutableQueueState queueState = new MutableQueueState(1, 0);
 
         for (SearchCollectionTarget target : targets) {
             SourceCandidate candidate = target == null ? null : target.getCandidate();
@@ -98,85 +120,48 @@ public class CollectionExecutionCoordinator {
             if (StringUtils.hasText(canonicalUrl) && !scheduledCanonicalUrls.add(canonicalUrl)) {
                 continue;
             }
-            queue.addLast(new QueuedCollectionTask(candidate, nextTargetIndex++, 0,
+            queue.addLast(new QueuedCollectionTask(candidate, target.getCollectedPage(), queueState.nextTargetIndex++, 0,
                     StringUtils.hasText(canonicalUrl) ? canonicalUrl : resolveCandidateIdentity(candidate), false));
         }
 
         while (!queue.isEmpty()) {
-            QueuedCollectionTask queuedTask = queue.pollFirst();
-            if (queuedTask == null || queuedTask.candidate() == null) {
+            int currentDepth = queue.peekFirst().discoveryDepth();
+            List<QueuedCollectionTask> currentBatch = new ArrayList<>();
+            while (!queue.isEmpty() && queue.peekFirst().discoveryDepth() == currentDepth) {
+                QueuedCollectionTask task = queue.pollFirst();
+                if (task != null && task.candidate() != null) {
+                    currentBatch.add(task);
+                }
+            }
+            if (currentBatch.isEmpty()) {
                 continue;
             }
-            CollectionTaskPackage taskPackage = packageBuilder.build(
+
+            List<CollectionExecutionResult> batchResults = executeBatch(
+                    currentBatch,
                     taskId,
                     nodeName,
                     planVersionId,
                     competitorName,
-                    queuedTask.candidate(),
-                    queuedTask.targetIndex(),
-                    queuedTask.discoveryDepth()
-            );
-            CollectionExecutionResult reusedResult = resolveReusableCheckpointResult(
-                    taskPackage,
                     checkpointResultMap,
                     checkpointIdentityMap,
-                    consumedCheckpointKeys
+                    consumedCheckpointKeys,
+                    counters
             );
-            CollectionExecutionResult executionResult;
-            if (reusedResult != null) {
-                executionResult = markReused(reusedResult, taskPackage);
-            } else {
-                executionResult = executeTaskPackage(taskPackage);
-            }
-            results.add(executionResult);
+            results.addAll(batchResults);
 
-            if (!internalLinkDiscoveryProperties.isEnabled()
-                    || executionResult == null
-                    || executionResult.getDiscoveredCandidates() == null
-                    || executionResult.getDiscoveredCandidates().isEmpty()) {
-                continue;
-            }
-            if (queuedTask.discoveryDepth() >= Math.max(0, internalLinkDiscoveryProperties.getMaxDepth())) {
-                continue;
-            }
-
-            for (SourceCandidate discoveredCandidate : executionResult.getDiscoveredCandidates()) {
-                if (discoveredCandidate == null || !StringUtils.hasText(discoveredCandidate.getUrl())) {
-                    continue;
-                }
-                if (totalDiscoveredLinks >= Math.max(0, internalLinkDiscoveryProperties.getMaxLinksPerNode())) {
-                    break;
-                }
-                int entryDiscoveredCount = discoveredCountByEntry.getOrDefault(queuedTask.entryKey(), 0);
-                if (entryDiscoveredCount >= Math.max(0, internalLinkDiscoveryProperties.getMaxLinksPerEntry())) {
-                    break;
-                }
-
-                String canonicalUrl = canonicalize(resolveCandidateIdentity(discoveredCandidate));
-                if (StringUtils.hasText(canonicalUrl) && !scheduledCanonicalUrls.add(canonicalUrl)) {
-                    continue;
-                }
-
-                SourceCandidate normalizedChildCandidate = discoveredCandidate.toBuilder()
-                        .sourceFamilyKey(StringUtils.hasText(discoveredCandidate.getSourceFamilyKey())
-                                ? discoveredCandidate.getSourceFamilyKey()
-                                : queuedTask.candidate().getSourceFamilyKey())
-                        .sourceType(StringUtils.hasText(discoveredCandidate.getSourceType())
-                                ? discoveredCandidate.getSourceType()
-                                : queuedTask.candidate().getSourceType())
-                        .build();
-                queue.addLast(new QueuedCollectionTask(
-                        normalizedChildCandidate,
-                        nextTargetIndex++,
-                        queuedTask.discoveryDepth() + 1,
-                        queuedTask.entryKey(),
-                        true
-                ));
-                discoveredCountByEntry.put(queuedTask.entryKey(), entryDiscoveredCount + 1);
-                totalDiscoveredLinks++;
+            for (int index = 0; index < currentBatch.size(); index++) {
+                enqueueDiscoveredCandidates(
+                        queue,
+                        currentBatch.get(index),
+                        batchResults.get(index),
+                        scheduledCanonicalUrls,
+                        discoveredCountByEntry,
+                        queueState
+                );
             }
         }
-        return buildReport(results);
+        return buildReport(results, buildStats(results, counters, startedAt));
     }
 
     /**
@@ -189,6 +174,16 @@ public class CollectionExecutionCoordinator {
     }
 
     private CollectionExecutionReport emptyReport() {
+        CollectionExecutionStats stats = CollectionExecutionStats.builder()
+                .totalPackageCount(0)
+                .successCount(0)
+                .failedCount(0)
+                .prefetchedReuseCount(0)
+                .checkpointReuseCount(0)
+                .executorCallCount(0)
+                .configuredConcurrency(Math.max(1, collectionExecutionProperties.getConcurrency()))
+                .elapsedMillis(0L)
+                .build();
         CollectionAuditSnapshot auditSnapshot = CollectionAuditSnapshot.builder()
                 .summary(CollectionAuditSummary.builder()
                         .totalPackages(0)
@@ -208,6 +203,7 @@ public class CollectionExecutionCoordinator {
                 .results(List.of())
                 .auditSnapshot(auditSnapshot)
                 .sourceUrls(List.of())
+                .stats(stats)
                 .build();
     }
 
@@ -321,6 +317,155 @@ public class CollectionExecutionCoordinator {
                 && "SUCCESS".equalsIgnoreCase(result.getStatus());
     }
 
+    private List<CollectionExecutionResult> executeBatch(List<QueuedCollectionTask> batch,
+                                                         Long taskId,
+                                                         String nodeName,
+                                                         Long planVersionId,
+                                                         String competitorName,
+                                                         Map<String, CollectionExecutionResult> checkpointResultMap,
+                                                         Map<String, CollectionExecutionResult> checkpointIdentityMap,
+                                                         Set<String> consumedCheckpointKeys,
+                                                         MutableCollectionCounters counters) {
+        int concurrency = Math.max(1, collectionExecutionProperties.getConcurrency());
+        if (concurrency == 1 || batch.size() <= 1) {
+            List<CollectionExecutionResult> batchResults = new ArrayList<>();
+            for (QueuedCollectionTask task : batch) {
+                batchResults.add(executeQueuedTask(
+                        task,
+                        taskId,
+                        nodeName,
+                        planVersionId,
+                        competitorName,
+                        checkpointResultMap,
+                        checkpointIdentityMap,
+                        consumedCheckpointKeys,
+                        counters
+                ));
+            }
+            return batchResults;
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(concurrency, batch.size()));
+        try {
+            List<CompletableFuture<CollectionExecutionResult>> futures = batch.stream()
+                    .map(task -> CompletableFuture.supplyAsync(
+                            () -> executeQueuedTask(
+                                    task,
+                                    taskId,
+                                    nodeName,
+                                    planVersionId,
+                                    competitorName,
+                                    checkpointResultMap,
+                                    checkpointIdentityMap,
+                                    consumedCheckpointKeys,
+                                    counters
+                            ),
+                            executor
+                    ))
+                    .toList();
+            List<CollectionExecutionResult> batchResults = new ArrayList<>();
+            for (CompletableFuture<CollectionExecutionResult> future : futures) {
+                batchResults.add(future.join());
+            }
+            return batchResults;
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private CollectionExecutionResult executeQueuedTask(QueuedCollectionTask queuedTask,
+                                                        Long taskId,
+                                                        String nodeName,
+                                                        Long planVersionId,
+                                                        String competitorName,
+                                                        Map<String, CollectionExecutionResult> checkpointResultMap,
+                                                        Map<String, CollectionExecutionResult> checkpointIdentityMap,
+                                                        Set<String> consumedCheckpointKeys,
+                                                        MutableCollectionCounters counters) {
+        CollectionTaskPackage taskPackage = packageBuilder.build(
+                taskId,
+                nodeName,
+                planVersionId,
+                competitorName,
+                queuedTask.candidate(),
+                queuedTask.targetIndex(),
+                queuedTask.discoveryDepth()
+        );
+        CollectionExecutionResult reusedResult = resolveReusableCheckpointResult(
+                taskPackage,
+                checkpointResultMap,
+                checkpointIdentityMap,
+                consumedCheckpointKeys
+        );
+        if (reusedResult != null) {
+            counters.incrementCheckpointReuse();
+            return markReused(reusedResult, taskPackage);
+        }
+        if (collectionExecutionProperties.isReusePrefetchedPage()) {
+            CollectionExecutionResult prefetchedResult = buildPrefetchedResult(taskPackage, queuedTask.prefetchedPage());
+            if (prefetchedResult != null) {
+                counters.incrementPrefetchedReuse();
+                return prefetchedResult;
+            }
+        }
+        counters.incrementExecutorCall();
+        return executeTaskPackage(taskPackage);
+    }
+
+    private void enqueueDiscoveredCandidates(ArrayDeque<QueuedCollectionTask> queue,
+                                             QueuedCollectionTask queuedTask,
+                                             CollectionExecutionResult executionResult,
+                                             LinkedHashSet<String> scheduledCanonicalUrls,
+                                             Map<String, Integer> discoveredCountByEntry,
+                                             MutableQueueState queueState) {
+        if (!internalLinkDiscoveryProperties.isEnabled()
+                || executionResult == null
+                || executionResult.getDiscoveredCandidates() == null
+                || executionResult.getDiscoveredCandidates().isEmpty()) {
+            return;
+        }
+        if (queuedTask.discoveryDepth() >= Math.max(0, internalLinkDiscoveryProperties.getMaxDepth())) {
+            return;
+        }
+
+        for (SourceCandidate discoveredCandidate : executionResult.getDiscoveredCandidates()) {
+            if (discoveredCandidate == null || !StringUtils.hasText(discoveredCandidate.getUrl())) {
+                continue;
+            }
+            if (queueState.totalDiscoveredLinks >= Math.max(0, internalLinkDiscoveryProperties.getMaxLinksPerNode())) {
+                break;
+            }
+            int entryDiscoveredCount = discoveredCountByEntry.getOrDefault(queuedTask.entryKey(), 0);
+            if (entryDiscoveredCount >= Math.max(0, internalLinkDiscoveryProperties.getMaxLinksPerEntry())) {
+                break;
+            }
+
+            String canonicalUrl = canonicalize(resolveCandidateIdentity(discoveredCandidate));
+            if (StringUtils.hasText(canonicalUrl) && !scheduledCanonicalUrls.add(canonicalUrl)) {
+                continue;
+            }
+
+            SourceCandidate normalizedChildCandidate = discoveredCandidate.toBuilder()
+                    .sourceFamilyKey(StringUtils.hasText(discoveredCandidate.getSourceFamilyKey())
+                            ? discoveredCandidate.getSourceFamilyKey()
+                            : queuedTask.candidate().getSourceFamilyKey())
+                    .sourceType(StringUtils.hasText(discoveredCandidate.getSourceType())
+                            ? discoveredCandidate.getSourceType()
+                            : queuedTask.candidate().getSourceType())
+                    .build();
+            queue.addLast(new QueuedCollectionTask(
+                    normalizedChildCandidate,
+                    null,
+                    queueState.nextTargetIndex++,
+                    queuedTask.discoveryDepth() + 1,
+                    queuedTask.entryKey(),
+                    true
+            ));
+            discoveredCountByEntry.put(queuedTask.entryKey(), entryDiscoveredCount + 1);
+            queueState.totalDiscoveredLinks++;
+        }
+    }
+
     private CollectionExecutionResult markReused(CollectionExecutionResult result, CollectionTaskPackage taskPackage) {
         return result.toBuilder()
                 .taskPackageKey(taskPackage.getPackageKey())
@@ -329,6 +474,36 @@ public class CollectionExecutionCoordinator {
                 .status("SUCCESS")
                 .reusedFromCheckpoint(true)
                 .checkpointSource("collectionAuditCheckpoint")
+                .build()
+                .normalize();
+    }
+
+    private CollectionExecutionResult buildPrefetchedResult(CollectionTaskPackage taskPackage,
+                                                            SourceCollector.CollectedPage page) {
+        if (taskPackage == null || page == null || !page.isSuccess()) {
+            return null;
+        }
+        String content = StringUtils.hasText(page.getContent()) ? page.getContent() : page.getSnippet();
+        if (!StringUtils.hasText(content)) {
+            return null;
+        }
+        return CollectionExecutionResult.builder()
+                .taskPackageKey(taskPackage.getPackageKey())
+                .targetIndex(taskPackage.getTargetIndex())
+                .executorType("WEB_PAGE")
+                .success(true)
+                .status("SUCCESS")
+                .resourceLocator(StringUtils.hasText(page.getUrl()) ? page.getUrl() : taskPackage.getResourceLocator())
+                .title(page.getTitle())
+                .content(content)
+                .sourceUrls(taskPackage.getSourceUrls() == null ? List.of() : taskPackage.getSourceUrls())
+                .qualitySignals(List.of("SEARCH_VERIFICATION_PAGE_REUSED"))
+                .qualityScore(0.72D)
+                .structuredBlocks(List.of())
+                .collectedAt(Instant.now())
+                .durationMillis(0L)
+                .checkpointSource("searchVerification")
+                .reusedFromCheckpoint(false)
                 .build()
                 .normalize();
     }
@@ -471,6 +646,38 @@ public class CollectionExecutionCoordinator {
                 .build();
     }
 
+    private CollectionExecutionReport buildReport(List<CollectionExecutionResult> results,
+                                                  CollectionExecutionStats stats) {
+        return buildReport(results).toBuilder()
+                .stats(stats)
+                .build();
+    }
+
+    private CollectionExecutionStats buildStats(List<CollectionExecutionResult> results,
+                                                MutableCollectionCounters counters,
+                                                long startedAt) {
+        List<CollectionExecutionResult> stableResults = results == null ? List.of() : results;
+        int successCount = 0;
+        int failedCount = 0;
+        for (CollectionExecutionResult result : stableResults) {
+            if (result != null && result.isSuccess()) {
+                successCount++;
+            } else {
+                failedCount++;
+            }
+        }
+        return CollectionExecutionStats.builder()
+                .totalPackageCount(stableResults.size())
+                .successCount(successCount)
+                .failedCount(failedCount)
+                .prefetchedReuseCount(counters.prefetchedReuseCount)
+                .checkpointReuseCount(counters.checkpointReuseCount)
+                .executorCallCount(counters.executorCallCount)
+                .configuredConcurrency(Math.max(1, collectionExecutionProperties.getConcurrency()))
+                .elapsedMillis(Math.max(0L, System.currentTimeMillis() - startedAt))
+                .build();
+    }
+
     private String resolveAggregateStatus(List<CollectionExecutionResult> results, int successCount, int failedCount) {
         if (results == null || results.isEmpty()) {
             return "SUCCESS";
@@ -502,9 +709,40 @@ public class CollectionExecutionCoordinator {
      * entryKey 用于 per-entry 限量，discovered 用于后续进度文案区分入口页与内部发现页。
      */
     private record QueuedCollectionTask(SourceCandidate candidate,
+                                        SourceCollector.CollectedPage prefetchedPage,
                                         int targetIndex,
                                         int discoveryDepth,
                                         String entryKey,
                                         boolean discovered) {
+    }
+
+    private static class MutableCollectionCounters {
+
+        private int prefetchedReuseCount;
+        private int checkpointReuseCount;
+        private int executorCallCount;
+
+        private synchronized void incrementPrefetchedReuse() {
+            prefetchedReuseCount++;
+        }
+
+        private synchronized void incrementCheckpointReuse() {
+            checkpointReuseCount++;
+        }
+
+        private synchronized void incrementExecutorCall() {
+            executorCallCount++;
+        }
+    }
+
+    private static class MutableQueueState {
+
+        private int nextTargetIndex;
+        private int totalDiscoveredLinks;
+
+        private MutableQueueState(int nextTargetIndex, int totalDiscoveredLinks) {
+            this.nextTargetIndex = nextTargetIndex;
+            this.totalDiscoveredLinks = totalDiscoveredLinks;
+        }
     }
 }

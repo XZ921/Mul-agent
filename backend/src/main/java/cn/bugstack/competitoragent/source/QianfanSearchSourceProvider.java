@@ -115,7 +115,7 @@ public class QianfanSearchSourceProvider implements SearchSourceProvider {
                     .timeout(Duration.ofSeconds(15))
                     .header("Content-Type", "application/json")
                     .header("Accept", "application/json")
-                    .header("Authorization", properties.getApiKey())
+                    .header("Authorization", resolveAuthorizationHeader())
                     .POST(HttpRequest.BodyPublishers.ofString(buildRequestBody(query), StandardCharsets.UTF_8))
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -132,7 +132,34 @@ public class QianfanSearchSourceProvider implements SearchSourceProvider {
     }
 
     private String buildRequestBody(String query) {
-        return "{\"query\":\"" + escapeJson(query) + "\"}";
+        try {
+            int topK = Math.max(1, Math.min(50, searchProviderProperties.getResultsPerScope()));
+            return objectMapper.writeValueAsString(java.util.Map.of(
+                    "messages", List.of(java.util.Map.of(
+                            "content", defaultText(query, ""),
+                            "role", "user"
+                    )),
+                    "search_source", "baidu_search_v2",
+                    "resource_type_filter", List.of(java.util.Map.of(
+                            "type", "web",
+                            "top_k", topK
+                    ))
+            ));
+        } catch (Exception e) {
+            throw new IllegalStateException("build qianfan request body failed", e);
+        }
+    }
+
+    private String resolveAuthorizationHeader() {
+        String apiKey = properties == null ? null : properties.getApiKey();
+        if (!StringUtils.hasText(apiKey)) {
+            return "";
+        }
+        String trimmedApiKey = apiKey.trim();
+        if (trimmedApiKey.regionMatches(true, 0, "Bearer ", 0, "Bearer ".length())) {
+            return trimmedApiKey;
+        }
+        return "Bearer " + trimmedApiKey;
     }
 
     private List<SourceCandidate> parseCandidates(String responseBody,
@@ -141,7 +168,7 @@ public class QianfanSearchSourceProvider implements SearchSourceProvider {
                                                   String query) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
-            JsonNode results = root == null ? null : root.path("data").path("results");
+            JsonNode results = resolveResultArray(root);
             if (results == null || !results.isArray()) {
                 return List.of();
             }
@@ -153,11 +180,13 @@ public class QianfanSearchSourceProvider implements SearchSourceProvider {
                 if (rank >= limit) {
                     break;
                 }
-                String url = text(item, "url");
+                String url = defaultText(text(item, "url"), text(item, "link"));
                 if (!StringUtils.hasText(url)) {
                     continue;
                 }
                 rank++;
+                String snippet = defaultText(text(item, "summary"),
+                        defaultText(text(item, "content"), text(item, "snippet")));
                 candidates.add(SourceCandidate.builder()
                         .url(url)
                         .sourceUrls(List.of(url))
@@ -165,11 +194,13 @@ public class QianfanSearchSourceProvider implements SearchSourceProvider {
                         .sourceType(scope)
                         .providerKey("qianfan")
                         .discoveryMethod("QIANFAN_SEARCH")
-                        .reason(buildReason(scope, defaultText(text(item, "content"), text(item, "snippet"))))
+                        .reason(buildReason(scope, snippet))
                         .domain(extractDomain(url))
-                        .publishedAt(defaultText(text(item, "publish_time"), text(item, "published_at")))
+                        .publishedAt(defaultText(text(item, "publish_time"),
+                                defaultText(text(item, "published_at"), text(item, "date"))))
                         .relevanceScore(inferRelevance(scope, rank))
-                        .freshnessScore(StringUtils.hasText(defaultText(text(item, "publish_time"), text(item, "published_at"))) ? 0.80 : 0.58)
+                        .freshnessScore(StringUtils.hasText(defaultText(text(item, "publish_time"),
+                                defaultText(text(item, "published_at"), text(item, "date")))) ? 0.80 : 0.58)
                         .qualityScore(inferQuality(url))
                         .searchQuery(query)
                         .searchEngine(defaultText(properties.getDefaultEngine(), "baidu"))
@@ -184,6 +215,43 @@ public class QianfanSearchSourceProvider implements SearchSourceProvider {
                     UrlSecurityUtils.maskForLog(competitorName), scope, e.getMessage());
             return List.of();
         }
+    }
+
+    /**
+     * 千帆新版百度搜索文档示例常见返回为顶层结果数组；旧版/历史测试使用 data.results。
+     * 这里保留多路径兼容，避免外部 API 小版本字段差异导致候选全部丢失。
+     */
+    private JsonNode resolveResultArray(JsonNode root) {
+        if (root == null || root.isMissingNode() || root.isNull()) {
+            return null;
+        }
+        for (String path : List.of(
+                "references",
+                "search_results",
+                "results",
+                "data.results",
+                "data.search_results",
+                "data.web_results",
+                "data.resource.results",
+                "data.resource.search_results"
+        )) {
+            JsonNode node = resolvePath(root, path);
+            if (node != null && node.isArray()) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    private JsonNode resolvePath(JsonNode root, String path) {
+        JsonNode current = root;
+        for (String segment : path.split("\\.")) {
+            if (current == null || !StringUtils.hasText(segment)) {
+                return current;
+            }
+            current = current.path(segment);
+        }
+        return current;
     }
 
     private List<SourceCandidate> deduplicateCandidates(List<SourceCandidate> candidates) {
@@ -258,12 +326,5 @@ public class QianfanSearchSourceProvider implements SearchSourceProvider {
 
     private String defaultText(String value, String fallback) {
         return StringUtils.hasText(value) ? value : fallback;
-    }
-
-    private String escapeJson(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.collection;
 
+import cn.bugstack.competitoragent.source.DirectHtmlReaderClient;
 import cn.bugstack.competitoragent.source.JinaReaderClient;
 import cn.bugstack.competitoragent.source.PageContentExtractionResult;
 import cn.bugstack.competitoragent.source.SourceCollectRequest;
@@ -23,6 +24,462 @@ import static org.mockito.Mockito.when;
 class WebPageCollectionExecutorRouteTest {
 
     @Test
+    void shouldUseDirectHtmlBeforeJinaForLightweightDocsPage() {
+        DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);
+        JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(directHtmlReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(true)
+                .title("Open Docs")
+                .mainContent("Direct 直连采集到的开放平台文档正文。[账号授权](https://open.example.com/doc/auth)")
+                .qualityScore(0.74D)
+                .qualitySignals(List.of("DIRECT_HTML_CONTENT_READY"))
+                .build());
+
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(directHtmlReaderClient, jinaReaderClient, sourceCollector);
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("JINA_READER")
+                .renderHint(WebPageRenderHint.LIGHTWEIGHT)
+                .url("https://open.example.com/doc")
+                .resourceLocator("https://open.example.com/doc")
+                .sourceType("DOCS")
+                .discoveryDepth(1)
+                .sourceUrls(List.of("https://open.example.com/doc"))
+                .build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getContent()).contains("Direct 直连采集到的开放平台文档正文");
+        assertThat(result.getSourceUrls()).containsExactly("https://open.example.com/doc");
+        assertThat(result.getQualitySignals()).contains("DIRECT_HTML_CONTENT_READY");
+        verify(jinaReaderClient, never()).collect(any(SourceCollectRequest.class));
+        verify(sourceCollector, never()).collect(any(SourceCollectRequest.class));
+    }
+
+    @Test
+    void shouldFallbackToJinaWhenDirectHtmlReturnsSpaShell() {
+        DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);
+        JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(directHtmlReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(false)
+                .failureKind("CONTENT_UNUSABLE")
+                .qualityScore(0.0D)
+                .qualitySignals(List.of("DIRECT_HTML_SPA_SHELL"))
+                .build());
+        when(jinaReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(true)
+                .title("Open Docs")
+                .mainContent("JinaReader 采集到的文档正文，Direct 失败后仍然可以成功。")
+                .qualityScore(0.78D)
+                .qualitySignals(List.of("LIGHTWEIGHT_CONTENT_READY"))
+                .build());
+
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(directHtmlReaderClient, jinaReaderClient, sourceCollector);
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("JINA_READER")
+                .renderHint(WebPageRenderHint.LIGHTWEIGHT)
+                .url("https://open.example.com/doc")
+                .resourceLocator("https://open.example.com/doc")
+                .sourceType("DOCS")
+                .discoveryDepth(1)
+                .sourceUrls(List.of("https://open.example.com/doc"))
+                .build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getContent()).contains("JinaReader 采集到的文档正文");
+        assertThat(result.getQualitySignals()).contains("LIGHTWEIGHT_CONTENT_READY");
+        verify(jinaReaderClient).collect(any(SourceCollectRequest.class));
+        verify(sourceCollector, never()).collect(any(SourceCollectRequest.class));
+    }
+
+    @Test
+    void shouldFallbackToPlaywrightWhenDirectAndJinaAreBothUnusable() {
+        DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);
+        JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(directHtmlReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(false)
+                .failureKind("CONTENT_UNUSABLE")
+                .qualitySignals(List.of("DIRECT_HTML_SPA_SHELL"))
+                .qualityScore(0.0D)
+                .build());
+        when(jinaReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(false)
+                .failureKind("CONTENT_UNUSABLE")
+                .qualitySignals(List.of("LIGHTWEIGHT_CONTENT_TOO_THIN"))
+                .qualityScore(0.0D)
+                .build());
+        when(sourceCollector.collect(any(SourceCollectRequest.class))).thenReturn(SourceCollector.CollectedPage.builder()
+                .url("https://open.example.com/doc")
+                .title("Open Docs")
+                .content("Playwright 完整渲染后的正文。")
+                .metadata("""
+                        {
+                          "sourceUrls": ["https://open.example.com/doc"],
+                          "qualitySignals": ["FULL_RENDER_READY"],
+                          "qualityScore": 0.82,
+                          "durationMillis": 3000
+                        }
+                        """)
+                .sourceType("DOCS")
+                .competitorName("Acme")
+                .success(true)
+                .build());
+
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(directHtmlReaderClient, jinaReaderClient, sourceCollector);
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("JINA_READER")
+                .renderHint(WebPageRenderHint.LIGHTWEIGHT)
+                .url("https://open.example.com/doc")
+                .resourceLocator("https://open.example.com/doc")
+                .sourceType("DOCS")
+                .discoveryDepth(1)
+                .sourceUrls(List.of("https://open.example.com/doc"))
+                .build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getContent()).contains("Playwright 完整渲染后的正文");
+        assertThat(result.getQualitySignals())
+                .contains("DIRECT_HTML_SPA_SHELL", "LIGHTWEIGHT_CONTENT_TOO_THIN", "UPGRADED_TO_FULL_RENDER");
+        verify(sourceCollector).collect(any(SourceCollectRequest.class));
+    }
+
+    @Test
+    void shouldKeepOriginalJinaThenPlaywrightChainWhenDirectHtmlDisabled() {
+        DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);
+        JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(directHtmlReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(false)
+                .failureKind("RUNTIME_FAILURE")
+                .qualitySignals(List.of("DIRECT_HTML_DISABLED"))
+                .qualityScore(0.0D)
+                .build());
+        when(jinaReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(true)
+                .title("Open Docs")
+                .mainContent("Direct 关闭后，JinaReader 仍按原轻量链路采集正文。")
+                .qualityScore(0.78D)
+                .qualitySignals(List.of("LIGHTWEIGHT_CONTENT_READY"))
+                .build());
+
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(directHtmlReaderClient, jinaReaderClient, sourceCollector);
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("JINA_READER")
+                .renderHint(WebPageRenderHint.LIGHTWEIGHT)
+                .url("https://open.example.com/doc")
+                .resourceLocator("https://open.example.com/doc")
+                .sourceType("DOCS")
+                .discoveryDepth(1)
+                .sourceUrls(List.of("https://open.example.com/doc"))
+                .build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getContent()).contains("JinaReader 仍按原轻量链路采集正文");
+        assertThat(result.getQualitySignals()).contains("LIGHTWEIGHT_CONTENT_READY");
+        verify(jinaReaderClient).collect(any(SourceCollectRequest.class));
+        verify(sourceCollector, never()).collect(any(SourceCollectRequest.class));
+    }
+
+    @Test
+    void shouldUsePlaywrightOnlyToSupplementLinksWhenEntryLightweightContentHasNoInternalLinks() {
+        DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);
+        JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(directHtmlReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(true)
+                .title("Open Docs")
+                .mainContent("OPEN API documentation center. Account auth, user management, video management and Android SDK are available.")
+                .qualityScore(0.82D)
+                .qualitySignals(List.of("DIRECT_HTML_CONTENT_READY"))
+                .build());
+        when(sourceCollector.collect(any(SourceCollectRequest.class))).thenReturn(SourceCollector.CollectedPage.builder()
+                .url("https://open.example.com/doc")
+                .title("Open Docs")
+                .content("""
+                        <a href="https://open.example.com/doc/auth">OAuth Account API</a>
+                        <a href="https://open.example.com/doc/android-sdk">Android SDK</a>
+                        """)
+                .metadata("""
+                        {
+                          "sourceUrls": ["https://open.example.com/doc"],
+                          "qualitySignals": ["FULL_RENDER_READY"],
+                          "qualityScore": 0.52,
+                          "durationMillis": 3000
+                        }
+                        """)
+                .sourceType("DOCS")
+                .competitorName("Acme")
+                .success(true)
+                .build());
+
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(directHtmlReaderClient, jinaReaderClient, sourceCollector);
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("JINA_READER")
+                .renderHint(WebPageRenderHint.LIGHTWEIGHT)
+                .url("https://open.example.com/doc")
+                .resourceLocator("https://open.example.com/doc")
+                .sourceType("DOCS")
+                .discoveryDepth(0)
+                .sourceUrls(List.of("https://open.example.com/doc"))
+                .build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getContent()).contains("OPEN API documentation center");
+        assertThat(result.getQualitySignals())
+                .contains("DIRECT_HTML_CONTENT_READY", "PLAYWRIGHT_LINK_SUPPLEMENT_READY")
+                .doesNotContain("UPGRADED_TO_FULL_RENDER");
+        assertThat(result.getDiscoveredCandidates())
+                .extracting(candidate -> candidate.getUrl())
+                .containsExactly("https://open.example.com/doc/auth", "https://open.example.com/doc/android-sdk");
+        verify(jinaReaderClient, never()).collect(any(SourceCollectRequest.class));
+        verify(sourceCollector).collect(any(SourceCollectRequest.class));
+    }
+
+    @Test
+    void shouldSupplementLinksForEntryPageWhenDiscoveryDepthIsMissing() {
+        DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);
+        JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(directHtmlReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(true)
+                .title("Open Docs")
+                .mainContent("OPEN API documentation center. Account auth, user management and Android SDK are available.")
+                .qualityScore(0.82D)
+                .qualitySignals(List.of("DIRECT_HTML_CONTENT_READY"))
+                .build());
+        when(sourceCollector.collect(any(SourceCollectRequest.class))).thenReturn(SourceCollector.CollectedPage.builder()
+                .url("https://open.example.com/doc")
+                .title("Open Docs")
+                .content("""
+                        <a href="https://open.example.com/doc/auth">OAuth Account API</a>
+                        <a href="https://open.example.com/doc/android-sdk">Android SDK</a>
+                        """)
+                .metadata("""
+                        {
+                          "sourceUrls": ["https://open.example.com/doc"],
+                          "qualitySignals": ["FULL_RENDER_READY"],
+                          "qualityScore": 0.52,
+                          "durationMillis": 3000
+                        }
+                        """)
+                .sourceType("DOCS")
+                .competitorName("Acme")
+                .success(true)
+                .build());
+
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(directHtmlReaderClient, jinaReaderClient, sourceCollector);
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("JINA_READER")
+                .renderHint(WebPageRenderHint.LIGHTWEIGHT)
+                .url("https://open.example.com/doc")
+                .resourceLocator("https://open.example.com/doc")
+                .sourceType("DOCS")
+                .sourceUrls(List.of("https://open.example.com/doc"))
+                .build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getContent()).contains("OPEN API documentation center");
+        assertThat(result.getDiscoveryDepth()).isZero();
+        assertThat(result.getQualitySignals())
+                .contains("DIRECT_HTML_CONTENT_READY", "PLAYWRIGHT_LINK_SUPPLEMENT_READY")
+                .doesNotContain("UPGRADED_TO_FULL_RENDER");
+        assertThat(result.getDiscoveredCandidates())
+                .extracting(candidate -> candidate.getUrl())
+                .containsExactly("https://open.example.com/doc/auth", "https://open.example.com/doc/android-sdk");
+        verify(jinaReaderClient, never()).collect(any(SourceCollectRequest.class));
+        verify(sourceCollector).collect(any(SourceCollectRequest.class));
+    }
+
+    @Test
+    void shouldNotSupplementLinksForRecursiveLightweightSuccess() {
+        DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);
+        JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(directHtmlReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(true)
+                .title("Account Auth")
+                .mainContent("Account Auth details. Scope: USER_INFO. Request method: GET.")
+                .qualityScore(0.82D)
+                .qualitySignals(List.of("DIRECT_HTML_CONTENT_READY"))
+                .build());
+
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(directHtmlReaderClient, jinaReaderClient, sourceCollector);
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("JINA_READER")
+                .renderHint(WebPageRenderHint.LIGHTWEIGHT)
+                .url("https://open.example.com/doc/auth")
+                .resourceLocator("https://open.example.com/doc/auth")
+                .sourceType("DOCS")
+                .discoveryDepth(1)
+                .sourceUrls(List.of("https://open.example.com/doc", "https://open.example.com/doc/auth"))
+                .build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getContent()).contains("Account Auth details");
+        assertThat(result.getQualitySignals()).doesNotContain("PLAYWRIGHT_LINK_SUPPLEMENT_READY");
+        verify(sourceCollector, never()).collect(any(SourceCollectRequest.class));
+    }
+
+    @Test
+    void shouldNotSupplementLinksForOfficialEntryPageByDefault() {
+        DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);
+        JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(directHtmlReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(true)
+                .title("Official Home")
+                .mainContent("Official home content is usable, but OFFICIAL entry pages do not supplement links by default.")
+                .qualityScore(0.82D)
+                .qualitySignals(List.of("DIRECT_HTML_CONTENT_READY"))
+                .build());
+
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(directHtmlReaderClient, jinaReaderClient, sourceCollector);
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("JINA_READER")
+                .renderHint(WebPageRenderHint.LIGHTWEIGHT)
+                .url("https://www.example.com")
+                .resourceLocator("https://www.example.com")
+                .sourceType("OFFICIAL")
+                .discoveryDepth(0)
+                .sourceUrls(List.of("https://www.example.com"))
+                .build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getQualitySignals()).doesNotContain("PLAYWRIGHT_LINK_SUPPLEMENT_READY");
+        verify(sourceCollector, never()).collect(any(SourceCollectRequest.class));
+    }
+
+    @Test
+    void shouldNotSupplementLinksWhenPlaywrightLinkSupplementDisabled() {
+        DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);
+        JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        WebPageCollectionProperties properties = new WebPageCollectionProperties();
+        properties.setPlaywrightLinkSupplementEnabled(false);
+        when(directHtmlReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(true)
+                .title("Open Docs")
+                .mainContent("OPEN API documentation center content is usable but has no internal links.")
+                .qualityScore(0.82D)
+                .qualitySignals(List.of("DIRECT_HTML_CONTENT_READY"))
+                .build());
+
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(
+                directHtmlReaderClient,
+                jinaReaderClient,
+                sourceCollector,
+                new InternalLinkDiscoveryService(new InternalLinkDiscoveryProperties(), new cn.bugstack.competitoragent.search.CanonicalUrlResolver()),
+                properties
+        );
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("JINA_READER")
+                .renderHint(WebPageRenderHint.LIGHTWEIGHT)
+                .url("https://open.example.com/doc")
+                .resourceLocator("https://open.example.com/doc")
+                .sourceType("DOCS")
+                .discoveryDepth(0)
+                .sourceUrls(List.of("https://open.example.com/doc"))
+                .build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getQualitySignals()).doesNotContain("PLAYWRIGHT_LINK_SUPPLEMENT_READY");
+        verify(sourceCollector, never()).collect(any(SourceCollectRequest.class));
+    }
+
+    @Test
+    void shouldSupplementLinksForOfficialEntryPageWhenSourceTypeWhitelistIncludesOfficial() {
+        DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);
+        JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        WebPageCollectionProperties properties = new WebPageCollectionProperties();
+        properties.setPlaywrightLinkSupplementSourceTypes(List.of("DOCS", "OFFICIAL"));
+        when(directHtmlReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(true)
+                .title("Official Home")
+                .mainContent("Official home content is usable, but internal entry links need configurable Playwright supplementation.")
+                .qualityScore(0.82D)
+                .qualitySignals(List.of("DIRECT_HTML_CONTENT_READY"))
+                .build());
+        when(sourceCollector.collect(any(SourceCollectRequest.class))).thenReturn(SourceCollector.CollectedPage.builder()
+                .url("https://www.example.com")
+                .title("Official Home")
+                .content("""
+                        <a href="https://www.example.com/docs">Developer Docs</a>
+                        <a href="https://www.example.com/pricing">Pricing</a>
+                        """)
+                .metadata("""
+                        {
+                          "sourceUrls": ["https://www.example.com"],
+                          "qualitySignals": ["FULL_RENDER_READY"],
+                          "qualityScore": 0.52,
+                          "durationMillis": 2600
+                        }
+                        """)
+                .sourceType("OFFICIAL")
+                .competitorName("Acme")
+                .success(true)
+                .build());
+
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(
+                directHtmlReaderClient,
+                jinaReaderClient,
+                sourceCollector,
+                new InternalLinkDiscoveryService(new InternalLinkDiscoveryProperties(), new cn.bugstack.competitoragent.search.CanonicalUrlResolver()),
+                properties
+        );
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("JINA_READER")
+                .renderHint(WebPageRenderHint.LIGHTWEIGHT)
+                .url("https://www.example.com")
+                .resourceLocator("https://www.example.com")
+                .sourceType("OFFICIAL")
+                .discoveryDepth(0)
+                .sourceUrls(List.of("https://www.example.com"))
+                .build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getContent()).contains("Official home content is usable");
+        assertThat(result.getQualitySignals())
+                .contains("DIRECT_HTML_CONTENT_READY", "PLAYWRIGHT_LINK_SUPPLEMENT_READY")
+                .doesNotContain("UPGRADED_TO_FULL_RENDER");
+        assertThat(result.getDiscoveredCandidates())
+                .extracting(candidate -> candidate.getUrl())
+                .containsExactly("https://example.com/docs");
+        verify(sourceCollector).collect(any(SourceCollectRequest.class));
+    }
+
+    @Test
+    void shouldKeepDirectDurationWhenNoPlaywrightSupplementIsNeeded() {
+        DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);
+        JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(directHtmlReaderClient.collect(any())).thenReturn(PageContentExtractionResult.builder()
+                .success(true)
+                .title("API Reference")
+                .mainContent("[Account Auth](https://open.example.com/doc/auth) content")
+                .qualityScore(0.92D)
+                .qualitySignals(List.of("DIRECT_HTML_CONTENT_READY"))
+                .durationMillis(44L)
+                .build());
+
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(directHtmlReaderClient, jinaReaderClient, sourceCollector);
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("JINA_READER")
+                .renderHint(WebPageRenderHint.LIGHTWEIGHT)
+                .url("https://open.example.com/doc")
+                .resourceLocator("https://open.example.com/doc")
+                .sourceType("DOCS")
+                .discoveryDepth(0)
+                .sourceUrls(List.of("https://open.example.com/doc"))
+                .build());
+
+        assertThat(result.getDurationMillis()).isEqualTo(44L);
+        verify(jinaReaderClient, never()).collect(any(SourceCollectRequest.class));
+        verify(sourceCollector, never()).collect(any(SourceCollectRequest.class));
+    }
+
+    @Test
     void shouldUseJinaReaderAsPrimaryPathForLightweightDocsPage() {
         JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
         SourceCollector sourceCollector = mock(SourceCollector.class);
@@ -41,6 +498,7 @@ class WebPageCollectionExecutorRouteTest {
                 .url("https://docs.example.com/api/reference")
                 .resourceLocator("https://docs.example.com/api/reference")
                 .sourceType("DOCS")
+                .discoveryDepth(1)
                 .sourceUrls(List.of("https://docs.example.com/api/reference"))
                 .build());
 
@@ -127,7 +585,7 @@ class WebPageCollectionExecutorRouteTest {
                 .success(true)
                 .build());
 
-        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(jinaReaderClient, sourceCollector);
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(null, jinaReaderClient, sourceCollector);
         CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
                 .primaryTool("JINA_READER")
                 .renderHint(WebPageRenderHint.LIGHTWEIGHT)
@@ -139,6 +597,8 @@ class WebPageCollectionExecutorRouteTest {
 
         assertThat(result.isSuccess()).isTrue();
         assertThat(result.getQualitySignals()).contains("UPGRADED_TO_FULL_RENDER", "STRUCTURED_BLOCK_HIT");
+        assertThat(result.getContent()).contains("完整定价页正文");
+        assertThat(result.getDiscoveredCandidates()).isNotNull();
         assertThat(result.getQualityScore()).isEqualTo(0.86D);
         assertThat(result.getStructuredBlocks())
                 .extracting(StructuredContentBlock::getBlockType)

@@ -1,5 +1,8 @@
 package cn.bugstack.competitoragent.search;
 
+import cn.bugstack.competitoragent.collection.CollectionExecutionProperties;
+import cn.bugstack.competitoragent.collection.WebPageCollectionProperties;
+import cn.bugstack.competitoragent.source.DirectHtmlReaderProperties;
 import cn.bugstack.competitoragent.source.JinaReaderProperties;
 import cn.bugstack.competitoragent.source.SearchProviderProperties;
 import org.junit.jupiter.api.Test;
@@ -36,6 +39,10 @@ class SearchPropertiesBindingTest {
                     "search.browser.continue-on-search-timeout=true",
                     "search.browser.continue-on-page-collect-failure=false",
                     "search.browser.recover-partial-content-on-timeout=true",
+                    "search.browser.verification-concurrency=4",
+                    "search.browser.verification-timing-enabled=true",
+                    "search.browser.verification-direct-first-enabled=true",
+                    "search.browser.verification-direct-positive-shortcut-enabled=true",
                     "search.source-catalog.families.official.role=PRIMARY_VERTICAL",
                     "search.source-catalog.families.official.preferred-web-render-hint=LIGHTWEIGHT",
                     "search.source-catalog.families.official.expected-block-types[0]=PRICING_BLOCK",
@@ -73,6 +80,21 @@ class SearchPropertiesBindingTest {
                     "collection.jina-reader.timeout-seconds=25",
                     "collection.jina-reader.max-retries=4",
                     "collection.jina-reader.minimum-content-length=220",
+                    "collection.direct-html-reader.enabled=true",
+                    "collection.direct-html-reader.timeout-seconds=9",
+                    "collection.direct-html-reader.max-retries=2",
+                    "collection.direct-html-reader.minimum-content-length=180",
+                    "collection.direct-html-reader.readable-chinese-guard-chars=80",
+                    "collection.direct-html-reader.max-extracted-links=60",
+                    "collection.direct-html-reader.user-agent=test-agent",
+                    "collection.web-page.playwright-link-supplement-enabled=true",
+                    "collection.web-page.playwright-link-supplement-max-depth=0",
+                    "collection.web-page.playwright-link-supplement-min-links=1",
+                    "collection.web-page.playwright-link-supplement-source-types[0]=DOCS",
+                    "collection.web-page.playwright-link-supplement-source-types[1]=OFFICIAL",
+                    "collection.execution.reuse-prefetched-page=true",
+                    "collection.execution.concurrency=3",
+                    "collection.execution.timing-enabled=true",
                     "source-discovery.search.primary-candidate-threshold=1",
                     "source-discovery.search.run-auxiliary-when-primary-satisfied=false",
                     "serpapi.api-key=test-serp-key",
@@ -94,6 +116,10 @@ class SearchPropertiesBindingTest {
             cn.bugstack.competitoragent.source.GithubApiProperties githubApiProperties =
                     context.getBean(cn.bugstack.competitoragent.source.GithubApiProperties.class);
             JinaReaderProperties jinaReaderProperties = context.getBean(JinaReaderProperties.class);
+            DirectHtmlReaderProperties directHtmlReaderProperties = context.getBean(DirectHtmlReaderProperties.class);
+            WebPageCollectionProperties webPageCollectionProperties = context.getBean(WebPageCollectionProperties.class);
+            CollectionExecutionProperties collectionExecutionProperties =
+                    context.getBean(CollectionExecutionProperties.class);
             SearchProperties searchProperties = context.getBean(SearchProperties.class);
 
             assertThat(searchProviderProperties.getProviderOrder()).containsExactly("serpapi", "qianfan");
@@ -116,6 +142,10 @@ class SearchPropertiesBindingTest {
             assertThat(searchBrowserProperties.isContinueOnSearchTimeout()).isTrue();
             assertThat(searchBrowserProperties.isContinueOnPageCollectFailure()).isFalse();
             assertThat(searchBrowserProperties.isRecoverPartialContentOnTimeout()).isTrue();
+            assertThat(searchBrowserProperties.getVerificationConcurrency()).isEqualTo(4);
+            assertThat(searchBrowserProperties.isVerificationTimingEnabled()).isTrue();
+            assertThat(searchBrowserProperties.isVerificationDirectFirstEnabled()).isTrue();
+            assertThat(searchBrowserProperties.isVerificationDirectPositiveShortcutEnabled()).isTrue();
             assertThat(serpApiProperties.getApiKey()).isEqualTo("test-serp-key");
             assertThat(serpApiProperties.getDefaultEngine()).isEqualTo("google");
             assertThat(qianfanSearchProperties.getApiKey()).isEqualTo("test-qianfan-key");
@@ -134,6 +164,21 @@ class SearchPropertiesBindingTest {
             assertThat(jinaReaderProperties.getTimeoutSeconds()).isEqualTo(25);
             assertThat(jinaReaderProperties.getMaxRetries()).isEqualTo(4);
             assertThat(jinaReaderProperties.getMinimumContentLength()).isEqualTo(220);
+            assertThat(directHtmlReaderProperties.isEnabled()).isTrue();
+            assertThat(directHtmlReaderProperties.getTimeoutSeconds()).isEqualTo(9);
+            assertThat(directHtmlReaderProperties.getMaxRetries()).isEqualTo(2);
+            assertThat(directHtmlReaderProperties.getMinimumContentLength()).isEqualTo(180);
+            assertThat(directHtmlReaderProperties.getReadableChineseGuardChars()).isEqualTo(80);
+            assertThat(directHtmlReaderProperties.getMaxExtractedLinks()).isEqualTo(60);
+            assertThat(directHtmlReaderProperties.getUserAgent()).isEqualTo("test-agent");
+            assertThat(webPageCollectionProperties.isPlaywrightLinkSupplementEnabled()).isTrue();
+            assertThat(webPageCollectionProperties.getPlaywrightLinkSupplementMaxDepth()).isEqualTo(0);
+            assertThat(webPageCollectionProperties.getPlaywrightLinkSupplementMinLinks()).isEqualTo(1);
+            assertThat(webPageCollectionProperties.getPlaywrightLinkSupplementSourceTypes())
+                    .containsExactly("DOCS", "OFFICIAL");
+            assertThat(collectionExecutionProperties.isReusePrefetchedPage()).isTrue();
+            assertThat(collectionExecutionProperties.getConcurrency()).isEqualTo(3);
+            assertThat(collectionExecutionProperties.isTimingEnabled()).isTrue();
             assertThat(searchProperties.getSourceCatalog().getFamilies()).containsKeys("official", "news", "github");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getRole())
                     .isEqualTo("PRIMARY_VERTICAL");
@@ -215,7 +260,10 @@ class SearchPropertiesBindingTest {
             SearchBrowserProperties.class,
             SearchProperties.class,
             cn.bugstack.competitoragent.source.GithubApiProperties.class,
+            DirectHtmlReaderProperties.class,
             JinaReaderProperties.class,
+            WebPageCollectionProperties.class,
+            CollectionExecutionProperties.class,
             SerpApiProperties.class,
             QianfanSearchProperties.class
     })

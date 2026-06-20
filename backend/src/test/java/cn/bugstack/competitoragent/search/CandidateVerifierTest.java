@@ -1,14 +1,21 @@
 package cn.bugstack.competitoragent.search;
 
+import cn.bugstack.competitoragent.source.DirectHtmlReaderClient;
+import cn.bugstack.competitoragent.source.PageContentExtractionResult;
 import cn.bugstack.competitoragent.source.SourceCandidate;
+import cn.bugstack.competitoragent.source.SourceCollectRequest;
 import cn.bugstack.competitoragent.source.SourceCollector;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -118,5 +125,167 @@ class CandidateVerifierTest {
         assertEquals(1, result.getUpdatedCandidates().size());
         assertEquals(0, result.getVerifiedTargets().size());
         assertTrue(Boolean.FALSE.equals(result.getUpdatedCandidates().get(0).getVerified()));
+    }
+
+    @Test
+    void shouldUseDirectHtmlAsPositiveShortcutBeforeBrowserVerification() {
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);
+        SearchBrowserProperties properties = new SearchBrowserProperties();
+        properties.setVerificationDirectFirstEnabled(true);
+        properties.setVerificationDirectPositiveShortcutEnabled(true);
+        when(directHtmlReaderClient.collect(any(SourceCollectRequest.class))).thenReturn(PageContentExtractionResult.builder()
+                .success(true)
+                .title("Open API Docs")
+                .mainContent("Open API 文档 OAuth SDK guide reference")
+                .qualitySignals(List.of("DIRECT_HTML_CONTENT_READY"))
+                .qualityScore(0.86D)
+                .build());
+
+        CandidateVerifier verifier = new CandidateVerifier(
+                sourceCollector,
+                new SearchKeywordPolicy(),
+                new CandidateOwnershipPolicy(),
+                properties,
+                directHtmlReaderProvider(directHtmlReaderClient)
+        );
+
+        CandidateVerificationResult result = verifier.verify("Acme", "DOCS", List.of(
+                SourceCandidate.builder()
+                        .url("https://docs.example.com/a")
+                        .sourceType("DOCS")
+                        .domain("docs.example.com")
+                        .build()
+        ));
+
+        assertEquals(1, result.getVerifiedTargets().size());
+        assertEquals(1, result.getDirectVerificationAttemptCount());
+        assertEquals(1, result.getDirectVerificationUsableCount());
+        assertEquals(1, result.getDirectVerificationShortcutCount());
+        assertTrue(result.getVerifiedTargets().get(0).getCandidate().getQualitySignals()
+                .contains("DIRECT_HTML_VERIFICATION_SHORTCUT"));
+        verify(sourceCollector, never()).collect(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void shouldFallThroughToCollectorWhenDirectHtmlDoesNotProveRelevance() {
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);
+        SearchBrowserProperties properties = new SearchBrowserProperties();
+        properties.setVerificationDirectFirstEnabled(true);
+        when(directHtmlReaderClient.collect(any(SourceCollectRequest.class))).thenReturn(PageContentExtractionResult.builder()
+                .success(false)
+                .failureKind("CONTENT_UNUSABLE")
+                .errorMessage("direct html content too thin")
+                .qualitySignals(List.of("DIRECT_HTML_CONTENT_TOO_THIN"))
+                .build());
+        when(sourceCollector.collect(anyString(), anyString(), anyString())).thenReturn(SourceCollector.CollectedPage.builder()
+                .title("Open API Docs")
+                .content("Open API 文档 OAuth SDK guide reference")
+                .snippet("Open API 文档")
+                .success(true)
+                .build());
+
+        CandidateVerifier verifier = new CandidateVerifier(
+                sourceCollector,
+                new SearchKeywordPolicy(),
+                new CandidateOwnershipPolicy(),
+                properties,
+                directHtmlReaderProvider(directHtmlReaderClient)
+        );
+
+        CandidateVerificationResult result = verifier.verify("Acme", "DOCS", List.of(
+                SourceCandidate.builder()
+                        .url("https://docs.example.com/a")
+                        .sourceType("DOCS")
+                        .domain("docs.example.com")
+                        .build()
+        ));
+
+        assertEquals(1, result.getVerifiedTargets().size());
+        assertEquals(1, result.getDirectVerificationAttemptCount());
+        assertEquals(0, result.getDirectVerificationShortcutCount());
+        verify(sourceCollector, times(1)).collect(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void shouldVerifyCandidatesConcurrentlyWithoutDroppingResults() {
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        SearchBrowserProperties properties = new SearchBrowserProperties();
+        properties.setVerificationConcurrency(3);
+        when(sourceCollector.collect(anyString(), anyString(), anyString())).thenAnswer(invocation -> {
+            Thread.sleep(200);
+            String url = invocation.getArgument(0);
+            return SourceCollector.CollectedPage.builder()
+                    .url(url)
+                    .title("Open API Docs")
+                    .content("Open API 文档 OAuth SDK guide reference")
+                    .snippet("Open API 文档")
+                    .success(true)
+                    .build();
+        });
+
+        CandidateVerifier verifier = new CandidateVerifier(
+                sourceCollector,
+                new SearchKeywordPolicy(),
+                new CandidateOwnershipPolicy(),
+                properties
+        );
+
+        long startedAt = System.currentTimeMillis();
+        CandidateVerificationResult result = verifier.verify("Acme", "DOCS", List.of(
+                SourceCandidate.builder().url("https://docs.example.com/a").sourceType("DOCS").domain("docs.example.com").build(),
+                SourceCandidate.builder().url("https://docs.example.com/b").sourceType("DOCS").domain("docs.example.com").build(),
+                SourceCandidate.builder().url("https://docs.example.com/c").sourceType("DOCS").domain("docs.example.com").build()
+        ));
+        long elapsedMillis = System.currentTimeMillis() - startedAt;
+
+        assertEquals(3, result.getAttemptedTargets().size());
+        assertEquals(List.of(
+                        "https://docs.example.com/a",
+                        "https://docs.example.com/b",
+                        "https://docs.example.com/c"
+                ),
+                result.getUpdatedCandidates().stream().map(SourceCandidate::getUrl).toList());
+        assertEquals(3, result.getVerificationConcurrency());
+        assertTrue(elapsedMillis < 550L, "并发验证耗时应低于串行三次 200ms 的总耗时");
+    }
+
+    @Test
+    void shouldUseSerialVerificationWhenConcurrencyIsOne() {
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        SearchBrowserProperties properties = new SearchBrowserProperties();
+        properties.setVerificationConcurrency(1);
+        when(sourceCollector.collect(anyString(), anyString(), anyString())).thenReturn(SourceCollector.CollectedPage.builder()
+                .title("Open API Docs")
+                .content("Open API 文档 OAuth SDK guide reference")
+                .snippet("Open API 文档")
+                .success(true)
+                .build());
+
+        CandidateVerifier verifier = new CandidateVerifier(
+                sourceCollector,
+                new SearchKeywordPolicy(),
+                new CandidateOwnershipPolicy(),
+                properties
+        );
+
+        CandidateVerificationResult result = verifier.verify("Acme", "DOCS", List.of(
+                SourceCandidate.builder()
+                        .url("https://docs.example.com/a")
+                        .sourceType("DOCS")
+                        .domain("docs.example.com")
+                        .build()
+        ));
+
+        assertEquals(1, result.getVerificationConcurrency());
+        assertEquals(1, result.getAttemptedTargets().size());
+    }
+
+    @SuppressWarnings("unchecked")
+    private ObjectProvider<DirectHtmlReaderClient> directHtmlReaderProvider(DirectHtmlReaderClient directHtmlReaderClient) {
+        ObjectProvider<DirectHtmlReaderClient> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(directHtmlReaderClient);
+        return provider;
     }
 }

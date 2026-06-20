@@ -21,4 +21,14 @@ public class CandidateVerificationResult {
     private List<SourceCandidate> updatedCandidates;
     private List<SearchCollectionTarget> attemptedTargets;
     private List<SearchCollectionTarget> verifiedTargets;
+    private Integer inputCandidateCount;
+    private Integer uniqueCandidateCount;
+    private Integer attemptedCandidateCount;
+    private Integer verifiedCandidateCount;
+    private Integer reusedCollectedPageCount;
+    private Integer directVerificationAttemptCount;
+    private Integer directVerificationUsableCount;
+    private Integer directVerificationShortcutCount;
+    private Integer verificationConcurrency;
+    private Long verificationElapsedMillis;
 }
