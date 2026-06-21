@@ -11,6 +11,7 @@ import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.workflow.contract.AnalysisResult;
+import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceView;
 import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
 import cn.bugstack.competitoragent.workflow.contract.SectionEvidenceBundle;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -76,15 +77,14 @@ public class CompetitorAnalysisAgent extends BaseAgent {
     @Override
     protected AgentResult doExecute(AgentContext context) {
         List<CompetitorKnowledge> knowledges = knowledgeRepository.findByTaskIdOrderByIdAsc(context.getTaskId());
-        if (knowledges.isEmpty()) {
+        List<DownstreamEvidenceView> downstreamEvidenceViews = readDownstreamEvidenceViews(context.getSharedOutput("extract_schema"));
+        if (knowledges.isEmpty() && downstreamEvidenceViews.isEmpty()) {
             return AgentResult.failed("暂无可分析的竞品知识");
         }
 
         String competitorData;
         try {
-            competitorData = objectMapper.writeValueAsString(knowledges.stream()
-                    .map(this::toPromptPayload)
-                    .toList());
+            competitorData = objectMapper.writeValueAsString(buildPromptPayloads(knowledges, downstreamEvidenceViews));
         } catch (JsonProcessingException e) {
             return AgentResult.failed("竞品知识序列化失败：" + e.getMessage());
         }
@@ -108,7 +108,7 @@ public class CompetitorAnalysisAgent extends BaseAgent {
             if (!(rawJson instanceof ObjectNode analysisJson)) {
                 return AgentResult.failed("竞品分析失败：模型未返回 JSON 对象");
             }
-            AnalysisResult analysisResult = normalizeAnalysisResult(analysisJson, knowledges);
+            AnalysisResult analysisResult = normalizeAnalysisResult(analysisJson, knowledges, downstreamEvidenceViews);
             // 把最终实际消费的 Task RAG 摘要一并写回运行态输出，方便后续节点和审计接口复核。
             analysisResult.setTaskRagContext(context.getTaskRagPromptContext());
             String outputJson = objectMapper.writeValueAsString(analysisResult);
@@ -121,6 +121,38 @@ public class CompetitorAnalysisAgent extends BaseAgent {
             log.error("competitor analysis failed", e);
             return AgentResult.failed("竞品分析失败：" + e.getMessage());
         }
+    }
+
+    private List<Map<String, Object>> buildPromptPayloads(List<CompetitorKnowledge> knowledges,
+                                                          List<DownstreamEvidenceView> downstreamEvidenceViews) {
+        List<Map<String, Object>> payloads = new ArrayList<>();
+        if (knowledges != null && !knowledges.isEmpty()) {
+            for (CompetitorKnowledge knowledge : knowledges) {
+                Map<String, Object> payload = toPromptPayload(knowledge);
+                List<DownstreamEvidenceView> matchedViews = downstreamEvidenceViewsByCompetitor(
+                        downstreamEvidenceViews,
+                        knowledge.getCompetitorName());
+                if (!matchedViews.isEmpty()) {
+                    payload.put("downstreamEvidenceViews", matchedViews);
+                }
+                payloads.add(payload);
+            }
+            return payloads;
+        }
+        Map<String, List<DownstreamEvidenceView>> viewsByCompetitor = new LinkedHashMap<>();
+        for (DownstreamEvidenceView view : downstreamEvidenceViews == null ? List.<DownstreamEvidenceView>of() : downstreamEvidenceViews) {
+            String competitorName = firstNonBlank(view.getCompetitorName(), "UNKNOWN");
+            viewsByCompetitor.computeIfAbsent(competitorName, key -> new ArrayList<>()).add(view.normalized());
+        }
+        for (Map.Entry<String, List<DownstreamEvidenceView>> entry : viewsByCompetitor.entrySet()) {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("competitorName", entry.getKey());
+            payload.put("sourceUrls", collectEvidenceViewSourceUrls(entry.getValue()));
+            payload.put("issueFlags", collectEvidenceViewIssueFlags(entry.getValue()));
+            payload.put("downstreamEvidenceViews", entry.getValue());
+            payloads.add(payload);
+        }
+        return payloads;
     }
 
     private Map<String, Object> toPromptPayload(CompetitorKnowledge knowledge) {
@@ -144,7 +176,9 @@ public class CompetitorAnalysisAgent extends BaseAgent {
      * 分析阶段的首要职责不是相信模型字段永远稳定，而是把模型输出矫正回系统约定的契约形态。
      * 这里统一处理字段漂移、来源回填和证据缺口继承，保证 Writer 永远拿到同一种结构。
      */
-    private AnalysisResult normalizeAnalysisResult(ObjectNode analysisJson, List<CompetitorKnowledge> knowledges) {
+    private AnalysisResult normalizeAnalysisResult(ObjectNode analysisJson,
+                                                   List<CompetitorKnowledge> knowledges,
+                                                   List<DownstreamEvidenceView> downstreamEvidenceViews) {
         LinkedHashSet<String> issueFlags = new LinkedHashSet<>(readStringList(analysisJson.path("issueFlags")));
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>(readStringList(analysisJson.path("sourceUrls")));
         List<EvidenceFragment> evidenceFragments = new ArrayList<>(readEvidenceFragments(analysisJson.path("evidenceFragments")));
@@ -164,6 +198,7 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                 List.of("weaknessesSummary", "weaknessSummary", "risksSummary"), issueFlags);
 
         sourceUrls.addAll(collectKnowledgeSourceUrls(knowledges));
+        sourceUrls.addAll(collectEvidenceViewSourceUrls(downstreamEvidenceViews));
         if ((analysisJson.path("sourceUrls").isMissingNode() || analysisJson.path("sourceUrls").isEmpty())
                 && !sourceUrls.isEmpty()) {
             issueFlags.add("SOURCE_URLS_BACKFILLED");
@@ -171,6 +206,7 @@ public class CompetitorAnalysisAgent extends BaseAgent {
 
         List<String> knowledgeIssueFlags = collectKnowledgeIssueFlags(knowledges);
         issueFlags.addAll(knowledgeIssueFlags);
+        issueFlags.addAll(collectEvidenceViewIssueFlags(downstreamEvidenceViews));
         if (evidenceFragments.isEmpty()) {
             evidenceFragments.addAll(buildKnowledgeEvidenceFragments(knowledges, issueFlags));
         }
@@ -193,6 +229,7 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                 .issueFlags(new ArrayList<>(issueFlags))
                 .evidenceFragments(normalizeEvidenceFragments(evidenceFragments))
                 .sectionEvidenceBundles(normalizeSectionEvidenceBundles(sectionEvidenceBundles))
+                .downstreamEvidenceViews(normalizeDownstreamEvidenceViews(downstreamEvidenceViews))
                 .build();
     }
 
@@ -309,6 +346,75 @@ public class CompetitorAnalysisAgent extends BaseAgent {
      * 如果模型没有主动返回 evidenceFragments，就直接从抽取阶段落库的 sources/sourceUrls 回填。
      * 这样 Writer 可以只依赖 AnalysisResult，而不用重新猜测知识对象里的来源结构。
      */
+    private List<DownstreamEvidenceView> readDownstreamEvidenceViews(String extractorOutput) {
+        JsonNode root = readJsonNode(extractorOutput);
+        if (root == null || root.isMissingNode() || root.isNull()) {
+            return List.of();
+        }
+        List<DownstreamEvidenceView> views = new ArrayList<>();
+        views.addAll(readDownstreamEvidenceViews(root.path("downstreamEvidenceViews")));
+        JsonNode drafts = root.path("drafts");
+        if (drafts.isArray()) {
+            for (JsonNode draft : drafts) {
+                views.addAll(readDownstreamEvidenceViews(draft.path("downstreamEvidenceViews")));
+            }
+        }
+        return normalizeDownstreamEvidenceViews(views);
+    }
+
+    private List<DownstreamEvidenceView> readDownstreamEvidenceViews(JsonNode node) {
+        if (!(node instanceof ArrayNode arrayNode)) {
+            return List.of();
+        }
+        List<DownstreamEvidenceView> views = new ArrayList<>();
+        for (JsonNode item : arrayNode) {
+            DownstreamEvidenceView view = objectMapper.convertValue(item, DownstreamEvidenceView.class);
+            if (view != null) {
+                views.add(view.normalized());
+            }
+        }
+        return views;
+    }
+
+    private List<DownstreamEvidenceView> downstreamEvidenceViewsByCompetitor(List<DownstreamEvidenceView> views,
+                                                                             String competitorName) {
+        List<DownstreamEvidenceView> matchedViews = new ArrayList<>();
+        for (DownstreamEvidenceView view : views == null ? List.<DownstreamEvidenceView>of() : views) {
+            if (competitorName == null
+                    || view.getCompetitorName() == null
+                    || competitorName.equalsIgnoreCase(view.getCompetitorName())) {
+                matchedViews.add(view.normalized());
+            }
+        }
+        return matchedViews;
+    }
+
+    private List<String> collectEvidenceViewSourceUrls(List<DownstreamEvidenceView> views) {
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        for (DownstreamEvidenceView view : views == null ? List.<DownstreamEvidenceView>of() : views) {
+            sourceUrls.addAll(view.getSourceUrls() == null ? List.of() : view.getSourceUrls());
+        }
+        return new ArrayList<>(sourceUrls);
+    }
+
+    private List<String> collectEvidenceViewIssueFlags(List<DownstreamEvidenceView> views) {
+        LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
+        for (DownstreamEvidenceView view : views == null ? List.<DownstreamEvidenceView>of() : views) {
+            issueFlags.addAll(view.getIssueFlags() == null ? List.of() : view.getIssueFlags());
+        }
+        return new ArrayList<>(issueFlags);
+    }
+
+    private List<DownstreamEvidenceView> normalizeDownstreamEvidenceViews(List<DownstreamEvidenceView> views) {
+        List<DownstreamEvidenceView> normalized = new ArrayList<>();
+        for (DownstreamEvidenceView view : views == null ? List.<DownstreamEvidenceView>of() : views) {
+            if (view != null) {
+                normalized.add(view.normalized());
+            }
+        }
+        return normalized;
+    }
+
     private List<EvidenceFragment> buildKnowledgeEvidenceFragments(List<CompetitorKnowledge> knowledges,
                                                                   LinkedHashSet<String> inheritedIssueFlags) {
         List<EvidenceFragment> fragments = new ArrayList<>();

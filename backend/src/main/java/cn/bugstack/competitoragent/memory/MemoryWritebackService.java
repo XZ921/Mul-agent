@@ -118,6 +118,7 @@ public class MemoryWritebackService {
                 .officialUrl(request.getOfficialUrl())
                 .summary(request.getSummary())
                 .memoryLayer("DOMAIN")
+                .snapshotScope("DOMAIN")
                 .positioning(request.getPositioning())
                 .targetUsers(firstNonBlank(request.getTargetUsers(), "[]"))
                 .coreFeatures(firstNonBlank(request.getCoreFeatures(), "[]"))

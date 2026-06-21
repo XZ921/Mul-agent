@@ -130,6 +130,40 @@ class EvidenceQueryServiceTest {
     }
 
     @Test
+    void shouldProjectStructuredEvidenceQualityFieldsIntoPageMetadata() {
+        EvidenceSource evidence = EvidenceSource.builder()
+                .taskId(2L)
+                .competitorName("Notion AI")
+                .evidenceId("E002")
+                .title("Pricing Docs")
+                .url("https://docs.example.com/pricing")
+                .contentSnippet("pricing snippet")
+                .sourceType("DOCS")
+                .discoveryMethod("SEARCH")
+                .sourceDomain("docs.example.com")
+                .discoveryReason("命中定价资料")
+                .publishedAt("2026-06-01")
+                .sourceScore(0.781)
+                .pageMetadata("""
+                        {
+                          "qualitySignals":["QUALITY_SIGNAL_FAILED","NO_PRICING_BLOCK"],
+                          "structuredBlocks":[{"blockType":"PRICING","summary":"enterprise pricing missing"}],
+                          "qualityScore":0.34,
+                          "failureKind":"STRUCTURED_EXTRACTION_INSUFFICIENT"
+                        }
+                        """)
+                .build();
+
+        EvidenceInfo info = service.toEvidenceInfo(evidence);
+
+        assertEquals(List.of("QUALITY_SIGNAL_FAILED", "NO_PRICING_BLOCK"), info.getPageMetadata().get("qualitySignals"));
+        assertEquals(0.34, info.getPageMetadata().get("qualityScore"));
+        assertEquals("STRUCTURED_EXTRACTION_INSUFFICIENT", info.getPageMetadata().get("failureKind"));
+        assertTrue(String.valueOf(info.getPageMetadata().get("structuredBlocks")).contains("PRICING"));
+        assertTrue(String.valueOf(info.getPageMetadata().get("structuredBlocks")).contains("enterprise pricing missing"));
+    }
+
+    @Test
     void shouldQueryWithSpecificationAndStableSort() {
         when(evidenceRepository.findAll(any(Specification.class), any(Sort.class))).thenReturn(List.of());
 

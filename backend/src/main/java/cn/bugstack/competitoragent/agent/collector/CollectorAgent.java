@@ -32,12 +32,15 @@ import cn.bugstack.competitoragent.source.SourceCollector;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.workflow.contract.CollectResult;
 import cn.bugstack.competitoragent.workflow.contract.CollectedDocument;
+import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceView;
+import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceViewAssembler;
 import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
 import cn.bugstack.competitoragent.workflow.contract.SectionEvidenceBundle;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -65,6 +68,7 @@ public class CollectorAgent extends BaseAgent {
     private final TaskRetrievalIndexService taskRetrievalIndexService;
     private final ObjectMapper objectMapper;
     private final CanonicalUrlResolver canonicalUrlResolver;
+    private final DownstreamEvidenceViewAssembler downstreamEvidenceViewAssembler;
 
     public CollectorAgent(AgentExecutionLogRepository logRepository,
                           SourceCollector sourceCollector,
@@ -75,6 +79,31 @@ public class CollectorAgent extends BaseAgent {
                           CollectionExecutionCoordinator collectionExecutionCoordinator,
                           TaskRetrievalIndexService taskRetrievalIndexService,
                           ObjectMapper objectMapper) {
+        this(logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchExecutionCoordinator,
+                collectionExecutionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper,
+                new DownstreamEvidenceViewAssembler(objectMapper));
+    }
+
+    @Autowired
+    public CollectorAgent(AgentExecutionLogRepository logRepository,
+                          SourceCollector sourceCollector,
+                          EvidenceSourceRepository evidenceRepository,
+                          TaskNodeRepository nodeRepository,
+                          AgentContextAssembler agentContextAssembler,
+                          SearchExecutionCoordinator searchExecutionCoordinator,
+                          CollectionExecutionCoordinator collectionExecutionCoordinator,
+                          TaskRetrievalIndexService taskRetrievalIndexService,
+                          ObjectMapper objectMapper,
+                          DownstreamEvidenceViewAssembler downstreamEvidenceViewAssembler) {
+        // Spring 需要明确知道运行期应优先使用带统一证据视图装配器的正式构造器，
+        // 否则存在多个 public 构造器时会退回默认实例化路径，导致上下文加载失败。
         super(logRepository, agentContextAssembler);
         this.sourceCollector = sourceCollector;
         this.evidenceRepository = evidenceRepository;
@@ -84,6 +113,9 @@ public class CollectorAgent extends BaseAgent {
         this.taskRetrievalIndexService = taskRetrievalIndexService;
         this.objectMapper = objectMapper;
         this.canonicalUrlResolver = new CanonicalUrlResolver();
+        this.downstreamEvidenceViewAssembler = downstreamEvidenceViewAssembler == null
+                ? new DownstreamEvidenceViewAssembler(objectMapper)
+                : downstreamEvidenceViewAssembler;
     }
 
     @Override
@@ -315,6 +347,8 @@ public class CollectorAgent extends BaseAgent {
             resultEntry.put("issueFlags", collectionIssueFlags);
             resultEntry.put("evidenceFragments", buildCollectedEvidenceFragments(
                     config, sourceType, page, matchedCandidate, evidenceId, effectiveUrl));
+            resultEntry.put("downstreamEvidenceViews", buildDownstreamEvidenceViews(
+                    config, sourceType, page, evidenceId, effectiveUrl, pageMetadata));
             if (retrievalIndexingResult != null) {
                 resultEntry.put("knowledgeDocument", toKnowledgeDocumentPayload(retrievalIndexingResult.knowledgeDocument()));
                 resultEntry.put("retrievalChunks", toRetrievalChunkPayloads(retrievalIndexingResult.retrievalChunks()));
@@ -790,6 +824,7 @@ public class CollectorAgent extends BaseAgent {
         output.put("issueFlags", collectResult.getIssueFlags());
         output.put("evidenceFragments", collectResult.getEvidenceFragments());
         output.put("sectionEvidenceBundles", collectResult.getSectionEvidenceBundles());
+        output.put("downstreamEvidenceViews", collectResult.getDownstreamEvidenceViews());
         output.put("knowledgeDocuments", collectResult.getKnowledgeDocuments());
         output.put("retrievalChunks", collectResult.getRetrievalChunks());
         output.put("retrievalIndexes", collectResult.getRetrievalIndexes());
@@ -806,6 +841,7 @@ public class CollectorAgent extends BaseAgent {
         List<CollectedDocument> documents = new ArrayList<>();
         List<EvidenceFragment> fragments = new ArrayList<>();
         List<SectionEvidenceBundle> sectionEvidenceBundles = new ArrayList<>();
+        List<DownstreamEvidenceView> downstreamEvidenceViews = new ArrayList<>();
         List<KnowledgeDocument> knowledgeDocuments = new ArrayList<>();
         List<RetrievalChunk> retrievalChunks = new ArrayList<>();
         List<RetrievalIndex> retrievalIndexes = new ArrayList<>();
@@ -816,6 +852,7 @@ public class CollectorAgent extends BaseAgent {
             List<String> documentSourceUrls = readStringList(result.get("sourceUrls"));
             List<String> documentIssueFlags = readStringList(result.get("issueFlags"));
             List<EvidenceFragment> documentFragments = readEvidenceFragments(result.get("evidenceFragments"));
+            List<DownstreamEvidenceView> documentEvidenceViews = readDownstreamEvidenceViews(result.get("downstreamEvidenceViews"));
             KnowledgeDocument knowledgeDocument = readKnowledgeDocument(result.get("knowledgeDocument"));
             List<RetrievalChunk> documentRetrievalChunks = readRetrievalChunks(result.get("retrievalChunks"));
             RetrievalIndex retrievalIndex = readRetrievalIndex(result.get("retrievalIndex"));
@@ -823,6 +860,7 @@ public class CollectorAgent extends BaseAgent {
             sourceUrls.addAll(documentSourceUrls);
             issueFlags.addAll(documentIssueFlags);
             fragments.addAll(documentFragments);
+            downstreamEvidenceViews.addAll(documentEvidenceViews);
             SectionEvidenceBundle documentBundle = buildDocumentSectionEvidenceBundle(result, documentSourceUrls, documentIssueFlags, documentFragments);
             sectionEvidenceBundles.add(documentBundle);
             if (knowledgeDocument != null) {
@@ -852,6 +890,7 @@ public class CollectorAgent extends BaseAgent {
                     .issueFlags(documentIssueFlags)
                     .evidenceFragments(documentFragments)
                     .sectionEvidenceBundles(List.of(documentBundle))
+                    .downstreamEvidenceViews(documentEvidenceViews)
                     .knowledgeDocument(knowledgeDocument)
                     .retrievalChunks(documentRetrievalChunks)
                     .retrievalIndex(retrievalIndex)
@@ -878,6 +917,7 @@ public class CollectorAgent extends BaseAgent {
                 .issueFlags(new ArrayList<>(issueFlags))
                 .evidenceFragments(normalizeEvidenceFragments(fragments))
                 .sectionEvidenceBundles(normalizeSectionEvidenceBundles(sectionEvidenceBundles))
+                .downstreamEvidenceViews(normalizeDownstreamEvidenceViews(downstreamEvidenceViews))
                 .knowledgeDocuments(knowledgeDocuments)
                 .retrievalChunks(retrievalChunks)
                 .retrievalIndexes(retrievalIndexes)
@@ -930,6 +970,29 @@ public class CollectorAgent extends BaseAgent {
      * 采集阶段虽然还没有结构化字段，但至少要把“哪篇页面支撑了哪个来源章节”这层关系固定下来，
      * 这样下游即使回退到采集契约，也能知道当前文档对应的证据段落与缺口状态。
      */
+    /**
+     * Collector 在输出阶段就生成统一下游视图，后续 extractor/analyzer 只消费该视图，
+     * 不再分别解析 pageMetadata 中的质量信号和结构化块。
+     */
+    private List<DownstreamEvidenceView> buildDownstreamEvidenceViews(CollectorNodeConfig config,
+                                                                      String sourceType,
+                                                                      SourceCollector.CollectedPage page,
+                                                                      String evidenceId,
+                                                                      String effectiveUrl,
+                                                                      String pageMetadata) {
+        EvidenceSource evidence = EvidenceSource.builder()
+                .competitorName(config == null ? null : config.getCompetitorName())
+                .evidenceId(evidenceId)
+                .title(page == null ? effectiveUrl : firstNonBlank(page.getTitle(), effectiveUrl))
+                .url(effectiveUrl)
+                .contentSnippet(page == null ? null : page.getSnippet())
+                .fullContent(page == null ? null : page.getContent())
+                .pageMetadata(pageMetadata)
+                .sourceType(sourceType)
+                .build();
+        return downstreamEvidenceViewAssembler.fromEvidenceSources(List.of(evidence));
+    }
+
     private SectionEvidenceBundle buildDocumentSectionEvidenceBundle(Map<String, Object> result,
                                                                     List<String> documentSourceUrls,
                                                                     List<String> documentIssueFlags,
@@ -1010,11 +1073,35 @@ public class CollectorAgent extends BaseAgent {
         return fragments;
     }
 
+    private List<DownstreamEvidenceView> readDownstreamEvidenceViews(Object value) {
+        if (!(value instanceof List<?> items)) {
+            return List.of();
+        }
+        List<DownstreamEvidenceView> views = new ArrayList<>();
+        for (Object item : items) {
+            DownstreamEvidenceView view = objectMapper.convertValue(item, DownstreamEvidenceView.class);
+            if (view != null) {
+                views.add(view.normalized());
+            }
+        }
+        return views;
+    }
+
     private List<EvidenceFragment> normalizeEvidenceFragments(List<EvidenceFragment> fragments) {
         List<EvidenceFragment> normalized = new ArrayList<>();
         for (EvidenceFragment fragment : fragments) {
             if (fragment != null) {
                 normalized.add(fragment.normalized());
+            }
+        }
+        return normalized;
+    }
+
+    private List<DownstreamEvidenceView> normalizeDownstreamEvidenceViews(List<DownstreamEvidenceView> views) {
+        List<DownstreamEvidenceView> normalized = new ArrayList<>();
+        for (DownstreamEvidenceView view : views == null ? List.<DownstreamEvidenceView>of() : views) {
+            if (view != null) {
+                normalized.add(view.normalized());
             }
         }
         return normalized;
@@ -1336,6 +1423,8 @@ public class CollectorAgent extends BaseAgent {
         resultEntry.put("issueFlags", collectionIssueFlags);
         resultEntry.put("evidenceFragments", buildCollectedEvidenceFragments(
                 config, effectiveSourceType, page, effectiveCandidate, evidenceId, effectiveUrl));
+        resultEntry.put("downstreamEvidenceViews", buildDownstreamEvidenceViews(
+                config, effectiveSourceType, page, evidenceId, effectiveUrl, pageMetadata));
         if (retrievalIndexingResult != null) {
             resultEntry.put("knowledgeDocument", toKnowledgeDocumentPayload(retrievalIndexingResult.knowledgeDocument()));
             resultEntry.put("retrievalChunks", toRetrievalChunkPayloads(retrievalIndexingResult.retrievalChunks()));

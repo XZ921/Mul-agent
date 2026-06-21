@@ -188,7 +188,7 @@ public class ReportService {
         return ReportResponse.DeliverySummaryInfo.builder()
                 .readyForDelivery(readyForDelivery)
                 .deliveryStatus(deliveryStatus)
-                .summary(summary)
+                .summary(readyForDelivery ? summary : buildDeliverySummaryText(blockerCount, evidenceGapCount, reportDiagnosis))
                 .primaryIssue(resolvePrimaryIssue(issues, reportDiagnosis))
                 .recommendedAction(resolveRecommendedAction(revisionPlan, reportDiagnosis))
                 .blockerCount(blockerCount)
@@ -277,6 +277,48 @@ public class ReportService {
                         .map(String::trim)
                         .toList())
                 .build();
+    }
+
+    /**
+     * 交付摘要要把“证据不足”进一步细分成业务可读的阻塞原因，
+     * 避免继续停留在泛化的缺证据表述。
+     */
+    private String buildDeliverySummaryText(int blockerCount,
+                                            int evidenceGapCount,
+                                            ReportDiagnosisInfo reportDiagnosis) {
+        if (reportDiagnosis == null || reportDiagnosis.getSections() == null || reportDiagnosis.getSections().isEmpty()) {
+            return "当前报告暂不可交付，存在 %d 个阻塞问题和 %d 个证据缺口。".formatted(blockerCount, evidenceGapCount);
+        }
+        LinkedHashSet<String> gapKinds = new LinkedHashSet<>();
+        for (ReportResponse.DiagnosisSection section : reportDiagnosis.getSections()) {
+            if (section == null || section.getDiagnoses() == null) {
+                continue;
+            }
+            for (ReportResponse.DiagnosisItem diagnosisItem : section.getDiagnoses()) {
+                if (diagnosisItem == null || diagnosisItem.getDiagnosis() == null) {
+                    continue;
+                }
+                String evidenceBasis = defaultText(diagnosisItem.getDiagnosis().getEvidenceBasis(), "");
+                List<String> sourceUrls = diagnosisItem.getDiagnosis().getSourceUrls();
+                if (sourceUrls == null || sourceUrls.isEmpty()) {
+                    gapKinds.add("sourceUrls 缺失");
+                }
+                if (evidenceBasis.contains("structuredBlocks")) {
+                    gapKinds.add("structuredBlocks 缺失");
+                }
+                if (evidenceBasis.contains("qualitySignals")) {
+                    gapKinds.add("qualitySignals 命中失败");
+                }
+                if (evidenceBasis.contains("evidenceCoverage")) {
+                    gapKinds.add("evidenceCoverage 缺字段");
+                }
+            }
+        }
+        if (gapKinds.isEmpty()) {
+            return "当前报告暂不可交付，存在 %d 个阻塞问题和 %d 个证据缺口。".formatted(blockerCount, evidenceGapCount);
+        }
+        return "当前报告暂不可交付，存在 %d 个阻塞问题和 %d 个证据缺口；主要缺口已细化为%s。"
+                .formatted(blockerCount, evidenceGapCount, String.join(" / ", gapKinds));
     }
 
     private int resolveBlockerCount(List<QualityIssue> issues, ReportDiagnosisInfo reportDiagnosis) {

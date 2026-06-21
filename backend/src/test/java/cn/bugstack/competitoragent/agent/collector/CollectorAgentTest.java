@@ -243,6 +243,8 @@ class CollectorAgentTest {
         assertTrue(output.path("collectionAudit").path("sourceUrls").isArray());
         assertTrue(output.path("evidenceFragments").isArray());
         assertTrue(output.path("sectionEvidenceBundles").isArray());
+        assertTrue(output.path("downstreamEvidenceViews").isArray());
+        assertTrue(output.path("documents").get(0).path("downstreamEvidenceViews").isArray());
     }
 
     @Test

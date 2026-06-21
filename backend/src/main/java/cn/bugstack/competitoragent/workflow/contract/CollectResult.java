@@ -38,6 +38,9 @@ public class CollectResult {
     /** 采集阶段聚合出的章节证据束，供后续抽取/分析直接复用 */
     private List<SectionEvidenceBundle> sectionEvidenceBundles;
 
+    /** 采集阶段面向下游的统一证据运行期视图 */
+    private List<DownstreamEvidenceView> downstreamEvidenceViews;
+
     /** 任务级知识文档集合 */
     private List<KnowledgeDocument> knowledgeDocuments;
 

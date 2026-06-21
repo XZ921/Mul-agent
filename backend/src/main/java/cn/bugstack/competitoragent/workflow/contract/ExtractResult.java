@@ -31,4 +31,7 @@ public class ExtractResult {
 
     /** 抽取阶段聚合出的章节证据束，承接字段覆盖与证据缺口语义 */
     private List<SectionEvidenceBundle> sectionEvidenceBundles;
+
+    /** 抽取阶段实际消费并传递给下游的统一证据运行期视图 */
+    private List<DownstreamEvidenceView> downstreamEvidenceViews;
 }

@@ -18,6 +18,11 @@ public interface CompetitorKnowledgeRepository extends JpaRepository<CompetitorK
      */
     List<CompetitorKnowledge> findByMemoryLayerOrderByIdAsc(String memoryLayer);
 
+    /**
+     * 任务现场快照和领域知识需要显式隔离读取，避免下游节点误把 TASK 快照当成 DOMAIN 记忆复用。
+     */
+    List<CompetitorKnowledge> findByTaskIdAndSnapshotScopeOrderByIdAsc(Long taskId, String snapshotScope);
+
     Optional<CompetitorKnowledge> findByTaskIdAndCompetitorName(Long taskId, String competitorName);
 
     void deleteByTaskId(Long taskId);

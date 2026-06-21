@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -203,6 +204,161 @@ class SchemaExtractorAgentTest {
     }
 
     @Test
+    void shouldBuildExtractorInputFromStructuredEvidenceViewInsteadOfRawFullContentOnly() throws Exception {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Acme")
+                        .evidenceId("E001")
+                        .title("Pricing Docs")
+                        .url("https://docs.example.com/pricing")
+                        .sourceType("DOCS")
+                        .fullContent("公开定价页正文")
+                        .pageMetadata("""
+                                {
+                                  "sourceUrls": ["https://docs.example.com/pricing"],
+                                  "qualitySignals": ["STRUCTURED_BLOCK_HIT", "PRICING_BLOCK_HIT"],
+                                  "structuredBlocks": [{"blockType": "PRICING_BLOCK", "summary": "Pro 199 / 月"}],
+                                  "qualityScore": 0.82
+                                }
+                                """)
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://example.com",
+                          "summary": "ok",
+                          "positioning": "team collaboration",
+                          "targetUsers": ["teams"],
+                          "coreFeatures": [],
+                          "pricing": {"model": "Pro 199 / 月", "evidenceIds": ["E001"]},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://docs.example.com/pricing"]
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+        JsonNode output = new ObjectMapper().readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        // extractor 的正式输入必须先经过 DownstreamEvidenceView，结构化块和质量信号要出现在 prompt 变量里。
+        verify(promptService).render(eq("extractor"), argThat(variables ->
+                variables.get("evidenceCatalog") != null
+                        && variables.get("evidenceCatalog").contains("sourceUrls")
+                        && variables.get("evidenceCatalog").contains("qualitySignals")
+                        && variables.get("evidenceCatalog").contains("PRICING_BLOCK")
+                        && variables.get("collectedContent") != null
+                        && variables.get("collectedContent").contains("structuredBlocks")
+                        && variables.get("collectedContent").contains("PRICING_BLOCK_HIT")
+        ));
+        assertTrue(output.path("downstreamEvidenceViews").isArray());
+        assertTrue(output.path("downstreamEvidenceViews").toString().contains("PRICING_BLOCK"));
+        assertTrue(output.path("drafts").get(0).path("downstreamEvidenceViews").toString().contains("STRUCTURED_BLOCK_HIT"));
+    }
+
+    @Test
+    void shouldNotCrashWhenEvidenceContentFallsBetweenFourAndEightThousandChars() {
+        String longContent = "A".repeat(4010);
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Acme")
+                        .evidenceId("E001")
+                        .title("Long Docs")
+                        .url("https://docs.example.com/long")
+                        .fullContent(longContent)
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://example.com",
+                          "summary": "ok",
+                          "positioning": "team collaboration",
+                          "targetUsers": ["teams"],
+                          "coreFeatures": [],
+                          "pricing": {},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://docs.example.com/long"]
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+
+        // 锁定真实链路里的截断回归：正文处于 4k~8k 区间时不能因为二次 substring 直接失败。
+        assertEquals("SUCCESS", result.getStatus().name());
+        verify(promptService).render(eq("extractor"), argThat(variables ->
+                variables.get("collectedContent") != null
+                        && variables.get("collectedContent").contains("...(truncated)")
+        ));
+    }
+
+    @Test
+    void shouldPreferTaskScopedKnowledgeBoundaryOverDefaultDomainMemoryLayer() {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Acme")
+                        .evidenceId("E001")
+                        .title("Docs")
+                        .url("https://docs.example.com")
+                        .fullContent("usable content")
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://example.com",
+                          "summary": "ok",
+                          "positioning": "team collaboration",
+                          "targetUsers": ["teams"],
+                          "coreFeatures": [],
+                          "pricing": {},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://docs.example.com"]
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .planVersionId(27L)
+                .branchKey("root/eighth")
+                .build());
+
+        ArgumentCaptor<CompetitorKnowledge> knowledgeCaptor = ArgumentCaptor.forClass(CompetitorKnowledge.class);
+        verify(knowledgeRepository).save(knowledgeCaptor.capture());
+        CompetitorKnowledge savedKnowledge = knowledgeCaptor.getValue();
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        // extract_schema 产生的是任务现场快照，默认不能再沉入长期 DOMAIN 记忆层。
+        assertEquals("TASK", savedKnowledge.getMemoryLayer());
+        assertEquals("TASK", savedKnowledge.getSnapshotScope());
+        assertEquals("extract_schema", savedKnowledge.getProducerNodeName());
+        assertEquals(27L, savedKnowledge.getPlanVersionId());
+        assertEquals("root/eighth", savedKnowledge.getBranchKey());
+    }
+
+    @Test
     void shouldAcceptSingleObjectWrappedByJsonArray() {
         when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
                 EvidenceSource.builder()
@@ -244,7 +400,7 @@ class SchemaExtractorAgentTest {
     }
 
     @Test
-    void shouldRecoverWhenExtractorReturnsEmptyJsonArray() {
+    void shouldRejectRecoveredEmptyJsonArrayWithoutBusinessFields() {
         when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
                 EvidenceSource.builder()
                         .taskId(1L)
@@ -266,10 +422,60 @@ class SchemaExtractorAgentTest {
                 .currentNodeName("extract_schema")
                 .build());
 
-        assertEquals("SUCCESS", result.getStatus().name());
-        assertTrue(result.getOutputData().contains("MODEL_OUTPUT_RECOVERED"));
-        assertTrue(result.getOutputData().contains("https://www.bilibili.com"));
-        verify(knowledgeRepository, times(1)).save(any());
+        assertEquals("FAILED", result.getStatus().name());
+        assertTrue(result.getErrorMessage().contains("未能抽取出任何业务字段"));
+        verify(knowledgeRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldFailWhenModelReturnsNoBusinessFieldsDespiteUsableEvidence() {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceId("T0001-COLLECT-001")
+                        .title("Product")
+                        .url("https://www.notion.so/product")
+                        .fullContent("Notion AI is a workspace assistant for notes, docs, search, and project collaboration.")
+                        .contentSnippet("workspace assistant for notes, docs, search, and project collaboration")
+                        .build(),
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceId("T0001-COLLECT-002")
+                        .title("Pricing")
+                        .url("https://www.notion.so/pricing")
+                        .fullContent("Business plan pricing and AI add-on information are available for team workspaces.")
+                        .contentSnippet("Business plan pricing and AI add-on information")
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://www.notion.so",
+                          "summary": "",
+                          "positioning": "",
+                          "targetUsers": [],
+                          "coreFeatures": [],
+                          "pricing": {},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": []
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+
+        // 有可用采集正文时，sourceUrls 回填只能说明可追溯，不能把 0 个业务字段伪装成抽取成功。
+        assertEquals("FAILED", result.getStatus().name());
+        assertTrue(result.getErrorMessage().contains("未能抽取出任何业务字段"));
+        verify(knowledgeRepository, never()).save(any());
     }
 
     @Test

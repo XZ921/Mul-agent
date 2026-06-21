@@ -60,4 +60,7 @@ public class AnalysisResult {
 
     /** 分析阶段输出的章节/结论证据束，供 Writer 与报告接口直接沿用 */
     private List<SectionEvidenceBundle> sectionEvidenceBundles;
+
+    /** 分析阶段沿用的统一下游证据运行期视图 */
+    private List<DownstreamEvidenceView> downstreamEvidenceViews;
 }

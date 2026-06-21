@@ -117,6 +117,79 @@ class CompetitorAnalysisAgentTest {
         ));
     }
 
+    @Test
+    void shouldCarryDownstreamEvidenceViewsFromExtractorToAnalyzer() throws Exception {
+        when(agentContextAssembler.assemble(any(AgentContext.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(1L)).thenReturn(List.of());
+        when(promptService.render(eq("analyzer"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("Analysis"))).thenReturn("""
+                {
+                  "overview": "分析完成",
+                  "featureComparison": "功能完整",
+                  "positioningComparison": "协作平台",
+                  "pricingComparison": "公开 Pro 199 / 月",
+                  "targetUserComparison": "团队用户",
+                  "strengthsSummary": "文档清晰",
+                  "weaknessesSummary": "暂无",
+                  "recommendations": ["持续观察"]
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .subjectProduct("Our Product")
+                .analysisDimensions("功能,定位,定价")
+                .currentNodeName("analyze_competitors")
+                .build();
+        context.putSharedOutput("extract_schema", """
+                {
+                  "drafts": [
+                    {
+                      "competitorName": "Acme",
+                      "summary": "ok",
+                      "sourceUrls": ["https://docs.example.com/pricing"],
+                      "issueFlags": [],
+                      "downstreamEvidenceViews": [
+                        {
+                          "evidenceId": "E001",
+                          "title": "Pricing Docs",
+                          "sourceType": "DOCS",
+                          "content": "公开定价页正文",
+                          "sourceUrls": ["https://docs.example.com/pricing"],
+                          "qualitySignals": ["STRUCTURED_BLOCK_HIT", "PRICING_BLOCK_HIT"],
+                          "structuredBlocks": [{"blockType": "PRICING_BLOCK", "summary": "Pro 199 / 月"}]
+                        }
+                      ]
+                    }
+                  ],
+                  "downstreamEvidenceViews": [
+                    {
+                      "evidenceId": "E001",
+                      "sourceUrls": ["https://docs.example.com/pricing"],
+                      "qualitySignals": ["STRUCTURED_BLOCK_HIT"],
+                      "structuredBlocks": [{"blockType": "PRICING_BLOCK", "summary": "Pro 199 / 月"}]
+                    }
+                  ]
+                }
+                """);
+
+        AgentResult result = agent.execute(context);
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        // analyzer 必须优先消费 extract_schema 的统一证据视图，历史仓库快照只作为缺失上游视图时的回退。
+        verify(promptService).render(eq("analyzer"), argThat(variables ->
+                variables.get("competitorData") != null
+                        && variables.get("competitorData").contains("downstreamEvidenceViews")
+                        && variables.get("competitorData").contains("PRICING_BLOCK")
+                        && variables.get("competitorData").contains("STRUCTURED_BLOCK_HIT")
+        ));
+        assertTrue(output.path("downstreamEvidenceViews").toString().contains("PRICING_BLOCK"));
+    }
+
     private JsonNode findBundle(JsonNode bundles, String sectionKey) {
         for (JsonNode bundle : bundles) {
             if (sectionKey.equals(bundle.path("sectionKey").asText())) {

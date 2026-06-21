@@ -748,4 +748,69 @@ class QualityReviewAgentTest {
                         && request.getEvidenceCoverage() != null
                         && request.getEvidenceCoverage().contains("TRACEABLE")));
     }
+
+    @Test
+    void shouldDiagnoseMissingStructuredEvidenceInsteadOfOnlyUnsupportedClaim() throws Exception {
+        when(reportRepository.findByTaskId(11L)).thenReturn(Optional.of(
+                Report.builder()
+                        .taskId(11L)
+                        .content("""
+                                # 定价对比
+                                Notion AI 已经形成稳定的企业版价格分层，并且大客户采购门槛更低。
+                                """)
+                        .build()
+        ));
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(11L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(11L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E011")
+                        .title("Pricing Page")
+                        .url("https://www.notion.so/pricing")
+                        .pageMetadata("""
+                                {
+                                  "qualitySignals": ["QUALITY_SIGNAL_FAILED", "NO_STRUCTURED_PRICE_BLOCK"],
+                                  "structuredBlocks": [],
+                                  "qualityScore": 0.21,
+                                  "failureKind": "STRUCTURED_EXTRACTION_INSUFFICIENT"
+                                }
+                                """)
+                        .build()
+        ));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(11L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .taskId(11L)
+                        .competitorName("Notion AI")
+                        .evidenceCoverage("""
+                                {
+                                  "pricing": {"status":"TRACEABLE","hasValue":true}
+                                }
+                                """)
+                        .build()
+        ));
+        when(promptService.render(eq("reviewer"), any())).thenReturn("review-prompt");
+        when(llmClient.chatForJson(any(), any(), eq("QualityReview"))).thenReturn("""
+                {
+                  "score": 91,
+                  "passed": true,
+                  "issues": [],
+                  "summary": "模型初步认为文本质量尚可"
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentResult result = agent.execute(AgentContext.builder()
+                .taskId(11L)
+                .taskName("task")
+                .currentNodeName("quality_check")
+                .build());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(output.path("diagnoses").toString().contains("missing_structured_evidence"));
+        assertTrue(output.path("diagnoses").toString().contains("structuredBlocks"));
+        assertTrue(output.path("diagnoses").toString().contains("qualitySignals"));
+        assertTrue(output.path("diagnoses").toString().contains("STRUCTURED_EXTRACTION_INSUFFICIENT"));
+    }
 }

@@ -47,6 +47,9 @@ public class CompetitorKnowledgeDraft {
     /** 草稿层面的章节证据束，保留字段证据如何汇聚到章节的语义 */
     private List<SectionEvidenceBundle> sectionEvidenceBundles;
 
+    /** 当前草稿对应的统一下游证据运行期视图 */
+    private List<DownstreamEvidenceView> downstreamEvidenceViews;
+
     /** 草稿层面的缺口/问题标记 */
     private List<String> issueFlags;
 

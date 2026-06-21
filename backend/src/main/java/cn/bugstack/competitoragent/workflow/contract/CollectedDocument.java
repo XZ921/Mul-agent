@@ -54,6 +54,9 @@ public class CollectedDocument {
     /** 文档维度聚合后的章节证据束，显式说明该文档对哪个章节提供了什么支撑 */
     private List<SectionEvidenceBundle> sectionEvidenceBundles;
 
+    /** 当前文档面向下游节点的统一证据运行期视图 */
+    private List<DownstreamEvidenceView> downstreamEvidenceViews;
+
     /** 当前采集文档沉淀出的任务级知识文档 */
     private KnowledgeDocument knowledgeDocument;
 

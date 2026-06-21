@@ -479,7 +479,53 @@ public class QualityReviewAgent extends BaseAgent {
                     .build()
                     .normalized());
         }
+        appendStructuredEvidenceDiagnoses(diagnoses, evidences, coverageSnapshot);
         return diagnoses;
+    }
+
+    /**
+     * 当 pageMetadata 已经暴露结构化质量信号时，Reviewer 需要把问题识别为结构化证据不足，
+     * 避免所有问题继续退化为通用 unsupported_claim。
+     */
+    private void appendStructuredEvidenceDiagnoses(List<QualityDiagnosis> diagnoses,
+                                                   List<EvidenceSource> evidences,
+                                                   CoverageSnapshot coverageSnapshot) {
+        for (EvidenceSource evidence : evidences == null ? List.<EvidenceSource>of() : evidences) {
+            Map<String, Object> metadata = parseJsonMap(evidence == null ? null : evidence.getPageMetadata());
+            List<String> qualitySignals = readMetadataStringList(metadata.get("qualitySignals"));
+            List<Object> structuredBlocks = readMetadataObjectList(metadata.get("structuredBlocks"));
+            String failureKind = readMetadataText(metadata.get("failureKind"));
+            Double qualityScore = readMetadataDouble(metadata.get("qualityScore"));
+            if (!shouldDiagnoseStructuredEvidenceGap(qualitySignals, structuredBlocks, failureKind, qualityScore)) {
+                continue;
+            }
+
+            String section = inferStructuredEvidenceSection(evidence);
+            String evidenceBasis = buildStructuredEvidenceBasis(section, qualitySignals, structuredBlocks, failureKind, qualityScore, coverageSnapshot);
+            boolean exists = diagnoses.stream().anyMatch(diagnosis ->
+                    "missing_structured_evidence".equalsIgnoreCase(safeValue(diagnosis.getType(), ""))
+                            && section.equalsIgnoreCase(safeValue(diagnosis.getSection(), "")));
+            if (exists) {
+                continue;
+            }
+
+            diagnoses.add(QualityDiagnosis.builder()
+                    .dimensionCode("SEARCH_QUALITY")
+                    .dimensionName(resolveDimensionName("SEARCH_QUALITY"))
+                    .type("missing_structured_evidence")
+                    .section(section)
+                    .severity("ERROR")
+                    .title("结构化证据不足")
+                    .detail("当前来源虽然已命中 sourceUrls，但 structuredBlocks 或 qualitySignals 未达到可用门槛。")
+                    .evidenceBasis(evidenceBasis)
+                    .evidenceIds(evidence != null && evidence.getEvidenceId() != null && !evidence.getEvidenceId().isBlank()
+                            ? List.of(evidence.getEvidenceId().trim()) : List.of())
+                    .sourceUrls(evidence != null && evidence.getUrl() != null && !evidence.getUrl().isBlank()
+                            ? List.of(evidence.getUrl().trim()) : List.of())
+                    .repairSuggestion(buildStructuredEvidenceRepairSuggestion(section, qualitySignals, structuredBlocks))
+                    .build()
+                    .normalized());
+        }
     }
 
     /**
@@ -745,6 +791,132 @@ public class QualityReviewAgent extends BaseAgent {
             case "EXPRESSION_ISSUE" -> section + "需要改写为克制、可验证的表达，不保留绝对化结论。";
             default -> section + "需要补齐来源引用或下调无法验证的判断，确保结论可回溯。";
         };
+    }
+
+    private String buildStructuredEvidenceBasis(String section,
+                                                List<String> qualitySignals,
+                                                List<Object> structuredBlocks,
+                                                String failureKind,
+                                                Double qualityScore,
+                                                CoverageSnapshot coverageSnapshot) {
+        StringBuilder basis = new StringBuilder(section)
+                .append(" 的 structuredBlocks 与 qualitySignals 未达到可用门槛");
+        basis.append("。structuredBlocks=").append(structuredBlocks.size());
+        basis.append("，qualitySignals=").append(qualitySignals);
+        if (qualityScore != null) {
+            basis.append("，qualityScore=").append(String.format(Locale.ROOT, "%.2f", qualityScore));
+        }
+        if (failureKind != null && !failureKind.isBlank()) {
+            basis.append("，failureKind=").append(failureKind);
+        }
+        String coverageHint = resolveStructuredCoverageHint(section, coverageSnapshot);
+        if (coverageHint != null) {
+            basis.append("，evidenceCoverage=").append(coverageHint);
+        }
+        basis.append("。");
+        return basis.toString();
+    }
+
+    private String buildStructuredEvidenceRepairSuggestion(String section,
+                                                           List<String> qualitySignals,
+                                                           List<Object> structuredBlocks) {
+        if (structuredBlocks.isEmpty()) {
+            return "请先为" + section + "补齐可复用 structuredBlocks，再复核是否保留当前结论。";
+        }
+        if (containsFailedQualitySignal(qualitySignals)) {
+            return "请先修复" + section + "对应 evidence 的 qualitySignals，再决定是否继续引用该来源。";
+        }
+        return "请重跑" + section + "对应采集链路，补齐结构化证据后再继续下游结论生成。";
+    }
+
+    private String resolveStructuredCoverageHint(String section, CoverageSnapshot coverageSnapshot) {
+        if (coverageSnapshot == null) {
+            return null;
+        }
+        String coverageSection = mapReportSectionToCoverageSection(section);
+        if (coverageSection == null) {
+            return null;
+        }
+        if (coverageSnapshot.missingSections().contains(coverageSection)) {
+            return coverageSection + ":MISSING_EVIDENCE";
+        }
+        if (coverageSnapshot.emptySections().contains(coverageSection)) {
+            return coverageSection + ":EMPTY";
+        }
+        if (coverageSnapshot.traceableSections().contains(coverageSection)) {
+            return coverageSection + ":TRACEABLE";
+        }
+        return coverageSection + ":UNKNOWN";
+    }
+
+    private String mapReportSectionToCoverageSection(String section) {
+        if (section == null || section.isBlank()) {
+            return null;
+        }
+        if (section.contains("定价")) {
+            return "定价策略";
+        }
+        if (section.contains("功能")) {
+            return "核心能力";
+        }
+        if (section.contains("定位")) {
+            return "市场定位";
+        }
+        if (section.contains("用户")) {
+            return "目标用户";
+        }
+        if (section.contains("优势")) {
+            return "优势判断";
+        }
+        if (section.contains("风险") || section.contains("不足")) {
+            return "短板与风险";
+        }
+        if (section.contains("结论")) {
+            return "产品概览";
+        }
+        return null;
+    }
+
+    private boolean shouldDiagnoseStructuredEvidenceGap(List<String> qualitySignals,
+                                                        List<Object> structuredBlocks,
+                                                        String failureKind,
+                                                        Double qualityScore) {
+        if (structuredBlocks.isEmpty() && !qualitySignals.isEmpty()) {
+            return true;
+        }
+        if (structuredBlocks.isEmpty() && failureKind != null && !failureKind.isBlank()) {
+            return true;
+        }
+        return structuredBlocks.isEmpty() && qualityScore != null && qualityScore < 0.6D;
+    }
+
+    private boolean containsFailedQualitySignal(List<String> qualitySignals) {
+        for (String qualitySignal : qualitySignals == null ? List.<String>of() : qualitySignals) {
+            String normalized = safeValue(qualitySignal, "").toUpperCase(Locale.ROOT);
+            if (normalized.contains("FAILED")
+                    || normalized.contains("FAIL")
+                    || normalized.contains("MISSING")
+                    || normalized.contains("NO_")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String inferStructuredEvidenceSection(EvidenceSource evidence) {
+        String sourceType = safeValue(evidence == null ? null : evidence.getSourceType(), "").toUpperCase(Locale.ROOT);
+        String title = safeValue(evidence == null ? null : evidence.getTitle(), "").toLowerCase(Locale.ROOT);
+        String url = safeValue(evidence == null ? null : evidence.getUrl(), "").toLowerCase(Locale.ROOT);
+        if (sourceType.contains("PRICING") || title.contains("pricing") || url.contains("pricing")) {
+            return "定价对比";
+        }
+        if (sourceType.contains("DOCS") || title.contains("feature") || url.contains("feature")) {
+            return "功能对比";
+        }
+        if (title.contains("security") || url.contains("security")) {
+            return "风险点";
+        }
+        return "通用";
     }
 
     private List<Map<String, String>> buildNextActionsFromDirectives(List<RevisionDirective> revisionDirectives) {
@@ -1085,6 +1257,49 @@ public class QualityReviewAgent extends BaseAgent {
     }
 
     // 清理 markdown code fence，避免模型返回的 JSON 被额外包装导致解析失败。
+    private String readMetadataText(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isBlank() ? null : text;
+    }
+
+    private Double readMetadataDouble(Object value) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return Double.parseDouble(text);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private List<String> readMetadataStringList(Object value) {
+        if (!(value instanceof List<?> values)) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        for (Object item : values) {
+            String text = readMetadataText(item);
+            if (text != null) {
+                result.add(text);
+            }
+        }
+        return result;
+    }
+
+    private List<Object> readMetadataObjectList(Object value) {
+        if (!(value instanceof List<?> values)) {
+            return List.of();
+        }
+        return new ArrayList<>(values);
+    }
+
     private String cleanJson(String llmResponse) {
         String cleaned = llmResponse.trim();
         if (cleaned.startsWith("```json")) {

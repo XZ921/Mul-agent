@@ -764,4 +764,103 @@ class ReportServiceTest {
         assertEquals("SUPPLEMENT_EVIDENCE", response.getRevisionPlan().getDirectives().get(0).getActionType());
         assertTrue(response.getRevisionPlan().getRewriteGuidelines().contains("补充官网来源，再决定是否改写。"));
     }
+    @Test
+    void shouldUpgradeDeliverySummaryWhenStructuredEvidenceGapsAreDiagnosed() {
+        Report report = Report.builder()
+                .id(7L)
+                .taskId(700L)
+                .title("企业级竞品分析")
+                .content("# Report")
+                .summary("summary")
+                .qualityPassed(false)
+                .evidenceCount(1)
+                .build();
+        ReportResponse.EvidenceInfo evidenceInfo = new ReportResponse.EvidenceInfo(
+                "E-700",
+                "Pricing Page",
+                "https://www.notion.so/pricing",
+                "pricing snippet",
+                "Notion AI",
+                null,
+                "DOCS",
+                "SEARCH",
+                "www.notion.so",
+                "命中定价页",
+                null,
+                0.71,
+                true,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                java.util.Map.of(
+                        "qualitySignals", List.of("QUALITY_SIGNAL_FAILED"),
+                        "structuredBlocks", List.of(),
+                        "failureKind", "STRUCTURED_EXTRACTION_INSUFFICIENT",
+                        "qualityScore", 0.18
+                )
+        );
+        TaskNode reviewNode = TaskNode.builder()
+                .taskId(700L)
+                .nodeName("quality_check")
+                .status(TaskNodeStatus.SUCCESS)
+                .outputData("""
+                        {
+                          "score": 62,
+                          "passed": false,
+                          "summary": "当前报告仍缺结构化证据闭环",
+                          "diagnoses": [
+                            {
+                              "dimensionCode":"SEARCH_QUALITY",
+                              "dimensionName":"搜索质量",
+                              "type":"missing_structured_evidence",
+                              "section":"定价对比",
+                              "severity":"ERROR",
+                              "level":"BLOCKER",
+                              "title":"结构化证据不足",
+                              "detail":"定价结论缺少可复用 structuredBlocks 支撑。",
+                              "evidenceBasis":"sourceUrls 已存在，但 structuredBlocks 缺失，qualitySignals 命中失败，evidenceCoverage 仍缺字段。",
+                              "evidenceIds":["E-700"],
+                              "sourceUrls":["https://www.notion.so/pricing"],
+                              "repairSuggestion":"先补齐 structuredBlocks，再回填 coverage 并复核定价结论。"
+                            }
+                          ],
+                          "issues": [
+                            {
+                              "type":"missing_structured_evidence",
+                              "section":"定价对比",
+                              "severity":"ERROR",
+                              "level":"BLOCKER",
+                              "dimensionCode":"SEARCH_QUALITY",
+                              "dimensionName":"搜索质量",
+                              "evidenceBasis":"sourceUrls 已存在，但 structuredBlocks 缺失，qualitySignals 命中失败，evidenceCoverage 仍缺字段。",
+                              "evidenceIds":["E-700"],
+                              "sourceUrls":["https://www.notion.so/pricing"],
+                              "suggestion":"先补齐 structuredBlocks，再回填 coverage 并复核定价结论。"
+                            }
+                          ]
+                        }
+                        """)
+                .executionOrder(1)
+                .build();
+
+        when(reportRepository.findByTaskId(700L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(700L)).thenReturn(List.of(evidenceInfo));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(700L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(700L)).thenReturn(List.of(reviewNode));
+
+        ReportResponse response = reportService.getReport(700L);
+
+        assertNotNull(response.getDeliverySummary());
+        assertTrue(response.getDeliverySummary().getSummary().contains("structuredBlocks"));
+        assertTrue(response.getDeliverySummary().getSummary().contains("qualitySignals"));
+        assertTrue(response.getDeliverySummary().getSummary().contains("evidenceCoverage"));
+        assertTrue(response.getDeliverySummary().getPrimaryIssue().contains("结构化证据"));
+        assertTrue(response.getReportDiagnosis().getSections().get(0).getRepairSuggestions().stream()
+                .anyMatch(item -> item.contains("structuredBlocks")));
+    }
 }

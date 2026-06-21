@@ -60,6 +60,22 @@ public class CompetitorKnowledge {
     @Schema(description = "Memory layer", example = "DOMAIN")
     private String memoryLayer;
 
+    @Column(name = "snapshot_scope", nullable = false, length = 40)
+    @Schema(description = "Snapshot scope", example = "TASK")
+    private String snapshotScope;
+
+    @Column(name = "producer_node_name", length = 120)
+    @Schema(description = "Producer node name", example = "extract_schema")
+    private String producerNodeName;
+
+    @Column(name = "plan_version_id")
+    @Schema(description = "Plan version ID", example = "27")
+    private Long planVersionId;
+
+    @Column(name = "branch_key", length = 120)
+    @Schema(description = "Plan branch key", example = "root")
+    private String branchKey;
+
     @Column(length = 500)
     @Schema(description = "Positioning")
     private String positioning;
@@ -146,6 +162,9 @@ public class CompetitorKnowledge {
     private void applyDefaults() {
         if (this.memoryLayer == null || this.memoryLayer.isBlank()) {
             this.memoryLayer = "DOMAIN";
+        }
+        if (this.snapshotScope == null || this.snapshotScope.isBlank()) {
+            this.snapshotScope = this.memoryLayer;
         }
         if (this.versionSource == null || this.versionSource.isBlank()) {
             this.versionSource = "UNSPECIFIED";

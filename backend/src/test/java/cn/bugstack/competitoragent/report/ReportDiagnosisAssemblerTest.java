@@ -285,4 +285,76 @@ class ReportDiagnosisAssemblerTest {
         assertEquals(1, diagnosis.getRevisionDirectives().size());
         assertEquals(List.of("https://www.notion.so/security"), diagnosis.getRevisionDirectives().get(0).getSourceUrls());
     }
+
+    @Test
+    void shouldTreatMissingStructuredEvidenceAsEvidenceInsufficientDiagnosis() {
+        List<EvidenceInfo> evidences = List.of(new EvidenceInfo(
+                "E-011",
+                "Pricing Page",
+                "https://www.notion.so/pricing",
+                "pricing snippet",
+                "Notion AI",
+                LocalDateTime.now(),
+                "DOCS",
+                "SEARCH",
+                "www.notion.so",
+                "命中定价页",
+                null,
+                0.66,
+                true,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                java.util.Map.of(
+                        "qualitySignals", List.of("QUALITY_SIGNAL_FAILED"),
+                        "structuredBlocks", List.of(),
+                        "failureKind", "STRUCTURED_EXTRACTION_INSUFFICIENT",
+                        "qualityScore", 0.22
+                )
+        ));
+        ReviewCheckpoint initialReview = ReviewCheckpoint.builder()
+                .nodeName("quality_check")
+                .nodeStatus(TaskNodeStatus.SUCCESS)
+                .score(69)
+                .passed(false)
+                .diagnoses(List.of(QualityDiagnosis.builder()
+                        .dimensionCode("SEARCH_QUALITY")
+                        .dimensionName("搜索质量")
+                        .type("missing_structured_evidence")
+                        .section("定价对比")
+                        .severity("ERROR")
+                        .level("BLOCKER")
+                        .title("结构化证据不足")
+                        .detail("定价结论缺少稳定结构化块支撑")
+                        .evidenceBasis("structuredBlocks 缺失，qualitySignals 显示质量门槛未达标。")
+                        .evidenceIds(List.of("E-011"))
+                        .sourceUrls(List.of("https://www.notion.so/pricing"))
+                        .repairSuggestion("先补齐可用 structuredBlocks，再决定是否保留当前定价结论。")
+                        .build().normalized()))
+                .build();
+
+        ReportResponse.ReportDiagnosisInfo diagnosis = assembler.assemble(
+                evidences,
+                List.of(),
+                initialReview,
+                null,
+                null,
+                List.of()
+        );
+
+        assertNotNull(diagnosis);
+        assertEquals(1, diagnosis.getEvidenceGapCount());
+        DiagnosisSection section = diagnosis.getSections().stream()
+                .filter(item -> "定价对比".equals(item.getSection()))
+                .findFirst()
+                .orElseThrow();
+        assertTrue(section.getEvidenceInsufficient());
+        assertTrue(section.getRepairSuggestions().stream()
+                .anyMatch(item -> item.contains("structuredBlocks") || item.contains("结构化")));
+    }
 }
