@@ -98,21 +98,23 @@ public class ReportWriterAgent extends BaseAgent {
                 .orElse("");
         String revisionFocus = buildRevisionFocus(revisionPlan);
         NormalizedAnalysisPayload normalizedAnalysis = normalizeAnalysisPayload(analysisResult, evidences);
+        String evidenceCitationGuide = buildEvidenceCitationGuide(evidences, revisionMode);
 
-        // 同一套 writer 模板通过 revisionMode 与 revisionPlan 控制“首稿/重写”分支。
-        String prompt = promptService.render("writer", Map.of(
-                "taskName", safe(context.getTaskName()),
-                "subjectProduct", safe(context.getSubjectProduct()),
-                "reportLanguage", safe(context.getReportLanguage(), "中文"),
-                "analysisResult", normalizedAnalysis.serializedAnalysis(),
-                // Writer 在撰写阶段也需要感知统一检索摘要，避免把证据缺口写成确定性结论。
-                "taskRagContext", context.getTaskRagPromptContext(),
-                "currentReport", currentReport,
-                "evidenceList", evidenceList.toString(),
-                "revisionMode", String.valueOf(revisionMode),
-                "revisionPlan", revisionPlan == null ? "[]" : revisionPlan.toPrettyString(),
-                "revisionFocus", revisionFocus
-        ));
+        // Writer prompt 变量已经超过 Map.of 的 10 对上限，使用有序 Map 保持模板输入稳定可扩展。
+        Map<String, String> promptVariables = new LinkedHashMap<>();
+        promptVariables.put("taskName", safe(context.getTaskName()));
+        promptVariables.put("subjectProduct", safe(context.getSubjectProduct()));
+        promptVariables.put("reportLanguage", safe(context.getReportLanguage(), "中文"));
+        promptVariables.put("analysisResult", normalizedAnalysis.serializedAnalysis());
+        // Writer 在撰写阶段也需要感知统一检索摘要，避免把证据缺口写成确定性结论。
+        promptVariables.put("taskRagContext", context.getTaskRagPromptContext());
+        promptVariables.put("currentReport", currentReport);
+        promptVariables.put("evidenceList", evidenceList.toString());
+        promptVariables.put("revisionMode", String.valueOf(revisionMode));
+        promptVariables.put("revisionPlan", revisionPlan == null ? "[]" : revisionPlan.toPrettyString());
+        promptVariables.put("revisionFocus", revisionFocus);
+        promptVariables.put("evidenceCitationGuide", evidenceCitationGuide);
+        String prompt = promptService.render("writer", promptVariables);
 
         try {
             // 统一走 LLM 生成报告正文，便于后续在日志中追踪 token 使用与模型名称。
@@ -120,6 +122,7 @@ public class ReportWriterAgent extends BaseAgent {
                     "你是一名专业的中文竞品分析报告撰写专家，请输出高质量 Markdown 报告。",
                     prompt
             );
+            reportContent = enforceEvidenceTraceabilityForKeySections(reportContent);
 
             // 报告记录是幂等更新：首次创建，后续重写直接覆盖正文和摘要。
             Report report = reportRepository.findByTaskId(context.getTaskId())
@@ -239,6 +242,135 @@ public class ReportWriterAgent extends BaseAgent {
     }
 
     // Reviewer 结果既可能是对象，也可能被序列化成字符串，这里统一兜底解析。
+    /**
+     * Writer 给模型的证据目录需要直接呈现可复制的 `[证据：EID]` 片段。
+     * 真实任务中模型会看到 `- [EID] title(url)` 却忘记转成报告内引用，因此这里把报告章节规则和引用样式前置。
+     */
+    private String buildEvidenceCitationGuide(List<EvidenceSource> evidences, boolean revisionMode) {
+        List<String> lines = new ArrayList<>();
+        lines.add("证据引用规则：");
+        lines.add("1. 建议、结论、风险、机会、启示与行动建议中的每个判断句，必须追加 `[证据：EID]`。");
+        lines.add("2. 如果某个本方策略建议无法由公开证据直接支撑，必须写成“推测，当前公开资料未能验证，需补充证据”。");
+        lines.add("3. 不允许只在段落开头列 URL；正文判断句必须逐句带证据编号或显式降级。");
+        lines.add("4. 可用证据引用目录如下：");
+        if (evidences == null || evidences.isEmpty()) {
+            lines.add("- 暂无可用 evidenceId；所有建议性结论都必须降级为“当前公开资料未能验证，需补充证据”。");
+        } else {
+            for (EvidenceSource evidence : evidences) {
+                if (evidence == null || evidence.getEvidenceId() == null || evidence.getEvidenceId().isBlank()) {
+                    continue;
+                }
+                lines.add("- [证据：" + evidence.getEvidenceId() + "] "
+                        + safe(evidence.getTitle())
+                        + (evidence.getUrl() == null || evidence.getUrl().isBlank() ? "" : " | " + evidence.getUrl()));
+            }
+        }
+        if (revisionMode) {
+            lines.add("5. 当前为 rewrite_report：修订重点里的每个缺证据问题都必须在正文中落实，不要只写修订说明。");
+        }
+        return String.join("\n", lines);
+    }
+
+    /**
+     * 兜底处理 Writer 偶发“引用了证据目录但正文建议句仍裸奔”的情况。
+     * 这里不自动给本方策略建议硬贴证据，避免把推演伪装成事实；没有逐句证据时统一降级为待验证假设。
+     */
+    private String enforceEvidenceTraceabilityForKeySections(String reportContent) {
+        if (reportContent == null || reportContent.isBlank()) {
+            return reportContent;
+        }
+        StringBuilder guarded = new StringBuilder();
+        boolean keySection = false;
+        String[] lines = reportContent.split("\\R", -1);
+        for (String line : lines) {
+            String trimmed = line == null ? "" : line.trim();
+            if (trimmed.startsWith("#")) {
+                keySection = isTraceabilitySensitiveSection(trimmed);
+                guarded.append(line);
+            } else if (keySection) {
+                guarded.append(guardTraceabilityLine(line));
+            } else {
+                guarded.append(line);
+            }
+            guarded.append('\n');
+        }
+        if (!reportContent.endsWith("\n") && guarded.length() > 0) {
+            guarded.setLength(guarded.length() - 1);
+        }
+        return guarded.toString();
+    }
+
+    private boolean isTraceabilitySensitiveSection(String heading) {
+        if (heading == null || heading.isBlank()) {
+            return false;
+        }
+        return heading.contains("建议")
+                || heading.contains("结论")
+                || heading.contains("风险")
+                || heading.contains("机会")
+                || heading.contains("启示")
+                || heading.contains("行动");
+    }
+
+    private String guardTraceabilityLine(String line) {
+        if (line == null || line.isBlank()) {
+            return line;
+        }
+        String trimmed = line.trim();
+        if (trimmed.equals("---") || trimmed.startsWith("|")) {
+            return line;
+        }
+        String[] sentences = line.split("(?<=[。！？；;.!?])\\s*");
+        StringBuilder guarded = new StringBuilder();
+        for (String sentence : sentences) {
+            if (needsTraceabilityGuard(sentence)) {
+                guarded.append(appendConservativeDowngrade(sentence));
+            } else {
+                guarded.append(sentence);
+            }
+        }
+        return guarded.toString();
+    }
+
+    private boolean needsTraceabilityGuard(String sentence) {
+        if (sentence == null) {
+            return false;
+        }
+        String compact = sentence.replaceAll("\\s+", " ").trim();
+        if (compact.length() < 16) {
+            return false;
+        }
+        return !hasEvidenceCitation(compact) && !hasExplicitConservativeDowngrade(compact);
+    }
+
+    private String appendConservativeDowngrade(String sentence) {
+        String suffix = "（推测，当前公开资料未能验证，需补充证据）";
+        if (sentence == null || sentence.isBlank()) {
+            return sentence;
+        }
+        int last = sentence.length() - 1;
+        char ch = sentence.charAt(last);
+        if ("。！？；;.!?".indexOf(ch) >= 0) {
+            return sentence.substring(0, last) + suffix + ch;
+        }
+        return sentence + suffix;
+    }
+
+    private boolean hasEvidenceCitation(String text) {
+        return text != null && (text.contains("[证据：") || text.contains("[证据:"));
+    }
+
+    private boolean hasExplicitConservativeDowngrade(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        return text.contains("当前公开资料未能验证")
+                || text.contains("公开资料未能验证")
+                || text.contains("需补充证据")
+                || text.contains("待验证")
+                || text.contains("低置信度");
+    }
+
     private JsonNode extractRevisionPlan(JsonNode reviewOutput) {
         if (reviewOutput == null || !reviewOutput.has("revisionPlan")) {
             return null;

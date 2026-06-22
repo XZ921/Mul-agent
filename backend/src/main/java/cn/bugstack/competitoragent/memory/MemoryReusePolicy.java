@@ -87,7 +87,9 @@ public class MemoryReusePolicy {
             return false;
         }
         String normalized = qualitySignal.trim().toUpperCase();
-        return "VERIFIED".equals(normalized) || "TRACEABLE".equals(normalized);
+        return "VERIFIED".equals(normalized)
+                || "TRACEABLE".equals(normalized)
+                || "STRUCTURED_BLOCK_DIRECT".equals(normalized);
     }
 
     private boolean isDomainKnowledgeCategory(String writebackCategory) {

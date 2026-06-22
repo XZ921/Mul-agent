@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.task;
 
 import cn.bugstack.competitoragent.search.SearchSharedNodeOutputProjector;
+import cn.bugstack.competitoragent.extractor.ExtractSharedNodeOutputProjector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +37,81 @@ class SharedNodeOutputProjectorContractTest {
         assertThat(envelope.getProjectionType()).isEqualTo("SEARCH_SHARED_PROJECTION_V1");
         assertThat(envelope.getSourceUrls()).containsExactly("https://docs.example.com/reference");
         assertThat(envelope.getPayloadJson()).doesNotContain("very large body");
+    }
+
+    @Test
+    void shouldProjectExtractorOutputToLightweightSharedEnvelope() throws Exception {
+        ExtractSharedNodeOutputProjector projector = new ExtractSharedNodeOutputProjector(new ObjectMapper().findAndRegisterModules());
+        String rawOutput = """
+                {
+                  "contractVersion": "1.0",
+                  "sourceUrls": ["https://docs.example.com/pricing"],
+                  "issueFlags": ["TRACEABLE"],
+                  "drafts": [
+                    {
+                      "competitorName": "Acme",
+                      "summary": "workspace pricing",
+                      "sourceUrls": ["https://docs.example.com/pricing"],
+                      "downstreamEvidenceViews": [
+                        {
+                          "evidenceId": "E001",
+                          "title": "Pricing Docs",
+                          "sourceType": "DOCS",
+                          "content": "very large body very large body very large body",
+                          "sourceUrls": ["https://docs.example.com/pricing"],
+                          "qualitySignals": ["STRUCTURED_BLOCK_HIT"],
+                          "structuredBlocks": [
+                            {
+                              "blockType": "PRICING_BLOCK",
+                              "summary": "Pro 199 / 月",
+                              "content": "large structured block body"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ],
+                  "downstreamEvidenceViews": [
+                    {
+                      "evidenceId": "E001",
+                      "title": "Pricing Docs",
+                      "sourceType": "DOCS",
+                      "content": "very large body very large body very large body",
+                      "sourceUrls": ["https://docs.example.com/pricing"],
+                      "qualitySignals": ["STRUCTURED_BLOCK_HIT"],
+                      "structuredBlocks": [
+                        {
+                          "blockType": "PRICING_BLOCK",
+                          "summary": "Pro 199 / 月",
+                          "content": "large structured block body"
+                        }
+                      ]
+                    }
+                  ],
+                  "extractorInput": {
+                    "competitors": [
+                      {
+                        "competitorName": "Acme",
+                        "readableEvidence": [
+                          {
+                            "evidenceId": "E001",
+                            "content": "very large body very large body very large body"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+                """;
+
+        assertThat(projector.supports(rawOutput)).isTrue();
+
+        SharedNodeOutputEnvelope envelope = projector.project(33L, "extract_schema", 7L, rawOutput);
+        assertThat(envelope.getProjectionType()).isEqualTo("EXTRACT_SHARED_PROJECTION_V1");
+        assertThat(envelope.getSourceUrls()).containsExactly("https://docs.example.com/pricing");
+        assertThat(envelope.getPayloadJson()).contains("PRICING_BLOCK");
+        assertThat(envelope.getPayloadJson()).doesNotContain("very large body");
+        assertThat(envelope.getPayloadJson()).doesNotContain("large structured block body");
     }
 
     @Test

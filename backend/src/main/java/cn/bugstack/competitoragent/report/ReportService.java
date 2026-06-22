@@ -1561,8 +1561,8 @@ public class ReportService {
         }
         String normalized = String.valueOf(status).trim().toUpperCase();
         return switch (normalized) {
-            case "TRACEABLE" -> CoverageStatus.TRACEABLE;
-            case "MISSING_EVIDENCE", "PARTIAL" -> CoverageStatus.MISSING_EVIDENCE;
+            case "TRACEABLE", "STRUCTURED_BLOCK_DIRECT" -> CoverageStatus.TRACEABLE;
+            case "MISSING_EVIDENCE", "PARTIAL", "LLM_REFUSED", "EVIDENCE_NOT_COVERING" -> CoverageStatus.MISSING_EVIDENCE;
             default -> CoverageStatus.EMPTY;
         };
     }

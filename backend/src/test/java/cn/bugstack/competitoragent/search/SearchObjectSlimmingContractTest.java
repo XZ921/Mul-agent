@@ -50,4 +50,29 @@ class SearchObjectSlimmingContractTest {
         assertThat(serialized).doesNotContain("large-body");
         assertThat(serialized.length()).isLessThan(600);
     }
+
+    @Test
+    void shouldNotTreatExtractorOutputAsCollectorProjection() {
+        String extractorLikeOutput = """
+                {
+                  "contractVersion": "1.0",
+                  "sourceUrls": ["https://docs.example.com/pricing"],
+                  "issueFlags": ["TRACEABLE"],
+                  "drafts": [
+                    {
+                      "competitorName": "Acme",
+                      "summary": "workspace pricing"
+                    }
+                  ],
+                  "downstreamEvidenceViews": [
+                    {
+                      "evidenceId": "E001",
+                      "title": "Pricing Docs"
+                    }
+                  ]
+                }
+                """;
+
+        assertThat(SearchSharedProjection.supportsCollectorOutput(objectMapper, extractorLikeOutput)).isFalse();
+    }
 }

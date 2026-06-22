@@ -24,11 +24,13 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -176,6 +178,59 @@ class QualityReviewAgentTest {
     }
 
     @Test
+    void shouldExposeExpandedCoverageStatusesInReviewerPromptSummary() {
+        when(reportRepository.findByTaskId(1L)).thenReturn(Optional.of(
+                Report.builder().taskId(1L).content("# report").build()
+        ));
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E001")
+                        .title("Docs")
+                        .url("https://docs.notion.so")
+                        .build()
+        ));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(1L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceCoverage("""
+                                {
+                                  "summary": {"status":"LLM_REFUSED","hasValue":false},
+                                  "positioning": {"status":"TRACEABLE","hasValue":true},
+                                  "targetUsers": {"status":"STRUCTURED_BLOCK_DIRECT","hasValue":true},
+                                  "pricing": {"status":"EVIDENCE_NOT_COVERING","hasValue":false}
+                                }
+                                """)
+                        .build()
+        ));
+        when(promptService.render(eq("reviewer"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("QualityReview"))).thenReturn("""
+                {
+                  "score": 88,
+                  "passed": true,
+                  "issues": [],
+                  "summary": "ok"
+                }
+                """);
+
+        AgentResult result = agent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("quality_check")
+                .build());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        verify(promptService).render(eq("reviewer"), argThat(variables ->
+                variables.get("evidenceCoverageSummary").contains("模型拒答章节=产品概览")
+                        && variables.get("evidenceCoverageSummary").contains("结构块直出章节=目标用户")
+                        && variables.get("evidenceCoverageSummary").contains("证据不覆盖章节=定价策略")
+                        && variables.get("evidenceCoverageSummary").contains("已可追溯章节=市场定位")
+        ));
+    }
+
+    @Test
     void shouldInjectClaimAuditChecklistIntoReviewerPrompt() {
         when(reportRepository.findByTaskId(3L)).thenReturn(Optional.of(
                 Report.builder()
@@ -226,6 +281,77 @@ class QualityReviewAgentTest {
         assertEquals("SUCCESS", result.getStatus().name());
         assertTrue(result.getOutputData().contains("建议"));
         verify(promptService).render(eq("reviewer"), any());
+    }
+
+    @Test
+    void shouldRetryWhenReviewerReturnsBrokenJsonBeforeSuccessfulQualityReview() throws Exception {
+        when(reportRepository.findByTaskId(12L)).thenReturn(Optional.of(
+                Report.builder()
+                        .taskId(12L)
+                        .content("""
+                                # 结论
+                                Notion AI 在企业知识协作场景中更适合作为统一工作台。
+                                """)
+                        .build()
+        ));
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(12L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(12L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E012")
+                        .title("Product")
+                        .url("https://www.notion.so/product/ai")
+                        .build()
+        ));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(12L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .taskId(12L)
+                        .competitorName("Notion AI")
+                        .evidenceCoverage("""
+                                {
+                                  "summary": {"status":"TRACEABLE","hasValue":true}
+                                }
+                                """)
+                        .build()
+        ));
+        when(promptService.render(eq("reviewer"), any())).thenReturn("review-prompt");
+        when(llmClient.chatForJson(any(), any(), eq("QualityReview")))
+                .thenReturn("""
+                        {
+                          "score": 67,
+                          "passed": false,
+                          "issues": [
+                            {
+                              "type": "unsupported_claim",
+                              "section": "结论",
+                              "severity": "ERROR",
+                              "suggestion": "请补充证据"
+                            }
+                        """)
+                .thenReturn("""
+                        {
+                          "score": 84,
+                          "passed": true,
+                          "issues": [],
+                          "summary": "终审通过"
+                        }
+                        """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentResult result = agent.execute(AgentContext.builder()
+                .taskId(12L)
+                .taskName("task")
+                .currentNodeName("quality_check_final")
+                .currentNodeConfig("""
+                        {
+                          "qualityPolicy": "final pass after revision"
+                        }
+                        """)
+                .build());
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(result.getOutputData().contains("\"reviewStage\":\"final\""), result.getOutputData());
+        verify(llmClient, times(2)).chatForJson(any(), any(), eq("QualityReview"));
     }
 
     @Test
@@ -287,6 +413,138 @@ class QualityReviewAgentTest {
         assertTrue(result.getOutputData().contains("unsupported_claim"));
         assertTrue(result.getOutputData().contains("结论"));
         assertTrue(result.getOutputData().contains("[证据：EID]"));
+    }
+
+    @Test
+    void shouldAcceptExplicitConservativeDowngradeWhenAdviceClaimLacksCitation() throws Exception {
+        when(reportRepository.findByTaskId(11L)).thenReturn(Optional.of(
+                Report.builder()
+                        .taskId(11L)
+                        .content("""
+                                # 建议
+                                建议优先推进连接器生态（推测，当前公开资料未能验证，需补充证据后再进入正式路线图）。
+                                """)
+                        .build()
+        ));
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(11L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(11L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E011")
+                        .title("Docs")
+                        .url("https://docs.notion.so")
+                        .build()
+        ));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(11L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .taskId(11L)
+                        .competitorName("Notion AI")
+                        .evidenceCoverage("""
+                                {
+                                  "summary": {"status":"TRACEABLE","hasValue":true},
+                                  "positioning": {"status":"TRACEABLE","hasValue":true},
+                                  "targetUsers": {"status":"TRACEABLE","hasValue":true},
+                                  "coreFeatures": {"status":"TRACEABLE","hasValue":true},
+                                  "pricing": {"status":"TRACEABLE","hasValue":true},
+                                  "strengths": {"status":"TRACEABLE","hasValue":true},
+                                  "weaknesses": {"status":"TRACEABLE","hasValue":true}
+                                }
+                                """)
+                        .build()
+        ));
+        when(promptService.render(eq("reviewer"), any())).thenReturn("review-prompt");
+        when(llmClient.chatForJson(any(), any(), eq("QualityReview"))).thenReturn("""
+                {
+                  "score": 92,
+                  "passed": true,
+                  "issues": [],
+                  "summary": "建议已显式降级为待验证假设"
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentResult result = agent.execute(AgentContext.builder()
+                .taskId(11L)
+                .taskName("task")
+                .currentNodeName("quality_check_final")
+                .currentNodeConfig("{\"qualityPolicy\":\"final pass after revision\"}")
+                .build());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(output.path("passed").asBoolean());
+        assertFalse(output.path("diagnoses").toString().contains("missing_evidence"));
+        assertFalse(output.path("diagnoses").toString().contains("unsupported_claim"));
+    }
+
+    @Test
+    void shouldSuppressGenericLlmIssueWhenAdviceSectionAlreadyUsesExplicitDowngrade() throws Exception {
+        when(reportRepository.findByTaskId(13L)).thenReturn(Optional.of(
+                Report.builder()
+                        .taskId(13L)
+                        .content("""
+                                # 5. 启示与行动建议
+                                建议优先推进连接器生态（推测，当前公开资料未能验证，需补充证据后再进入正式路线图）。
+                                """)
+                        .build()
+        ));
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(13L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(13L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E013")
+                        .title("Docs")
+                        .url("https://docs.notion.so")
+                        .build()
+        ));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(13L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .taskId(13L)
+                        .competitorName("Notion AI")
+                        .evidenceCoverage("""
+                                {
+                                  "summary": {"status":"TRACEABLE","hasValue":true},
+                                  "positioning": {"status":"TRACEABLE","hasValue":true},
+                                  "targetUsers": {"status":"TRACEABLE","hasValue":true},
+                                  "coreFeatures": {"status":"TRACEABLE","hasValue":true},
+                                  "pricing": {"status":"TRACEABLE","hasValue":true},
+                                  "strengths": {"status":"TRACEABLE","hasValue":true},
+                                  "weaknesses": {"status":"TRACEABLE","hasValue":true}
+                                }
+                                """)
+                        .build()
+        ));
+        when(promptService.render(eq("reviewer"), any())).thenReturn("review-prompt");
+        when(llmClient.chatForJson(any(), any(), eq("QualityReview"))).thenReturn("""
+                {
+                  "score": 70,
+                  "passed": false,
+                  "issues": [
+                    {
+                      "type": "UNKNOWN",
+                      "section": "5. 启示与行动建议",
+                      "severity": "ERROR",
+                      "suggestion": "请删除无法验证的建议"
+                    }
+                  ],
+                  "summary": "建议段落仍需收紧"
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentResult result = agent.execute(AgentContext.builder()
+                .taskId(13L)
+                .taskName("task")
+                .currentNodeName("quality_check_final")
+                .currentNodeConfig("{\"qualityPolicy\":\"final pass after revision\"}")
+                .build());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertFalse(output.path("diagnoses").toString().contains("\"section\":\"5. 启示与行动建议\""));
+        assertFalse(output.path("diagnoses").toString().contains("\"type\":\"UNKNOWN\""));
     }
 
     @Test
@@ -812,5 +1070,72 @@ class QualityReviewAgentTest {
         assertTrue(output.path("diagnoses").toString().contains("structuredBlocks"));
         assertTrue(output.path("diagnoses").toString().contains("qualitySignals"));
         assertTrue(output.path("diagnoses").toString().contains("STRUCTURED_EXTRACTION_INSUFFICIENT"));
+    }
+
+    @Test
+    void shouldNotDiagnoseStructuredEvidenceGapForReadableHighScoreEvidenceWithoutFailureSignals() throws Exception {
+        when(reportRepository.findByTaskId(12L)).thenReturn(Optional.of(
+                Report.builder()
+                        .taskId(12L)
+                        .content("""
+                                # 功能对比
+                                Notion AI 已提供知识问答与工作流能力 [证据：E012]。
+                                """)
+                        .build()
+        ));
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(12L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(12L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E012")
+                        .title("Docs Page")
+                        .url("https://www.notion.so/docs")
+                        .pageMetadata("""
+                                {
+                                  "qualitySignals": ["MAIN_CONTENT_READY", "NO_STRUCTURED_BLOCKS"],
+                                  "structuredBlocks": [],
+                                  "qualityScore": 0.92
+                                }
+                                """)
+                        .build()
+        ));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(12L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .taskId(12L)
+                        .competitorName("Notion AI")
+                        .evidenceCoverage("""
+                                {
+                                  "summary": {"status":"TRACEABLE","hasValue":true},
+                                  "positioning": {"status":"TRACEABLE","hasValue":true},
+                                  "targetUsers": {"status":"TRACEABLE","hasValue":true},
+                                  "coreFeatures": {"status":"TRACEABLE","hasValue":true},
+                                  "pricing": {"status":"TRACEABLE","hasValue":true},
+                                  "strengths": {"status":"TRACEABLE","hasValue":true},
+                                  "weaknesses": {"status":"TRACEABLE","hasValue":true}
+                                }
+                                """)
+                        .build()
+        ));
+        when(promptService.render(eq("reviewer"), any())).thenReturn("review-prompt");
+        when(llmClient.chatForJson(any(), any(), eq("QualityReview"))).thenReturn("""
+                {
+                  "score": 93,
+                  "passed": true,
+                  "issues": [],
+                  "summary": "当前文本质量可用"
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentResult result = agent.execute(AgentContext.builder()
+                .taskId(12L)
+                .taskName("task")
+                .currentNodeName("quality_check")
+                .build());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertFalse(output.path("diagnoses").toString().contains("missing_structured_evidence"));
     }
 }

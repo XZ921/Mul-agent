@@ -51,9 +51,11 @@ public class SearchSharedProjection {
         return output.has("searchAudit")
                 || output.has("searchExecutionTrace")
                 || output.has("selectedTargets")
-                || output.has("results")
-                || output.has("sourceUrls")
-                || output.has("issueFlags");
+                || output.has("searchExecutionPlan")
+                || output.has("searchProgress")
+                || output.has("searchQueries")
+                || output.has("sourceCandidates")
+                || output.has("collectionAudit");
     }
 
     public static SearchSharedProjection fromCollectorOutput(ObjectMapper objectMapper, String rawOutput) {

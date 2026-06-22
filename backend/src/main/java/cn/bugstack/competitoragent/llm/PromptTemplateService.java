@@ -63,6 +63,9 @@ public class PromptTemplateService {
                     # 修订重点
                     {revisionFocus}
 
+                    # 证据引用与降级规则
+                    {evidenceCitationGuide}
+
                     # 证据列表
                     {evidenceList}
                     """),
@@ -87,14 +90,36 @@ public class PromptTemplateService {
             new AbstractMap.SimpleEntry<>("extractor", """
                     你是一名竞品信息结构化抽取专家。
                     你必须只返回 JSON。
+
                     # 竞品名称
                     {competitorName}
+
+                    # 本次任务分析重点
+                    {schemaGuidance}
+
+                    # 字段提取指引
+                    {fieldExtractionGuidance}
 
                     # 证据目录
                     {evidenceCatalog}
 
-                    # 已采集内容
+                    # 结构化证据（优先使用）
+                    {structuredEvidence}
+
+                    # 质量信号提取指引
+                    {qualitySignalGuidance}
+
+                    # 正文内容（兜底）
+                    {readableContent}
+
+                    # 兼容期原始采集内容
                     {collectedContent}
+
+                    # 输出要求
+                    顶层必须包含 sourceUrls。
+                    summary、positioning、targetUsers、coreFeatures、pricing、strengths、weaknesses 任一字段有值时，必须能回指 evidenceIds 或 sourceUrls。
+                    如果证据不足，请返回空值并保留 issueFlags，不要编造。
+                    禁止只返回空对象；如果正文可读，请至少尝试抽取一个可证据支撑的业务字段。
                     """),
             new AbstractMap.SimpleEntry<>("analyzer", """
                     你是一名资深竞品分析专家，请只返回 JSON。

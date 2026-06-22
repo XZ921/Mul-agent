@@ -2,6 +2,10 @@ package cn.bugstack.competitoragent.agent.extractor;
 
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
+import cn.bugstack.competitoragent.extractor.input.ExtractorCompetitorInput;
+import cn.bugstack.competitoragent.extractor.input.ExtractorInputPackage;
+import cn.bugstack.competitoragent.extractor.input.ExtractorInputProvider;
+import cn.bugstack.competitoragent.extractor.input.RepositoryExtractorInputProvider;
 import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.context.TaskRagContextBundle;
 import cn.bugstack.competitoragent.llm.LlmClient;
@@ -11,12 +15,17 @@ import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.model.entity.CompetitorKnowledge;
+import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceQuality;
+import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceView;
+import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceViewAssembler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -37,6 +46,8 @@ class SchemaExtractorAgentTest {
     private final LlmClient llmClient = mock(LlmClient.class);
     private final PromptTemplateService promptService = mock(PromptTemplateService.class);
     private final AgentContextAssembler agentContextAssembler = mock(AgentContextAssembler.class);
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ExtractorInputProvider inputProvider = mock(ExtractorInputProvider.class);
     private final SchemaExtractorAgent extractorAgent = new SchemaExtractorAgent(
             logRepository,
             evidenceRepository,
@@ -44,8 +55,201 @@ class SchemaExtractorAgentTest {
             llmClient,
             promptService,
             agentContextAssembler,
-            new ObjectMapper()
+            objectMapper,
+            new DownstreamEvidenceViewAssembler(objectMapper),
+            new RepositoryExtractorInputProvider(
+                    evidenceRepository,
+                    new DownstreamEvidenceViewAssembler(objectMapper),
+                    objectMapper)
     );
+
+    @Test
+    void shouldConsumeExtractorInputProviderInsteadOfReadingRepositoryDirectly() throws Exception {
+        SchemaExtractorAgent providerOnlyAgent = new SchemaExtractorAgent(
+                logRepository,
+                knowledgeRepository,
+                llmClient,
+                promptService,
+                agentContextAssembler,
+                objectMapper,
+                inputProvider
+        );
+        DownstreamEvidenceView providerEvidence = DownstreamEvidenceView.builder()
+                .evidenceId("P001")
+                .competitorName("Provider AI")
+                .sourceType("DOCS")
+                .title("Provider Pricing")
+                .content("Provider AI offers team pricing and workspace automation for enterprise teams.")
+                .sourceUrls(List.of("https://provider.example.com/pricing"))
+                .qualitySignals(List.of("STRUCTURED_BLOCK_HIT"))
+                .issueFlags(List.of())
+                .structuredBlocks(List.of())
+                .structuredPayload(Map.of())
+                .quality(DownstreamEvidenceQuality.builder()
+                        .qualityScore(0.91)
+                        .build())
+                .build()
+                .normalized();
+        Map<String, Object> budget = new LinkedHashMap<>();
+        budget.put("maxPromptEvidenceChars", 4000);
+        budget.put("usedPromptEvidenceChars", 96);
+        budget.put("truncated", false);
+        when(inputProvider.provide(any(AgentContext.class))).thenReturn(ExtractorInputPackage.builder()
+                .taskId(1L)
+                .nodeName("extract_schema")
+                .planVersionId(8L)
+                .branchKey("root/p1a")
+                .schemaId(12L)
+                .dimensions(List.of("产品功能", "价格策略"))
+                .competitors(List.of(ExtractorCompetitorInput.builder()
+                        .competitorName("Provider AI")
+                        .evidenceCatalog(List.of(providerEvidence))
+                        .structuredEvidence(List.of(providerEvidence))
+                        .readableEvidence(List.of(providerEvidence))
+                        .skippedEvidence(List.of())
+                        .sourceUrls(List.of("https://provider.example.com/pricing"))
+                        .issueFlags(List.of())
+                        .budget(budget)
+                        .build()))
+                .build());
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://provider.example.com",
+                          "summary": "enterprise workspace assistant",
+                          "positioning": "workspace ai",
+                          "targetUsers": ["enterprise teams"],
+                          "coreFeatures": [{
+                            "name": "AI search",
+                            "description": "search workspace knowledge",
+                            "category": "knowledge"
+                          }],
+                          "pricing": {"model": "team plan", "evidenceIds": ["P001"]},
+                          "strengths": [{
+                            "point": "strong workspace integration",
+                            "description": "model returned an extra explanation field"
+                          }],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://provider.example.com/pricing"]
+                        }
+                        """);
+
+        AgentResult result = providerOnlyAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .currentNodeConfig("""
+                        {
+                          "schemaId": 12,
+                          "dimensions": ["产品功能", "价格策略"]
+                        }
+                        """)
+                .planVersionId(8L)
+                .branchKey("root/p1a")
+                .build());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        verify(inputProvider).provide(any(AgentContext.class));
+        verify(evidenceRepository, never()).findByTaskIdOrderByEvidenceIdAsc(any());
+        verify(promptService).render(eq("extractor"), argThat(variables ->
+                variables.get("schemaGuidance") != null
+                        && variables.get("schemaGuidance").contains("schemaId=12")
+                        && variables.get("readableContent") != null
+                        && variables.get("readableContent").contains("Provider AI offers team pricing")
+        ));
+    }
+
+    @Test
+    void shouldUseProviderReadableEvidenceInsteadOfDumpingContentGapIntoReadablePrompt() {
+        SchemaExtractorAgent providerOnlyAgent = new SchemaExtractorAgent(
+                logRepository,
+                knowledgeRepository,
+                llmClient,
+                promptService,
+                agentContextAssembler,
+                objectMapper,
+                inputProvider
+        );
+        DownstreamEvidenceView contentGapView = DownstreamEvidenceView.builder()
+                .evidenceId("G001")
+                .competitorName("Acme")
+                .sourceType("DOCS")
+                .title("Broken Docs")
+                .content("this content should stay out of readable prompt")
+                .sourceUrls(List.of("https://acme.example.com/broken"))
+                .issueFlags(List.of("CONTENT_GAP"))
+                .qualitySignals(List.of("LIGHTWEIGHT_CONTENT_READY"))
+                .structuredBlocks(List.of())
+                .structuredPayload(Map.of())
+                .quality(DownstreamEvidenceQuality.builder().qualityScore(0.62).build())
+                .build()
+                .normalized();
+        DownstreamEvidenceView readableView = DownstreamEvidenceView.builder()
+                .evidenceId("G002")
+                .competitorName("Acme")
+                .sourceType("DOCS")
+                .title("Product Docs")
+                .content("Acme supports workflow automation, admin controls, and team pricing for enterprise teams.")
+                .sourceUrls(List.of("https://acme.example.com/docs"))
+                .issueFlags(List.of())
+                .qualitySignals(List.of("LIGHTWEIGHT_CONTENT_READY"))
+                .structuredBlocks(List.of())
+                .structuredPayload(Map.of())
+                .quality(DownstreamEvidenceQuality.builder().qualityScore(0.84).build())
+                .build()
+                .normalized();
+        when(inputProvider.provide(any(AgentContext.class))).thenReturn(ExtractorInputPackage.builder()
+                .taskId(1L)
+                .nodeName("extract_schema")
+                .competitors(List.of(ExtractorCompetitorInput.builder()
+                        .competitorName("Acme")
+                        .evidenceCatalog(List.of(contentGapView, readableView))
+                        .structuredEvidence(List.of())
+                        .readableEvidence(List.of(readableView))
+                        .skippedEvidence(List.of())
+                        .sourceUrls(List.of("https://acme.example.com/docs"))
+                        .issueFlags(List.of("CONTENT_GAP"))
+                        .budget(Map.of(
+                                "maxPromptEvidenceChars", 4000,
+                                "usedPromptEvidenceChars", 88,
+                                "truncated", false
+                        ))
+                        .build()))
+                .build());
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://acme.example.com",
+                          "summary": "workflow platform",
+                          "positioning": "enterprise workflow",
+                          "targetUsers": ["enterprise teams"],
+                          "coreFeatures": [],
+                          "pricing": {},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://acme.example.com/docs"]
+                        }
+                        """);
+
+        AgentResult result = providerOnlyAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        verify(promptService).render(eq("extractor"), argThat(variables ->
+                variables.get("readableContent") != null
+                        && variables.get("readableContent").contains("workflow automation")
+                        && !variables.get("readableContent").contains("this content should stay out of readable prompt")
+                        && variables.get("collectedContent") != null
+                        && variables.get("collectedContent").contains("CONTENT_GAP")
+        ));
+    }
 
     @Test
     void shouldPassUnifiedTaskRagContextIntoExtractorPrompt() throws Exception {
@@ -166,6 +370,15 @@ class SchemaExtractorAgentTest {
                         .url("https://example.com/docs")
                         .fullContent("usable content")
                         .build()
+                ,
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Feishu")
+                        .evidenceId("T0001-COLLECT-002")
+                        .title("Pricing")
+                        .url("https://example.com/pricing")
+                        .fullContent("pricing content")
+                        .build()
         ));
         when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
         when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
@@ -201,6 +414,53 @@ class SchemaExtractorAgentTest {
         assertTrue(knowledgeCaptor.getValue().getEvidenceCoverage().contains("MISSING_EVIDENCE"));
         assertTrue(result.getOutputData().contains("SOURCE_URLS_BACKFILLED"));
         assertTrue(result.getOutputData().contains("MISSING_EVIDENCE"));
+    }
+
+    @Test
+    void shouldBackfillSingleSourceTraceabilityWhenOnlyOneEvidenceWasConsumed() throws Exception {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E001")
+                        .title("Product Docs")
+                        .url("https://docs.example.com/notion-ai")
+                        .fullContent("Notion AI helps teams write docs, search workspace knowledge, and collaborate in one place.")
+                        .contentSnippet("helps teams write docs and search workspace knowledge")
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://docs.example.com/notion-ai",
+                          "summary": "Notion AI is a workspace assistant for docs and collaboration.",
+                          "positioning": "workspace ai",
+                          "targetUsers": ["teams", "knowledge workers"],
+                          "coreFeatures": [],
+                          "pricing": {},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://docs.example.com/notion-ai"]
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+        JsonNode coverage = objectMapper.readTree(result.getOutputData())
+                .path("drafts").get(0).path("evidenceCoverage");
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertEquals("TRACEABLE", coverage.path("summary").path("status").asText());
+        assertEquals("TRACEABLE", coverage.path("positioning").path("status").asText());
+        assertEquals("TRACEABLE", coverage.path("targetUsers").path("status").asText());
+        assertTrue(coverage.path("summary").path("sourceUrls").toString().contains("https://docs.example.com/notion-ai"));
+        assertTrue(coverage.path("positioning").path("sourceUrls").toString().contains("https://docs.example.com/notion-ai"));
+        assertTrue(coverage.path("targetUsers").path("sourceUrls").toString().contains("https://docs.example.com/notion-ai"));
     }
 
     @Test
@@ -262,6 +522,270 @@ class SchemaExtractorAgentTest {
         assertTrue(output.path("downstreamEvidenceViews").isArray());
         assertTrue(output.path("downstreamEvidenceViews").toString().contains("PRICING_BLOCK"));
         assertTrue(output.path("drafts").get(0).path("downstreamEvidenceViews").toString().contains("STRUCTURED_BLOCK_HIT"));
+    }
+
+    @Test
+    void shouldRetryWhenFirstPassReturnsZeroBusinessFieldsButReadableEvidenceExists() {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E001")
+                        .title("Pricing")
+                        .url("https://www.notion.so/pricing")
+                        .fullContent("Notion AI provides pricing and workspace plan details for teams, docs, search, and project collaboration.")
+                        .contentSnippet("workspace plan details for teams")
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://www.notion.so",
+                          "summary": "",
+                          "positioning": "",
+                          "targetUsers": [],
+                          "coreFeatures": [],
+                          "pricing": {},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": []
+                        }
+                        """)
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://www.notion.so",
+                          "summary": "workspace assistant",
+                          "positioning": "workspace ai",
+                          "targetUsers": ["teams"],
+                          "coreFeatures": [],
+                          "pricing": {"model": "team workspace plan", "evidenceIds": ["E001"]},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://www.notion.so/pricing"]
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        verify(llmClient, times(2)).chatForJson(any(), any(), eq("ExtractedSchema"));
+        verify(knowledgeRepository).save(any(CompetitorKnowledge.class));
+    }
+
+    @Test
+    void shouldAcceptStructuredOnlyEvidenceWhenContentIsBlank() {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Acme")
+                        .evidenceId("E001")
+                        .title("Pricing API")
+                        .url("https://api.example.com/pricing")
+                        .sourceType("API_DATA")
+                        .fullContent("")
+                        .contentSnippet("")
+                        .pageMetadata("""
+                                {
+                                  "sourceUrls": ["https://api.example.com/pricing"],
+                                  "qualitySignals": ["STRUCTURED_BLOCK_HIT", "PRICING_BLOCK_HIT"],
+                                  "structuredBlocks": [{"blockType": "PRICING_BLOCK", "summary": "Pro 199 / 月"}],
+                                  "structuredPayload": {"plans": [{"name": "Pro", "price": 199}]}
+                                }
+                                """)
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://example.com",
+                          "summary": "pricing api",
+                          "positioning": "",
+                          "targetUsers": [],
+                          "coreFeatures": [],
+                          "pricing": {"model": "Pro 199 / 月", "evidenceIds": ["E001"]},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://api.example.com/pricing"]
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        verify(promptService).render(eq("extractor"), argThat(variables ->
+                variables.toString().contains("PRICING_BLOCK")
+                        && variables.toString().contains("STRUCTURED_BLOCK_HIT")
+        ));
+    }
+
+    @Test
+    void shouldMarkStructuredOnlyPricingCoverageAsStructuredBlockDirect() throws Exception {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Acme")
+                        .evidenceId("E001")
+                        .title("Pricing API")
+                        .url("https://api.example.com/pricing")
+                        .sourceType("API_DATA")
+                        .fullContent("")
+                        .contentSnippet("")
+                        .pageMetadata("""
+                                {
+                                  "sourceUrls": ["https://api.example.com/pricing"],
+                                  "qualitySignals": ["STRUCTURED_BLOCK_HIT", "PRICING_BLOCK_HIT"],
+                                  "structuredBlocks": [{"blockType": "PRICING_BLOCK", "summary": "Pro 199 / 月"}],
+                                  "structuredPayload": {"plans": [{"name": "Pro", "price": 199}]}
+                                }
+                                """)
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://example.com",
+                          "summary": "pricing api",
+                          "positioning": "",
+                          "targetUsers": [],
+                          "coreFeatures": [],
+                          "pricing": {"model": "Pro 199 / 月", "evidenceIds": ["E001"]},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://api.example.com/pricing"]
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        JsonNode draft = output.path("drafts").get(0);
+        JsonNode pricingBundle = findBundle(draft.path("sectionEvidenceBundles"), "pricing");
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertEquals("STRUCTURED_BLOCK_DIRECT", draft.path("evidenceCoverage").path("pricing").path("status").asText());
+        assertEquals("STRUCTURED_BLOCK_DIRECT",
+                pricingBundle.path("evidenceFragments").get(0).path("coverageStatus").asText());
+    }
+
+    @Test
+    void shouldInjectSchemaDimensionsFromCurrentNodeConfigIntoExtractorPrompt() {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E001")
+                        .title("Product")
+                        .url("https://www.notion.so/product")
+                        .fullContent("Notion AI helps teams manage docs, projects, search, and workspace knowledge.")
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://www.notion.so",
+                          "summary": "workspace assistant",
+                          "positioning": "team workspace",
+                          "targetUsers": ["teams"],
+                          "coreFeatures": [],
+                          "pricing": {},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://www.notion.so/product"]
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .currentNodeConfig("""
+                        {
+                          "schemaId": 7,
+                          "dimensions": ["产品功能", "价格策略", "目标用户"]
+                        }
+                        """)
+                .build());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        verify(promptService).render(eq("extractor"), argThat(variables ->
+                variables.get("schemaGuidance") != null
+                        && variables.get("schemaGuidance").contains("schemaId=7")
+                        && variables.get("schemaGuidance").contains("产品功能")
+                        && variables.get("schemaGuidance").contains("价格策略")
+        ));
+    }
+
+    @Test
+    void shouldRenderSeparatedPromptInputsForStructuredQualityAndReadableEvidence() {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Acme")
+                        .evidenceId("E001")
+                        .title("Docs")
+                        .url("https://docs.example.com")
+                        .fullContent("Acme offers workflow automation, collaboration features, and team billing details.")
+                        .pageMetadata("""
+                                {
+                                  "sourceUrls": ["https://docs.example.com"],
+                                  "qualitySignals": ["LIGHTWEIGHT_CONTENT_READY", "PRICING_BLOCK_HIT"],
+                                  "structuredBlocks": [{"blockType": "FEATURE_LIST", "summary": "workflow automation"}]
+                                }
+                                """)
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://example.com",
+                          "summary": "workflow automation",
+                          "positioning": "team workflow platform",
+                          "targetUsers": ["teams"],
+                          "coreFeatures": [{"name": "automation", "evidenceIds": ["E001"]}],
+                          "pricing": {},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://docs.example.com"]
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        verify(promptService).render(eq("extractor"), argThat(variables ->
+                variables.get("structuredEvidence") != null
+                        && variables.get("structuredEvidence").contains("FEATURE_LIST")
+                        && variables.get("qualitySignalGuidance") != null
+                        && variables.get("qualitySignalGuidance").contains("PRICING_BLOCK_HIT")
+                        && variables.get("readableContent") != null
+                        && variables.get("readableContent").contains("workflow automation")
+        ));
     }
 
     @Test
@@ -479,6 +1003,97 @@ class SchemaExtractorAgentTest {
     }
 
     @Test
+    void shouldMarkEmptyFieldAsEvidenceNotCoveringWhenConsumedEvidenceLacksRelevantSignal() throws Exception {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E001")
+                        .title("Help Docs")
+                        .url("https://docs.example.com/help")
+                        .fullContent("Notion AI help center explains AI features, agents, docs, and team collaboration.")
+                        .contentSnippet("help center explains ai features and team collaboration")
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://docs.example.com/help",
+                          "summary": "workspace ai",
+                          "positioning": "collaboration assistant",
+                          "targetUsers": ["teams"],
+                          "coreFeatures": [],
+                          "pricing": {},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://docs.example.com/help"]
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+        JsonNode coverage = objectMapper.readTree(result.getOutputData())
+                .path("drafts").get(0).path("evidenceCoverage");
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertEquals("EVIDENCE_NOT_COVERING", coverage.path("pricing").path("status").asText());
+        assertEquals("EVIDENCE_NOT_COVERING", coverage.path("weaknesses").path("status").asText());
+    }
+
+    @Test
+    void shouldMarkRefusalTextAsLlmRefusedCoverage() throws Exception {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Acme")
+                        .evidenceId("E001")
+                        .title("Docs")
+                        .url("https://docs.example.com/acme")
+                        .fullContent("Acme offers admin controls and workflow automation for enterprise teams.")
+                        .contentSnippet("admin controls and workflow automation")
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://docs.example.com/acme",
+                          "summary": "当前公开资料未能验证",
+                          "positioning": "",
+                          "targetUsers": [],
+                          "coreFeatures": [{
+                            "name": "admin controls",
+                            "description": "enterprise controls",
+                            "evidenceIds": ["E001"]
+                          }],
+                          "pricing": {},
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://docs.example.com/acme"]
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        JsonNode coverage = output.path("drafts").get(0).path("evidenceCoverage");
+        JsonNode summaryBundle = findBundle(output.path("drafts").get(0).path("sectionEvidenceBundles"), "summary");
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertEquals("LLM_REFUSED", coverage.path("summary").path("status").asText());
+        assertEquals("LLM_REFUSED", summaryBundle.path("evidenceFragments").get(0).path("coverageStatus").asText());
+    }
+
+    @Test
     void shouldEmitSectionEvidenceBundlesAndGapMarkersForPartialCoverage() throws Exception {
         when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
                 EvidenceSource.builder()
@@ -489,6 +1104,16 @@ class SchemaExtractorAgentTest {
                         .url("https://docs.notion.so/pricing")
                         .fullContent("pricing content")
                         .contentSnippet("pricing snippet")
+                        .build()
+                ,
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E002")
+                        .title("Product Docs")
+                        .url("https://docs.notion.so/product")
+                        .fullContent("product overview content")
+                        .contentSnippet("product overview snippet")
                         .build()
         ));
         when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
@@ -523,6 +1148,74 @@ class SchemaExtractorAgentTest {
         assertTrue(pricingBundle.path("issueFlags").toString().contains("SECTION_EVIDENCE_GAP"));
         assertTrue(pricingBundle.path("evidenceFragments").get(0).path("coverageStatus").asText().contains("MISSING_EVIDENCE"));
         assertTrue(pricingBundle.path("gapSummary").asText().contains("pricing"));
+    }
+
+    @Test
+    void shouldSlimExtractorOutputByRemovingLongEvidenceContentFromSharedFields() throws Exception {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Acme")
+                        .evidenceId("E001")
+                        .title("Pricing Docs")
+                        .url("https://docs.example.com/pricing")
+                        .fullContent("这里是很长的完整定价页正文，包含套餐、价格、折扣、限制说明，不应该继续出现在 extract_schema 的跨节点输出中。")
+                        .contentSnippet("价格说明摘要")
+                        .pageMetadata("""
+                                {
+                                  "sourceUrls": ["https://docs.example.com/pricing"],
+                                  "qualitySignals": ["STRUCTURED_BLOCK_HIT", "PRICING_BLOCK_HIT"],
+                                  "structuredBlocks": [{
+                                    "blockType": "PRICING_BLOCK",
+                                    "summary": "Pro 199 / 月",
+                                    "content": "完整结构块正文也不应该继续透传"
+                                  }],
+                                  "structuredPayload": {
+                                    "plans": [{"name": "Pro", "price": 199}]
+                                  }
+                                }
+                                """)
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://docs.example.com",
+                          "summary": "workspace pricing",
+                          "positioning": "collaboration suite",
+                          "targetUsers": ["teams"],
+                          "coreFeatures": [],
+                          "pricing": {
+                            "model": "seat based",
+                            "evidenceIds": ["E001"]
+                          },
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://docs.example.com/pricing"]
+                        }
+                        """);
+
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        String serialized = output.toString();
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(output.path("downstreamEvidenceViews").isArray());
+        assertTrue(output.path("drafts").get(0).path("downstreamEvidenceViews").isArray());
+        assertTrue(output.path("extractorInput").path("competitors").isArray());
+        assertTrue(serialized.contains("PRICING_BLOCK"));
+        assertTrue(serialized.contains("STRUCTURED_BLOCK_HIT"));
+        assertTrue(serialized.contains("https://docs.example.com/pricing"));
+        assertTrue(serialized.contains("\"content\":\"\"")
+                || !serialized.contains("这里是很长的完整定价页正文"));
+        assertTrue(!serialized.contains("这里是很长的完整定价页正文"));
+        assertTrue(!serialized.contains("完整结构块正文也不应该继续透传"));
     }
 
     @Test
@@ -568,6 +1261,56 @@ class SchemaExtractorAgentTest {
                 .build());
 
         assertEquals("SUCCESS", result.getStatus().name());
+        verify(knowledgeRepository, times(1)).save(any());
+    }
+
+    @Test
+    void shouldNormalizeArrayPricingWhenBuildingKnowledgeDraft() throws Exception {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceId("T0050-COLLECT-001")
+                        .title("Notion AI Pricing")
+                        .url("https://www.notion.so/pricing")
+                        .fullContent("Notion AI pricing evidence describes business plans and AI add-on options for team workspaces.")
+                        .contentSnippet("business plans and AI add-on options")
+                        .build()
+        ));
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://www.notion.so/product/ai",
+                          "summary": "workspace AI assistant",
+                          "positioning": "team knowledge assistant",
+                          "targetUsers": ["teams"],
+                          "coreFeatures": [],
+                          "pricing": [[{
+                            "model": "business plan with AI add-on",
+                            "plans": [{"name": "Business", "price": "$20 per member"}],
+                            "evidenceIds": ["T0050-COLLECT-001"],
+                            "sourceUrls": ["https://www.notion.so/pricing"]
+                          }]],
+                          "strengths": [],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://www.notion.so/pricing"]
+                        }
+                        """);
+
+        // live 链路里模型可能把 pricing 包成数组甚至嵌套数组，抽取节点应规范化后继续向下游传递。
+        AgentResult result = extractorAgent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        assertEquals("business plan with AI add-on",
+                output.path("drafts").get(0).path("pricing").path("model").asText());
+        assertTrue(output.path("drafts").get(0).path("pricing").path("plans").toString().contains("Business"));
         verify(knowledgeRepository, times(1)).save(any());
     }
 

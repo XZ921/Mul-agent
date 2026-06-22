@@ -11,6 +11,7 @@ import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.workflow.contract.AnalysisResult;
+import cn.bugstack.competitoragent.workflow.contract.CompetitorKnowledgeDraft;
 import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceView;
 import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
 import cn.bugstack.competitoragent.workflow.contract.SectionEvidenceBundle;
@@ -27,6 +28,7 @@ import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 分析 Agent。
@@ -77,14 +79,15 @@ public class CompetitorAnalysisAgent extends BaseAgent {
     @Override
     protected AgentResult doExecute(AgentContext context) {
         List<CompetitorKnowledge> knowledges = knowledgeRepository.findByTaskIdOrderByIdAsc(context.getTaskId());
-        List<DownstreamEvidenceView> downstreamEvidenceViews = readDownstreamEvidenceViews(context.getSharedOutput("extract_schema"));
-        if (knowledges.isEmpty() && downstreamEvidenceViews.isEmpty()) {
+        ExtractRuntimeOutput extractorOutput = readExtractRuntimeOutput(context.getSharedOutput("extract_schema"));
+        List<DownstreamEvidenceView> downstreamEvidenceViews = extractorOutput.downstreamEvidenceViews();
+        if (knowledges.isEmpty() && downstreamEvidenceViews.isEmpty() && extractorOutput.drafts().isEmpty()) {
             return AgentResult.failed("暂无可分析的竞品知识");
         }
 
         String competitorData;
         try {
-            competitorData = objectMapper.writeValueAsString(buildPromptPayloads(knowledges, downstreamEvidenceViews));
+            competitorData = objectMapper.writeValueAsString(buildPromptPayloads(knowledges, extractorOutput));
         } catch (JsonProcessingException e) {
             return AgentResult.failed("竞品知识序列化失败：" + e.getMessage());
         }
@@ -108,7 +111,11 @@ public class CompetitorAnalysisAgent extends BaseAgent {
             if (!(rawJson instanceof ObjectNode analysisJson)) {
                 return AgentResult.failed("竞品分析失败：模型未返回 JSON 对象");
             }
-            AnalysisResult analysisResult = normalizeAnalysisResult(analysisJson, knowledges, downstreamEvidenceViews);
+            AnalysisResult analysisResult = normalizeAnalysisResult(
+                    analysisJson,
+                    knowledges,
+                    downstreamEvidenceViews,
+                    extractorOutput.drafts());
             // 把最终实际消费的 Task RAG 摘要一并写回运行态输出，方便后续节点和审计接口复核。
             analysisResult.setTaskRagContext(context.getTaskRagPromptContext());
             String outputJson = objectMapper.writeValueAsString(analysisResult);
@@ -124,32 +131,54 @@ public class CompetitorAnalysisAgent extends BaseAgent {
     }
 
     private List<Map<String, Object>> buildPromptPayloads(List<CompetitorKnowledge> knowledges,
-                                                          List<DownstreamEvidenceView> downstreamEvidenceViews) {
+                                                          ExtractRuntimeOutput extractorOutput) {
+        Map<String, CompetitorKnowledge> snapshotsByCompetitor = indexKnowledgeByCompetitor(knowledges);
+        Map<String, List<DownstreamEvidenceView>> viewsByCompetitor = groupViewsByCompetitor(extractorOutput.downstreamEvidenceViews());
         List<Map<String, Object>> payloads = new ArrayList<>();
-        if (knowledges != null && !knowledges.isEmpty()) {
-            for (CompetitorKnowledge knowledge : knowledges) {
-                Map<String, Object> payload = toPromptPayload(knowledge);
-                List<DownstreamEvidenceView> matchedViews = downstreamEvidenceViewsByCompetitor(
-                        downstreamEvidenceViews,
-                        knowledge.getCompetitorName());
-                if (!matchedViews.isEmpty()) {
-                    payload.put("downstreamEvidenceViews", matchedViews);
-                }
-                payloads.add(payload);
+        Set<String> emittedCompetitors = new LinkedHashSet<>();
+
+        for (CompetitorKnowledgeDraft draft : extractorOutput.drafts()) {
+            String competitorName = firstNonBlank(draft.getCompetitorName(), "UNKNOWN");
+            Map<String, Object> payload = toPromptPayload(draft);
+            CompetitorKnowledge snapshot = snapshotsByCompetitor.get(competitorName);
+            if (snapshot != null) {
+                mergeMissingFieldsFromTaskSnapshot(payload, snapshot);
             }
-            return payloads;
+            List<DownstreamEvidenceView> matchedViews = viewsByCompetitor.getOrDefault(competitorName, List.of());
+            if (!matchedViews.isEmpty()) {
+                payload.put("downstreamEvidenceViews", normalizeDownstreamEvidenceViews(matchedViews));
+            }
+            payload.put("inputPriority", "EXTRACT_RESULT_DRAFT");
+            payloads.add(payload);
+            emittedCompetitors.add(competitorName);
         }
-        Map<String, List<DownstreamEvidenceView>> viewsByCompetitor = new LinkedHashMap<>();
-        for (DownstreamEvidenceView view : downstreamEvidenceViews == null ? List.<DownstreamEvidenceView>of() : downstreamEvidenceViews) {
-            String competitorName = firstNonBlank(view.getCompetitorName(), "UNKNOWN");
-            viewsByCompetitor.computeIfAbsent(competitorName, key -> new ArrayList<>()).add(view.normalized());
+
+        for (CompetitorKnowledge snapshot : knowledges == null ? List.<CompetitorKnowledge>of() : knowledges) {
+            String competitorName = firstNonBlank(snapshot.getCompetitorName(), "UNKNOWN");
+            if (emittedCompetitors.contains(competitorName)) {
+                continue;
+            }
+            Map<String, Object> payload = toPromptPayload(snapshot);
+            payload.put("inputPriority", "TASK_SNAPSHOT_FALLBACK");
+            payload.put("issueFlags", appendIssueFlag(payload.get("issueFlags"), "EXTRACT_OUTPUT_FALLBACK_TO_TASK_SNAPSHOT"));
+            List<DownstreamEvidenceView> matchedViews = viewsByCompetitor.getOrDefault(competitorName, List.of());
+            if (!matchedViews.isEmpty()) {
+                payload.put("downstreamEvidenceViews", normalizeDownstreamEvidenceViews(matchedViews));
+            }
+            payloads.add(payload);
+            emittedCompetitors.add(competitorName);
         }
+
         for (Map.Entry<String, List<DownstreamEvidenceView>> entry : viewsByCompetitor.entrySet()) {
+            if (emittedCompetitors.contains(entry.getKey())) {
+                continue;
+            }
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("competitorName", entry.getKey());
             payload.put("sourceUrls", collectEvidenceViewSourceUrls(entry.getValue()));
             payload.put("issueFlags", collectEvidenceViewIssueFlags(entry.getValue()));
-            payload.put("downstreamEvidenceViews", entry.getValue());
+            payload.put("downstreamEvidenceViews", normalizeDownstreamEvidenceViews(entry.getValue()));
+            payload.put("inputPriority", "EXTRACT_RESULT_VIEWS_ONLY");
             payloads.add(payload);
         }
         return payloads;
@@ -172,13 +201,30 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         return payload;
     }
 
+    private Map<String, Object> toPromptPayload(CompetitorKnowledgeDraft draft) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("competitorName", draft.getCompetitorName());
+        payload.put("summary", draft.getSummary());
+        payload.put("positioning", draft.getPositioning());
+        payload.put("targetUsers", draft.getTargetUsers());
+        payload.put("coreFeatures", draft.getCoreFeatures());
+        payload.put("pricing", draft.getPricing());
+        payload.put("strengths", draft.getStrengths());
+        payload.put("weaknesses", draft.getWeaknesses());
+        payload.put("sourceUrls", draft.getSourceUrls());
+        payload.put("evidenceCoverage", draft.getEvidenceCoverage());
+        payload.put("issueFlags", draft.getIssueFlags() == null ? new ArrayList<>() : new ArrayList<>(draft.getIssueFlags()));
+        return payload;
+    }
+
     /**
      * 分析阶段的首要职责不是相信模型字段永远稳定，而是把模型输出矫正回系统约定的契约形态。
      * 这里统一处理字段漂移、来源回填和证据缺口继承，保证 Writer 永远拿到同一种结构。
      */
     private AnalysisResult normalizeAnalysisResult(ObjectNode analysisJson,
                                                    List<CompetitorKnowledge> knowledges,
-                                                   List<DownstreamEvidenceView> downstreamEvidenceViews) {
+                                                   List<DownstreamEvidenceView> downstreamEvidenceViews,
+                                                   List<CompetitorKnowledgeDraft> drafts) {
         LinkedHashSet<String> issueFlags = new LinkedHashSet<>(readStringList(analysisJson.path("issueFlags")));
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>(readStringList(analysisJson.path("sourceUrls")));
         List<EvidenceFragment> evidenceFragments = new ArrayList<>(readEvidenceFragments(analysisJson.path("evidenceFragments")));
@@ -198,6 +244,7 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                 List.of("weaknessesSummary", "weaknessSummary", "risksSummary"), issueFlags);
 
         sourceUrls.addAll(collectKnowledgeSourceUrls(knowledges));
+        sourceUrls.addAll(collectDraftSourceUrls(drafts));
         sourceUrls.addAll(collectEvidenceViewSourceUrls(downstreamEvidenceViews));
         if ((analysisJson.path("sourceUrls").isMissingNode() || analysisJson.path("sourceUrls").isEmpty())
                 && !sourceUrls.isEmpty()) {
@@ -206,12 +253,21 @@ public class CompetitorAnalysisAgent extends BaseAgent {
 
         List<String> knowledgeIssueFlags = collectKnowledgeIssueFlags(knowledges);
         issueFlags.addAll(knowledgeIssueFlags);
+        issueFlags.addAll(collectDraftIssueFlags(drafts));
         issueFlags.addAll(collectEvidenceViewIssueFlags(downstreamEvidenceViews));
+        issueFlags.addAll(collectSnapshotFallbackIssueFlags(knowledges, drafts));
         if (evidenceFragments.isEmpty()) {
+            evidenceFragments.addAll(buildDraftEvidenceFragments(drafts, issueFlags));
             evidenceFragments.addAll(buildKnowledgeEvidenceFragments(knowledges, issueFlags));
+            evidenceFragments.addAll(buildEvidenceViewFragments(downstreamEvidenceViews, issueFlags));
         }
         if (sectionEvidenceBundles.isEmpty()) {
-            sectionEvidenceBundles.addAll(buildSectionEvidenceBundles(knowledges, analysisJson, issueFlags));
+            sectionEvidenceBundles.addAll(buildSectionEvidenceBundles(
+                    knowledges,
+                    drafts,
+                    downstreamEvidenceViews,
+                    analysisJson,
+                    issueFlags));
         }
 
         return AnalysisResult.builder()
@@ -313,10 +369,158 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
         coverageNode.fields().forEachRemaining(entry -> {
             String status = entry.getValue().path("status").asText("");
-            if ("MISSING_EVIDENCE".equalsIgnoreCase(status)) {
-                issueFlags.add("MISSING_EVIDENCE");
+            if (isCoverageGapStatus(status)) {
+                issueFlags.add(status.toUpperCase());
             }
         });
+        return new ArrayList<>(issueFlags);
+    }
+
+    private boolean isCoverageGapStatus(String status) {
+        return "MISSING_EVIDENCE".equalsIgnoreCase(status)
+                || "LLM_REFUSED".equalsIgnoreCase(status)
+                || "EVIDENCE_NOT_COVERING".equalsIgnoreCase(status);
+    }
+
+    private boolean isTraceableCoverageStatus(String status) {
+        return "TRACEABLE".equalsIgnoreCase(status)
+                || "STRUCTURED_BLOCK_DIRECT".equalsIgnoreCase(status);
+    }
+
+    private String buildCoverageGapComment(String status) {
+        if (isTraceableCoverageStatus(status)) {
+            return null;
+        }
+        if ("EMPTY".equalsIgnoreCase(status)) {
+            return "字段暂无内容";
+        }
+        if ("LLM_REFUSED".equalsIgnoreCase(status)) {
+            return "模型根据当前公开资料拒绝判断该字段";
+        }
+        if ("EVIDENCE_NOT_COVERING".equalsIgnoreCase(status)) {
+            return "当前证据未覆盖该字段";
+        }
+        return "字段缺少稳定证据支撑";
+    }
+
+    private Map<String, CompetitorKnowledge> indexKnowledgeByCompetitor(List<CompetitorKnowledge> knowledges) {
+        Map<String, CompetitorKnowledge> snapshots = new LinkedHashMap<>();
+        for (CompetitorKnowledge knowledge : knowledges == null ? List.<CompetitorKnowledge>of() : knowledges) {
+            if (knowledge == null) {
+                continue;
+            }
+            snapshots.putIfAbsent(firstNonBlank(knowledge.getCompetitorName(), "UNKNOWN"), knowledge);
+        }
+        return snapshots;
+    }
+
+    private Map<String, List<DownstreamEvidenceView>> groupViewsByCompetitor(List<DownstreamEvidenceView> views) {
+        Map<String, List<DownstreamEvidenceView>> grouped = new LinkedHashMap<>();
+        for (DownstreamEvidenceView view : views == null ? List.<DownstreamEvidenceView>of() : views) {
+            String competitorName = firstNonBlank(view == null ? null : view.getCompetitorName(), "UNKNOWN");
+            grouped.computeIfAbsent(competitorName, key -> new ArrayList<>()).add(view.normalized());
+        }
+        return grouped;
+    }
+
+    /**
+     * 同一竞品同时存在 draft 和 TASK snapshot 时，只允许 snapshot 补 draft 的空字段。
+     * 如果两边同时给值但内容不同，就把冲突显式记录下来，交给 analyzer Prompt 做语义裁决。
+     */
+    private void mergeMissingFieldsFromTaskSnapshot(Map<String, Object> payload, CompetitorKnowledge snapshot) {
+        List<Map<String, Object>> conflicts = new ArrayList<>();
+        mergeField(payload, "summary", snapshot.getSummary(), conflicts);
+        mergeField(payload, "positioning", snapshot.getPositioning(), conflicts);
+        mergeField(payload, "targetUsers", parseJsonOrFallback(snapshot.getTargetUsers()), conflicts);
+        mergeField(payload, "coreFeatures", parseJsonOrFallback(snapshot.getCoreFeatures()), conflicts);
+        mergeField(payload, "pricing", parseJsonOrFallback(snapshot.getPricing()), conflicts);
+        mergeField(payload, "strengths", parseJsonOrFallback(snapshot.getStrengths()), conflicts);
+        mergeField(payload, "weaknesses", parseJsonOrFallback(snapshot.getWeaknesses()), conflicts);
+        mergeField(payload, "sourceUrls", parseJsonOrFallback(snapshot.getSourceUrls()), conflicts);
+        mergeField(payload, "evidenceCoverage", parseJsonOrFallback(snapshot.getEvidenceCoverage()), conflicts);
+        if (!conflicts.isEmpty()) {
+            payload.put("inputConflicts", conflicts);
+        }
+    }
+
+    private void mergeField(Map<String, Object> payload,
+                            String fieldName,
+                            Object snapshotValue,
+                            List<Map<String, Object>> conflicts) {
+        Object draftValue = payload.get(fieldName);
+        if (!hasMeaningfulValue(draftValue)) {
+            if (snapshotValue != null) {
+                payload.put(fieldName, snapshotValue);
+            }
+            return;
+        }
+        if (hasMeaningfulValue(snapshotValue) && !sameValue(draftValue, snapshotValue)) {
+            conflicts.add(Map.of(
+                    "fieldName", fieldName,
+                    "draftValue", draftValue,
+                    "snapshotValue", snapshotValue,
+                    "priority", "EXTRACT_RESULT_DRAFT_WINS"
+            ));
+        }
+    }
+
+    private List<String> appendIssueFlag(Object issueFlagsValue, String issueFlag) {
+        LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
+        if (issueFlagsValue instanceof List<?> values) {
+            for (Object value : values) {
+                if (value != null && !String.valueOf(value).isBlank()) {
+                    issueFlags.add(String.valueOf(value));
+                }
+            }
+        }
+        if (issueFlag != null && !issueFlag.isBlank()) {
+            issueFlags.add(issueFlag);
+        }
+        return new ArrayList<>(issueFlags);
+    }
+
+    private List<String> collectDraftSourceUrls(List<CompetitorKnowledgeDraft> drafts) {
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        for (CompetitorKnowledgeDraft draft : drafts == null ? List.<CompetitorKnowledgeDraft>of() : drafts) {
+            if (draft != null && draft.getSourceUrls() != null) {
+                sourceUrls.addAll(draft.getSourceUrls());
+            }
+        }
+        return new ArrayList<>(sourceUrls);
+    }
+
+    private List<String> collectDraftIssueFlags(List<CompetitorKnowledgeDraft> drafts) {
+        LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
+        for (CompetitorKnowledgeDraft draft : drafts == null ? List.<CompetitorKnowledgeDraft>of() : drafts) {
+            if (draft != null && draft.getIssueFlags() != null) {
+                issueFlags.addAll(draft.getIssueFlags());
+            }
+        }
+        return new ArrayList<>(issueFlags);
+    }
+
+    /**
+     * 只要某个竞品缺少运行态 draft，analyzer 实际上就已经回退到 TASK snapshot。
+     * 这个信号必须跟随分析结果继续向后传，方便排查“为什么这次分析不是基于最新抽取现场”。
+     */
+    private List<String> collectSnapshotFallbackIssueFlags(List<CompetitorKnowledge> knowledges,
+                                                           List<CompetitorKnowledgeDraft> drafts) {
+        LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
+        Set<String> draftCompetitors = new LinkedHashSet<>();
+        for (CompetitorKnowledgeDraft draft : drafts == null ? List.<CompetitorKnowledgeDraft>of() : drafts) {
+            if (draft != null) {
+                draftCompetitors.add(firstNonBlank(draft.getCompetitorName(), "UNKNOWN"));
+            }
+        }
+        for (CompetitorKnowledge knowledge : knowledges == null ? List.<CompetitorKnowledge>of() : knowledges) {
+            if (knowledge == null) {
+                continue;
+            }
+            String competitorName = firstNonBlank(knowledge.getCompetitorName(), "UNKNOWN");
+            if (!draftCompetitors.contains(competitorName)) {
+                issueFlags.add("EXTRACT_OUTPUT_FALLBACK_TO_TASK_SNAPSHOT");
+            }
+        }
         return new ArrayList<>(issueFlags);
     }
 
@@ -343,23 +547,116 @@ public class CompetitorAnalysisAgent extends BaseAgent {
     }
 
     /**
+     * 优先保留 extractor 现场里已经按字段组织好的证据片段。
+     * 这样 analyzer 即使只产出总结文本，下游也仍能沿着 draft 里的字段证据追溯来源。
+     */
+    private List<EvidenceFragment> buildDraftEvidenceFragments(List<CompetitorKnowledgeDraft> drafts,
+                                                               LinkedHashSet<String> inheritedIssueFlags) {
+        List<EvidenceFragment> fragments = new ArrayList<>();
+        for (CompetitorKnowledgeDraft draft : drafts == null ? List.<CompetitorKnowledgeDraft>of() : drafts) {
+            if (draft == null) {
+                continue;
+            }
+            if (draft.getEvidenceFragments() != null && !draft.getEvidenceFragments().isEmpty()) {
+                for (EvidenceFragment fragment : draft.getEvidenceFragments()) {
+                    if (fragment == null) {
+                        continue;
+                    }
+                    LinkedHashSet<String> mergedFlags = new LinkedHashSet<>(inheritedIssueFlags);
+                    mergedFlags.addAll(fragment.getIssueFlags() == null ? List.of() : fragment.getIssueFlags());
+                    fragments.add(fragment.toBuilder()
+                            .stage("ANALYZE")
+                            .issueFlags(new ArrayList<>(mergedFlags))
+                            .build()
+                            .normalized());
+                }
+                continue;
+            }
+            for (String sourceUrl : draft.getSourceUrls() == null ? List.<String>of() : draft.getSourceUrls()) {
+                fragments.add(EvidenceFragment.builder()
+                        .stage("ANALYZE")
+                        .competitorName(draft.getCompetitorName())
+                        .fieldName("analysis")
+                        .sourceUrl(sourceUrl)
+                        .issueFlags(new ArrayList<>(inheritedIssueFlags))
+                        .build()
+                        .normalized());
+            }
+        }
+        return fragments;
+    }
+
+    /**
      * 如果模型没有主动返回 evidenceFragments，就直接从抽取阶段落库的 sources/sourceUrls 回填。
      * 这样 Writer 可以只依赖 AnalysisResult，而不用重新猜测知识对象里的来源结构。
      */
-    private List<DownstreamEvidenceView> readDownstreamEvidenceViews(String extractorOutput) {
+    private ExtractRuntimeOutput readExtractRuntimeOutput(String extractorOutput) {
         JsonNode root = readJsonNode(extractorOutput);
         if (root == null || root.isMissingNode() || root.isNull()) {
-            return List.of();
+            return new ExtractRuntimeOutput(List.of(), List.of());
         }
         List<DownstreamEvidenceView> views = new ArrayList<>();
         views.addAll(readDownstreamEvidenceViews(root.path("downstreamEvidenceViews")));
-        JsonNode drafts = root.path("drafts");
-        if (drafts.isArray()) {
-            for (JsonNode draft : drafts) {
-                views.addAll(readDownstreamEvidenceViews(draft.path("downstreamEvidenceViews")));
+        List<CompetitorKnowledgeDraft> draftResults = new ArrayList<>();
+        JsonNode draftNodes = root.path("drafts");
+        if (draftNodes.isArray()) {
+            for (JsonNode draftNode : draftNodes) {
+                CompetitorKnowledgeDraft draft = readCompetitorKnowledgeDraft(draftNode);
+                draftResults.add(draft);
+                views.addAll(readDownstreamEvidenceViews(draftNode.path("downstreamEvidenceViews")));
             }
         }
-        return normalizeDownstreamEvidenceViews(views);
+        return new ExtractRuntimeOutput(draftResults, normalizeDownstreamEvidenceViews(views));
+    }
+
+    private CompetitorKnowledgeDraft readCompetitorKnowledgeDraft(JsonNode draftNode) {
+        if (draftNode == null || draftNode.isMissingNode() || draftNode.isNull()) {
+            return CompetitorKnowledgeDraft.builder().build();
+        }
+        return CompetitorKnowledgeDraft.builder()
+                .competitorName(draftNode.path("competitorName").asText(null))
+                .officialUrl(draftNode.path("officialUrl").asText(null))
+                .summary(draftNode.path("summary").asText(null))
+                .positioning(draftNode.path("positioning").asText(null))
+                .targetUsers(readStringList(draftNode.path("targetUsers")))
+                .coreFeatures(readTypedList(draftNode.path("coreFeatures"), cn.bugstack.competitoragent.workflow.contract.FeatureItem.class))
+                .pricing(readTypedObject(draftNode.path("pricing"), cn.bugstack.competitoragent.workflow.contract.PricingItem.class))
+                .strengths(readTypedList(draftNode.path("strengths"), cn.bugstack.competitoragent.workflow.contract.StrengthWeaknessItem.class))
+                .weaknesses(readTypedList(draftNode.path("weaknesses"), cn.bugstack.competitoragent.workflow.contract.StrengthWeaknessItem.class))
+                .sourceUrls(readStringList(draftNode.path("sourceUrls")))
+                .evidenceFragments(readEvidenceFragments(draftNode.path("evidenceFragments")))
+                .sectionEvidenceBundles(readSectionEvidenceBundles(draftNode.path("sectionEvidenceBundles")))
+                .downstreamEvidenceViews(readDownstreamEvidenceViews(draftNode.path("downstreamEvidenceViews")))
+                .issueFlags(readStringList(draftNode.path("issueFlags")))
+                .evidenceCoverage(readTypedMap(draftNode.path("evidenceCoverage")))
+                .fieldsExtracted(draftNode.path("fieldsExtracted").asInt(0))
+                .status(draftNode.path("status").asText(null))
+                .build();
+    }
+
+    private <T> List<T> readTypedList(JsonNode node, Class<T> itemType) {
+        if (!(node instanceof ArrayNode arrayNode)) {
+            return List.of();
+        }
+        List<T> values = new ArrayList<>();
+        for (JsonNode item : arrayNode) {
+            values.add(objectMapper.convertValue(item, itemType));
+        }
+        return values;
+    }
+
+    private <T> T readTypedObject(JsonNode node, Class<T> itemType) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        return objectMapper.convertValue(node, itemType);
+    }
+
+    private Map<String, Object> readTypedMap(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return Map.of();
+        }
+        return objectMapper.convertValue(node, Map.class);
     }
 
     private List<DownstreamEvidenceView> readDownstreamEvidenceViews(JsonNode node) {
@@ -415,6 +712,37 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         return normalized;
     }
 
+    /**
+     * shared output 里的轻量证据视图不再携带字段级 coverage，因此这里只生成通用分析片段，
+     * 目的不是替代 draft，而是保证 qualitySignals / sourceUrls 不会在 analyzer 输出时被静默丢掉。
+     */
+    private List<EvidenceFragment> buildEvidenceViewFragments(List<DownstreamEvidenceView> views,
+                                                              LinkedHashSet<String> inheritedIssueFlags) {
+        List<EvidenceFragment> fragments = new ArrayList<>();
+        for (DownstreamEvidenceView view : views == null ? List.<DownstreamEvidenceView>of() : views) {
+            if (view == null) {
+                continue;
+            }
+            LinkedHashSet<String> mergedFlags = new LinkedHashSet<>(inheritedIssueFlags);
+            mergedFlags.addAll(view.getIssueFlags() == null ? List.of() : view.getIssueFlags());
+            String primarySourceUrl = view.getSourceUrls() == null || view.getSourceUrls().isEmpty()
+                    ? null
+                    : view.getSourceUrls().get(0);
+            fragments.add(EvidenceFragment.builder()
+                    .stage("ANALYZE")
+                    .competitorName(view.getCompetitorName())
+                    .fieldName("analysis")
+                    .evidenceId(view.getEvidenceId())
+                    .sourceUrl(primarySourceUrl)
+                    .title(view.getTitle())
+                    .snippet(firstNonBlank(truncate(view.getContent(), 180), summarizeStructuredBlocks(view)))
+                    .issueFlags(new ArrayList<>(mergedFlags))
+                    .build()
+                    .normalized());
+        }
+        return fragments;
+    }
+
     private List<EvidenceFragment> buildKnowledgeEvidenceFragments(List<CompetitorKnowledge> knowledges,
                                                                   LinkedHashSet<String> inheritedIssueFlags) {
         List<EvidenceFragment> fragments = new ArrayList<>();
@@ -456,21 +784,58 @@ public class CompetitorAnalysisAgent extends BaseAgent {
      * 确保 Writer 和报告接口都能直接拿到“这段结论引用了哪些来源、哪里仍有缺口”。
      */
     private List<SectionEvidenceBundle> buildSectionEvidenceBundles(List<CompetitorKnowledge> knowledges,
+                                                                   List<CompetitorKnowledgeDraft> drafts,
+                                                                   List<DownstreamEvidenceView> downstreamEvidenceViews,
                                                                    ObjectNode analysisJson,
                                                                    LinkedHashSet<String> inheritedIssueFlags) {
+        Map<String, CompetitorKnowledge> snapshotsByCompetitor = indexKnowledgeByCompetitor(knowledges);
+        Map<String, CompetitorKnowledgeDraft> draftsByCompetitor = indexDraftByCompetitor(drafts);
+        Map<String, List<DownstreamEvidenceView>> viewsByCompetitor = groupViewsByCompetitor(downstreamEvidenceViews);
+        LinkedHashSet<String> competitorNames = new LinkedHashSet<>();
+        competitorNames.addAll(draftsByCompetitor.keySet());
+        competitorNames.addAll(snapshotsByCompetitor.keySet());
+        competitorNames.addAll(viewsByCompetitor.keySet());
+
         List<SectionEvidenceBundle> bundles = new ArrayList<>();
         for (SectionMapping mapping : SECTION_MAPPINGS) {
             List<EvidenceFragment> sectionFragments = new ArrayList<>();
             LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
             LinkedHashSet<String> missingFields = new LinkedHashSet<>();
 
-            for (CompetitorKnowledge knowledge : knowledges) {
-                JsonNode coverageNode = readCoverageNode(knowledge, mapping.knowledgeFieldKey());
-                String status = coverageNode == null ? "EMPTY" : coverageNode.path("status").asText("EMPTY");
-                List<EvidenceFragment> fieldFragments = buildKnowledgeFieldFragments(knowledge, mapping, status, coverageNode);
-                sectionFragments.addAll(fieldFragments);
-                sourceUrls.addAll(EvidenceFragment.collectSourceUrls(fieldFragments));
-                if (!"TRACEABLE".equalsIgnoreCase(status)) {
+            for (String competitorName : competitorNames) {
+                boolean traceable = false;
+
+                CompetitorKnowledgeDraft draft = draftsByCompetitor.get(competitorName);
+                SectionEvidenceBundle draftBundle = findDraftSectionBundle(draft, mapping.knowledgeFieldKey());
+                if (draftBundle != null) {
+                    List<EvidenceFragment> draftFragments = retagDraftFragmentsForAnalyzer(mapping, draftBundle.getEvidenceFragments());
+                    sectionFragments.addAll(draftFragments);
+                    sourceUrls.addAll(draftBundle.getSourceUrls() == null ? List.of() : draftBundle.getSourceUrls());
+                    sourceUrls.addAll(EvidenceFragment.collectSourceUrls(draftFragments));
+                    if (!hasSectionGap(draftBundle)) {
+                        traceable = true;
+                    }
+                }
+
+                CompetitorKnowledge knowledge = snapshotsByCompetitor.get(competitorName);
+                if (knowledge != null) {
+                    JsonNode coverageNode = readCoverageNode(knowledge, mapping.knowledgeFieldKey());
+                    String status = coverageNode == null ? "EMPTY" : coverageNode.path("status").asText("EMPTY");
+                    List<EvidenceFragment> fieldFragments = buildKnowledgeFieldFragments(knowledge, mapping, status, coverageNode);
+                    sectionFragments.addAll(fieldFragments);
+                    sourceUrls.addAll(EvidenceFragment.collectSourceUrls(fieldFragments));
+                    if (isTraceableCoverageStatus(status)) {
+                        traceable = true;
+                    }
+                }
+
+                List<DownstreamEvidenceView> matchedViews = viewsByCompetitor.getOrDefault(competitorName, List.of());
+                if (!matchedViews.isEmpty()) {
+                    sectionFragments.addAll(buildEvidenceViewSectionFragments(mapping, competitorName, matchedViews));
+                    sourceUrls.addAll(collectEvidenceViewSourceUrls(matchedViews));
+                }
+
+                if (!traceable) {
                     missingFields.add(mapping.analysisFieldKey());
                 }
             }
@@ -490,8 +855,104 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                     .normalized());
         }
 
-        bundles.add(buildConclusionBundle(analysisJson, knowledges, inheritedIssueFlags, bundles));
+        bundles.add(buildConclusionBundle(
+                analysisJson,
+                knowledges,
+                drafts,
+                downstreamEvidenceViews,
+                inheritedIssueFlags,
+                bundles));
         return bundles;
+    }
+
+    private Map<String, CompetitorKnowledgeDraft> indexDraftByCompetitor(List<CompetitorKnowledgeDraft> drafts) {
+        Map<String, CompetitorKnowledgeDraft> indexed = new LinkedHashMap<>();
+        for (CompetitorKnowledgeDraft draft : drafts == null ? List.<CompetitorKnowledgeDraft>of() : drafts) {
+            if (draft == null) {
+                continue;
+            }
+            indexed.putIfAbsent(firstNonBlank(draft.getCompetitorName(), "UNKNOWN"), draft);
+        }
+        return indexed;
+    }
+
+    private SectionEvidenceBundle findDraftSectionBundle(CompetitorKnowledgeDraft draft, String sectionKey) {
+        if (draft == null || draft.getSectionEvidenceBundles() == null) {
+            return null;
+        }
+        for (SectionEvidenceBundle bundle : draft.getSectionEvidenceBundles()) {
+            if (bundle == null) {
+                continue;
+            }
+            String normalizedKey = firstNonBlank(bundle.getSectionKey(), null);
+            if (sectionKey.equals(normalizedKey)) {
+                return bundle.normalized();
+            }
+        }
+        return null;
+    }
+
+    private boolean hasSectionGap(SectionEvidenceBundle bundle) {
+        SectionEvidenceBundle normalized = bundle == null ? null : bundle.normalized();
+        if (normalized == null) {
+            return true;
+        }
+        return !(normalized.getMissingFields() == null || normalized.getMissingFields().isEmpty())
+                || (normalized.getIssueFlags() != null
+                && (normalized.getIssueFlags().contains("SECTION_EVIDENCE_GAP")
+                || normalized.getIssueFlags().contains("NO_USABLE_EVIDENCE")));
+    }
+
+    /**
+     * draft 里的字段证据仍然使用抽取阶段的字段键。
+     * analyzer 输出要把这些片段挂到当前分析章节下，避免 writer 再去做一层字段语义映射。
+     */
+    private List<EvidenceFragment> retagDraftFragmentsForAnalyzer(SectionMapping mapping,
+                                                                  List<EvidenceFragment> fragments) {
+        List<EvidenceFragment> normalized = new ArrayList<>();
+        for (EvidenceFragment fragment : fragments == null ? List.<EvidenceFragment>of() : fragments) {
+            if (fragment == null) {
+                continue;
+            }
+            normalized.add(fragment.toBuilder()
+                    .stage("ANALYZE")
+                    .fieldName(mapping.analysisFieldKey())
+                    .fieldLabel(mapping.sectionTitle())
+                    .sectionKey(mapping.sectionKey())
+                    .sectionTitle(mapping.sectionTitle())
+                    .build()
+                    .normalized());
+        }
+        return normalized;
+    }
+
+    private List<EvidenceFragment> buildEvidenceViewSectionFragments(SectionMapping mapping,
+                                                                     String competitorName,
+                                                                     List<DownstreamEvidenceView> matchedViews) {
+        List<EvidenceFragment> fragments = new ArrayList<>();
+        for (DownstreamEvidenceView view : matchedViews == null ? List.<DownstreamEvidenceView>of() : matchedViews) {
+            if (view == null) {
+                continue;
+            }
+            String primarySourceUrl = view.getSourceUrls() == null || view.getSourceUrls().isEmpty()
+                    ? null
+                    : view.getSourceUrls().get(0);
+            fragments.add(EvidenceFragment.builder()
+                    .stage("ANALYZE")
+                    .competitorName(competitorName)
+                    .fieldName(mapping.analysisFieldKey())
+                    .fieldLabel(mapping.sectionTitle())
+                    .sectionKey(mapping.sectionKey())
+                    .sectionTitle(mapping.sectionTitle())
+                    .evidenceId(view.getEvidenceId())
+                    .sourceUrl(primarySourceUrl)
+                    .title(view.getTitle())
+                    .snippet(firstNonBlank(truncate(view.getContent(), 180), summarizeStructuredBlocks(view)))
+                    .issueFlags(view.getIssueFlags() == null ? List.of() : view.getIssueFlags())
+                    .build()
+                    .normalized());
+        }
+        return fragments;
     }
 
     private JsonNode readCoverageNode(CompetitorKnowledge knowledge, String fieldKey) {
@@ -526,8 +987,8 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                         .sourceUrl(source == null ? null : source.path("url").asText(null))
                         .title(source == null ? null : source.path("title").asText(null))
                         .snippet(source == null ? null : source.path("snippet").asText(null))
-                        .issueFlags("TRACEABLE".equalsIgnoreCase(status) ? List.of() : List.of(status))
-                        .gapComment("TRACEABLE".equalsIgnoreCase(status) ? null : "字段缺少稳定证据支撑")
+                        .issueFlags(isTraceableCoverageStatus(status) ? List.of() : List.of(status))
+                        .gapComment(buildCoverageGapComment(status))
                         .build()
                         .normalized());
             }
@@ -544,8 +1005,8 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                         .sectionTitle(mapping.sectionTitle())
                         .coverageStatus(status)
                         .sourceUrl(sourceUrl)
-                        .issueFlags("TRACEABLE".equalsIgnoreCase(status) ? List.of() : List.of(status))
-                        .gapComment("TRACEABLE".equalsIgnoreCase(status) ? null : "字段缺少稳定证据支撑")
+                        .issueFlags(isTraceableCoverageStatus(status) ? List.of() : List.of(status))
+                        .gapComment(buildCoverageGapComment(status))
                         .build()
                         .normalized());
             }
@@ -559,8 +1020,8 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                 .sectionKey(mapping.sectionKey())
                 .sectionTitle(mapping.sectionTitle())
                 .coverageStatus(status)
-                .issueFlags("TRACEABLE".equalsIgnoreCase(status) ? List.of() : List.of(status))
-                .gapComment("EMPTY".equalsIgnoreCase(status) ? "字段暂无内容" : "字段缺少稳定证据支撑")
+                .issueFlags(isTraceableCoverageStatus(status) ? List.of() : List.of(status))
+                .gapComment(buildCoverageGapComment(status))
                 .build()
                 .normalized());
         return fragments;
@@ -582,6 +1043,8 @@ public class CompetitorAnalysisAgent extends BaseAgent {
 
     private SectionEvidenceBundle buildConclusionBundle(ObjectNode analysisJson,
                                                        List<CompetitorKnowledge> knowledges,
+                                                       List<CompetitorKnowledgeDraft> drafts,
+                                                       List<DownstreamEvidenceView> downstreamEvidenceViews,
                                                        LinkedHashSet<String> inheritedIssueFlags,
                                                        List<SectionEvidenceBundle> sectionBundles) {
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
@@ -591,8 +1054,12 @@ public class CompetitorAnalysisAgent extends BaseAgent {
             conclusionFragments.addAll(sectionBundle.getEvidenceFragments() == null ? List.of() : sectionBundle.getEvidenceFragments());
         }
         sourceUrls.addAll(collectKnowledgeSourceUrls(knowledges));
+        sourceUrls.addAll(collectDraftSourceUrls(drafts));
+        sourceUrls.addAll(collectEvidenceViewSourceUrls(downstreamEvidenceViews));
         if (conclusionFragments.isEmpty()) {
+            conclusionFragments.addAll(buildDraftEvidenceFragments(drafts, inheritedIssueFlags));
             conclusionFragments.addAll(buildKnowledgeEvidenceFragments(knowledges, inheritedIssueFlags));
+            conclusionFragments.addAll(buildEvidenceViewFragments(downstreamEvidenceViews, inheritedIssueFlags));
         }
         LinkedHashSet<String> missingFields = new LinkedHashSet<>();
         if (analysisJson.path("recommendations").isMissingNode() || analysisJson.path("recommendations").isEmpty()) {
@@ -626,6 +1093,71 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         return fallback;
     }
 
+    private boolean hasMeaningfulValue(Object value) {
+        if (value == null) {
+            return false;
+        }
+        if (value instanceof String text) {
+            return !text.isBlank();
+        }
+        if (value instanceof List<?> list) {
+            return !list.isEmpty();
+        }
+        if (value instanceof Map<?, ?> map) {
+            return !map.isEmpty();
+        }
+        if (value instanceof JsonNode node) {
+            return hasMeaningfulJsonNode(node);
+        }
+        return hasMeaningfulJsonNode(objectMapper.valueToTree(value));
+    }
+
+    /**
+     * 有些字段在 draft 里会以空对象 `{}` 的形式出现。
+     * 这里把“只有空壳、没有任何非空子字段”的对象视为无效值，允许 snapshot 做补空。
+     */
+    private boolean hasMeaningfulJsonNode(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return false;
+        }
+        if (node.isTextual()) {
+            return !node.asText().isBlank();
+        }
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                if (hasMeaningfulJsonNode(child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (node.isObject()) {
+            var fields = node.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> entry = fields.next();
+                if (hasMeaningfulJsonNode(entry.getValue())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private boolean sameValue(Object left, Object right) {
+        if (left == null && right == null) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        try {
+            return objectMapper.writeValueAsString(left).equals(objectMapper.writeValueAsString(right));
+        } catch (JsonProcessingException e) {
+            return left.equals(right);
+        }
+    }
+
     private String truncate(String value, int maxLength) {
         if (value == null || value.isBlank()) {
             return null;
@@ -635,7 +1167,7 @@ public class CompetitorAnalysisAgent extends BaseAgent {
 
     private List<EvidenceFragment> normalizeEvidenceFragments(List<EvidenceFragment> fragments) {
         List<EvidenceFragment> normalized = new ArrayList<>();
-        for (EvidenceFragment fragment : fragments) {
+        for (EvidenceFragment fragment : fragments == null ? List.<EvidenceFragment>of() : fragments) {
             if (fragment != null) {
                 normalized.add(fragment.normalized());
             }
@@ -645,7 +1177,7 @@ public class CompetitorAnalysisAgent extends BaseAgent {
 
     private List<SectionEvidenceBundle> normalizeSectionEvidenceBundles(List<SectionEvidenceBundle> bundles) {
         List<SectionEvidenceBundle> normalized = new ArrayList<>();
-        for (SectionEvidenceBundle bundle : bundles) {
+        for (SectionEvidenceBundle bundle : bundles == null ? List.<SectionEvidenceBundle>of() : bundles) {
             if (bundle != null) {
                 normalized.add(bundle.normalized());
             }
@@ -664,10 +1196,33 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         }
     }
 
+    private String summarizeStructuredBlocks(DownstreamEvidenceView view) {
+        if (view == null || view.getStructuredBlocks() == null || view.getStructuredBlocks().isEmpty()) {
+            return null;
+        }
+        List<String> summaries = new ArrayList<>();
+        view.getStructuredBlocks().stream().limit(2).forEach(block -> {
+            if (block != null) {
+                String summary = firstNonBlank(block.getSummary(), block.getBlockType());
+                if (summary != null && !summary.isBlank()) {
+                    summaries.add(summary);
+                }
+            }
+        });
+        if (summaries.isEmpty()) {
+            return null;
+        }
+        return truncate(String.join(" | ", summaries), 180);
+    }
+
     private record SectionMapping(String sectionKey,
                                   String analysisFieldKey,
                                   String sectionTitle,
                                   String knowledgeFieldKey,
                                   String sectionType) {
+    }
+
+    private record ExtractRuntimeOutput(List<CompetitorKnowledgeDraft> drafts,
+                                        List<DownstreamEvidenceView> downstreamEvidenceViews) {
     }
 }

@@ -170,6 +170,81 @@ class ReportWriterAgentTest {
     }
 
     @Test
+    void shouldPassEvidenceCitationGuideAndDowngradeUnsupportedAdviceClaimsInRevisionMode() throws Exception {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E001")
+                        .title("Notion AI")
+                        .url("https://www.notion.so/product/ai")
+                        .build()
+        ));
+        when(reportRepository.findByTaskId(1L)).thenReturn(Optional.of(
+                Report.builder()
+                        .taskId(1L)
+                        .content("# 初版\n## 建议\n建议推进连接器生态。")
+                        .build()
+        ));
+        when(promptService.render(eq("writer"), any())).thenAnswer(invocation -> {
+            Map<String, String> variables = invocation.getArgument(1);
+            assertTrue(variables.containsKey("evidenceCitationGuide"));
+            assertTrue(variables.get("evidenceCitationGuide").contains("[证据：E001]"));
+            assertTrue(variables.get("evidenceCitationGuide").contains("建议"));
+            return "writer-prompt";
+        });
+        when(llmClient.chat(any(), any())).thenReturn("""
+                # 修订报告
+                ## 建议
+                - **竞品行为观察**: Notion AI 强调企业上下文能力 [证据：E001]。这表明上下文整合会成为竞争焦点。
+                - **本方应对思路**: 建议优先推进连接器生态，形成差异化壁垒。
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .subjectProduct("Our Product")
+                .reportLanguage("中文")
+                .currentNodeName("rewrite_report")
+                .currentNodeConfig("{\"mode\":\"revision\"}")
+                .build();
+        context.putSharedOutput("analyze_competitors", """
+                {
+                  "overview": "分析完成",
+                  "sourceUrls": ["https://www.notion.so/product/ai"]
+                }
+                """);
+        context.putSharedOutput("quality_check", """
+                {
+                  "revisionPlan": {
+                    "rewriteRequired": true,
+                    "items": [
+                      {
+                        "type": "missing_evidence",
+                        "section": "建议",
+                        "severity": "WARNING",
+                        "suggestion": "建议章节缺少逐句证据引用，请补充 [证据：EID] 或显式降级。"
+                      }
+                    ],
+                    "rewriteGuidelines": [
+                      "建议: 每条无法直接证据支撑的本方应对思路必须标记为当前公开资料未能验证。"
+                    ]
+                  }
+                }
+                """);
+
+        AgentResult result = agent.execute(context);
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        String content = output.path("content").asText();
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(content.contains("当前公开资料未能验证"));
+        assertTrue(content.contains("需补充证据"));
+    }
+
+    @Test
     void shouldBackfillWriterSourceUrlsWhenAnalyzerOutputDropsThem() throws Exception {
         when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
                 EvidenceSource.builder()

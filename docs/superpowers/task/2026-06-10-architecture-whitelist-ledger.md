@@ -1,0 +1,11 @@
+| Rule | Class | Reason | Remove By Phase | Owner |
+| --- | --- | --- | --- | --- |
+| agent_classes_should_not_access_task_repositories | cn.bugstack.competitoragent.agent.BaseAgent | legacy runtime support 仍直接承担日志持久化与上下文增强依赖，phase1 明确不改 BaseAgent 主体。 | phase5-modularization-evaluation-task | A+B |
+| agent_classes_should_not_access_task_repositories | cn.bugstack.competitoragent.agent.analyzer.CompetitorAnalysisAgent | knowledge 侧分析 Agent 仍保留历史 repository 直连，phase4a 只收口 facade 与 contract，不提前拆 analysis-intelligence。 | phase5-modularization-evaluation-task | A |
+| agent_classes_should_not_access_task_repositories | cn.bugstack.competitoragent.agent.collector.CollectorAgent | phase3b 明确只收口 evidence 边界，不承诺移除 CollectorAgent 继承 BaseAgent 带来的历史 repository 依赖。 | phase5-modularization-evaluation-task | B |
+| agent_classes_should_not_access_task_repositories | cn.bugstack.competitoragent.agent.extractor.SchemaExtractorAgent | knowledge 抽取 Agent 当前仍沿用历史 repository 访问方式，phase4a 先收口知识读取 contract 再评估回收。 | phase5-modularization-evaluation-task | A |
+| agent_classes_should_not_access_task_repositories | cn.bugstack.competitoragent.agent.reviewer.QualityReviewAgent | report 质量复核 Agent 仍在 legacy 结构里直接读取持久化对象，需等待 report facade 与消费视图稳定后再回收。 | phase5-modularization-evaluation-task | B |
+| agent_classes_should_not_access_task_repositories | cn.bugstack.competitoragent.agent.writer.ReportWriterAgent | report 生成 Agent 当前仍直接读取证据与报告持久化对象，phase4b 之前不在本阶段提前改造其历史实现。 | phase5-modularization-evaluation-task | B |
+| workflow_should_not_depend_on_business_agent_implementations | cn.bugstack.competitoragent.workflow.WorkflowFactory | WorkflowFactory 仍承担把搜索规划翻译成 Collector 节点配置的历史职责，需等待 phase3b collection facade 稳定后统一回收。 | phase3b-collection-evidence-task | B |
+| workflow_should_not_depend_on_business_agent_implementations | cn.bugstack.competitoragent.workflow.CollectorPlanTemplateFactory | 2.1.1/2.1.2 将 WorkflowFactory 的 collector 节点配置拼装拆到模板工厂，但底层仍复用同一份 CollectorNodeConfig 契约，后续随 collection facade 一并降耦。 | phase3b-collection-evidence-task | B |
+| workflow_should_not_depend_on_business_agent_implementations | cn.bugstack.competitoragent.workflow.ExecutionPlanDefinitionBuilder | ExecutionPlanDefinitionBuilder 当前只是承接 WorkflowFactory 拆出的规划装配职责，仍需要读取 Collector 节点契约；后续与 collection facade 一起回收。 | phase3b-collection-evidence-task | B |

@@ -26,6 +26,9 @@ public enum NodeFailureCategory {
     @Schema(description = "需要走补偿动作而不是直接重试")
     COMPENSATABLE(false, true, true, "需要先执行补偿"),
 
+    @Schema(description = "Extractor / Analyzer 已通过，但写作、质检或交付链路未能消费证据形成可通过结果")
+    DOWNSTREAM_CONSUMPTION_GAP(false, true, false, "下游质量闭环未通过，需检查写作、评审或交付链路"),
+
     @Schema(description = "未知失败，默认按人工介入处理以避免误重试")
     UNKNOWN(false, true, false, "需要人工确认");
 

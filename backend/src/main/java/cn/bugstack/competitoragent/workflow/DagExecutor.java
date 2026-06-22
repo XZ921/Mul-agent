@@ -792,6 +792,7 @@ public class DagExecutor {
             List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
             NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
                     recoveryPolicy.resolveTaskExecution(task, nodes);
+            classifyDownstreamQualityGateFailure(nodes, resolution);
             task.setStatus(resolution.getStatus());
             task.setErrorMessage(resolution.getErrorMessage());
             task.setCompletedAt(resolution.resolveCompletedAtForPersistence(task.getCompletedAt()));
@@ -805,6 +806,76 @@ public class DagExecutor {
             taskSnapshotCacheService.saveTaskSnapshot(snapshot);
             taskEventPublisher.publishTaskSnapshot(snapshot);
         });
+    }
+
+    /**
+     * 终审节点“执行成功”不等于质量闭环通过。
+     * 当 extractor/analyzer/writer/reviewer 都跑完但最终 `passed=false` 时，需要把失败移交给下游消费链路，
+     * 避免用户继续误判为抽取或分析边界问题。
+     */
+    private void classifyDownstreamQualityGateFailure(List<TaskNode> nodes,
+                                                      NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution) {
+        if (resolution == null || nodes == null || nodes.isEmpty()) {
+            return;
+        }
+        if (resolution.getStatus() == AnalysisTaskStatus.FAILED) {
+            nodes.stream()
+                    .filter(this::isFailedFinalQualityGateNode)
+                    .findFirst()
+                    .ifPresent(node -> markDownstreamConsumptionGap(
+                            node,
+                            "终审执行成功但质量闭环未通过，问题已移交写作、评审或交付链路处理"));
+            return;
+        }
+        if (resolution.getStatus() == AnalysisTaskStatus.STOPPED) {
+            nodes.stream()
+                    .filter(this::isInitialReviewHumanInterventionGapNode)
+                    .findFirst()
+                    .ifPresent(node -> markDownstreamConsumptionGap(
+                            node,
+                            "初审已明确要求人工补证据或调整写作策略，当前阻断属于写作/评审链路的下游消费缺口"));
+        }
+    }
+
+    private boolean isFailedFinalQualityGateNode(TaskNode node) {
+        if (node == null || node.getStatus() != TaskNodeStatus.SUCCESS) {
+            return false;
+        }
+        String nodeName = node.getNodeName();
+        boolean finalReviewNode = "quality_check_final".equals(nodeName)
+                || (nodeName != null && nodeName.startsWith("quality_check_revision_patch_v"));
+        return finalReviewNode && !isPassedReview(node.getOutputData());
+    }
+
+    /**
+     * 这里专门识别“初审已经确认问题在写作/评审消费链路，且自动改写不能继续”的阻断场景。
+     * 这类任务虽然公开状态是 STOPPED，但停点已经越过 extractor / analyzer，
+     * workflow 需要把 reviewer 节点显式标成 DOWNSTREAM_CONSUMPTION_GAP，便于 rerun / replay / UI 统一解释。
+     */
+    private boolean isInitialReviewHumanInterventionGapNode(TaskNode node) {
+        if (node == null || node.getStatus() != TaskNodeStatus.SUCCESS) {
+            return false;
+        }
+        if (!"quality_check".equals(node.getNodeName())) {
+            return false;
+        }
+        if (isPassedReview(node.getOutputData()) || !requiresHumanIntervention(node.getOutputData())) {
+            return false;
+        }
+        JsonNode reviewOutput = readJson(node.getOutputData());
+        if (reviewOutput == null || !"initial".equalsIgnoreCase(reviewOutput.path("reviewStage").asText("initial"))) {
+            return false;
+        }
+        return true;
+    }
+
+    private void markDownstreamConsumptionGap(TaskNode node, String reason) {
+        if (node == null) {
+            return;
+        }
+        node.setFailureCategory(NodeFailureCategory.DOWNSTREAM_CONSUMPTION_GAP);
+        node.setInterventionReason(reason);
+        nodeRepository.save(node);
     }
 
     private void failTask(Long taskId, String errorMessage) {

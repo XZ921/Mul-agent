@@ -259,6 +259,52 @@ class ReportServiceTest {
     }
 
     @Test
+    void shouldTreatStructuredDirectAsTraceableAndExpandedGapStatesAsMissingCoverage() {
+        Report report = Report.builder()
+                .id(31L)
+                .taskId(310L)
+                .title("企业级竞品分析")
+                .content("# Report")
+                .summary("summary")
+                .qualityPassed(true)
+                .evidenceCount(1)
+                .build();
+
+        CompetitorKnowledge knowledge = CompetitorKnowledge.builder()
+                .taskId(310L)
+                .competitorName("Notion AI")
+                .summary("summary")
+                .sourceUrls("[\"https://www.notion.so/product/ai\"]")
+                .evidenceCoverage("""
+                        {
+                          "summary": {"status":"LLM_REFUSED","hasValue":false},
+                          "positioning": {"status":"TRACEABLE","hasValue":true},
+                          "targetUsers": {"status":"STRUCTURED_BLOCK_DIRECT","hasValue":true},
+                          "coreFeatures": {"status":"TRACEABLE","hasValue":true},
+                          "pricing": {"status":"EVIDENCE_NOT_COVERING","hasValue":false},
+                          "strengths": {"status":"TRACEABLE","hasValue":true},
+                          "weaknesses": {"status":"EMPTY","hasValue":false}
+                        }
+                        """)
+                .build();
+
+        when(reportRepository.findByTaskId(310L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(310L)).thenReturn(List.of());
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(310L)).thenReturn(List.of(knowledge));
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(310L)).thenReturn(List.of());
+
+        ReportResponse response = reportService.getReport(310L);
+
+        assertNotNull(response.getEvidenceCoverageOverview());
+        assertEquals(7, response.getEvidenceCoverageOverview().getTotalFields());
+        assertEquals(4, response.getEvidenceCoverageOverview().getTraceableFields());
+        assertEquals(2, response.getEvidenceCoverageOverview().getMissingEvidenceFields());
+        assertEquals(1, response.getEvidenceCoverageOverview().getEmptyFields());
+        assertTrue(response.getEvidenceCoverageOverview().getCompetitors().get(0).getMissingSections().contains("产品概览"));
+        assertTrue(response.getEvidenceCoverageOverview().getCompetitors().get(0).getMissingSections().contains("定价策略"));
+    }
+
+    @Test
     void shouldExposeTaskRagAuditSummaryToReportResponse() {
         // 报告接口应直接回流任务级检索审计摘要，避免前端再去解析节点原始 outputData。
         Report report = Report.builder()

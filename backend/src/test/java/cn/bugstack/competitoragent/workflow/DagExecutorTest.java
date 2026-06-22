@@ -1148,6 +1148,159 @@ class DagExecutorTest {
                 && "root/review-2".equals(node.getBranchKey())));
     }
 
+    @Test
+    void shouldClassifyFinalQualityGateFailureAsDownstreamConsumptionGap() {
+        Long taskId = 1002L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode writeReport = TaskNode.builder()
+                .id(201L)
+                .taskId(taskId)
+                .nodeName("write_report")
+                .agentType(AgentType.WRITER)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+        TaskNode initialReview = TaskNode.builder()
+                .id(202L)
+                .taskId(taskId)
+                .nodeName("quality_check")
+                .agentType(AgentType.REVIEWER)
+                .dependsOn("[\"write_report\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+        TaskNode rewriteReport = TaskNode.builder()
+                .id(203L)
+                .taskId(taskId)
+                .nodeName("rewrite_report")
+                .agentType(AgentType.WRITER)
+                .dependsOn("[\"quality_check\"]")
+                .nodeConfig("{\"trigger\":\"review_failed\"}")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(2)
+                .build();
+        TaskNode finalReview = TaskNode.builder()
+                .id(204L)
+                .taskId(taskId)
+                .nodeName("quality_check_final")
+                .agentType(AgentType.REVIEWER)
+                .dependsOn("[\"rewrite_report\"]")
+                .nodeConfig("{\"trigger\":\"rewrite_executed\",\"qualityPolicy\":\"final pass after revision\"}")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(3)
+                .build();
+        List<TaskNode> nodes = List.of(writeReport, initialReview, rewriteReport, finalReview);
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(nodes);
+        when(nodeRepository.findById(any())).thenAnswer(invocation -> {
+            Long nodeId = invocation.getArgument(0);
+            return nodes.stream().filter(node -> node.getId().equals(nodeId)).findFirst();
+        });
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new DynamicRewriteAgent(), new QualityGateFailureReviewerAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("quality-gate-test").build());
+
+        assertEquals(AnalysisTaskStatus.FAILED, task.getStatus());
+        assertEquals(NodeFailureCategory.DOWNSTREAM_CONSUMPTION_GAP, finalReview.getFailureCategory());
+        assertTrue(task.getErrorMessage().contains("质量闭环"));
+    }
+
+    @Test
+    void shouldClassifyInitialReviewHumanInterventionStopAsDownstreamConsumptionGap() {
+        Long taskId = 1003L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode writeReport = TaskNode.builder()
+                .id(301L)
+                .taskId(taskId)
+                .nodeName("write_report")
+                .agentType(AgentType.WRITER)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+        TaskNode initialReview = TaskNode.builder()
+                .id(302L)
+                .taskId(taskId)
+                .nodeName("quality_check")
+                .agentType(AgentType.REVIEWER)
+                .dependsOn("[\"write_report\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+        TaskNode rewriteReport = TaskNode.builder()
+                .id(303L)
+                .taskId(taskId)
+                .nodeName("rewrite_report")
+                .agentType(AgentType.WRITER)
+                .dependsOn("[\"quality_check\"]")
+                .nodeConfig("{\"trigger\":\"review_failed\"}")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(2)
+                .build();
+        List<TaskNode> nodes = List.of(writeReport, initialReview, rewriteReport);
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(nodes);
+        when(nodeRepository.findById(any())).thenAnswer(invocation -> {
+            Long nodeId = invocation.getArgument(0);
+            return nodes.stream().filter(node -> node.getId().equals(nodeId)).findFirst();
+        });
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new DynamicRewriteAgent(), new InitialReviewHumanInterventionReviewerAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("initial-review-human-test").build());
+
+        assertEquals(AnalysisTaskStatus.STOPPED, task.getStatus());
+        assertEquals(NodeFailureCategory.DOWNSTREAM_CONSUMPTION_GAP, initialReview.getFailureCategory());
+        assertTrue(initialReview.getInterventionReason().contains("下游消费"));
+        assertTrue(task.getErrorMessage().contains("人工介入"));
+    }
+
     private static TaskExecutionLockService allowingNodeLockService() {
         TaskExecutionLockService lockService = mock(TaskExecutionLockService.class);
         when(lockService.tryAcquireNodeExecutionLock(any(), any(), any(), any())).thenReturn(Boolean.TRUE);
@@ -1425,6 +1578,60 @@ class DagExecutorTest {
             return AgentResult.builder()
                     .status(TaskNodeStatus.SUCCESS)
                     .outputData("{\"reviewStage\":\"final\",\"passed\":true,\"requiresHumanIntervention\":false}")
+                    .build();
+        }
+    }
+
+    private static final class QualityGateFailureReviewerAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.REVIEWER;
+        }
+
+        @Override
+        public String getName() {
+            return "quality-gate-failure-reviewer";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            if ("quality_check".equals(context.getCurrentNodeName())) {
+                return AgentResult.builder()
+                        .status(TaskNodeStatus.SUCCESS)
+                        .outputData("""
+                                {"reviewStage":"initial","passed":false,"requiresHumanIntervention":false,"autoRewriteAllowed":true}
+                                """.trim())
+                        .build();
+            }
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("""
+                            {"reviewStage":"final","passed":false,"requiresHumanIntervention":true,"diagnoses":[{"dimensionCode":"EVIDENCE_TRACEABILITY","type":"missing_evidence"}]}
+                            """.trim())
+                    .build();
+        }
+    }
+
+    private static final class InitialReviewHumanInterventionReviewerAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.REVIEWER;
+        }
+
+        @Override
+        public String getName() {
+            return "initial-review-human-intervention-reviewer";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("""
+                            {"reviewStage":"initial","passed":false,"requiresHumanIntervention":true,"autoRewriteAllowed":false,"diagnoses":[{"dimensionCode":"EVIDENCE_TRACEABILITY","type":"missing_evidence"}]}
+                            """.trim())
                     .build();
         }
     }

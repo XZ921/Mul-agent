@@ -14,7 +14,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -188,6 +190,189 @@ class CompetitorAnalysisAgentTest {
                         && variables.get("competitorData").contains("STRUCTURED_BLOCK_HIT")
         ));
         assertTrue(output.path("downstreamEvidenceViews").toString().contains("PRICING_BLOCK"));
+    }
+
+    @Test
+    void shouldPreferExtractorDraftsOverTaskSnapshotAndOnlyBackfillMissingFields() throws Exception {
+        when(agentContextAssembler.assemble(any(AgentContext.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(1L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .taskId(1L)
+                        .competitorName("Acme")
+                        .summary("old snapshot summary")
+                        .positioning("old positioning")
+                        .targetUsers("[\"old users\"]")
+                        .coreFeatures("[{\"name\":\"legacy feature\"}]")
+                        .pricing("{\"model\":\"legacy pricing\"}")
+                        .strengths("[{\"name\":\"legacy strength\"}]")
+                        .weaknesses("[{\"name\":\"legacy weakness\"}]")
+                        .sources("[{\"evidenceId\":\"S001\",\"title\":\"Legacy\",\"url\":\"https://legacy.example.com\"}]")
+                        .sourceUrls("[\"https://legacy.example.com\"]")
+                        .evidenceCoverage("""
+                                {
+                                  "summary": {"status": "TRACEABLE", "sourceUrls": ["https://legacy.example.com"]}
+                                }
+                                """)
+                        .build()
+        ));
+        when(promptService.render(eq("analyzer"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("Analysis"))).thenReturn("""
+                {
+                  "overview": "分析完成",
+                  "featureComparison": "新功能更强",
+                  "positioningComparison": "新定位",
+                  "pricingComparison": "新价格",
+                  "targetUserComparison": "团队用户",
+                  "strengthsSummary": "新优势",
+                  "weaknessesSummary": "新短板",
+                  "recommendations": ["继续推进"]
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .subjectProduct("Our Product")
+                .analysisDimensions("功能,定位,定价")
+                .currentNodeName("analyze_competitors")
+                .build();
+        context.putSharedOutput("extract_schema", """
+                {
+                  "drafts": [
+                    {
+                      "competitorName": "Acme",
+                      "summary": "fresh runtime summary",
+                      "positioning": "fresh positioning",
+                      "targetUsers": ["runtime teams"],
+                      "coreFeatures": [{"name": "runtime feature"}],
+                      "pricing": {},
+                      "strengths": [],
+                      "weaknesses": [],
+                      "sourceUrls": ["https://runtime.example.com"],
+                      "issueFlags": [],
+                      "evidenceCoverage": {
+                        "summary": {
+                          "status": "TRACEABLE",
+                          "sourceUrls": ["https://runtime.example.com"]
+                        }
+                      },
+                      "downstreamEvidenceViews": [
+                        {
+                          "evidenceId": "E001",
+                          "competitorName": "Acme",
+                          "title": "Runtime Docs",
+                          "sourceType": "DOCS",
+                          "sourceUrls": ["https://runtime.example.com"],
+                          "qualitySignals": ["STRUCTURED_BLOCK_HIT"],
+                          "structuredBlocks": [{"blockType": "FEATURE_LIST", "summary": "runtime feature"}]
+                        }
+                      ]
+                    }
+                  ],
+                  "downstreamEvidenceViews": [
+                    {
+                      "evidenceId": "E001",
+                      "competitorName": "Acme",
+                      "sourceUrls": ["https://runtime.example.com"],
+                      "qualitySignals": ["STRUCTURED_BLOCK_HIT"],
+                      "structuredBlocks": [{"blockType": "FEATURE_LIST", "summary": "runtime feature"}]
+                    }
+                  ]
+                }
+                """);
+
+        AgentResult result = agent.execute(context);
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        verify(promptService).render(eq("analyzer"), argThat(variables -> {
+            try {
+                JsonNode competitorData = objectMapper.readTree(variables.get("competitorData"));
+                JsonNode payload = competitorData.get(0);
+                return "fresh runtime summary".equals(payload.path("summary").asText())
+                        && "fresh positioning".equals(payload.path("positioning").asText())
+                        && "legacy pricing".equals(payload.path("pricing").path("model").asText())
+                        && "EXTRACT_RESULT_DRAFT".equals(payload.path("inputPriority").asText())
+                        && payload.path("downstreamEvidenceViews").toString().contains("runtime feature")
+                        && payload.path("inputConflicts").isArray()
+                        && payload.path("inputConflicts").toString().contains("summary")
+                        && payload.path("inputConflicts").toString().contains("EXTRACT_RESULT_DRAFT_WINS");
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }));
+    }
+
+    @Test
+    void shouldFallbackToTaskSnapshotWhenExtractorDraftsMissingAndMarkFallbackIssueFlag() throws Exception {
+        when(agentContextAssembler.assemble(any(AgentContext.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(1L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .taskId(1L)
+                        .competitorName("Fallback AI")
+                        .summary("snapshot summary")
+                        .positioning("snapshot positioning")
+                        .targetUsers("[\"teams\"]")
+                        .coreFeatures("[]")
+                        .pricing("{}")
+                        .strengths("[]")
+                        .weaknesses("[]")
+                        .sources("[{\"evidenceId\":\"S001\",\"title\":\"Docs\",\"url\":\"https://fallback.example.com\"}]")
+                        .sourceUrls("[\"https://fallback.example.com\"]")
+                        .evidenceCoverage("{}")
+                        .build()
+        ));
+        when(promptService.render(eq("analyzer"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("Analysis"))).thenReturn("""
+                {
+                  "overview": "分析完成",
+                  "featureComparison": "功能完整",
+                  "positioningComparison": "定位清晰",
+                  "pricingComparison": "价格未知",
+                  "targetUserComparison": "团队用户",
+                  "strengthsSummary": "稳定",
+                  "weaknessesSummary": "待补",
+                  "recommendations": ["继续观察"]
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .subjectProduct("Our Product")
+                .analysisDimensions("功能,定位,定价")
+                .currentNodeName("analyze_competitors")
+                .build();
+        context.putSharedOutput("extract_schema", """
+                {
+                  "downstreamEvidenceViews": [
+                    {
+                      "evidenceId": "E009",
+                      "competitorName": "Fallback AI",
+                      "sourceUrls": ["https://fallback.example.com"],
+                      "qualitySignals": ["STRUCTURED_BLOCK_HIT"]
+                    }
+                  ]
+                }
+                """);
+
+        AgentResult result = agent.execute(context);
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        verify(promptService).render(eq("analyzer"), argThat(variables -> {
+            try {
+                JsonNode competitorData = objectMapper.readTree(variables.get("competitorData"));
+                JsonNode payload = competitorData.get(0);
+                return "TASK_SNAPSHOT_FALLBACK".equals(payload.path("inputPriority").asText())
+                        && payload.path("issueFlags").toString().contains("EXTRACT_OUTPUT_FALLBACK_TO_TASK_SNAPSHOT")
+                        && payload.path("downstreamEvidenceViews").toString().contains("fallback.example.com");
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }));
     }
 
     private JsonNode findBundle(JsonNode bundles, String sectionKey) {
