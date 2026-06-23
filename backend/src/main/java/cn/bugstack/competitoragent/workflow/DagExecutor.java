@@ -607,6 +607,7 @@ public class DagExecutor {
                 .currentNodeConfig(node.getNodeConfig())
                 .traceId(sharedContext.getTraceId())
                 .sharedState(sharedContext.getSharedState())
+                .sharedOutputEnvelopes(sharedContext.getSharedOutputEnvelopes())
                 .createdAt(sharedContext.getCreatedAt())
                 .build();
     }

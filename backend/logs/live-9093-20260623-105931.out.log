@@ -1,0 +1,527 @@
+[WARNING] 
+[WARNING] Some problems were encountered while building the effective settings
+[WARNING] Unrecognised tag: 'mirrors' (position: START_TAG seen ...</mirror>\n     -->\n    <mirrors>... @168:14)  @ E:\java\maven\maven\apache-maven-3.9.9-bin\apache-maven-3.9.9\conf\settings.xml, line 168, column 14
+[WARNING] 
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------------< cn.bugstack:backend >-------------------------
+[INFO] Building AI 竞品分析 Agent 协作系统 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:3.3.5:run (default-cli) > test-compile @ backend >>>
+[WARNING] 1 problem was encountered while building the effective model for org.javassist:javassist:jar:3.21.0-GA during dependency collection step for project (use -X to see details)
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ backend ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 33 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ backend ---
+[INFO] Copying 4 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] <<< spring-boot:3.3.5:run (default-cli) < test-compile @ backend <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:3.3.5:run (default-cli) @ backend ---
+[INFO] Attaching agents: []
+Standard Commons Logging discovery in action with spring-jcl: please remove commons-logging.jar from classpath in order to avoid potential conflicts
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.3.5)
+
+2026-06-23 10:59:40.699 [main] INFO  c.b.c.CompetitorAgentApplication - Starting CompetitorAgentApplication using Java 17.0.3.1 with PID 14764 (E:\java_study\Mul-agnet\backend\target\classes started by Lenovo in E:\java_study\Mul-agnet\backend)
+2026-06-23 10:59:40.701 [main] DEBUG c.b.c.CompetitorAgentApplication - Running with Spring Boot v3.3.5, Spring v6.1.14
+2026-06-23 10:59:40.702 [main] INFO  c.b.c.CompetitorAgentApplication - The following 1 profile is active: "dev"
+2026-06-23 10:59:42.260 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Multiple Spring Data modules found, entering strict repository configuration mode
+2026-06-23 10:59:42.262 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-06-23 10:59:42.604 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 320 ms. Found 26 JPA repository interfaces.
+2026-06-23 10:59:42.630 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Multiple Spring Data modules found, entering strict repository configuration mode
+2026-06-23 10:59:42.633 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-06-23 10:59:42.681 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.AgentExecutionLogRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.682 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.AiCallAuditRecordRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.683 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.AnalysisSchemaRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.683 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.AnalysisTaskRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.684 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.684 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.ConnectorRuntimeLeaseRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.685 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.ConnectorSyncRecordRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.685 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.ConversationSessionRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.686 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.EvidenceSourceRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.687 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.FormDraftRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.687 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.IntentDecisionRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.689 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.KnowledgeDocumentRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.690 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.KnowledgeDomainRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.691 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.MemoryReuseRecordRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.691 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.MemorySnapshotRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.693 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.OrganizationQuotaSnapshotRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.694 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.RecoveryCheckpointRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.695 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.ReportExportRecordRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.696 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.ReportRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.698 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.RetrievalChunkRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.699 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.RetrievalIndexRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.700 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.TaskNodeExecutionAttemptRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.700 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.TaskNodeRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.701 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.TaskPlanRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.701 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.703 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.WorkflowDeadLetterRecordRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-06-23 10:59:42.704 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 58 ms. Found 0 Redis repository interfaces.
+2026-06-23 10:59:43.980 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 9093 (http)
+2026-06-23 10:59:43.998 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-06-23 10:59:43.998 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.31]
+2026-06-23 10:59:44.091 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-06-23 10:59:44.092 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3344 ms
+Standard Commons Logging discovery in action with spring-jcl: please remove commons-logging.jar from classpath in order to avoid potential conflicts
+2026-06-23 10:59:44.697 [main] INFO  com.zaxxer.hikari.HikariDataSource - RagentHikariPool - Starting...
+2026-06-23 10:59:44.935 [main] INFO  com.zaxxer.hikari.pool.HikariPool - RagentHikariPool - Added connection org.postgresql.jdbc.PgConnection@7619fbe7
+2026-06-23 10:59:44.938 [main] INFO  com.zaxxer.hikari.HikariDataSource - RagentHikariPool - Start completed.
+2026-06-23 10:59:44.990 [main] INFO  org.flywaydb.core.FlywayExecutor - Database: jdbc:postgresql://127.0.0.1:5432/ecommerce_agent (PostgreSQL 16.13)
+2026-06-23 10:59:45.140 [main] INFO  o.f.core.internal.command.DbValidate - Successfully validated 28 migrations (execution time 00:00.098s)
+2026-06-23 10:59:45.172 [main] INFO  o.f.core.internal.command.DbMigrate - Current version of schema "public": 27
+2026-06-23 10:59:45.178 [main] INFO  o.f.core.internal.command.DbMigrate - Schema "public" is up to date. No migration necessary.
+2026-06-23 10:59:45.330 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-06-23 10:59:45.385 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 6.5.3.Final
+2026-06-23 10:59:45.421 [main] INFO  o.h.c.i.RegionFactoryInitiator - HHH000026: Second-level cache disabled
+2026-06-23 10:59:45.736 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-06-23 10:59:45.795 [main] WARN  org.hibernate.orm.deprecation - HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-06-23 10:59:47.576 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-06-23 10:59:47.726 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-06-23 10:59:48.602 [main] INFO  c.b.c.config.PlaywrightConfig - 初始化 Playwright 实例...
+2026-06-23 10:59:52.426 [main] INFO  c.b.c.c.PlaywrightBrowserManager - Playwright 启动期浏览器预热已关闭，将在运行期获取或定时健康检查时按需启动
+2026-06-23 10:59:52.510 [main] INFO  o.s.d.j.r.query.QueryEnhancerFactory - Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-06-23 10:59:53.209 [main] INFO  c.b.c.a.c.SpringAgentCapabilityRegistry - agent capability registry initialized: [COLLECTOR, EXTRACTOR, ANALYZER, WRITER, REVIEWER]
+2026-06-23 10:59:55.519 [main] INFO  o.a.r.s.s.RocketMQMessageListenerContainerRegistrar - Register the listener to container, listenerBeanName:workflowEventConsumer, containerBeanName:org.apache.rocketmq.spring.support.DefaultRocketMQListenerContainer_1
+2026-06-23 10:59:58.889 [main] INFO  o.a.r.s.a.RocketMQAutoConfiguration - a producer (competitor-agent-workflow-producer) init on namesrv 127.0.0.1:9876
+2026-06-23 11:00:02.727 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 9093 (http) with context path '/'
+2026-06-23 11:00:08.814 [main] INFO  o.a.r.s.s.DefaultRocketMQListenerContainer - running container: DefaultRocketMQListenerContainer{consumerGroup='competitor-agent-workflow-consumer', namespace='', namespaceV2='', nameServer='127.0.0.1:9876', topic='task-workflow-events', consumeMode=CONCURRENTLY, selectorType=TAG, selectorExpression='*', messageModel=CLUSTERING', tlsEnable=false, instanceName=DEFAULT}
+2026-06-23 11:00:08.834 [main] INFO  c.b.c.CompetitorAgentApplication - Started CompetitorAgentApplication in 28.721 seconds (process running for 29.889)
+2026-06-23 11:00:08.845 [main] INFO  c.b.c.s.SearchCapabilityReadinessGuard - 搜索能力 readiness 摘要: planningProvidersAvailable=true, runtimeBrowserEnabled=true, runtimeBrowserEngine=baidu
+2026-06-23 11:00:08.846 [main] INFO  c.b.c.s.SearchCapabilityReadinessGuard - 搜索 provider readiness: provider=qianfan, routeEnabled=true, available=true, reason=null
+2026-06-23 11:00:08.848 [main] WARN  c.b.c.s.SearchCapabilityReadinessGuard - 搜索 provider 未就绪: provider=serpapi, reason=apiKey missing, planningRouteEnabled=true
+2026-06-23 11:00:08.848 [main] WARN  c.b.c.s.SearchCapabilityReadinessGuard - 搜索 provider 未就绪: provider=http, reason=apiKey missing, planningRouteEnabled=true
+2026-06-23 11:00:08.848 [main] INFO  c.b.c.s.SearchCapabilityReadinessGuard - 搜索 provider readiness: provider=browserpreview, routeEnabled=true, available=true, reason=null
+2026-06-23 11:00:08.849 [main] INFO  c.b.c.s.SearchCapabilityReadinessGuard - 规划期/运行期浏览器 readiness: planningProvidersAvailable=true, browserPreviewRouteEnabled=true, browserPreviewFeatureEnabled=true, runtimeBrowserEnabled=true
+2026-06-23 11:00:08.850 [main] INFO  c.b.c.s.SearchCapabilityReadinessGuard - RSS owner readiness 边界: rss owner ready for explicit feed urls only; news article urls still go through webpage collection; feed subscription monitoring, seed discovery, cursor and replay are out of current scope
+2026-06-23 11:00:09.005 [main] INFO  c.b.c.s.SearchBrowserConfigurationGuard - 浏览器搜索已启用: engine=baidu, fallbackEngines=[bing], mode=HYBRID, verifyResultPage=true, maxOpenResultPages=3
+2026-06-23 11:00:09.005 [main] INFO  c.b.c.s.SearchBrowserConfigurationGuard - 浏览器搜索容错策略: continueOnBrowserUnavailable=true, continueOnSearchTimeout=true, continueOnPageCollectFailure=true, recoverPartialContentOnTimeout=true
+2026-06-23 11:00:09.006 [main] INFO  c.b.c.s.SearchSecurityConfigurationGuard - 搜索安全配置校验通过: engineCount=4, serpapiConfigured=false, qianfanConfigured=true
+2026-06-23 11:00:23.829 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:00:42.626 [http-nio-9093-exec-1] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-06-23 11:00:42.627 [http-nio-9093-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2026-06-23 11:00:42.629 [http-nio-9093-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 2 ms
+2026-06-23 11:01:23.831 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:02:08.484 [http-nio-9093-exec-9] INFO  c.b.c.t.c.TaskRuntimeCommandAppService - task rerun from node requested, taskId=50, nodeName=extract_schema, affectedCount=10
+2026-06-23 11:02:08.491 [task-1] INFO  c.b.c.task.AnalysisTaskRunner - start async workflow dispatch, taskId=50
+2026-06-23 11:02:08.492 [task-1] INFO  c.b.c.task.AnalysisTaskRunner - task status event published before workflow dispatch, taskId=50
+2026-06-23 11:02:08.505 [task-1] INFO  c.b.c.task.AnalysisTaskRunner - task execution lock acquired, taskId=50, owner=task-runner-50-f3897e60-4af9-4982-b5d7-3852d19a3339
+2026-06-23 11:02:08.511 [task-1] INFO  c.b.c.task.AnalysisTaskRunner - task loaded for workflow dispatch, taskId=50, currentPlanVersionId=20
+2026-06-23 11:02:08.554 [task-1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=TASK_EXECUTION_REQUESTED, taskId=50, entityId=511
+2026-06-23 11:02:08.558 [task-1] INFO  c.b.c.task.AnalysisTaskRunner - task execution requested event staged, taskId=50
+2026-06-23 11:02:11.383 [ConsumeMessageThread_competitor-agent-workflow-consumer_1] INFO  c.b.c.workflow.DagExecutor - start dag execution, taskId=50
+2026-06-23 11:02:11.510 [ConsumeMessageThread_competitor-agent-workflow-consumer_1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=512
+2026-06-23 11:02:11.786 [pool-5-thread-1] INFO  c.b.competitoragent.agent.BaseAgent - [结构抽取智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:02:16.387 [ConsumeMessageThread_competitor-agent-workflow-consumer_2] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=d611a1bb-f765-4a0d-a751-2c70fe1dad29, type=NODE_READY
+2026-06-23 11:02:23.832 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:02:53.309 [pool-5-thread-1] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:02:53.367 [pool-5-thread-1] INFO  c.b.competitoragent.agent.BaseAgent - [结构抽取智能体] 执行完成, status=SUCCESS, durationMs=41818
+2026-06-23 11:02:53.540 [pool-5-thread-1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=513
+2026-06-23 11:02:53.576 [ConsumeMessageThread_competitor-agent-workflow-consumer_1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=514
+2026-06-23 11:02:53.812 [pool-5-thread-2] INFO  c.b.competitoragent.agent.BaseAgent - [竞品分析智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:02:56.440 [ConsumeMessageThread_competitor-agent-workflow-consumer_3] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=7347f20c-ca5a-4747-8edc-bfab5b23275f, type=NODE_COMPLETED
+2026-06-23 11:02:56.450 [ConsumeMessageThread_competitor-agent-workflow-consumer_4] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=d8ce01f3-fa50-43e4-b9ea-888c5d12c577, type=NODE_READY
+2026-06-23 11:03:18.197 [pool-5-thread-2] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:03:18.207 [pool-5-thread-2] INFO  c.b.competitoragent.agent.BaseAgent - [竞品分析智能体] 执行完成, status=SUCCESS, durationMs=24575
+2026-06-23 11:03:18.353 [pool-5-thread-2] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=515
+2026-06-23 11:03:18.384 [ConsumeMessageThread_competitor-agent-workflow-consumer_1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=516
+2026-06-23 11:03:18.615 [pool-5-thread-3] INFO  c.b.competitoragent.agent.BaseAgent - [报告撰写智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:03:21.485 [ConsumeMessageThread_competitor-agent-workflow-consumer_5] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=85699195-7969-4b9a-842c-d60fbacd6966, type=NODE_COMPLETED
+2026-06-23 11:03:21.494 [ConsumeMessageThread_competitor-agent-workflow-consumer_6] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=2499632a-8ade-4ef9-88bf-f0d9daff671d, type=NODE_READY
+2026-06-23 11:03:23.834 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:04:05.839 [pool-5-thread-3] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:04:05.878 [pool-5-thread-3] INFO  c.b.c.agent.writer.ReportWriterAgent - report writing done, taskId=50, revisionMode=false, length=4476
+2026-06-23 11:04:05.881 [pool-5-thread-3] INFO  c.b.competitoragent.agent.BaseAgent - [报告撰写智能体] 执行完成, status=SUCCESS, durationMs=47463
+2026-06-23 11:04:06.047 [pool-5-thread-3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=517
+2026-06-23 11:04:06.087 [ConsumeMessageThread_competitor-agent-workflow-consumer_1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=518
+2026-06-23 11:04:06.305 [pool-5-thread-4] INFO  c.b.competitoragent.agent.BaseAgent - [质量评审智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:04:06.552 [ConsumeMessageThread_competitor-agent-workflow-consumer_7] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=dc836a7a-eb93-4724-9e0d-dd99eaefdd36, type=NODE_COMPLETED
+2026-06-23 11:04:06.560 [ConsumeMessageThread_competitor-agent-workflow-consumer_8] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=14b8eb65-34c2-481c-aead-0707d5fd143e, type=NODE_READY
+2026-06-23 11:04:23.835 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:04:28.668 [pool-5-thread-4] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:04:28.689 [pool-5-thread-4] INFO  c.b.competitoragent.agent.BaseAgent - [质量评审智能体] 执行完成, status=SUCCESS, durationMs=22555
+2026-06-23 11:04:28.883 [pool-5-thread-4] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=519
+2026-06-23 11:04:28.929 [ConsumeMessageThread_competitor-agent-workflow-consumer_1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=520
+2026-06-23 11:04:29.153 [pool-5-thread-1] INFO  c.b.competitoragent.agent.BaseAgent - [报告撰写智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:04:31.587 [ConsumeMessageThread_competitor-agent-workflow-consumer_9] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=2791fede-549e-44ca-864e-99fea52c8bb8, type=NODE_COMPLETED
+2026-06-23 11:04:31.594 [ConsumeMessageThread_competitor-agent-workflow-consumer_10] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=86c6e31c-d464-4b4e-8cee-1f7c697d48d3, type=NODE_READY
+2026-06-23 11:05:11.165 [pool-5-thread-1] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:05:11.232 [pool-5-thread-1] INFO  c.b.c.agent.writer.ReportWriterAgent - report writing done, taskId=50, revisionMode=true, length=5136
+2026-06-23 11:05:11.236 [pool-5-thread-1] INFO  c.b.competitoragent.agent.BaseAgent - [报告撰写智能体] 执行完成, status=SUCCESS, durationMs=42260
+2026-06-23 11:05:11.579 [pool-5-thread-1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=521
+2026-06-23 11:05:11.662 [ConsumeMessageThread_competitor-agent-workflow-consumer_11] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=ecb3e9bc-35b5-4f95-85f5-199533627977, type=NODE_COMPLETED
+2026-06-23 11:05:11.686 [ConsumeMessageThread_competitor-agent-workflow-consumer_1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=522
+2026-06-23 11:05:12.142 [pool-5-thread-2] INFO  c.b.competitoragent.agent.BaseAgent - [质量评审智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:05:16.677 [ConsumeMessageThread_competitor-agent-workflow-consumer_12] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=61b5f054-b209-47ff-a00c-59f762adc534, type=NODE_READY
+2026-06-23 11:05:23.837 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:05:49.603 [pool-5-thread-2] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:05:49.623 [pool-5-thread-2] INFO  c.b.competitoragent.agent.BaseAgent - [质量评审智能体] 执行完成, status=SUCCESS, durationMs=37876
+2026-06-23 11:05:49.840 [pool-5-thread-2] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=523
+2026-06-23 11:05:49.894 [ConsumeMessageThread_competitor-agent-workflow-consumer_1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=524
+2026-06-23 11:05:50.185 [pool-5-thread-3] INFO  c.b.competitoragent.agent.BaseAgent - [结构抽取智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:05:51.731 [ConsumeMessageThread_competitor-agent-workflow-consumer_13] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=60dc2960-295e-4ca6-890a-e5eec6b1234b, type=NODE_COMPLETED
+2026-06-23 11:05:51.738 [ConsumeMessageThread_competitor-agent-workflow-consumer_14] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=b955c505-f41e-4535-b71d-4e0e94f5b0e9, type=NODE_READY
+2026-06-23 11:06:13.141 [pool-5-thread-3] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:06:13.158 [pool-5-thread-3] INFO  c.b.competitoragent.agent.BaseAgent - [结构抽取智能体] 执行完成, status=SUCCESS, durationMs=23194
+2026-06-23 11:06:13.459 [pool-5-thread-3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=525
+2026-06-23 11:06:13.541 [ConsumeMessageThread_competitor-agent-workflow-consumer_1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=526
+2026-06-23 11:06:13.785 [pool-5-thread-4] INFO  c.b.competitoragent.agent.BaseAgent - [竞品分析智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:06:16.775 [ConsumeMessageThread_competitor-agent-workflow-consumer_15] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=1fd0238b-552b-468d-af12-3419c71c7001, type=NODE_COMPLETED
+2026-06-23 11:06:16.785 [ConsumeMessageThread_competitor-agent-workflow-consumer_16] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=716624b0-24e1-4e64-919c-29152d0ce3d8, type=NODE_READY
+2026-06-23 11:06:23.838 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:07:17.476 [pool-5-thread-4] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:07:17.485 [pool-5-thread-4] INFO  c.b.competitoragent.agent.BaseAgent - [竞品分析智能体] 执行完成, status=SUCCESS, durationMs=63881
+2026-06-23 11:07:17.758 [pool-5-thread-4] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=527
+2026-06-23 11:07:17.850 [ConsumeMessageThread_competitor-agent-workflow-consumer_1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=528
+2026-06-23 11:07:18.103 [pool-5-thread-1] INFO  c.b.competitoragent.agent.BaseAgent - [报告撰写智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:07:21.855 [ConsumeMessageThread_competitor-agent-workflow-consumer_17] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=c8909c50-c7a7-4e90-8198-2350b44f07c9, type=NODE_COMPLETED
+2026-06-23 11:07:21.861 [ConsumeMessageThread_competitor-agent-workflow-consumer_18] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=7c218fbd-fdf4-43bc-b829-9dfb9b2e5c24, type=NODE_READY
+2026-06-23 11:07:23.840 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:07:59.024 [pool-5-thread-1] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:07:59.045 [pool-5-thread-1] INFO  c.b.c.agent.writer.ReportWriterAgent - report writing done, taskId=50, revisionMode=true, length=5270
+2026-06-23 11:07:59.051 [pool-5-thread-1] INFO  c.b.competitoragent.agent.BaseAgent - [报告撰写智能体] 执行完成, status=SUCCESS, durationMs=41116
+2026-06-23 11:07:59.356 [pool-5-thread-1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=529
+2026-06-23 11:07:59.447 [ConsumeMessageThread_competitor-agent-workflow-consumer_1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=530
+2026-06-23 11:07:59.684 [pool-5-thread-2] INFO  c.b.competitoragent.agent.BaseAgent - [质量评审智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:08:01.902 [ConsumeMessageThread_competitor-agent-workflow-consumer_19] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=16b801f1-6ac7-4be0-80e1-c231e5fa8c92, type=NODE_COMPLETED
+2026-06-23 11:08:01.909 [ConsumeMessageThread_competitor-agent-workflow-consumer_20] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=fe98432f-d7e3-4a28-862a-b041cad0e1a6, type=NODE_READY
+2026-06-23 11:08:23.841 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:08:29.814 [pool-5-thread-2] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:08:29.836 [pool-5-thread-2] INFO  c.b.competitoragent.agent.BaseAgent - [质量评审智能体] 执行完成, status=SUCCESS, durationMs=30316
+2026-06-23 11:08:30.194 [pool-5-thread-2] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=531
+2026-06-23 11:08:31.941 [ConsumeMessageThread_competitor-agent-workflow-consumer_2] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=9d514f6f-63a0-4179-b48d-479d6d22f0a1, type=NODE_COMPLETED
+2026-06-23 11:09:23.844 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:10:23.845 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:11:23.847 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:12:23.847 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:13:23.849 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:14:23.850 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:15:23.852 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:16:23.853 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:17:23.854 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:18:23.856 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:19:23.857 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:20:23.859 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:21:23.861 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:22:23.862 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:23:23.863 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:24:23.864 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:25:23.865 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:26:23.866 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:27:23.868 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:28:23.869 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:29:23.870 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:30:23.871 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:31:23.873 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:32:23.875 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:33:23.882 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:34:23.883 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:35:23.884 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:36:23.884 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:37:23.885 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:38:23.886 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-06-23 11:39:07.136 [http-nio-9093-exec-9] INFO  c.b.c.t.c.TaskRuntimeCommandAppService - task rerun from node requested, taskId=50, nodeName=collect_sources_01_01, affectedCount=11
+2026-06-23 11:39:07.143 [task-2] INFO  c.b.c.task.AnalysisTaskRunner - start async workflow dispatch, taskId=50
+2026-06-23 11:39:07.144 [task-2] INFO  c.b.c.task.AnalysisTaskRunner - task status event published before workflow dispatch, taskId=50
+2026-06-23 11:39:07.146 [task-2] INFO  c.b.c.task.AnalysisTaskRunner - task execution lock acquired, taskId=50, owner=task-runner-50-796b092f-d0dc-4cc8-a664-f1fed846468a
+2026-06-23 11:39:07.150 [task-2] INFO  c.b.c.task.AnalysisTaskRunner - task loaded for workflow dispatch, taskId=50, currentPlanVersionId=20
+2026-06-23 11:39:07.155 [task-2] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=TASK_EXECUTION_REQUESTED, taskId=50, entityId=532
+2026-06-23 11:39:07.158 [task-2] INFO  c.b.c.task.AnalysisTaskRunner - task execution requested event staged, taskId=50
+2026-06-23 11:39:08.606 [ConsumeMessageThread_competitor-agent-workflow-consumer_3] INFO  c.b.c.workflow.DagExecutor - start dag execution, taskId=50
+2026-06-23 11:39:08.765 [ConsumeMessageThread_competitor-agent-workflow-consumer_3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=533
+2026-06-23 11:39:09.153 [pool-6-thread-1] INFO  c.b.competitoragent.agent.BaseAgent - [信息采集智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:39:10.316 [pool-7-thread-2] WARN  c.b.c.source.DirectHtmlReaderClient - Direct HTML 采集失败，准备按重试策略处理: url=https://notion.so/product/ai, attempt=1/2, error=null
+2026-06-23 11:39:10.481 [pool-7-thread-1] WARN  c.b.c.source.DirectHtmlReaderClient - Direct HTML 采集失败，准备按重试策略处理: url=https://notion.so, attempt=1/2, error=null
+2026-06-23 11:39:10.713 [pool-7-thread-2] WARN  c.b.c.source.DirectHtmlReaderClient - Direct HTML 采集失败，准备按重试策略处理: url=https://notion.so/product/ai, attempt=2/2, error=null
+2026-06-23 11:39:10.716 [pool-7-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://notion.so/product/ai, competitor=[REDACTED]Notion AI, sourceType=OFFICIAL
+2026-06-23 11:39:10.716 [pool-7-thread-1] WARN  c.b.c.source.DirectHtmlReaderClient - Direct HTML 采集失败，准备按重试策略处理: url=https://notion.so, attempt=2/2, error=null
+2026-06-23 11:39:10.717 [pool-7-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://notion.so, competitor=[REDACTED]Notion AI, sourceType=OFFICIAL
+2026-06-23 11:39:11.511 [pool-7-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://notion.so/product/ai
+2026-06-23 11:39:11.511 [pool-7-thread-2] INFO  c.b.c.c.PlaywrightBrowserManager - 启动 Playwright 浏览器: browser=chromium, channel=null, executablePath=D:\Aplaywright\chromium-1117\chrome-win\chrome.exe, headless=true, reason=runtime acquire, attempt=1/1
+2026-06-23 11:39:11.655 [pool-7-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://notion.so
+2026-06-23 11:39:13.615 [ConsumeMessageThread_competitor-agent-workflow-consumer_4] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=c64d2c1b-03ab-48f5-9985-417363ab7457, type=NODE_READY
+2026-06-23 11:40:01.812 [pool-7-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 页面采集成功: collector=playwright; fallbackReason=HTTP collect failed: null, title=Meet your AI team | Notion, contentLength=10139
+2026-06-23 11:40:24.565 [pool-7-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 页面采集成功: collector=playwright; fallbackReason=HTTP collect failed: null, title=The AI workspace that works for you. | Notion, contentLength=3324
+2026-06-23 11:40:25.852 [pool-6-thread-1] WARN  o.h.e.jdbc.spi.SqlExceptionHelper - SQL Error: 0, SQLState: 23505
+2026-06-23 11:40:25.852 [pool-6-thread-1] ERROR o.h.e.jdbc.spi.SqlExceptionHelper - ERROR: duplicate key value violates unique constraint "uk_retrieval_chunk_chunk_key"
+  详细：Key (chunk_key)=(TASK-50-T0050-COLLECT-SOURCES-01-01-001#CHUNK-001) already exists.
+2026-06-23 11:40:25.864 [pool-6-thread-1] WARN  o.h.e.jdbc.spi.SqlExceptionHelper - SQL Error: 0, SQLState: 25P02
+2026-06-23 11:40:25.865 [pool-6-thread-1] ERROR o.h.e.jdbc.spi.SqlExceptionHelper - ERROR: current transaction is aborted, commands ignored until end of transaction block
+2026-06-23 11:40:25.868 [pool-6-thread-1] WARN  c.b.c.agent.collector.CollectorAgent - index collected evidence failed, taskId=50, evidenceId=T0050-COLLECT_SOURCES_01_01-001
+org.springframework.orm.jpa.JpaSystemException: could not execute statement [ERROR: current transaction is aborted, commands ignored until end of transaction block] [insert into retrieval_index (chunk_count,competitor_name,created_at,document_key,document_version,evidence_id,failure_reason,index_key,index_scope,issue_flags,knowledge_document_id,knowledge_domain_key,retrieval_scope,scope_ref_key,source_category,source_urls,status,task_id,updated_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) returning id]
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:341)
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.translateExceptionIfPossible(HibernateJpaDialect.java:241)
+	at org.springframework.orm.jpa.AbstractEntityManagerFactoryBean.translateExceptionIfPossible(AbstractEntityManagerFactoryBean.java:550)
+	at org.springframework.dao.support.ChainedPersistenceExceptionTranslator.translateExceptionIfPossible(ChainedPersistenceExceptionTranslator.java:61)
+	at org.springframework.dao.support.DataAccessUtils.translateIfNecessary(DataAccessUtils.java:335)
+	at org.springframework.dao.support.PersistenceExceptionTranslationInterceptor.invoke(PersistenceExceptionTranslationInterceptor.java:160)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.data.jpa.repository.support.CrudMethodMetadataPostProcessor$CrudMethodMetadataPopulatingMethodInterceptor.invoke(CrudMethodMetadataPostProcessor.java:165)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.aop.interceptor.ExposeInvocationInterceptor.invoke(ExposeInvocationInterceptor.java:97)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.aop.framework.JdkDynamicAopProxy.invoke(JdkDynamicAopProxy.java:223)
+	at jdk.proxy2/jdk.proxy2.$Proxy162.save(Unknown Source)
+	at cn.bugstack.competitoragent.rag.TaskRetrievalIndexService.indexKnowledgeDocument(TaskRetrievalIndexService.java:136)
+	at cn.bugstack.competitoragent.rag.TaskRetrievalIndexService.indexEvidence(TaskRetrievalIndexService.java:84)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.invokeJoinpoint(ReflectiveMethodInvocation.java:196)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:163)
+	at org.springframework.aop.framework.CglibAopProxy$CglibMethodInvocation.proceed(CglibAopProxy.java:768)
+	at org.springframework.transaction.interceptor.TransactionAspectSupport.invokeWithinTransaction(TransactionAspectSupport.java:379)
+	at org.springframework.transaction.interceptor.TransactionInterceptor.invoke(TransactionInterceptor.java:119)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.aop.framework.CglibAopProxy$CglibMethodInvocation.proceed(CglibAopProxy.java:768)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:720)
+	at cn.bugstack.competitoragent.rag.TaskRetrievalIndexService$$SpringCGLIB$$0.indexEvidence(<generated>)
+	at cn.bugstack.competitoragent.agent.collector.CollectorAgent.appendCollectedResultEntry(CollectorAgent.java:1381)
+	at cn.bugstack.competitoragent.agent.collector.CollectorAgent.executeCollectionPhaseWithRecursiveResults(CollectorAgent.java:641)
+	at cn.bugstack.competitoragent.agent.collector.CollectorAgent.doExecute(CollectorAgent.java:198)
+	at cn.bugstack.competitoragent.agent.BaseAgent.execute(BaseAgent.java:48)
+	at cn.bugstack.competitoragent.agent.capability.SpringAgentCapabilityRegistry.lambda$buildCapabilities$0(SpringAgentCapabilityRegistry.java:46)
+	at cn.bugstack.competitoragent.workflow.DagExecutor.executeNodeOnce(DagExecutor.java:244)
+	at cn.bugstack.competitoragent.workflow.DagExecutor.executeRunningNode(DagExecutor.java:384)
+	at cn.bugstack.competitoragent.workflow.DagExecutor.lambda$dispatchExecutableNodes$2(DagExecutor.java:320)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+Caused by: org.hibernate.exception.GenericJDBCException: could not execute statement [ERROR: current transaction is aborted, commands ignored until end of transaction block] [insert into retrieval_index (chunk_count,competitor_name,created_at,document_key,document_version,evidence_id,failure_reason,index_key,index_scope,issue_flags,knowledge_document_id,knowledge_domain_key,retrieval_scope,scope_ref_key,source_category,source_urls,status,task_id,updated_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) returning id]
+	at org.hibernate.exception.internal.StandardSQLExceptionConverter.convert(StandardSQLExceptionConverter.java:63)
+	at org.hibernate.engine.jdbc.spi.SqlExceptionHelper.convert(SqlExceptionHelper.java:108)
+	at org.hibernate.engine.jdbc.internal.ResultSetReturnImpl.execute(ResultSetReturnImpl.java:145)
+	at org.hibernate.id.insert.InsertReturningDelegate.executeAndExtractReturning(InsertReturningDelegate.java:96)
+	at org.hibernate.id.insert.AbstractReturningDelegate.performMutation(AbstractReturningDelegate.java:58)
+	at org.hibernate.engine.jdbc.mutation.internal.MutationExecutorSingleNonBatched.performNonBatchedOperations(MutationExecutorSingleNonBatched.java:47)
+	at org.hibernate.engine.jdbc.mutation.internal.AbstractMutationExecutor.execute(AbstractMutationExecutor.java:55)
+	at org.hibernate.persister.entity.mutation.InsertCoordinatorStandard.doStaticInserts(InsertCoordinatorStandard.java:194)
+	at org.hibernate.persister.entity.mutation.InsertCoordinatorStandard.coordinateInsert(InsertCoordinatorStandard.java:132)
+	at org.hibernate.persister.entity.mutation.InsertCoordinatorStandard.insert(InsertCoordinatorStandard.java:95)
+	at org.hibernate.action.internal.EntityIdentityInsertAction.execute(EntityIdentityInsertAction.java:85)
+	at org.hibernate.engine.spi.ActionQueue.execute(ActionQueue.java:671)
+	at org.hibernate.engine.spi.ActionQueue.addResolvedEntityInsertAction(ActionQueue.java:292)
+	at org.hibernate.engine.spi.ActionQueue.addInsertAction(ActionQueue.java:273)
+	at org.hibernate.engine.spi.ActionQueue.addAction(ActionQueue.java:323)
+	at org.hibernate.event.internal.AbstractSaveEventListener.addInsertAction(AbstractSaveEventListener.java:391)
+	at org.hibernate.event.internal.AbstractSaveEventListener.performSaveOrReplicate(AbstractSaveEventListener.java:305)
+	at org.hibernate.event.internal.AbstractSaveEventListener.performSave(AbstractSaveEventListener.java:224)
+	at org.hibernate.event.internal.AbstractSaveEventListener.saveWithGeneratedId(AbstractSaveEventListener.java:137)
+	at org.hibernate.event.internal.DefaultPersistEventListener.entityIsTransient(DefaultPersistEventListener.java:175)
+	at org.hibernate.event.internal.DefaultPersistEventListener.persist(DefaultPersistEventListener.java:93)
+	at org.hibernate.event.internal.DefaultPersistEventListener.onPersist(DefaultPersistEventListener.java:77)
+	at org.hibernate.event.internal.DefaultPersistEventListener.onPersist(DefaultPersistEventListener.java:54)
+	at org.hibernate.event.service.internal.EventListenerGroupImpl.fireEventOnEachListener(EventListenerGroupImpl.java:127)
+	at org.hibernate.internal.SessionImpl.firePersist(SessionImpl.java:757)
+	at org.hibernate.internal.SessionImpl.persist(SessionImpl.java:741)
+	at jdk.internal.reflect.GeneratedMethodAccessor716.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.orm.jpa.SharedEntityManagerCreator$SharedEntityManagerInvocationHandler.invoke(SharedEntityManagerCreator.java:319)
+	at jdk.proxy2/jdk.proxy2.$Proxy152.persist(Unknown Source)
+	at org.springframework.data.jpa.repository.support.SimpleJpaRepository.save(SimpleJpaRepository.java:628)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.data.repository.core.support.RepositoryMethodInvoker$RepositoryFragmentMethodInvoker.lambda$new$0(RepositoryMethodInvoker.java:277)
+	at org.springframework.data.repository.core.support.RepositoryMethodInvoker.doInvoke(RepositoryMethodInvoker.java:170)
+	at org.springframework.data.repository.core.support.RepositoryMethodInvoker.invoke(RepositoryMethodInvoker.java:158)
+	at org.springframework.data.repository.core.support.RepositoryComposition$RepositoryFragments.invoke(RepositoryComposition.java:516)
+	at org.springframework.data.repository.core.support.RepositoryComposition.invoke(RepositoryComposition.java:285)
+	at org.springframework.data.repository.core.support.RepositoryFactorySupport$ImplementationMethodExecutionInterceptor.invoke(RepositoryFactorySupport.java:628)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.data.repository.core.support.QueryExecutorMethodInterceptor.doInvoke(QueryExecutorMethodInterceptor.java:173)
+	at org.springframework.data.repository.core.support.QueryExecutorMethodInterceptor.invoke(QueryExecutorMethodInterceptor.java:148)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.data.projection.DefaultMethodInvokingMethodInterceptor.invoke(DefaultMethodInvokingMethodInterceptor.java:70)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.transaction.interceptor.TransactionAspectSupport.invokeWithinTransaction(TransactionAspectSupport.java:379)
+	at org.springframework.transaction.interceptor.TransactionInterceptor.invoke(TransactionInterceptor.java:119)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.dao.support.PersistenceExceptionTranslationInterceptor.invoke(PersistenceExceptionTranslationInterceptor.java:138)
+	... 37 common frames omitted
+Caused by: org.postgresql.util.PSQLException: ERROR: current transaction is aborted, commands ignored until end of transaction block
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2733)
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2420)
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:372)
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:517)
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:434)
+	at org.postgresql.jdbc.PgPreparedStatement.executeWithFlags(PgPreparedStatement.java:194)
+	at org.postgresql.jdbc.PgPreparedStatement.execute(PgPreparedStatement.java:180)
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.execute(ProxyPreparedStatement.java:44)
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.execute(HikariProxyPreparedStatement.java)
+	at org.hibernate.engine.jdbc.internal.ResultSetReturnImpl.execute(ResultSetReturnImpl.java:129)
+	... 87 common frames omitted
+Caused by: org.postgresql.util.PSQLException: ERROR: duplicate key value violates unique constraint "uk_retrieval_chunk_chunk_key"
+  详细：Key (chunk_key)=(TASK-50-T0050-COLLECT-SOURCES-01-01-001#CHUNK-001) already exists.
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2733)
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2420)
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:372)
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:517)
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:434)
+	at org.postgresql.jdbc.PgPreparedStatement.executeWithFlags(PgPreparedStatement.java:194)
+	at org.postgresql.jdbc.PgPreparedStatement.execute(PgPreparedStatement.java:180)
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.execute(ProxyPreparedStatement.java:44)
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.execute(HikariProxyPreparedStatement.java)
+	at org.hibernate.engine.jdbc.internal.ResultSetReturnImpl.execute(ResultSetReturnImpl.java:129)
+	at org.hibernate.id.insert.InsertReturningDelegate.executeAndExtractReturning(InsertReturningDelegate.java:96)
+	at org.hibernate.id.insert.AbstractReturningDelegate.performMutation(AbstractReturningDelegate.java:58)
+	at org.hibernate.engine.jdbc.mutation.internal.MutationExecutorSingleNonBatched.performNonBatchedOperations(MutationExecutorSingleNonBatched.java:47)
+	at org.hibernate.engine.jdbc.mutation.internal.AbstractMutationExecutor.execute(AbstractMutationExecutor.java:55)
+	at org.hibernate.persister.entity.mutation.InsertCoordinatorStandard.doStaticInserts(InsertCoordinatorStandard.java:194)
+	at org.hibernate.persister.entity.mutation.InsertCoordinatorStandard.coordinateInsert(InsertCoordinatorStandard.java:132)
+	at org.hibernate.persister.entity.mutation.InsertCoordinatorStandard.insert(InsertCoordinatorStandard.java:95)
+	at org.hibernate.action.internal.EntityIdentityInsertAction.execute(EntityIdentityInsertAction.java:85)
+	at org.hibernate.engine.spi.ActionQueue.execute(ActionQueue.java:671)
+	at org.hibernate.engine.spi.ActionQueue.addResolvedEntityInsertAction(ActionQueue.java:292)
+	at org.hibernate.engine.spi.ActionQueue.addInsertAction(ActionQueue.java:273)
+	at org.hibernate.engine.spi.ActionQueue.addAction(ActionQueue.java:323)
+	at org.hibernate.event.internal.AbstractSaveEventListener.addInsertAction(AbstractSaveEventListener.java:391)
+	at org.hibernate.event.internal.AbstractSaveEventListener.performSaveOrReplicate(AbstractSaveEventListener.java:305)
+	at org.hibernate.event.internal.AbstractSaveEventListener.performSave(AbstractSaveEventListener.java:224)
+	at org.hibernate.event.internal.AbstractSaveEventListener.saveWithGeneratedId(AbstractSaveEventListener.java:137)
+	at org.hibernate.event.internal.DefaultPersistEventListener.entityIsTransient(DefaultPersistEventListener.java:175)
+	at org.hibernate.event.internal.DefaultPersistEventListener.persist(DefaultPersistEventListener.java:93)
+	at org.hibernate.event.internal.DefaultPersistEventListener.onPersist(DefaultPersistEventListener.java:77)
+	at org.hibernate.event.internal.DefaultPersistEventListener.onPersist(DefaultPersistEventListener.java:54)
+	at org.hibernate.event.service.internal.EventListenerGroupImpl.fireEventOnEachListener(EventListenerGroupImpl.java:127)
+	at org.hibernate.internal.SessionImpl.firePersist(SessionImpl.java:757)
+	at org.hibernate.internal.SessionImpl.persist(SessionImpl.java:741)
+	at jdk.internal.reflect.GeneratedMethodAccessor716.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.orm.jpa.SharedEntityManagerCreator$SharedEntityManagerInvocationHandler.invoke(SharedEntityManagerCreator.java:319)
+	at jdk.proxy2/jdk.proxy2.$Proxy152.persist(Unknown Source)
+	at org.springframework.data.jpa.repository.support.SimpleJpaRepository.save(SimpleJpaRepository.java:628)
+	at org.springframework.data.jpa.repository.support.SimpleJpaRepository.saveAll(SimpleJpaRepository.java:654)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.data.repository.core.support.RepositoryMethodInvoker$RepositoryFragmentMethodInvoker.lambda$new$0(RepositoryMethodInvoker.java:277)
+	at org.springframework.data.repository.core.support.RepositoryMethodInvoker.doInvoke(RepositoryMethodInvoker.java:170)
+	at org.springframework.data.repository.core.support.RepositoryMethodInvoker.invoke(RepositoryMethodInvoker.java:158)
+	at org.springframework.data.repository.core.support.RepositoryComposition$RepositoryFragments.invoke(RepositoryComposition.java:516)
+	at org.springframework.data.repository.core.support.RepositoryComposition.invoke(RepositoryComposition.java:285)
+	at org.springframework.data.repository.core.support.RepositoryFactorySupport$ImplementationMethodExecutionInterceptor.invoke(RepositoryFactorySupport.java:628)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.data.repository.core.support.QueryExecutorMethodInterceptor.doInvoke(QueryExecutorMethodInterceptor.java:173)
+	at org.springframework.data.repository.core.support.QueryExecutorMethodInterceptor.invoke(QueryExecutorMethodInterceptor.java:148)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.data.projection.DefaultMethodInvokingMethodInterceptor.invoke(DefaultMethodInvokingMethodInterceptor.java:70)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.transaction.interceptor.TransactionAspectSupport.invokeWithinTransaction(TransactionAspectSupport.java:379)
+	at org.springframework.transaction.interceptor.TransactionInterceptor.invoke(TransactionInterceptor.java:119)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.dao.support.PersistenceExceptionTranslationInterceptor.invoke(PersistenceExceptionTranslationInterceptor.java:138)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.data.jpa.repository.support.CrudMethodMetadataPostProcessor$CrudMethodMetadataPopulatingMethodInterceptor.invoke(CrudMethodMetadataPostProcessor.java:165)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.aop.interceptor.ExposeInvocationInterceptor.invoke(ExposeInvocationInterceptor.java:97)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184)
+	at org.springframework.aop.framework.JdkDynamicAopProxy.invoke(JdkDynamicAopProxy.java:223)
+	at jdk.proxy2/jdk.proxy2.$Proxy163.saveAll(Unknown Source)
+	at cn.bugstack.competitoragent.rag.TaskRetrievalIndexService.indexKnowledgeDocument(TaskRetrievalIndexService.java:116)
+	... 29 common frames omitted
+2026-06-23 11:40:25.908 [pool-6-thread-1] INFO  c.b.competitoragent.agent.BaseAgent - [信息采集智能体] 执行完成, status=SUCCESS, durationMs=77107
+2026-06-23 11:40:26.051 [pool-6-thread-1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=534
+2026-06-23 11:40:26.089 [ConsumeMessageThread_competitor-agent-workflow-consumer_3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=535
+2026-06-23 11:40:26.330 [pool-6-thread-2] INFO  c.b.competitoragent.agent.BaseAgent - [结构抽取智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:40:26.889 [ConsumeMessageThread_competitor-agent-workflow-consumer_5] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=a6f1c884-75eb-4b60-a4ba-aee84c256989, type=NODE_COMPLETED
+2026-06-23 11:40:26.903 [ConsumeMessageThread_competitor-agent-workflow-consumer_6] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=43b9be07-7008-4a57-bc6e-fa939f035e0a, type=NODE_READY
+2026-06-23 11:41:28.554 [pool-6-thread-2] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:41:28.555 [pool-6-thread-2] WARN  c.b.c.a.e.SchemaExtractorAgent - extractor json parse failed, competitor=Notion AI, attempt=1/3
+cn.bugstack.competitoragent.agent.extractor.SchemaExtractorAgent$3: Extractor output must be a JSON object
+	at cn.bugstack.competitoragent.agent.extractor.SchemaExtractorAgent.parseSchemaRootValue(SchemaExtractorAgent.java:488)
+	at cn.bugstack.competitoragent.agent.extractor.SchemaExtractorAgent.parseSchemaRoot(SchemaExtractorAgent.java:450)
+	at cn.bugstack.competitoragent.agent.extractor.SchemaExtractorAgent.invokeExtractorOnce(SchemaExtractorAgent.java:359)
+	at cn.bugstack.competitoragent.agent.extractor.SchemaExtractorAgent.extractAndNormalize(SchemaExtractorAgent.java:314)
+	at cn.bugstack.competitoragent.agent.extractor.SchemaExtractorAgent.doExecute(SchemaExtractorAgent.java:196)
+	at cn.bugstack.competitoragent.agent.BaseAgent.execute(BaseAgent.java:48)
+	at cn.bugstack.competitoragent.agent.capability.SpringAgentCapabilityRegistry.lambda$buildCapabilities$0(SpringAgentCapabilityRegistry.java:46)
+	at cn.bugstack.competitoragent.workflow.DagExecutor.executeNodeOnce(DagExecutor.java:244)
+	at cn.bugstack.competitoragent.workflow.DagExecutor.executeRunningNode(DagExecutor.java:384)
+	at cn.bugstack.competitoragent.workflow.DagExecutor.lambda$dispatchExecutableNodes$2(DagExecutor.java:320)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-06-23 11:42:00.341 [pool-6-thread-2] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:42:00.353 [pool-6-thread-2] INFO  c.b.competitoragent.agent.BaseAgent - [结构抽取智能体] 执行完成, status=SUCCESS, durationMs=94223
+2026-06-23 11:42:00.495 [pool-6-thread-2] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=536
+2026-06-23 11:42:00.548 [ConsumeMessageThread_competitor-agent-workflow-consumer_3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=537
+2026-06-23 11:42:00.781 [pool-6-thread-3] INFO  c.b.competitoragent.agent.BaseAgent - [竞品分析智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:42:01.997 [ConsumeMessageThread_competitor-agent-workflow-consumer_7] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=6523e25f-b83e-4c5e-814f-0f26b908ee34, type=NODE_COMPLETED
+2026-06-23 11:42:02.006 [ConsumeMessageThread_competitor-agent-workflow-consumer_8] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=d73ac380-ebb3-4869-8726-9b05cae49ab0, type=NODE_READY
+2026-06-23 11:42:28.768 [pool-6-thread-3] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:42:28.772 [pool-6-thread-3] INFO  c.b.competitoragent.agent.BaseAgent - [竞品分析智能体] 执行完成, status=SUCCESS, durationMs=28182
+2026-06-23 11:42:28.899 [pool-6-thread-3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=538
+2026-06-23 11:42:28.933 [ConsumeMessageThread_competitor-agent-workflow-consumer_3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=539
+2026-06-23 11:42:29.132 [pool-6-thread-4] INFO  c.b.competitoragent.agent.BaseAgent - [报告撰写智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:42:32.039 [ConsumeMessageThread_competitor-agent-workflow-consumer_9] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=104f7fc1-255e-4f9b-9cb1-dc04c460433b, type=NODE_COMPLETED
+2026-06-23 11:42:32.046 [ConsumeMessageThread_competitor-agent-workflow-consumer_10] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=d2871ed0-769c-468a-b5fb-8a0216844c13, type=NODE_READY
+2026-06-23 11:43:14.401 [pool-6-thread-4] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:43:14.424 [pool-6-thread-4] INFO  c.b.c.agent.writer.ReportWriterAgent - report writing done, taskId=50, revisionMode=false, length=4054
+2026-06-23 11:43:14.426 [pool-6-thread-4] INFO  c.b.competitoragent.agent.BaseAgent - [报告撰写智能体] 执行完成, status=SUCCESS, durationMs=45458
+2026-06-23 11:43:14.592 [pool-6-thread-4] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=540
+2026-06-23 11:43:14.629 [ConsumeMessageThread_competitor-agent-workflow-consumer_3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=541
+2026-06-23 11:43:14.843 [pool-6-thread-1] INFO  c.b.competitoragent.agent.BaseAgent - [质量评审智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:43:17.093 [ConsumeMessageThread_competitor-agent-workflow-consumer_11] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=42594c0a-3dde-4dc5-8a30-26f14670cabd, type=NODE_COMPLETED
+2026-06-23 11:43:17.100 [ConsumeMessageThread_competitor-agent-workflow-consumer_12] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=d097573c-8c75-42a2-bfb9-c47e717d3553, type=NODE_READY
+2026-06-23 11:43:35.105 [pool-6-thread-1] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:43:35.132 [pool-6-thread-1] INFO  c.b.competitoragent.agent.BaseAgent - [质量评审智能体] 执行完成, status=SUCCESS, durationMs=20455
+2026-06-23 11:43:35.310 [pool-6-thread-1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=542
+2026-06-23 11:43:35.351 [ConsumeMessageThread_competitor-agent-workflow-consumer_3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=543
+2026-06-23 11:43:35.630 [pool-6-thread-2] INFO  c.b.competitoragent.agent.BaseAgent - [报告撰写智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:43:37.126 [ConsumeMessageThread_competitor-agent-workflow-consumer_13] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=c521d5cc-1a92-438e-af91-157d3e3af1fc, type=NODE_COMPLETED
+2026-06-23 11:43:37.132 [ConsumeMessageThread_competitor-agent-workflow-consumer_14] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=17770468-3452-412d-8b25-f8865b80311f, type=NODE_READY
+2026-06-23 11:44:12.064 [pool-6-thread-2] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:44:12.088 [pool-6-thread-2] INFO  c.b.c.agent.writer.ReportWriterAgent - report writing done, taskId=50, revisionMode=true, length=4262
+2026-06-23 11:44:12.091 [pool-6-thread-2] INFO  c.b.competitoragent.agent.BaseAgent - [报告撰写智能体] 执行完成, status=SUCCESS, durationMs=36695
+2026-06-23 11:44:12.291 [pool-6-thread-2] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=544
+2026-06-23 11:44:12.339 [ConsumeMessageThread_competitor-agent-workflow-consumer_3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=545
+2026-06-23 11:44:12.562 [pool-6-thread-3] INFO  c.b.competitoragent.agent.BaseAgent - [质量评审智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:44:17.178 [ConsumeMessageThread_competitor-agent-workflow-consumer_15] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=a9025614-eb73-4aab-9025-3604a5833578, type=NODE_COMPLETED
+2026-06-23 11:44:17.185 [ConsumeMessageThread_competitor-agent-workflow-consumer_16] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=1cfcce06-4337-43a6-a608-47810e1f8c42, type=NODE_READY
+2026-06-23 11:45:02.658 [pool-6-thread-3] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:45:02.676 [pool-6-thread-3] INFO  c.b.competitoragent.agent.BaseAgent - [质量评审智能体] 执行完成, status=SUCCESS, durationMs=50291
+2026-06-23 11:45:02.885 [pool-6-thread-3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=546
+2026-06-23 11:45:02.937 [ConsumeMessageThread_competitor-agent-workflow-consumer_3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=547
+2026-06-23 11:45:03.181 [pool-6-thread-4] INFO  c.b.competitoragent.agent.BaseAgent - [结构抽取智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:45:07.236 [ConsumeMessageThread_competitor-agent-workflow-consumer_17] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=c36855d5-8f24-4858-9074-0acd60414b86, type=NODE_COMPLETED
+2026-06-23 11:45:07.243 [ConsumeMessageThread_competitor-agent-workflow-consumer_17] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=d1194cea-17ac-4ab8-b874-33379177ad6d, type=NODE_READY
+2026-06-23 11:46:26.171 [pool-6-thread-4] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-06-23 11:46:26.184 [pool-6-thread-4] INFO  c.b.competitoragent.agent.BaseAgent - [结构抽取智能体] 执行完成, status=SUCCESS, durationMs=83199
+2026-06-23 11:46:26.441 [pool-6-thread-4] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=50, entityId=548
+2026-06-23 11:46:26.515 [ConsumeMessageThread_competitor-agent-workflow-consumer_3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=50, entityId=549
+2026-06-23 11:46:26.759 [pool-6-thread-1] INFO  c.b.competitoragent.agent.BaseAgent - [竞品分析智能体] 开始执行, taskId=50, traceId=N/A
+2026-06-23 11:46:27.328 [ConsumeMessageThread_competitor-agent-workflow-consumer_19] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=f735f85f-de0e-46e6-a817-a8445d22d932, type=NODE_COMPLETED
+2026-06-23 11:46:27.335 [ConsumeMessageThread_competitor-agent-workflow-consumer_20] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=fd823bf5-891e-4b85-9425-e22fe4f75d75, type=NODE_READY

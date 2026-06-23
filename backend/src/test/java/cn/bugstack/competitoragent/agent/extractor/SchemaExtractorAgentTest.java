@@ -3,8 +3,11 @@ package cn.bugstack.competitoragent.agent.extractor;
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.extractor.input.ExtractorCompetitorInput;
+import cn.bugstack.competitoragent.extractor.input.ExtractorEvidenceInput;
+import cn.bugstack.competitoragent.extractor.input.ExtractorEvidenceInputAssembler;
 import cn.bugstack.competitoragent.extractor.input.ExtractorInputPackage;
 import cn.bugstack.competitoragent.extractor.input.ExtractorInputProvider;
+import cn.bugstack.competitoragent.extractor.input.RepositoryExtractorEvidenceSourcePort;
 import cn.bugstack.competitoragent.extractor.input.RepositoryExtractorInputProvider;
 import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.context.TaskRagContextBundle;
@@ -15,6 +18,7 @@ import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.model.entity.CompetitorKnowledge;
+import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceBlock;
 import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceQuality;
 import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceView;
 import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceViewAssembler;
@@ -58,8 +62,9 @@ class SchemaExtractorAgentTest {
             objectMapper,
             new DownstreamEvidenceViewAssembler(objectMapper),
             new RepositoryExtractorInputProvider(
-                    evidenceRepository,
-                    new DownstreamEvidenceViewAssembler(objectMapper),
+                    new RepositoryExtractorEvidenceSourcePort(
+                            evidenceRepository,
+                            new ExtractorEvidenceInputAssembler(objectMapper)),
                     objectMapper)
     );
 
@@ -103,9 +108,9 @@ class SchemaExtractorAgentTest {
                 .dimensions(List.of("产品功能", "价格策略"))
                 .competitors(List.of(ExtractorCompetitorInput.builder()
                         .competitorName("Provider AI")
-                        .evidenceCatalog(List.of(providerEvidence))
-                        .structuredEvidence(List.of(providerEvidence))
-                        .readableEvidence(List.of(providerEvidence))
+                        .evidenceCatalog(List.of(toExtractorEvidenceInput(providerEvidence)))
+                        .structuredEvidence(List.of(toExtractorEvidenceInput(providerEvidence)))
+                        .readableEvidence(List.of(toExtractorEvidenceInput(providerEvidence)))
                         .skippedEvidence(List.of())
                         .sourceUrls(List.of("https://provider.example.com/pricing"))
                         .issueFlags(List.of())
@@ -162,6 +167,76 @@ class SchemaExtractorAgentTest {
     }
 
     @Test
+    void shouldRenderPromptFromExtractorEvidenceInputAndStillExportLightweightViews() throws Exception {
+        ExtractorEvidenceInput extractorEvidenceInput = ExtractorEvidenceInput.builder()
+                .evidenceId("E901")
+                .competitorName("Acme")
+                .sourceType("PRICING")
+                .title("Pricing")
+                .content("Pro 199 / 月，按席位计费。")
+                .sourceUrls(List.of("https://acme.com/pricing"))
+                .qualitySignals(List.of("PRICING_BLOCK_HIT"))
+                .structuredBlocks(List.of(DownstreamEvidenceBlock.builder()
+                        .blockType("PRICING_BLOCK")
+                        .summary("Pro 199 / 月")
+                        .sourceUrls(List.of("https://acme.com/pricing"))
+                        .build()))
+                .structuredPayload(Map.of("plans", List.of(Map.of("name", "Pro", "price", 199))))
+                .quality(DownstreamEvidenceQuality.builder().qualityScore(0.95).build())
+                .build();
+        when(inputProvider.provide(any())).thenReturn(ExtractorInputPackage.builder()
+                .taskId(9L)
+                .nodeName("extract_schema")
+                .inputSource("REPOSITORY_BACKED_PORT")
+                .auditRefs(Map.of("searchAudit", Map.of("available", true)))
+                .competitors(List.of(ExtractorCompetitorInput.builder()
+                        .competitorName("Acme")
+                        .evidenceCatalog(List.of(extractorEvidenceInput))
+                        .structuredEvidence(List.of(extractorEvidenceInput))
+                        .readableEvidence(List.of(extractorEvidenceInput))
+                        .skippedEvidence(List.of())
+                        .sourceUrls(List.of("https://acme.com/pricing"))
+                        .issueFlags(List.of())
+                        .budget(Map.of("maxPromptEvidenceChars", 4000))
+                        .build()))
+                .build());
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema"))).thenReturn("""
+                {
+                  "officialUrl": "https://acme.com",
+                  "summary": "workspace pricing",
+                  "positioning": "collaboration suite",
+                  "targetUsers": ["teams"],
+                  "coreFeatures": [],
+                  "pricing": {"model": "Pro 199 / 月", "evidenceIds": ["E901"]},
+                  "strengths": [],
+                  "weaknesses": [],
+                  "sources": [],
+                  "sourceUrls": ["https://acme.com/pricing"]
+                }
+                """);
+
+        SchemaExtractorAgent providerOnlyAgent = new SchemaExtractorAgent(
+                logRepository,
+                knowledgeRepository,
+                llmClient,
+                promptService,
+                agentContextAssembler,
+                objectMapper,
+                inputProvider
+        );
+        AgentResult result = providerOnlyAgent.execute(AgentContext.builder()
+                .taskId(9L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        assertEquals("REPOSITORY_BACKED_PORT", output.path("extractorInput").path("inputSource").asText());
+        assertTrue(output.path("downstreamEvidenceViews").get(0).path("content").asText().isBlank());
+    }
+
+    @Test
     void shouldUseProviderReadableEvidenceInsteadOfDumpingContentGapIntoReadablePrompt() {
         SchemaExtractorAgent providerOnlyAgent = new SchemaExtractorAgent(
                 logRepository,
@@ -205,9 +280,11 @@ class SchemaExtractorAgentTest {
                 .nodeName("extract_schema")
                 .competitors(List.of(ExtractorCompetitorInput.builder()
                         .competitorName("Acme")
-                        .evidenceCatalog(List.of(contentGapView, readableView))
+                        .evidenceCatalog(List.of(
+                                toExtractorEvidenceInput(contentGapView),
+                                toExtractorEvidenceInput(readableView)))
                         .structuredEvidence(List.of())
-                        .readableEvidence(List.of(readableView))
+                        .readableEvidence(List.of(toExtractorEvidenceInput(readableView)))
                         .skippedEvidence(List.of())
                         .sourceUrls(List.of("https://acme.example.com/docs"))
                         .issueFlags(List.of("CONTENT_GAP"))
@@ -1346,9 +1423,9 @@ class SchemaExtractorAgentTest {
                 .nodeName("extract_schema")
                 .competitors(List.of(ExtractorCompetitorInput.builder()
                         .competitorName("Notion AI")
-                        .evidenceCatalog(List.of(pricingEvidence))
+                        .evidenceCatalog(List.of(toExtractorEvidenceInput(pricingEvidence)))
                         .structuredEvidence(List.of())
-                        .readableEvidence(List.of(pricingEvidence))
+                        .readableEvidence(List.of(toExtractorEvidenceInput(pricingEvidence)))
                         .skippedEvidence(List.of())
                         .sourceUrls(List.of("https://www.notion.so/pricing"))
                         .issueFlags(List.of())
@@ -1447,9 +1524,13 @@ class SchemaExtractorAgentTest {
                 .nodeName("extract_schema")
                 .competitors(List.of(ExtractorCompetitorInput.builder()
                         .competitorName("Notion AI")
-                        .evidenceCatalog(List.of(officialEvidence, docsEvidence))
+                        .evidenceCatalog(List.of(
+                                toExtractorEvidenceInput(officialEvidence),
+                                toExtractorEvidenceInput(docsEvidence)))
                         .structuredEvidence(List.of())
-                        .readableEvidence(List.of(officialEvidence, docsEvidence))
+                        .readableEvidence(List.of(
+                                toExtractorEvidenceInput(officialEvidence),
+                                toExtractorEvidenceInput(docsEvidence)))
                         .skippedEvidence(List.of())
                         .sourceUrls(List.of("https://www.notion.so/product/ai", "https://www.notion.so/help"))
                         .issueFlags(List.of())
@@ -1533,9 +1614,9 @@ class SchemaExtractorAgentTest {
                 .nodeName("extract_schema")
                 .competitors(List.of(ExtractorCompetitorInput.builder()
                         .competitorName("Notion AI")
-                        .evidenceCatalog(List.of(officialEvidence))
+                        .evidenceCatalog(List.of(toExtractorEvidenceInput(officialEvidence)))
                         .structuredEvidence(List.of())
-                        .readableEvidence(List.of(officialEvidence))
+                        .readableEvidence(List.of(toExtractorEvidenceInput(officialEvidence)))
                         .skippedEvidence(List.of())
                         .sourceUrls(List.of("https://www.notion.so/product/ai"))
                         .issueFlags(List.of())
@@ -1584,5 +1665,29 @@ class SchemaExtractorAgentTest {
             }
         }
         throw new AssertionError("bundle not found: " + sectionKey);
+    }
+
+    /**
+     * Task 3 期间测试数据先通过这个桥接方法适配新 DTO，
+     * 这样现有 extractor 行为断言可以继续聚焦输出契约，Task 4 再切到直接构造 ExtractorEvidenceInput。
+     */
+    private ExtractorEvidenceInput toExtractorEvidenceInput(DownstreamEvidenceView view) {
+        if (view == null) {
+            return null;
+        }
+        return ExtractorEvidenceInput.builder()
+                .evidenceId(view.getEvidenceId())
+                .competitorName(view.getCompetitorName())
+                .sourceType(view.getSourceType())
+                .title(view.getTitle())
+                .content(view.getContent())
+                .sourceUrls(view.getSourceUrls())
+                .issueFlags(view.getIssueFlags())
+                .qualitySignals(view.getQualitySignals())
+                .structuredBlocks(view.getStructuredBlocks())
+                .structuredPayload(view.getStructuredPayload())
+                .quality(view.getQuality())
+                .build()
+                .normalized();
     }
 }

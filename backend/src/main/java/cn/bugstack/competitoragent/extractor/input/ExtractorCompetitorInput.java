@@ -1,6 +1,5 @@
 package cn.bugstack.competitoragent.extractor.input;
 
-import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceView;
 import lombok.Builder;
 import lombok.Data;
 
@@ -18,13 +17,13 @@ public class ExtractorCompetitorInput {
 
     private String competitorName;
 
-    private List<DownstreamEvidenceView> evidenceCatalog;
+    private List<ExtractorEvidenceInput> evidenceCatalog;
 
-    private List<DownstreamEvidenceView> structuredEvidence;
+    private List<ExtractorEvidenceInput> structuredEvidence;
 
-    private List<DownstreamEvidenceView> readableEvidence;
+    private List<ExtractorEvidenceInput> readableEvidence;
 
-    private List<DownstreamEvidenceView> skippedEvidence;
+    private List<ExtractorEvidenceInput> skippedEvidence;
 
     private List<String> sourceUrls;
 

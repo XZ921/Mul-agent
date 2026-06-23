@@ -3,8 +3,7 @@ package cn.bugstack.competitoragent.extractor.input;
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
-import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceView;
-import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceViewAssembler;
+import cn.bugstack.competitoragent.task.SharedNodeOutputEnvelope;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -19,8 +18,9 @@ class RepositoryExtractorInputProviderTest {
     private final EvidenceSourceRepository evidenceRepository = mock(EvidenceSourceRepository.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final RepositoryExtractorInputProvider provider = new RepositoryExtractorInputProvider(
-            evidenceRepository,
-            new DownstreamEvidenceViewAssembler(objectMapper),
+            new RepositoryExtractorEvidenceSourcePort(
+                    evidenceRepository,
+                    new ExtractorEvidenceInputAssembler(objectMapper)),
             objectMapper
     );
 
@@ -86,13 +86,13 @@ class RepositoryExtractorInputProviderTest {
 
         ExtractorCompetitorInput competitorInput = inputPackage.getCompetitors().get(0);
         assertThat(competitorInput.getEvidenceCatalog())
-                .extracting(DownstreamEvidenceView::getEvidenceId)
+                .extracting(ExtractorEvidenceInput::getEvidenceId)
                 .containsExactly("E001", "E002");
         assertThat(competitorInput.getStructuredEvidence())
-                .extracting(DownstreamEvidenceView::getEvidenceId)
+                .extracting(ExtractorEvidenceInput::getEvidenceId)
                 .containsExactly("E001");
         assertThat(competitorInput.getReadableEvidence())
-                .extracting(DownstreamEvidenceView::getEvidenceId)
+                .extracting(ExtractorEvidenceInput::getEvidenceId)
                 .containsExactly("E001", "E002");
         assertThat(competitorInput.getSkippedEvidence()).hasSize(1);
         assertThat(competitorInput.getSkippedEvidence().get(0).getEvidenceId()).isEqualTo("E003");
@@ -150,14 +150,14 @@ class RepositoryExtractorInputProviderTest {
 
         ExtractorCompetitorInput competitorInput = inputPackage.getCompetitors().get(0);
         assertThat(competitorInput.getEvidenceCatalog())
-                .extracting(DownstreamEvidenceView::getEvidenceId)
+                .extracting(ExtractorEvidenceInput::getEvidenceId)
                 .contains("E201", "E202");
         assertThat(competitorInput.getReadableEvidence())
-                .extracting(DownstreamEvidenceView::getEvidenceId)
+                .extracting(ExtractorEvidenceInput::getEvidenceId)
                 .contains("E202");
         assertThat(competitorInput.getSourceUrls())
                 .contains("https://notion.so/help", "https://notion.so/pricing");
-        DownstreamEvidenceView helpView = competitorInput.getEvidenceCatalog().stream()
+        ExtractorEvidenceInput helpView = competitorInput.getEvidenceCatalog().stream()
                 .filter(view -> "E201".equals(view.getEvidenceId()))
                 .findFirst()
                 .orElseThrow();
@@ -214,16 +214,76 @@ class RepositoryExtractorInputProviderTest {
 
         ExtractorCompetitorInput competitorInput = inputPackage.getCompetitors().get(0);
         assertThat(competitorInput.getReadableEvidence())
-                .extracting(DownstreamEvidenceView::getEvidenceId)
+                .extracting(ExtractorEvidenceInput::getEvidenceId)
                 .doesNotContain("E101");
         assertThat(competitorInput.getEvidenceCatalog())
-                .extracting(DownstreamEvidenceView::getEvidenceId)
+                .extracting(ExtractorEvidenceInput::getEvidenceId)
                 .containsExactly("E101", "E102");
-        DownstreamEvidenceView thinView = competitorInput.getEvidenceCatalog().stream()
+        ExtractorEvidenceInput thinView = competitorInput.getEvidenceCatalog().stream()
                 .filter(view -> "E102".equals(view.getEvidenceId()))
                 .findFirst()
                 .orElseThrow();
         assertThat(thinView.getIssueFlags()).contains("THIN_CONTENT_ONLY");
         assertThat(competitorInput.getIssueFlags()).contains("CONTENT_GAP", "THIN_CONTENT_ONLY");
+    }
+
+    @Test
+    void shouldExposeAuditRefsFromCollectorSharedEnvelope() {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(8L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(8L)
+                        .competitorName("Acme")
+                        .evidenceId("E801")
+                        .title("Docs")
+                        .url("https://docs.acme.com")
+                        .sourceType("DOCS")
+                        .fullContent("docs body")
+                        .build()
+        ));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(8L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build();
+        context.putSharedOutputEnvelope("collect_sources_01_01", SharedNodeOutputEnvelope.builder()
+                .taskId(8L)
+                .nodeName("collect_sources_01_01")
+                .projectionType("SEARCH_SHARED_PROJECTION_V1")
+                .payloadJson("{\"projectionType\":\"SEARCH_SHARED_PROJECTION_V1\"}")
+                .sourceUrls(List.of("https://docs.acme.com"))
+                .build());
+
+        ExtractorInputPackage inputPackage = provider.provide(context);
+
+        assertThat(inputPackage.getInputSource()).isEqualTo("REPOSITORY_BACKED_PORT");
+        assertThat(inputPackage.getAuditRefs()).containsKey("searchAudit");
+        assertThat(String.valueOf(inputPackage.getAuditRefs().get("projectionTypes")))
+                .contains("SEARCH_SHARED_PROJECTION_V1");
+    }
+
+    @Test
+    void shouldMarkAuditRefsUnavailableReasonWhenCollectorEnvelopeMissing() {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(9L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(9L)
+                        .competitorName("Acme")
+                        .evidenceId("E901")
+                        .title("Docs")
+                        .url("https://docs.acme.com")
+                        .sourceType("DOCS")
+                        .fullContent("docs body")
+                        .build()
+        ));
+
+        ExtractorInputPackage inputPackage = provider.provide(AgentContext.builder()
+                .taskId(9L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+
+        assertThat(String.valueOf(inputPackage.getAuditRefs().get("searchAudit")))
+                .contains("available=false")
+                .contains("COLLECTOR_SHARED_ENVELOPE_MISSING");
     }
 }

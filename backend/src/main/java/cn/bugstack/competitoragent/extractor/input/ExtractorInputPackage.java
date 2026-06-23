@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * extractor 节点一次执行所消费的正式输入包。
@@ -25,6 +26,10 @@ public class ExtractorInputPackage {
     private Long schemaId;
 
     private List<String> dimensions;
+
+    private String inputSource;
+
+    private Map<String, Object> auditRefs;
 
     private List<ExtractorCompetitorInput> competitors;
 }

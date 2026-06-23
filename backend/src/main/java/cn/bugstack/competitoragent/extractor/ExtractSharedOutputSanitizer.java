@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.extractor;
 
 import cn.bugstack.competitoragent.extractor.input.ExtractorCompetitorInput;
+import cn.bugstack.competitoragent.extractor.input.ExtractorEvidenceInput;
 import cn.bugstack.competitoragent.extractor.input.ExtractorInputPackage;
 import cn.bugstack.competitoragent.workflow.contract.CompetitorKnowledgeDraft;
 import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceBlock;
@@ -92,6 +93,8 @@ public final class ExtractSharedOutputSanitizer {
                 .branchKey(inputPackage.getBranchKey())
                 .schemaId(inputPackage.getSchemaId())
                 .dimensions(copyList(inputPackage.getDimensions()))
+                .inputSource(firstNonBlank(inputPackage.getInputSource(), null))
+                .auditRefs(copyMap(inputPackage.getAuditRefs()))
                 .competitors(slimCompetitorInputs(inputPackage.getCompetitors()))
                 .build();
     }
@@ -236,16 +239,35 @@ public final class ExtractSharedOutputSanitizer {
             }
             slimCompetitors.add(ExtractorCompetitorInput.builder()
                     .competitorName(competitor.getCompetitorName())
-                    .evidenceCatalog(slimEvidenceViews(competitor.getEvidenceCatalog()))
-                    .structuredEvidence(slimEvidenceViews(competitor.getStructuredEvidence()))
-                    .readableEvidence(slimEvidenceViews(competitor.getReadableEvidence()))
-                    .skippedEvidence(slimEvidenceViews(competitor.getSkippedEvidence()))
+                    .evidenceCatalog(slimEvidenceInputs(competitor.getEvidenceCatalog()))
+                    .structuredEvidence(slimEvidenceInputs(competitor.getStructuredEvidence()))
+                    .readableEvidence(slimEvidenceInputs(competitor.getReadableEvidence()))
+                    .skippedEvidence(slimEvidenceInputs(competitor.getSkippedEvidence()))
                     .sourceUrls(copyList(competitor.getSourceUrls()))
                     .issueFlags(copyList(competitor.getIssueFlags()))
                     .budget(copyMap(competitor.getBudget()))
                     .build());
         }
         return slimCompetitors;
+    }
+
+    private static List<ExtractorEvidenceInput> slimEvidenceInputs(List<ExtractorEvidenceInput> inputs) {
+        if (inputs == null || inputs.isEmpty()) {
+            return List.of();
+        }
+        List<ExtractorEvidenceInput> slimInputs = new ArrayList<>();
+        for (ExtractorEvidenceInput input : inputs) {
+            if (input == null) {
+                continue;
+            }
+            slimInputs.add(input.toBuilder()
+                    .content("")
+                    .structuredPayload(Map.of())
+                    .structuredBlocks(slimEvidenceBlocks(input.getStructuredBlocks()))
+                    .build()
+                    .normalized());
+        }
+        return slimInputs;
     }
 
     private static List<DownstreamEvidenceView> convertAndSlimEvidenceViews(Object rawValue, ObjectMapper objectMapper) {

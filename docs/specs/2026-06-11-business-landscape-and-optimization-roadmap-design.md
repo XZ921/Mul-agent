@@ -65,6 +65,7 @@
 | --- | --- | --- |
 | 任务执行引擎 | DAG、节点状态、动态补图、重跑、恢复、人工接管、任务推进 | 当前大量语义集中在 `DagExecutor`、`WorkflowFactory`、`TaskRuntimeCommandAppService`；技术节点语义和业务阶段语义尚未彻底分层 |
 | 搜索执行引擎 | 搜索计划、候选生成、候选验证、补源顺序、正式选源、搜索现场回放 | 搜索计划和运行时行为已经明显是业务规则，但仍常被当作平台杂项；恢复、缓存、回放、观察的契约未完全稳定 |
+| Agent 协作编排引擎 | Orchestrator Agent、协作目标、协作计划、角色分工、Agent 建议、质量诊断、编排决策、决策校验、协作轨迹 | 当前系统已有多 Agent 能力模块和 DAG 执行底座，但前置协作规划仍由固定模板承担，运行期全局协作决策仍散落在 Reviewer、RevisionDirective、动态补图、恢复与对话动作入口中，尚未形成统一“调研组长”决策层 |
 | 质量回流引擎 | 质量问题 -> 补证 / 重写 / 重跑 / 人工接管 的动作转换 | `质量审查` 与 `修订与重写` 之间的桥梁已经存在，但缺少独立引擎视角；质量结果驱动后续图的规则仍分散 |
 | 对话动作引擎 | 意图识别、模式路由、动作预览、确认执行、任务控制提交 | 对话目前更像“大服务聚合层”，缺少动作执行协议、风险确认协议和正式命令协议的清晰边界 |
 
@@ -194,7 +195,15 @@
 - 实链验证：`🟡` 2026-06-22 task `50` 已完成真实 rerun 验收并最终通过终审，但 `LLM_REFUSED / EVIDENCE_NOT_COVERING / STRUCTURED_BLOCK_DIRECT` 等新状态仍缺 live 样本。后续 live 验证仍需记录 rerun 前现场、节点级输出、报告证据视图和失败层分类，不能只看任务最终 `SUCCESS/FAILED`。
 - 当前不做：不回头扩搜索发现、采集路由、RSS owner、Playwright 并发池；不把 `SchemaService` 拉入 extractor 热路径；不先改前端或报告 DTO 扩字段；不一次性重构完整 `CompetitorKnowledge` 或 `SchemaExtractorAgent`。
 
-### 3.4 其他链路专题索引
+### 3.4 Agent 协作编排层
+
+- 定位：`Agent 协作编排层` 不是第十条业务链路，而是横跨 `任务执行引擎`、`质量回流引擎` 和 `对话动作引擎` 的协作决策层。
+- 方案：`✅` 已新增架构规格 [2026-06-23-agent-collaboration-orchestration-architecture-spec.md](/E:/java_study/Mul-agnet/docs/superpowers/agent-collaboration-orchestration/specs/2026-06-23-agent-collaboration-orchestration-architecture-spec.md)。
+- 阶段边界：3.4 应在 `3.3 提取结构化` 证据边界基本稳定后进入；它采用 Orchestrator-first 双阶段架构，先冻结前置 `CollaborationGoal / CollaborationPlan / AgentRoleAssignment / InitialPlanReview / CollaborationCheckpoint` 与运行期 `AgentSuggestion / QualityDiagnosis / OrchestrationDecision / DecisionPolicyRuleSet / DecisionPolicyResult / DecisionExecutorAdapter / DynamicPlanMutation / DecisionTrace / OrchestratorCheckpoint` 等协作协议，再以终审失败后的质量回流作为 MVP 闭环，不提前把所有节点改成 LLM 自治调度。
+- 风险红线：Reviewer 只输出质量事实，Orchestrator 输出编排决策，DAG / DynamicTaskGraphService 负责安全执行；所有新协议必须保留 `sourceUrls` 或显式 `evidenceState` 证据缺口状态，Citation Agent 可以后移，但来源追溯不能后移。
+- 当前不做：不推倒 `DagExecutor`，不把 `ExecutionPlanDefinitionBuilder` 改成自由智能规划器，不让 Orchestrator 自由生成任意节点，不用 Orchestrator 替代 Citation Agent，不引入新的 Python Agent 运行时作为前置条件。
+
+### 3.5 其他链路专题索引
 
 | 链路 | 诊断文档 | 方案文档 | 备注 |
 | --- | --- | --- | --- |
@@ -225,6 +234,7 @@
 | --- | --- | --- | --- |
 | 任务执行引擎 | 🟡 已识别 | 边界已在任务定义与编排链路中被显式识别，但 `WorkflowFactory`、`DagExecutor`、`TaskRuntimeCommandAppService` 仍混合承载计划生成、调度、事件、快照与动态补图职责 | [2026-06-11-task-definition-and-orchestration-contract.md](/E:/java_study/Mul-agnet/docs/superpowers/task-definition-and-orchestration-contract/plan/2026-06-11-task-definition-and-orchestration-contract.md) |
 | 搜索执行引擎 | 🟡 已识别 | 优化需求已从搜索与采集链路中浮现；`Wave 6-9` 已把 family-first discovery 解释、`CollectionExecutionCoordinator`、正式 `collectionAudit` 子域、`collectionReplayTimeline`、`collectionAuditCheckpoint` 与包级复用语义收口进统一执行骨架，第七轮又进一步把 RSS owner 纳入同一执行与审计体系；但当前语义仍散落在 `CollectorAgent`、`SearchExecutionCoordinator`、`CandidateVerifier`、`CollectionTargetSelector`、`BrowserSearchRuntimeService` 等协作者中；`Source Family Catalog` 已有骨架，后续重点已转为跨重启 replay 持久化、下游业务质量闭环，以及如有需要再单开 news discovery 专题 | [CollectorAgent.md](/E:/java_study/Mul-agnet/docs/superpowers/search-and-collection/problem/CollectorAgent.md)、[2026-06-12-search-and-collection-execution-engine.md](/E:/java_study/Mul-agnet/docs/superpowers/search-and-collection/plan/2026-06-12-search-and-collection-execution-engine.md)、[2026-06-17-search-and-collection-architecture-design.md](/E:/java_study/Mul-agnet/docs/superpowers/search-and-collection/specs/2026-06-17-search-and-collection-architecture-design.md) |
+| Agent 协作编排引擎 | 🟡 已识别 | 已通过 3.4 架构规格明确其不是第十条业务链路，而是让业务 Agent、DAG 执行层、质量回流和对话动作入口形成统一协作决策的横切引擎；当前代码中的 `RevisionDirective.orchestrationAction`、`CompensationGraphAssembler`、`DynamicTaskGraphService`、`ClarificationOrchestrator` 等仍存在隐式编排语义，后续需按协议逐步迁移 | [2026-06-23-agent-collaboration-orchestration-architecture-spec.md](/E:/java_study/Mul-agnet/docs/superpowers/agent-collaboration-orchestration/specs/2026-06-23-agent-collaboration-orchestration-architecture-spec.md) |
 | 质量回流引擎 | ⬜ 隐式存在 | 系统中已存在“质量问题 -> 补证 / 重写 / 重跑 / 人工接管”的隐含转换，但仍待质量审查与修订重写两条链路共同诊断后再收口为独立引擎边界 | 当前总控层映射与现有运行时实现 |
 | 对话动作引擎 | ⬜ 隐式存在 | 统一入口已经形成，但动作预览、确认、正式执行的边界尚未通过正式链路诊断固化为独立引擎语义 | 当前总控层映射与现有会话实现 |
 
@@ -232,8 +242,9 @@
 
 1. `任务执行引擎`：计划生成、运行调度、事件投递、快照裁剪、动态补图已从混合服务中拆清；存在独立契约与独立测试，不再由 `WorkflowFactory` / `DagExecutor` / `TaskRuntimeCommandAppService` 交叉承载。
 2. `搜索执行引擎`：`SearchPolicyResolver` 成为唯一策略入口，`SearchExecutionCoordinator` 不再自行推导 fallback 顺序，搜索审计快照与恢复检查点契约稳定；至少一个真实 `PRIMARY_VERTICAL` source family 已通过正式 collection owner 进入真实链路，`resolveProviderRole` 能区分业务家族与公网辅助 discovery provider，搜索相关协作者已形成独立子域边界。
-3. `质量回流引擎`：质量问题分类、回流动作协议、受影响范围分析、动态补图模板已经独立成正式协作者，并由质量审查与修订重写两条链路共同消费。
-4. `对话动作引擎`：模式识别、动作预览、确认执行、正式命令桥接已形成独立契约与独立测试，不再散落在会话服务内部字符串判断。
+3. `Agent 协作编排引擎`：`CollaborationGoal / CollaborationPlan / AgentRoleAssignment / InitialPlanReview / CollaborationCheckpoint / AgentSuggestion / QualityDiagnosis / OrchestrationDecision / DecisionPolicyRuleSet / DecisionPolicyResult / DecisionExecutorAdapter / DynamicPlanMutation / DecisionTrace / OrchestratorCheckpoint` 等协议稳定；任务开始时 Orchestrator 能输出可审计协作计划，运行中 Reviewer 不再直接输出最终编排动作，Orchestrator 决策必须经过策略校验后由 DAG / 动态图服务执行，并能在任务回放中追溯 `sourceUrls / evidenceState`、计划原因、决策原因、执行结果和恢复游标。
+4. `质量回流引擎`：质量问题分类、回流动作协议、受影响范围分析、动态补图模板已经独立成正式协作者，并由质量审查与修订重写两条链路共同消费。
+5. `对话动作引擎`：模式识别、动作预览、确认执行、正式命令桥接已形成独立契约与独立测试，不再散落在会话服务内部字符串判断。
 
 ---
 

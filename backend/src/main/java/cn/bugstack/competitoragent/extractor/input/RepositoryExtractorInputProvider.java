@@ -1,10 +1,7 @@
 package cn.bugstack.competitoragent.extractor.input;
 
 import cn.bugstack.competitoragent.agent.AgentContext;
-import cn.bugstack.competitoragent.model.entity.EvidenceSource;
-import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
-import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceView;
-import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceViewAssembler;
+import cn.bugstack.competitoragent.task.SharedNodeOutputEnvelope;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -19,9 +16,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 基于 repository 的 extractor 输入提供者第一版实现。
- * P1 Task A 先把“读库 + 过滤 + 组装运行态输入包”的职责从 Agent 内部拔出来，
- * 后续预算控制、TopK、跳过原因等策略再继续在 Provider 层增强。
+ * 基于 repository-backed 端口的 extractor 输入提供者。
+ * 第三轮开始 Provider 只负责筛选、排序、预算控制和组包，
+ * 不再直接持有“从 repository 读 EvidenceSource 并解析 pageMetadata”的实现细节。
  */
 @Slf4j
 @Component
@@ -43,52 +40,28 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
             "NO_USABLE_CONTENT"
     );
 
-    private final EvidenceSourceRepository evidenceRepository;
-    private final DownstreamEvidenceViewAssembler downstreamEvidenceViewAssembler;
+    private final ExtractorEvidenceSourcePort extractorEvidenceSourcePort;
     private final ObjectMapper objectMapper;
 
     @Override
     public ExtractorInputPackage provide(AgentContext context) {
-        List<EvidenceSource> allEvidences = evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(context.getTaskId());
-        List<EvidenceSource> usableEvidences = new ArrayList<>();
-        List<EvidenceSource> skippedEvidences = new ArrayList<>();
-        for (EvidenceSource evidence : allEvidences == null ? List.<EvidenceSource>of() : allEvidences) {
-            if (isUsableEvidence(evidence)) {
-                usableEvidences.add(evidence);
-            } else {
-                skippedEvidences.add(evidence);
+        List<ExtractorEvidenceInput> allInputs = extractorEvidenceSourcePort.load(context);
+        List<ExtractorEvidenceInput> usableInputs = new ArrayList<>();
+        List<ExtractorEvidenceInput> skippedInputs = new ArrayList<>();
+        for (ExtractorEvidenceInput input : allInputs == null ? List.<ExtractorEvidenceInput>of() : allInputs) {
+            if (isUsableEvidence(input)) {
+                usableInputs.add(input);
+            } else if (input != null) {
+                skippedInputs.add(input.toBuilder()
+                        .issueFlags(appendIssueFlag(input.getIssueFlags(), "NO_USABLE_EVIDENCE"))
+                        .build()
+                        .normalized());
             }
         }
 
-        Map<String, List<EvidenceSource>> usableByCompetitor = groupByCompetitor(usableEvidences);
-        Map<String, List<EvidenceSource>> skippedByCompetitor = groupByCompetitor(skippedEvidences);
-        LinkedHashSet<String> competitorNames = new LinkedHashSet<>();
-        competitorNames.addAll(usableByCompetitor.keySet());
-        competitorNames.addAll(skippedByCompetitor.keySet());
-
+        Map<String, List<ExtractorEvidenceInput>> usableByCompetitor = groupByCompetitor(usableInputs);
+        Map<String, List<ExtractorEvidenceInput>> skippedByCompetitor = groupByCompetitor(skippedInputs);
         SchemaRuntimeConfig schemaRuntimeConfig = readSchemaRuntimeConfig(context == null ? null : context.getCurrentNodeConfig());
-        List<ExtractorCompetitorInput> competitors = new ArrayList<>();
-        for (String competitorName : competitorNames) {
-            List<DownstreamEvidenceView> normalizedUsableViews = normalizeViews(
-                    downstreamEvidenceViewAssembler.fromEvidenceSources(usableByCompetitor.getOrDefault(competitorName, List.of())));
-            List<DownstreamEvidenceView> enrichedUsableViews = enrichEvidenceViews(normalizedUsableViews);
-            List<DownstreamEvidenceView> skippedViews = normalizeViews(
-                    downstreamEvidenceViewAssembler.fromEvidenceSources(skippedByCompetitor.getOrDefault(competitorName, List.of())));
-            PromptSelection selection = selectPromptEvidence(enrichedUsableViews);
-            List<DownstreamEvidenceView> evidenceCatalog = selection.selectedEvidence();
-            List<DownstreamEvidenceView> traceableSkippedViews = new ArrayList<>(selection.skippedEvidence());
-            traceableSkippedViews.addAll(skippedViews);
-            competitors.add(ExtractorCompetitorInput.builder()
-                    .competitorName(competitorName)
-                    .evidenceCatalog(evidenceCatalog)
-                    .structuredEvidence(filterStructuredEvidence(evidenceCatalog))
-                    .readableEvidence(filterReadableEvidence(evidenceCatalog))
-                    .skippedEvidence(traceableSkippedViews)
-                    .sourceUrls(collectSourceUrls(evidenceCatalog))
-                    .issueFlags(collectIssueFlags(evidenceCatalog, traceableSkippedViews))
-                    .budget(buildBudget(selection.usedPromptEvidenceChars(), selection.truncated()))
-                    .build());
-        }
 
         return ExtractorInputPackage.builder()
                 .taskId(context == null ? null : context.getTaskId())
@@ -97,57 +70,80 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
                 .branchKey(context == null ? null : context.getBranchKey())
                 .schemaId(schemaRuntimeConfig.schemaId())
                 .dimensions(schemaRuntimeConfig.dimensions())
-                .competitors(competitors)
+                .inputSource("REPOSITORY_BACKED_PORT")
+                .auditRefs(buildAuditRefs(context))
+                .competitors(buildCompetitorInputs(usableByCompetitor, skippedByCompetitor))
                 .build();
     }
 
-    private Map<String, List<EvidenceSource>> groupByCompetitor(List<EvidenceSource> evidences) {
-        Map<String, List<EvidenceSource>> grouped = new LinkedHashMap<>();
-        for (EvidenceSource evidence : evidences == null ? List.<EvidenceSource>of() : evidences) {
+    private Map<String, List<ExtractorEvidenceInput>> groupByCompetitor(List<ExtractorEvidenceInput> evidences) {
+        Map<String, List<ExtractorEvidenceInput>> grouped = new LinkedHashMap<>();
+        for (ExtractorEvidenceInput evidence : evidences == null ? List.<ExtractorEvidenceInput>of() : evidences) {
             if (evidence == null) {
                 continue;
             }
             grouped.computeIfAbsent(firstNonBlank(evidence.getCompetitorName(), "UNKNOWN"), key -> new ArrayList<>())
-                    .add(evidence);
+                    .add(evidence.normalized());
         }
         return grouped;
     }
 
+    private List<ExtractorCompetitorInput> buildCompetitorInputs(Map<String, List<ExtractorEvidenceInput>> usableByCompetitor,
+                                                                 Map<String, List<ExtractorEvidenceInput>> skippedByCompetitor) {
+        LinkedHashSet<String> competitorNames = new LinkedHashSet<>();
+        competitorNames.addAll(usableByCompetitor.keySet());
+        competitorNames.addAll(skippedByCompetitor.keySet());
+
+        List<ExtractorCompetitorInput> competitors = new ArrayList<>();
+        for (String competitorName : competitorNames) {
+            List<ExtractorEvidenceInput> normalizedUsableInputs = normalizeInputs(
+                    usableByCompetitor.getOrDefault(competitorName, List.of()));
+            List<ExtractorEvidenceInput> enrichedUsableInputs = enrichEvidenceInputs(normalizedUsableInputs);
+            List<ExtractorEvidenceInput> normalizedSkippedInputs = normalizeInputs(
+                    skippedByCompetitor.getOrDefault(competitorName, List.of()));
+            PromptSelection selection = selectPromptEvidence(enrichedUsableInputs);
+            List<ExtractorEvidenceInput> evidenceCatalog = selection.selectedEvidence();
+            List<ExtractorEvidenceInput> traceableSkippedInputs = new ArrayList<>(selection.skippedEvidence());
+            traceableSkippedInputs.addAll(normalizedSkippedInputs);
+            competitors.add(ExtractorCompetitorInput.builder()
+                    .competitorName(competitorName)
+                    .evidenceCatalog(evidenceCatalog)
+                    .structuredEvidence(filterStructuredEvidence(evidenceCatalog))
+                    .readableEvidence(filterReadableEvidence(evidenceCatalog))
+                    .skippedEvidence(traceableSkippedInputs)
+                    .sourceUrls(collectSourceUrls(evidenceCatalog))
+                    .issueFlags(collectIssueFlags(evidenceCatalog, traceableSkippedInputs))
+                    .budget(buildBudget(selection.usedPromptEvidenceChars(), selection.truncated()))
+                    .build());
+        }
+        return competitors;
+    }
+
     /**
-     * P1 Task A 先把 extractor 入口的可用性判断收口到 Provider，
-     * 让 Agent 后续可以完全基于输入包解释“哪些证据进入了本轮抽取”。
+     * Provider 侧统一判断“什么输入有资格进入 extractor 选择队列”，
+     * 这样下游看到的 skippedEvidence 就能直接解释被拦下的原因。
      */
-    private boolean isUsableEvidence(EvidenceSource evidence) {
-        if (evidence == null) {
+    private boolean isUsableEvidence(ExtractorEvidenceInput input) {
+        if (input == null) {
             return false;
         }
-        boolean hasContent = hasText(evidence.getFullContent());
-        boolean hasSnippet = hasText(evidence.getContentSnippet());
-        boolean hasStructuredEvidence = hasStructuredEvidence(evidence);
-        return hasContent || hasSnippet || hasStructuredEvidence;
+        boolean hasContent = hasText(input.getContent());
+        boolean hasStructuredEvidence = hasStructuredEvidence(input);
+        return hasContent || hasStructuredEvidence;
     }
 
-    private boolean hasStructuredEvidence(EvidenceSource evidence) {
-        if (evidence == null || !hasText(evidence.getPageMetadata())) {
+    private boolean hasStructuredEvidence(ExtractorEvidenceInput input) {
+        if (input == null) {
             return false;
         }
-        try {
-            JsonNode metadata = objectMapper.readTree(evidence.getPageMetadata());
-            JsonNode structuredBlocks = metadata.path("structuredBlocks");
-            JsonNode structuredPayload = metadata.path("structuredPayload");
-            return (structuredBlocks.isArray() && !structuredBlocks.isEmpty())
-                    || (structuredPayload.isObject() && !structuredPayload.isEmpty())
-                    || (structuredPayload.isArray() && !structuredPayload.isEmpty());
-        } catch (Exception e) {
-            log.warn("provider failed to parse pageMetadata for structured evidence, evidenceId={}",
-                    evidence.getEvidenceId(), e);
-            return false;
-        }
+        boolean hasStructuredBlocks = input.getStructuredBlocks() != null && !input.getStructuredBlocks().isEmpty();
+        boolean hasStructuredPayload = input.getStructuredPayload() != null && !input.getStructuredPayload().isEmpty();
+        return hasStructuredBlocks || hasStructuredPayload;
     }
 
-    private List<DownstreamEvidenceView> filterStructuredEvidence(List<DownstreamEvidenceView> evidences) {
-        List<DownstreamEvidenceView> structured = new ArrayList<>();
-        for (DownstreamEvidenceView evidence : evidences == null ? List.<DownstreamEvidenceView>of() : evidences) {
+    private List<ExtractorEvidenceInput> filterStructuredEvidence(List<ExtractorEvidenceInput> evidences) {
+        List<ExtractorEvidenceInput> structured = new ArrayList<>();
+        for (ExtractorEvidenceInput evidence : evidences == null ? List.<ExtractorEvidenceInput>of() : evidences) {
             if (evidence != null && evidence.getStructuredBlocks() != null && !evidence.getStructuredBlocks().isEmpty()) {
                 structured.add(evidence);
             }
@@ -155,9 +151,9 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
         return structured;
     }
 
-    private List<DownstreamEvidenceView> filterReadableEvidence(List<DownstreamEvidenceView> evidences) {
-        List<DownstreamEvidenceView> readable = new ArrayList<>();
-        for (DownstreamEvidenceView evidence : evidences == null ? List.<DownstreamEvidenceView>of() : evidences) {
+    private List<ExtractorEvidenceInput> filterReadableEvidence(List<ExtractorEvidenceInput> evidences) {
+        List<ExtractorEvidenceInput> readable = new ArrayList<>();
+        for (ExtractorEvidenceInput evidence : evidences == null ? List.<ExtractorEvidenceInput>of() : evidences) {
             if (evidence == null || !hasText(evidence.getContent())) {
                 continue;
             }
@@ -174,22 +170,23 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
     }
 
     /**
-     * Provider 侧先把薄正文和显式缺口标记补齐，避免 Agent 再从 prompt 文本里反推输入质量。
+     * 在 Provider 层补齐薄正文标记，避免 extractor 只能从 prompt 文本里倒推输入质量。
      */
-    private List<DownstreamEvidenceView> enrichEvidenceViews(List<DownstreamEvidenceView> evidences) {
-        List<DownstreamEvidenceView> enriched = new ArrayList<>();
-        for (DownstreamEvidenceView evidence : evidences == null ? List.<DownstreamEvidenceView>of() : evidences) {
+    private List<ExtractorEvidenceInput> enrichEvidenceInputs(List<ExtractorEvidenceInput> evidences) {
+        List<ExtractorEvidenceInput> enriched = new ArrayList<>();
+        for (ExtractorEvidenceInput evidence : evidences == null ? List.<ExtractorEvidenceInput>of() : evidences) {
             if (evidence == null) {
                 continue;
             }
-            LinkedHashSet<String> issueFlags = new LinkedHashSet<>(evidence.getIssueFlags() == null ? List.of() : evidence.getIssueFlags());
-            boolean hasStructuredBlocks = evidence.getStructuredBlocks() != null && !evidence.getStructuredBlocks().isEmpty();
-            String content = evidence.getContent() == null ? "" : evidence.getContent().trim();
-            if (!hasStructuredBlocks && hasText(content) && content.length() < THIN_CONTENT_THRESHOLD) {
-                issueFlags.add("THIN_CONTENT_ONLY");
-            }
+            List<String> issueFlags = appendIssueFlag(
+                    evidence.getIssueFlags(),
+                    !hasStructuredEvidence(evidence)
+                            && hasText(evidence.getContent())
+                            && evidence.getContent().trim().length() < THIN_CONTENT_THRESHOLD
+                            ? "THIN_CONTENT_ONLY"
+                            : null);
             enriched.add(evidence.toBuilder()
-                    .issueFlags(new ArrayList<>(issueFlags))
+                    .issueFlags(issueFlags)
                     .build()
                     .normalized());
         }
@@ -197,31 +194,30 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
     }
 
     /**
-     * P1 Task B 要求在 Provider 层就收口“什么证据真正进入 Prompt”。
-     * 这里先按结构块、来源类型、质量分排序，再在总预算内截取，超预算证据转成可追溯的轻量 skipped 视图。
-     * 同时为核心来源类型保留最低预算，避免某一条超长 structured docs 抢占全部 prompt，
-     * 导致 pricing / official / api 等下游关键字段完全没有可读证据。
+     * 统一在 Provider 层决定真正进入 prompt 的证据集合。
+     * 排序、预算和跳过原因都必须在这里固定下来，后续 replay 才能解释“为什么这一轮看到的是这些正文”。
      */
-    private PromptSelection selectPromptEvidence(List<DownstreamEvidenceView> evidences) {
-        List<DownstreamEvidenceView> sorted = new ArrayList<>(evidences == null ? List.of() : evidences);
+    private PromptSelection selectPromptEvidence(List<ExtractorEvidenceInput> evidences) {
+        List<ExtractorEvidenceInput> sorted = new ArrayList<>(evidences == null ? List.of() : evidences);
         sorted.sort(Comparator
                 .comparing(this::structuredPriority)
                 .thenComparing(this::sourceTypePriority)
                 .thenComparing(this::qualityScorePriority)
                 .thenComparing(view -> firstNonBlank(view == null ? null : view.getEvidenceId(), "ZZZ")));
-        List<DownstreamEvidenceView> selected = new ArrayList<>();
-        List<DownstreamEvidenceView> skipped = new ArrayList<>();
+
+        List<ExtractorEvidenceInput> selected = new ArrayList<>();
+        List<ExtractorEvidenceInput> skipped = new ArrayList<>();
         LinkedHashSet<String> selectedDiversitySourceTypes = new LinkedHashSet<>();
         int usedPromptEvidenceChars = 0;
         boolean truncated = false;
         for (int index = 0; index < sorted.size(); index++) {
-            DownstreamEvidenceView evidence = sorted.get(index);
+            ExtractorEvidenceInput evidence = sorted.get(index);
             if (evidence == null) {
                 continue;
             }
             int evidenceChars = promptEvidenceChars(evidence);
             if (usedPromptEvidenceChars >= DEFAULT_MAX_PROMPT_EVIDENCE_CHARS) {
-                skipped.add(buildTraceOnlySkippedView(evidence, "PROMPT_BUDGET_SKIPPED"));
+                skipped.add(buildTraceOnlySkippedInput(evidence, "PROMPT_BUDGET_SKIPPED"));
                 truncated = true;
                 continue;
             }
@@ -235,12 +231,12 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
                 continue;
             }
             if (maxCharsForCurrentEvidence <= 0) {
-                skipped.add(buildTraceOnlySkippedView(evidence, "PROMPT_BUDGET_SKIPPED"));
+                skipped.add(buildTraceOnlySkippedInput(evidence, "PROMPT_BUDGET_SKIPPED"));
                 truncated = true;
                 continue;
             }
             if (evidenceChars > maxCharsForCurrentEvidence) {
-                DownstreamEvidenceView truncatedEvidence = truncateEvidenceForPrompt(evidence, maxCharsForCurrentEvidence);
+                ExtractorEvidenceInput truncatedEvidence = truncateEvidenceForPrompt(evidence, maxCharsForCurrentEvidence);
                 selected.add(truncatedEvidence);
                 addDiversitySourceType(selectedDiversitySourceTypes, truncatedEvidence);
                 usedPromptEvidenceChars += promptEvidenceChars(truncatedEvidence);
@@ -255,20 +251,19 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
     }
 
     /**
-     * 为尚未进入 prompt 的核心来源类型预留最小正文额度。
-     * 这不是提高某类来源的总权重，而是在预算紧张时保证字段覆盖面：
-     * 例如 structured DOCS 很长时，仍要给 PRICING 留出一段可读正文供抽取定价字段。
+     * 为尚未进入 prompt 的核心来源类型预留最低正文额度，
+     * 防止某一条超长 docs 证据挤掉 pricing / official 等关键来源。
      */
-    private int reservePromptCharsForPendingSourceTypes(List<DownstreamEvidenceView> sorted,
+    private int reservePromptCharsForPendingSourceTypes(List<ExtractorEvidenceInput> sorted,
                                                         int startIndex,
                                                         LinkedHashSet<String> selectedDiversitySourceTypes,
-                                                        DownstreamEvidenceView currentEvidence) {
+                                                        ExtractorEvidenceInput currentEvidence) {
         LinkedHashSet<String> reservedSourceTypes = new LinkedHashSet<>(
                 selectedDiversitySourceTypes == null ? List.of() : selectedDiversitySourceTypes);
         addDiversitySourceType(reservedSourceTypes, currentEvidence);
         int reservedChars = 0;
         for (int index = startIndex; index < (sorted == null ? 0 : sorted.size()); index++) {
-            DownstreamEvidenceView candidate = sorted.get(index);
+            ExtractorEvidenceInput candidate = sorted.get(index);
             String sourceType = diversitySourceType(candidate);
             if (!hasText(sourceType) || reservedSourceTypes.contains(sourceType)) {
                 continue;
@@ -284,26 +279,23 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
     }
 
     private void addDiversitySourceType(LinkedHashSet<String> selectedDiversitySourceTypes,
-                                        DownstreamEvidenceView evidence) {
+                                        ExtractorEvidenceInput evidence) {
         String sourceType = diversitySourceType(evidence);
         if (selectedDiversitySourceTypes != null && hasText(sourceType)) {
             selectedDiversitySourceTypes.add(sourceType);
         }
     }
 
-    private String diversitySourceType(DownstreamEvidenceView evidence) {
+    private String diversitySourceType(ExtractorEvidenceInput evidence) {
         String sourceType = firstNonBlank(evidence == null ? null : evidence.getSourceType(), "");
         return CORE_PROMPT_DIVERSITY_SOURCE_TYPES.contains(sourceType) ? sourceType : "";
     }
 
-    private int structuredPriority(DownstreamEvidenceView evidence) {
-        boolean hasStructuredBlocks = evidence != null
-                && evidence.getStructuredBlocks() != null
-                && !evidence.getStructuredBlocks().isEmpty();
-        return hasStructuredBlocks ? 0 : 1;
+    private int structuredPriority(ExtractorEvidenceInput evidence) {
+        return hasStructuredEvidence(evidence) ? 0 : 1;
     }
 
-    private int sourceTypePriority(DownstreamEvidenceView evidence) {
+    private int sourceTypePriority(ExtractorEvidenceInput evidence) {
         String sourceType = firstNonBlank(evidence == null ? null : evidence.getSourceType(), "UNKNOWN");
         return switch (sourceType) {
             case "OFFICIAL" -> 0;
@@ -317,23 +309,23 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
         };
     }
 
-    private double qualityScorePriority(DownstreamEvidenceView evidence) {
+    private double qualityScorePriority(ExtractorEvidenceInput evidence) {
         if (evidence == null || evidence.getQuality() == null || evidence.getQuality().getQualityScore() == null) {
             return 1.0d;
         }
         return -evidence.getQuality().getQualityScore();
     }
 
-    private int promptEvidenceChars(DownstreamEvidenceView evidence) {
+    private int promptEvidenceChars(ExtractorEvidenceInput evidence) {
         String content = evidence == null || evidence.getContent() == null ? "" : evidence.getContent().trim();
         return content.length();
     }
 
     /**
-     * 当高优先级证据超出剩余额度时，优先保留它的截断正文，而不是整条丢弃。
-     * 截断标记也计入预算，确保账面 prompt 预算与实际进入下游的正文长度一致。
+     * 当证据超过剩余额度时保留截断正文，而不是整条丢弃。
+     * 这样 extractor 至少还能看到来源、结构块和部分正文，并且预算统计与真实 prompt 一致。
      */
-    private DownstreamEvidenceView truncateEvidenceForPrompt(DownstreamEvidenceView evidence, int maxChars) {
+    private ExtractorEvidenceInput truncateEvidenceForPrompt(ExtractorEvidenceInput evidence, int maxChars) {
         if (evidence == null) {
             return null;
         }
@@ -345,38 +337,35 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
         String truncatedContent = maxChars <= truncatedMarker.length()
                 ? truncatedMarker.substring(0, maxChars)
                 : content.substring(0, maxChars - truncatedMarker.length()) + truncatedMarker;
-        LinkedHashSet<String> issueFlags = new LinkedHashSet<>(evidence.getIssueFlags() == null ? List.of() : evidence.getIssueFlags());
-        issueFlags.add("PROMPT_CONTENT_TRUNCATED");
         return evidence.toBuilder()
                 .content(truncatedContent)
-                .issueFlags(new ArrayList<>(issueFlags))
+                .issueFlags(appendIssueFlag(evidence.getIssueFlags(), "PROMPT_CONTENT_TRUNCATED"))
                 .build()
                 .normalized();
     }
 
-    private DownstreamEvidenceView buildTraceOnlySkippedView(DownstreamEvidenceView evidence, String skipReason) {
-        LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
-        if (evidence != null && evidence.getIssueFlags() != null) {
-            issueFlags.addAll(evidence.getIssueFlags());
+    private ExtractorEvidenceInput buildTraceOnlySkippedInput(ExtractorEvidenceInput evidence, String skipReason) {
+        if (evidence == null) {
+            return null;
         }
-        issueFlags.add(skipReason);
-        return DownstreamEvidenceView.builder()
-                .evidenceId(evidence == null ? null : evidence.getEvidenceId())
-                .competitorName(evidence == null ? null : evidence.getCompetitorName())
-                .sourceType(evidence == null ? null : evidence.getSourceType())
-                .title(evidence == null ? null : evidence.getTitle())
+        return evidence.toBuilder()
                 .content("")
-                .sourceUrls(evidence == null || evidence.getSourceUrls() == null ? List.of() : evidence.getSourceUrls())
-                .issueFlags(new ArrayList<>(issueFlags))
-                .qualitySignals(List.of(skipReason))
-                .structuredBlocks(List.of())
+                .issueFlags(appendIssueFlag(evidence.getIssueFlags(), skipReason))
+                .qualitySignals(appendIssueFlag(evidence.getQualitySignals(), skipReason))
                 .structuredPayload(Map.of())
-                .quality(evidence == null ? null : evidence.getQuality())
                 .build()
                 .normalized();
     }
 
-    private boolean containsAnyIssueFlag(DownstreamEvidenceView evidence, List<String> expectedFlags) {
+    private List<String> appendIssueFlag(List<String> issueFlags, String newIssueFlag) {
+        LinkedHashSet<String> merged = new LinkedHashSet<>(issueFlags == null ? List.of() : issueFlags);
+        if (hasText(newIssueFlag)) {
+            merged.add(newIssueFlag.trim());
+        }
+        return new ArrayList<>(merged);
+    }
+
+    private boolean containsAnyIssueFlag(ExtractorEvidenceInput evidence, List<String> expectedFlags) {
         for (String expectedFlag : expectedFlags == null ? List.<String>of() : expectedFlags) {
             if (containsIssueFlag(evidence, expectedFlag)) {
                 return true;
@@ -385,7 +374,7 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
         return false;
     }
 
-    private boolean containsIssueFlag(DownstreamEvidenceView evidence, String expectedFlag) {
+    private boolean containsIssueFlag(ExtractorEvidenceInput evidence, String expectedFlag) {
         if (evidence == null || evidence.getIssueFlags() == null || !hasText(expectedFlag)) {
             return false;
         }
@@ -397,19 +386,19 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
         return false;
     }
 
-    private List<DownstreamEvidenceView> normalizeViews(List<DownstreamEvidenceView> views) {
-        List<DownstreamEvidenceView> normalized = new ArrayList<>();
-        for (DownstreamEvidenceView view : views == null ? List.<DownstreamEvidenceView>of() : views) {
-            if (view != null) {
-                normalized.add(view.normalized());
+    private List<ExtractorEvidenceInput> normalizeInputs(List<ExtractorEvidenceInput> inputs) {
+        List<ExtractorEvidenceInput> normalized = new ArrayList<>();
+        for (ExtractorEvidenceInput input : inputs == null ? List.<ExtractorEvidenceInput>of() : inputs) {
+            if (input != null) {
+                normalized.add(input.normalized());
             }
         }
         return normalized;
     }
 
-    private List<String> collectSourceUrls(List<DownstreamEvidenceView> evidences) {
+    private List<String> collectSourceUrls(List<ExtractorEvidenceInput> evidences) {
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
-        for (DownstreamEvidenceView evidence : evidences == null ? List.<DownstreamEvidenceView>of() : evidences) {
+        for (ExtractorEvidenceInput evidence : evidences == null ? List.<ExtractorEvidenceInput>of() : evidences) {
             if (evidence == null || evidence.getSourceUrls() == null) {
                 continue;
             }
@@ -422,15 +411,20 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
         return new ArrayList<>(sourceUrls);
     }
 
-    private List<String> collectIssueFlags(List<DownstreamEvidenceView> evidences, List<DownstreamEvidenceView> skippedEvidence) {
+    private List<String> collectIssueFlags(List<ExtractorEvidenceInput> evidences, List<ExtractorEvidenceInput> skippedEvidence) {
         LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
-        for (DownstreamEvidenceView evidence : evidences == null ? List.<DownstreamEvidenceView>of() : evidences) {
+        for (ExtractorEvidenceInput evidence : evidences == null ? List.<ExtractorEvidenceInput>of() : evidences) {
             if (evidence != null && evidence.getIssueFlags() != null) {
                 issueFlags.addAll(evidence.getIssueFlags());
             }
         }
         if (skippedEvidence != null && !skippedEvidence.isEmpty()) {
             issueFlags.add("SKIPPED_UNUSABLE_EVIDENCE");
+            for (ExtractorEvidenceInput skippedInput : skippedEvidence) {
+                if (skippedInput != null && skippedInput.getIssueFlags() != null) {
+                    issueFlags.addAll(skippedInput.getIssueFlags());
+                }
+            }
         }
         return new ArrayList<>(issueFlags);
     }
@@ -441,6 +435,47 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
         budget.put("usedPromptEvidenceChars", usedPromptEvidenceChars);
         budget.put("truncated", truncated);
         return budget;
+    }
+
+    /**
+     * auditRefs 只提供来源与可用性诊断，不允许反向替代 extractor 正文输入。
+     * 这样 replay / cache 看得到“为什么能或不能解释这轮输入”，但不会把 shared envelope 误当成正式正文来源。
+     */
+    private Map<String, Object> buildAuditRefs(AgentContext context) {
+        int collectorEnvelopeCount = 0;
+        LinkedHashSet<String> projectionTypes = new LinkedHashSet<>();
+        for (Map.Entry<String, SharedNodeOutputEnvelope> entry :
+                (context == null || context.getSharedOutputEnvelopes() == null
+                        ? Map.<String, SharedNodeOutputEnvelope>of()
+                        : context.getSharedOutputEnvelopes()).entrySet()) {
+            if (entry.getKey() == null || !entry.getKey().startsWith("collect")) {
+                continue;
+            }
+            SharedNodeOutputEnvelope envelope = entry.getValue();
+            collectorEnvelopeCount++;
+            if (envelope != null && hasText(envelope.getProjectionType())) {
+                projectionTypes.add(envelope.getProjectionType().trim());
+            }
+        }
+        boolean hasSearchProjection = projectionTypes.contains("SEARCH_SHARED_PROJECTION_V1");
+        String searchAuditAvailabilityReason = collectorEnvelopeCount == 0
+                ? "COLLECTOR_SHARED_ENVELOPE_MISSING"
+                : hasSearchProjection ? "SEARCH_SHARED_PROJECTION_READY" : "SEARCH_SHARED_PROJECTION_NOT_FOUND";
+        String collectionAuditAvailabilityReason = collectorEnvelopeCount == 0
+                ? "COLLECTOR_SHARED_ENVELOPE_MISSING"
+                : "COLLECTOR_SHARED_ENVELOPE_READY";
+        return Map.of(
+                "collectorEnvelopeCount", collectorEnvelopeCount,
+                "projectionTypes", new ArrayList<>(projectionTypes),
+                "searchAudit", Map.of(
+                        "available", hasSearchProjection,
+                        "availabilityReason", searchAuditAvailabilityReason,
+                        "usage", "用于解释来源发现与采集路径，不直接替代 extractor 正文输入"),
+                "collectionAudit", Map.of(
+                        "available", collectorEnvelopeCount > 0,
+                        "availabilityReason", collectionAuditAvailabilityReason,
+                        "usage", "用于解释采集失败、降级与 skippedEvidence 来源")
+        );
     }
 
     private SchemaRuntimeConfig readSchemaRuntimeConfig(String currentNodeConfig) {
@@ -481,8 +516,8 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
     private record SchemaRuntimeConfig(Long schemaId, List<String> dimensions) {
     }
 
-    private record PromptSelection(List<DownstreamEvidenceView> selectedEvidence,
-                                   List<DownstreamEvidenceView> skippedEvidence,
+    private record PromptSelection(List<ExtractorEvidenceInput> selectedEvidence,
+                                   List<ExtractorEvidenceInput> skippedEvidence,
                                    int usedPromptEvidenceChars,
                                    boolean truncated) {
     }

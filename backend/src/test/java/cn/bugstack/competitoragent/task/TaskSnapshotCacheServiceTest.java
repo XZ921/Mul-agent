@@ -13,6 +13,7 @@ import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -191,5 +192,50 @@ class TaskSnapshotCacheServiceTest {
         assertEquals("SEARCH_SHARED_PROJECTION_V1", cachedEnvelopes.get("collect_sources_web").getProjectionType());
         assertEquals("collect_sources_web", cachedEnvelopes.get("collect_sources_web").getNodeName());
         assertTrue(cachedEnvelopes.get("collect_sources_web").getPayloadJson().contains("https://docs.example.com"));
+    }
+
+    @Test
+    void shouldLoadExtractorSharedEnvelopeWithInputSourceAndAuditRefs() {
+        Long taskId = 51L;
+        SharedNodeOutputEnvelope envelope = SharedNodeOutputEnvelope.builder()
+                .taskId(taskId)
+                .nodeName("extract_schema")
+                .planVersionId(3L)
+                .projectionType("EXTRACT_SHARED_PROJECTION_V1")
+                .payloadJson("""
+                        {
+                          "projectionType":"EXTRACT_SHARED_PROJECTION_V1",
+                          "extractorInput":{
+                            "inputSource":"REPOSITORY_BACKED_PORT",
+                            "auditRefs":{"searchAudit":{"available":true}},
+                            "competitors":[{"competitorName":"Acme","readableEvidence":[{"evidenceId":"E001","content":""}]}]
+                          },
+                          "sourceUrls":["https://docs.example.com/pricing"]
+                        }
+                        """)
+                .sourceUrls(List.of("https://docs.example.com/pricing"))
+                .build();
+
+        cacheService.cacheSharedOutputEnvelope(taskId, envelope);
+        when(hashOperations.entries("competitor-agent:task:runtime:51"))
+                .thenReturn(Map.of(
+                        "extract_schema",
+                        """
+                        {
+                          "taskId":51,
+                          "nodeName":"extract_schema",
+                          "planVersionId":3,
+                          "projectionType":"EXTRACT_SHARED_PROJECTION_V1",
+                          "payloadJson":"{\\"projectionType\\":\\"EXTRACT_SHARED_PROJECTION_V1\\",\\"extractorInput\\":{\\"inputSource\\":\\"REPOSITORY_BACKED_PORT\\",\\"auditRefs\\":{\\"searchAudit\\":{\\"available\\":true}},\\"competitors\\":[{\\"competitorName\\":\\"Acme\\",\\"readableEvidence\\":[{\\"evidenceId\\":\\"E001\\",\\"content\\":\\"\\"}]}]},\\"sourceUrls\\":[\\"https://docs.example.com/pricing\\"]}",
+                          "sourceUrls":["https://docs.example.com/pricing"]
+                        }
+                        """
+                ));
+
+        Map<String, SharedNodeOutputEnvelope> outputs = cacheService.getCachedSharedOutputEnvelopes(taskId);
+
+        assertEquals("EXTRACT_SHARED_PROJECTION_V1", outputs.get("extract_schema").getProjectionType());
+        assertTrue(outputs.get("extract_schema").getPayloadJson().contains("REPOSITORY_BACKED_PORT"));
+        assertTrue(outputs.get("extract_schema").getPayloadJson().contains("searchAudit"));
     }
 }

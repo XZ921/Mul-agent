@@ -140,6 +140,12 @@ ExtractorInputProvider
 - replay / cache 只能替换 Provider 内部的数据来源，不能绕过 Provider 直接向 Prompt 写入原始证据正文。
 - `DownstreamEvidenceView` 继续只承担下游轻量证据视图职责；如果未来需要承载 extractor 内部长正文，应新建输入投影视图，而不是把长正文重新塞回 shared output。
 
+第三轮已落地事实（2026-06-23）：
+
+- `RepositoryExtractorInputProvider` 已改成只保留筛选、排序、预算和组包职责；
+- repository-backed 正文读取已收口到 `ExtractorEvidenceSourcePort -> RepositoryExtractorEvidenceSourcePort`；
+- `SchemaExtractorAgent` 已直接消费 `ExtractorEvidenceInput`，不再把内部输入回建成旧 `EvidenceSource` 作为正式主链。
+
 ### 5.2 ExtractorInputPackage
 
 `ExtractorInputPackage` 应承载 extractor 本次执行需要的全部输入事实：
@@ -152,6 +158,7 @@ ExtractorInputProvider
   "branchKey": "root",
   "schemaId": 1,
   "dimensions": [],
+  "inputSource": "REPOSITORY_BACKED_PORT",
   "competitors": [
     {
       "competitorName": "Notion AI",
@@ -462,6 +469,12 @@ Prompt 必须要求模型只返回 JSON，并遵守：
 - `RepositoryExtractorInputProvider` 仍是 repository-backed 第一版适配器；
 - 下一阶段要继续收的是 Provider 内部数据源治理，而不是把输入边界重新摊回 Agent；
 - `DownstreamEvidenceView` 不再回退为跨节点长正文载体，长正文仍只允许停留在正式证据存储或 extractor 一次性输入包内。
+
+当前状态补充（2026-06-23 第三轮后）：
+
+- `ExtractorEvidenceInput` 与 `DownstreamEvidenceView` 已正式拆分：前者只留在 extractor 内部，后者继续作为轻量下游追溯契约；
+- `ExtractorInputPackage` 已补齐 `inputSource` 与 `auditRefs`，并可通过 extract shared projection、shared output envelope 与 Redis runtime cache 持续回放；
+- `RepositoryExtractorInputProvider` 当前稳定对外暴露 `inputSource=REPOSITORY_BACKED_PORT`，后续 replay/cache 只能通过替换来源端口实现接入。
 
 ### 后续：长期架构演进
 

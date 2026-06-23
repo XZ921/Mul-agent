@@ -53,10 +53,13 @@ public class ExtractSharedProjection {
         if (output == null || !output.isObject()) {
             return false;
         }
-        return output.has("drafts")
-                || output.has("extractorInput")
-                || output.has("downstreamEvidenceViews")
-                || output.has("evidenceFragments");
+        /*
+         * Collector 输出也会携带 evidenceFragments / downstreamEvidenceViews，
+         * 如果这里只按“证据字段存在”判断，就会把 collect_* 节点误投影成 extractor shared projection。
+         * 真正的 extract_schema 输出至少会带 extractorInput 或 drafts，
+         * 因此这里收紧识别条件，只接受明确属于 extractor 契约的字段组合。
+         */
+        return output.has("drafts") || output.has("extractorInput");
     }
 
     public static ExtractSharedProjection fromExtractorOutput(ObjectMapper objectMapper, String rawOutput) {

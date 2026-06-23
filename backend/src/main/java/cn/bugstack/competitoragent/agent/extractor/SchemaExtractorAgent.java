@@ -5,8 +5,11 @@ import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.agent.BaseAgent;
 import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.extractor.input.ExtractorCompetitorInput;
+import cn.bugstack.competitoragent.extractor.input.ExtractorEvidenceInput;
+import cn.bugstack.competitoragent.extractor.input.ExtractorEvidenceInputAssembler;
 import cn.bugstack.competitoragent.extractor.input.ExtractorInputPackage;
 import cn.bugstack.competitoragent.extractor.input.ExtractorInputProvider;
+import cn.bugstack.competitoragent.extractor.input.RepositoryExtractorEvidenceSourcePort;
 import cn.bugstack.competitoragent.extractor.input.RepositoryExtractorInputProvider;
 import cn.bugstack.competitoragent.extractor.ExtractSharedOutputSanitizer;
 import cn.bugstack.competitoragent.llm.LlmClient;
@@ -132,8 +135,9 @@ public class SchemaExtractorAgent extends BaseAgent {
                 : downstreamEvidenceViewAssembler;
         this.extractorInputProvider = extractorInputProvider == null
                 ? new RepositoryExtractorInputProvider(
-                evidenceRepository,
-                this.downstreamEvidenceViewAssembler,
+                new RepositoryExtractorEvidenceSourcePort(
+                        evidenceRepository,
+                        new ExtractorEvidenceInputAssembler(objectMapper)),
                 objectMapper)
                 : extractorInputProvider;
     }
@@ -287,22 +291,21 @@ public class SchemaExtractorAgent extends BaseAgent {
                                                  ExtractorCompetitorInput competitorInput)
             throws LlmException, JsonProcessingException {
         String competitorName = competitorInput == null ? "" : safe(competitorInput.getCompetitorName());
-        List<DownstreamEvidenceView> evidenceCatalog = normalizeDownstreamEvidenceViews(
+        List<ExtractorEvidenceInput> evidenceCatalog = normalizeEvidenceInputs(
                 competitorInput == null ? List.of() : competitorInput.getEvidenceCatalog());
-        List<DownstreamEvidenceView> structuredEvidenceViews = normalizeDownstreamEvidenceViews(
+        List<ExtractorEvidenceInput> structuredEvidenceInputs = normalizeEvidenceInputs(
                 competitorInput == null ? List.of() : competitorInput.getStructuredEvidence());
-        List<DownstreamEvidenceView> readableEvidenceViews = normalizeDownstreamEvidenceViews(
+        List<ExtractorEvidenceInput> readableEvidenceInputs = normalizeEvidenceInputs(
                 competitorInput == null ? List.of() : competitorInput.getReadableEvidence());
-        List<EvidenceSource> competitorEvidence = rebuildEvidenceSources(competitorInput);
         Map<String, String> promptVariables = new LinkedHashMap<>();
         promptVariables.put("competitorName", competitorName);
         promptVariables.put("schemaGuidance", buildSchemaGuidance(inputPackage, context == null ? null : context.getCurrentNodeConfig()));
         promptVariables.put("fieldExtractionGuidance", buildFieldExtractionGuidance());
         promptVariables.put("evidenceCatalog", buildEvidenceCatalog(evidenceCatalog));
-        promptVariables.put("structuredEvidence", buildStructuredEvidence(structuredEvidenceViews));
+        promptVariables.put("structuredEvidence", buildStructuredEvidence(structuredEvidenceInputs));
         promptVariables.put("qualitySignalGuidance", buildQualitySignalGuidance(evidenceCatalog));
-        promptVariables.put("readableContent", buildReadableContent(readableEvidenceViews));
-        // 迁移期继续保留 collectedContent，避免现有依赖 prompt 变量的链路在 P0 阶段直接失效。
+        promptVariables.put("readableContent", buildReadableContent(readableEvidenceInputs));
+        // 迁移期继续保留 collectedContent，但内容直接来自 extractor 内部输入投影，不再回转旧统一视图。
         promptVariables.put("collectedContent", buildCollectedContent(evidenceCatalog));
         // 统一任务上下文在这里透传给 Prompt，保证提取阶段也能看到检索结论与缺口说明。
         promptVariables.put("taskRagContext", context == null ? "当前暂无检索上下文。" : context.getTaskRagPromptContext());
@@ -310,12 +313,11 @@ public class SchemaExtractorAgent extends BaseAgent {
 
         NormalizedSchema firstPass = invokeExtractorOnce(
                 competitorName,
-                competitorEvidence,
                 evidenceCatalog,
                 prompt,
                 false
         );
-        if (countExtractedFields(firstPass.schema()) > 0 || !hasReadableEvidenceContent(readableEvidenceViews)) {
+        if (countExtractedFields(firstPass.schema()) > 0 || !hasReadableEvidenceContent(readableEvidenceInputs)) {
             return firstPass;
         }
         // 只有“JSON 合法但 0 业务字段，且正文确实可读”时，才补一次语义重试，
@@ -324,7 +326,6 @@ public class SchemaExtractorAgent extends BaseAgent {
                 competitorName);
         return invokeExtractorOnce(
                 competitorName,
-                competitorEvidence,
                 evidenceCatalog,
                 prompt,
                 true
@@ -335,8 +336,7 @@ public class SchemaExtractorAgent extends BaseAgent {
      * 单次业务调用内部保留 JSON 修复重试；只有外层明确要求时，才叠加“业务字段补抽”指令。
      */
     private NormalizedSchema invokeExtractorOnce(String competitorName,
-                                                 List<EvidenceSource> competitorEvidence,
-                                                 List<DownstreamEvidenceView> evidenceViews,
+                                                 List<ExtractorEvidenceInput> evidenceInputs,
                                                  String prompt,
                                                  boolean strictBusinessRetry)
             throws LlmException, JsonProcessingException {
@@ -361,7 +361,7 @@ public class SchemaExtractorAgent extends BaseAgent {
                     log.warn("extractor recovered non-object json root, competitor={}, attempt={}/{}",
                             competitorName, attempt, EXTRACT_JSON_MAX_ATTEMPTS);
                 }
-                return normalizeSchema(parsedRoot.objectNode(), competitorEvidence, evidenceViews, parsedRoot.issueFlags());
+                return normalizeSchema(parsedRoot.objectNode(), evidenceInputs, parsedRoot.issueFlags());
             } catch (JsonProcessingException e) {
                 lastParseException = e;
                 log.warn("extractor json parse failed, competitor={}, attempt={}/{}",
@@ -378,19 +378,20 @@ public class SchemaExtractorAgent extends BaseAgent {
      * 这里统一补齐 sourceUrls 与 evidenceCoverage，避免字段级溯源完全依赖模型自觉输出。
      */
     private NormalizedSchema normalizeSchema(ObjectNode schemaJson,
-                                            List<EvidenceSource> competitorEvidence,
-                                            List<DownstreamEvidenceView> downstreamEvidenceViews,
-                                            List<String> inheritedIssueFlags) {
-        Map<String, EvidenceSource> evidenceById = new LinkedHashMap<>();
-        for (EvidenceSource evidence : competitorEvidence) {
-            evidenceById.put(evidence.getEvidenceId(), evidence);
+                                             List<ExtractorEvidenceInput> evidenceInputs,
+                                             List<String> inheritedIssueFlags) {
+        Map<String, ExtractorEvidenceInput> evidenceById = new LinkedHashMap<>();
+        for (ExtractorEvidenceInput evidence : evidenceInputs == null ? List.<ExtractorEvidenceInput>of() : evidenceInputs) {
+            if (evidence != null) {
+                evidenceById.put(evidence.getEvidenceId(), evidence);
+            }
         }
         LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
         if (inheritedIssueFlags != null) {
             issueFlags.addAll(inheritedIssueFlags);
         }
 
-        ArrayNode sources = buildSourcesNode(schemaJson.path("sources"), competitorEvidence);
+        ArrayNode sources = buildSourcesNode(schemaJson.path("sources"), evidenceInputs);
         schemaJson.set("sources", sources);
 
         LinkedHashSet<String> topLevelSourceUrls = new LinkedHashSet<>(readStringList(schemaJson.path("sourceUrls")));
@@ -406,10 +407,15 @@ public class SchemaExtractorAgent extends BaseAgent {
         }
         if (topLevelSourceUrls.isEmpty()) {
             // 模型完全没给 sourceUrls 时，至少回退到当前竞品全部证据 URL，保证结果可追溯。
-            topLevelSourceUrls.addAll(competitorEvidence.stream()
-                    .map(EvidenceSource::getUrl)
-                    .filter(url -> url != null && !url.isBlank())
-                    .toList());
+            for (ExtractorEvidenceInput evidenceInput : evidenceInputs == null ? List.<ExtractorEvidenceInput>of() : evidenceInputs) {
+                if (evidenceInput != null && evidenceInput.getSourceUrls() != null) {
+                    for (String sourceUrl : evidenceInput.getSourceUrls()) {
+                        if (sourceUrl != null && !sourceUrl.isBlank()) {
+                            topLevelSourceUrls.add(sourceUrl.trim());
+                        }
+                    }
+                }
+            }
         }
         if (!modelProvidedSourceUrls && !topLevelSourceUrls.isEmpty()) {
             issueFlags.add("SOURCE_URLS_BACKFILLED");
@@ -421,9 +427,9 @@ public class SchemaExtractorAgent extends BaseAgent {
         ObjectNode coverage = buildCoverage(schemaJson, evidenceById, topLevelSourceUrls, modelProvidedSourceUrls);
         schemaJson.set("evidenceCoverage", coverage);
         issueFlags.addAll(collectCoverageIssueFlags(coverage));
-        List<EvidenceFragment> evidenceFragments = buildEvidenceFragments("EXTRACT", competitorEvidence, issueFlags);
+        List<EvidenceFragment> evidenceFragments = buildEvidenceFragments("EXTRACT", evidenceInputs, issueFlags);
         List<SectionEvidenceBundle> sectionEvidenceBundles = buildSectionEvidenceBundles(
-                competitorNameFromEvidence(competitorEvidence),
+                competitorNameFromEvidence(evidenceInputs),
                 schemaJson,
                 coverage,
                 evidenceById
@@ -433,7 +439,7 @@ public class SchemaExtractorAgent extends BaseAgent {
                 new ArrayList<>(issueFlags),
                 evidenceFragments,
                 sectionEvidenceBundles,
-                normalizeDownstreamEvidenceViews(downstreamEvidenceViews));
+                buildDownstreamEvidenceViews(evidenceInputs));
     }
 
     /**
@@ -482,17 +488,20 @@ public class SchemaExtractorAgent extends BaseAgent {
         throw new JsonProcessingException("Extractor output must be a JSON object") {};
     }
 
-    private ArrayNode buildSourcesNode(JsonNode existingSources, List<EvidenceSource> competitorEvidence) {
+    private ArrayNode buildSourcesNode(JsonNode existingSources, List<ExtractorEvidenceInput> evidenceInputs) {
         if (existingSources != null && existingSources.isArray() && !existingSources.isEmpty()) {
             return (ArrayNode) existingSources.deepCopy();
         }
 
         ArrayNode sources = objectMapper.createArrayNode();
-        for (EvidenceSource evidence : competitorEvidence) {
+        for (ExtractorEvidenceInput evidence : evidenceInputs == null ? List.<ExtractorEvidenceInput>of() : evidenceInputs) {
+            if (evidence == null) {
+                continue;
+            }
             ObjectNode sourceNode = objectMapper.createObjectNode();
             sourceNode.put("evidenceId", safe(evidence.getEvidenceId()));
             sourceNode.put("title", safe(evidence.getTitle()));
-            sourceNode.put("url", safe(evidence.getUrl()));
+            sourceNode.put("url", safe(firstSourceUrl(evidence)));
             sources.add(sourceNode);
         }
         return sources;
@@ -502,7 +511,7 @@ public class SchemaExtractorAgent extends BaseAgent {
      * 对关键字段逐个生成溯源覆盖摘要，供前端、质检和导出阶段直接复用。
      */
     private ObjectNode buildCoverage(ObjectNode schemaJson,
-                                     Map<String, EvidenceSource> evidenceById,
+                                     Map<String, ExtractorEvidenceInput> evidenceById,
                                      Set<String> topLevelSourceUrls,
                                      boolean modelProvidedSourceUrls) {
         ObjectNode coverage = objectMapper.createObjectNode();
@@ -513,9 +522,13 @@ public class SchemaExtractorAgent extends BaseAgent {
             List<String> evidenceIds = collectEvidenceIds(fieldNode);
             LinkedHashSet<String> sourceUrls = new LinkedHashSet<>(collectSourceUrls(fieldNode));
             for (String evidenceId : evidenceIds) {
-                EvidenceSource matched = evidenceById.get(evidenceId);
-                if (matched != null && matched.getUrl() != null && !matched.getUrl().isBlank()) {
-                    sourceUrls.add(matched.getUrl());
+                ExtractorEvidenceInput matched = evidenceById.get(evidenceId);
+                if (matched != null && matched.getSourceUrls() != null) {
+                    for (String sourceUrl : matched.getSourceUrls()) {
+                        if (sourceUrl != null && !sourceUrl.isBlank()) {
+                            sourceUrls.add(sourceUrl.trim());
+                        }
+                    }
                 }
             }
 
@@ -552,7 +565,7 @@ public class SchemaExtractorAgent extends BaseAgent {
                                          boolean llmRefused,
                                          List<String> evidenceIds,
                                          Set<String> sourceUrls,
-                                         Map<String, EvidenceSource> evidenceById) {
+                                         Map<String, ExtractorEvidenceInput> evidenceById) {
         if (llmRefused) {
             return "LLM_REFUSED";
         }
@@ -570,34 +583,40 @@ public class SchemaExtractorAgent extends BaseAgent {
         return "TRACEABLE";
     }
 
-    private List<String> resolveSingleConsumedSourceUrls(Map<String, EvidenceSource> evidenceById) {
+    private List<String> resolveSingleConsumedSourceUrls(Map<String, ExtractorEvidenceInput> evidenceById) {
         if (evidenceById == null || evidenceById.size() != 1) {
             return List.of();
         }
-        EvidenceSource onlyEvidence = evidenceById.values().iterator().next();
-        if (onlyEvidence == null || onlyEvidence.getUrl() == null || onlyEvidence.getUrl().isBlank()) {
+        ExtractorEvidenceInput onlyEvidence = evidenceById.values().iterator().next();
+        if (onlyEvidence == null || onlyEvidence.getSourceUrls() == null || onlyEvidence.getSourceUrls().isEmpty()) {
             return List.of();
         }
-        return List.of(onlyEvidence.getUrl().trim());
+        List<String> normalizedSourceUrls = new ArrayList<>();
+        for (String sourceUrl : onlyEvidence.getSourceUrls()) {
+            if (sourceUrl != null && !sourceUrl.isBlank()) {
+                normalizedSourceUrls.add(sourceUrl.trim());
+            }
+        }
+        return normalizedSourceUrls;
     }
 
     private boolean isStructuredBlockDirectCoverage(List<String> evidenceIds,
                                                     Set<String> sourceUrls,
-                                                    Map<String, EvidenceSource> evidenceById) {
+                                                    Map<String, ExtractorEvidenceInput> evidenceById) {
         if ((evidenceIds == null || evidenceIds.isEmpty()) && (sourceUrls == null || sourceUrls.isEmpty())) {
             return false;
         }
         if (evidenceIds != null && !evidenceIds.isEmpty()) {
             for (String evidenceId : evidenceIds) {
-                EvidenceSource matched = evidenceById.get(evidenceId);
+                ExtractorEvidenceInput matched = evidenceById.get(evidenceId);
                 if (!hasStructuredBlocks(matched) || hasReadableEvidenceText(matched)) {
                     return false;
                 }
             }
             return true;
         }
-        for (EvidenceSource evidence : evidenceById.values()) {
-            if (evidence == null || evidence.getUrl() == null || !sourceUrls.contains(evidence.getUrl())) {
+        for (ExtractorEvidenceInput evidence : evidenceById.values()) {
+            if (!intersectsSourceUrls(evidence, sourceUrls)) {
                 continue;
             }
             if (!hasStructuredBlocks(evidence) || hasReadableEvidenceText(evidence)) {
@@ -607,8 +626,8 @@ public class SchemaExtractorAgent extends BaseAgent {
         return true;
     }
 
-    private boolean fieldHasCoverageSignal(String fieldName, Iterable<EvidenceSource> evidences) {
-        for (EvidenceSource evidence : evidences == null ? List.<EvidenceSource>of() : evidences) {
+    private boolean fieldHasCoverageSignal(String fieldName, Iterable<ExtractorEvidenceInput> evidences) {
+        for (ExtractorEvidenceInput evidence : evidences == null ? List.<ExtractorEvidenceInput>of() : evidences) {
             if (evidence == null) {
                 continue;
             }
@@ -645,16 +664,15 @@ public class SchemaExtractorAgent extends BaseAgent {
                 || "targetUsers".equals(fieldName);
     }
 
-    private String buildEvidenceSignalText(EvidenceSource evidence) {
+    private String buildEvidenceSignalText(ExtractorEvidenceInput evidence) {
         StringBuilder builder = new StringBuilder();
         builder.append(safe(evidence.getTitle())).append(' ')
-                .append(safe(evidence.getUrl())).append(' ')
+                .append(evidence.getSourceUrls() == null ? List.of() : evidence.getSourceUrls()).append(' ')
                 .append(safe(evidence.getSourceType())).append(' ')
-                .append(safe(evidence.getContentSnippet())).append(' ')
-                .append(safe(evidence.getFullContent())).append(' ');
-        JsonNode metadata = readPageMetadata(evidence);
-        builder.append(metadata.path("qualitySignals").toString()).append(' ')
-                .append(metadata.path("structuredBlocks").toString());
+                .append(safe(evidence.getContent())).append(' ')
+                .append(evidence.getQualitySignals() == null ? List.of() : evidence.getQualitySignals()).append(' ')
+                .append(evidence.getStructuredBlocks() == null ? List.of() : evidence.getStructuredBlocks()).append(' ')
+                .append(evidence.getStructuredPayload() == null ? Map.of() : evidence.getStructuredPayload());
         return builder.toString().toLowerCase();
     }
 
@@ -671,37 +689,21 @@ public class SchemaExtractorAgent extends BaseAgent {
         return false;
     }
 
-    private JsonNode readPageMetadata(EvidenceSource evidence) {
-        if (evidence == null || evidence.getPageMetadata() == null || evidence.getPageMetadata().isBlank()) {
-            return objectMapper.createObjectNode();
-        }
-        try {
-            return objectMapper.readTree(evidence.getPageMetadata());
-        } catch (Exception e) {
-            return objectMapper.createObjectNode();
-        }
+    private boolean hasStructuredBlocks(ExtractorEvidenceInput evidence) {
+        return evidence != null
+                && evidence.getStructuredBlocks() != null
+                && !evidence.getStructuredBlocks().isEmpty();
     }
 
-    private boolean hasStructuredBlocks(EvidenceSource evidence) {
-        JsonNode metadata = readPageMetadata(evidence);
-        JsonNode structuredBlocks = metadata.path("structuredBlocks");
-        return structuredBlocks.isArray() && structuredBlocks.size() > 0;
-    }
-
-    private boolean hasReadableEvidenceText(EvidenceSource evidence) {
+    private boolean hasReadableEvidenceText(ExtractorEvidenceInput evidence) {
         if (evidence == null) {
             return false;
         }
-        String fullContent = safe(evidence.getFullContent()).trim();
-        if (fullContent.length() >= 40) {
-            return true;
-        }
-        String snippet = safe(evidence.getContentSnippet()).trim();
-        return snippet.length() >= 40;
+        return safe(evidence.getContent()).trim().length() >= 40;
     }
 
     private void collectReferencedUrls(JsonNode node,
-                                       Map<String, EvidenceSource> evidenceById,
+                                       Map<String, ExtractorEvidenceInput> evidenceById,
                                        Set<String> referencedUrls) {
         if (node == null || node.isMissingNode() || node.isNull()) {
             return;
@@ -712,9 +714,13 @@ public class SchemaExtractorAgent extends BaseAgent {
             JsonNode evidenceIdsNode = node.get("evidenceIds");
             if (evidenceIdsNode != null && evidenceIdsNode.isArray()) {
                 for (JsonNode evidenceIdNode : evidenceIdsNode) {
-                    EvidenceSource matched = evidenceById.get(evidenceIdNode.asText());
-                    if (matched != null && matched.getUrl() != null && !matched.getUrl().isBlank()) {
-                        referencedUrls.add(matched.getUrl());
+                    ExtractorEvidenceInput matched = evidenceById.get(evidenceIdNode.asText());
+                    if (matched != null && matched.getSourceUrls() != null) {
+                        for (String sourceUrl : matched.getSourceUrls()) {
+                            if (sourceUrl != null && !sourceUrl.isBlank()) {
+                                referencedUrls.add(sourceUrl.trim());
+                            }
+                        }
                     }
                 }
             }
@@ -737,6 +743,18 @@ public class SchemaExtractorAgent extends BaseAgent {
                 collectReferencedUrls(item, evidenceById, referencedUrls);
             }
         }
+    }
+
+    private boolean intersectsSourceUrls(ExtractorEvidenceInput evidence, Set<String> sourceUrls) {
+        if (evidence == null || evidence.getSourceUrls() == null || sourceUrls == null || sourceUrls.isEmpty()) {
+            return false;
+        }
+        for (String sourceUrl : evidence.getSourceUrls()) {
+            if (sourceUrl != null && sourceUrls.contains(sourceUrl)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private List<String> collectEvidenceIds(JsonNode node) {
@@ -919,9 +937,9 @@ public class SchemaExtractorAgent extends BaseAgent {
     /**
      * 把结构化块单独拆成高优先级输入区，避免 Prompt 只能从长正文里二次“猜”出定价与功能事实。
      */
-    private String buildStructuredEvidence(List<DownstreamEvidenceView> evidences) throws JsonProcessingException {
+    private String buildStructuredEvidence(List<ExtractorEvidenceInput> evidences) throws JsonProcessingException {
         List<Map<String, Object>> blocks = new ArrayList<>();
-        for (DownstreamEvidenceView evidence : evidences == null ? List.<DownstreamEvidenceView>of() : evidences) {
+        for (ExtractorEvidenceInput evidence : evidences == null ? List.<ExtractorEvidenceInput>of() : evidences) {
             if (evidence == null || evidence.getStructuredBlocks() == null || evidence.getStructuredBlocks().isEmpty()) {
                 continue;
             }
@@ -942,10 +960,10 @@ public class SchemaExtractorAgent extends BaseAgent {
      * 把 qualitySignals / issueFlags 翻译成明确的提取指令，
      * 减少模型看见信号名称却不知道该如何处理的歧义。
      */
-    private String buildQualitySignalGuidance(List<DownstreamEvidenceView> evidences) {
+    private String buildQualitySignalGuidance(List<ExtractorEvidenceInput> evidences) {
         LinkedHashSet<String> signals = new LinkedHashSet<>();
         LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
-        for (DownstreamEvidenceView evidence : evidences == null ? List.<DownstreamEvidenceView>of() : evidences) {
+        for (ExtractorEvidenceInput evidence : evidences == null ? List.<ExtractorEvidenceInput>of() : evidences) {
             if (evidence == null) {
                 continue;
             }
@@ -981,10 +999,10 @@ public class SchemaExtractorAgent extends BaseAgent {
     /**
      * 正文区只作为兜底输入；薄正文只记录诊断，不冒充高质量业务证据。
      */
-    private String buildReadableContent(List<DownstreamEvidenceView> evidences) {
+    private String buildReadableContent(List<ExtractorEvidenceInput> evidences) {
         final int maxEvidenceContentLength = 4000;
         StringBuilder readableContent = new StringBuilder();
-        for (DownstreamEvidenceView evidence : evidences == null ? List.<DownstreamEvidenceView>of() : evidences) {
+        for (ExtractorEvidenceInput evidence : evidences == null ? List.<ExtractorEvidenceInput>of() : evidences) {
             if (evidence == null) {
                 continue;
             }
@@ -1013,10 +1031,10 @@ public class SchemaExtractorAgent extends BaseAgent {
         return readableContent.toString();
     }
 
-    private String buildCollectedContent(List<DownstreamEvidenceView> evidences) {
+    private String buildCollectedContent(List<ExtractorEvidenceInput> evidences) {
         final int maxEvidenceContentLength = 4000;
         StringBuilder collectedContent = new StringBuilder();
-        for (DownstreamEvidenceView evidence : evidences) {
+        for (ExtractorEvidenceInput evidence : evidences == null ? List.<ExtractorEvidenceInput>of() : evidences) {
             collectedContent.append("--- Source: ")
                     .append(safe(evidence.getEvidenceId()))
                     .append(" ")
@@ -1093,9 +1111,9 @@ public class SchemaExtractorAgent extends BaseAgent {
                 """;
     }
 
-    private String buildEvidenceCatalog(List<DownstreamEvidenceView> evidences) throws JsonProcessingException {
+    private String buildEvidenceCatalog(List<ExtractorEvidenceInput> evidences) throws JsonProcessingException {
         List<Map<String, Object>> catalog = new ArrayList<>();
-        for (DownstreamEvidenceView evidence : evidences) {
+        for (ExtractorEvidenceInput evidence : evidences == null ? List.<ExtractorEvidenceInput>of() : evidences) {
             catalog.add(Map.of(
                     "evidenceId", safe(evidence.getEvidenceId()),
                     "title", safe(evidence.getTitle()),
@@ -1252,12 +1270,12 @@ public class SchemaExtractorAgent extends BaseAgent {
     /**
      * 语义补抽只在正文长度足够时触发；结构块-only 证据没有新增正文信息，不值得再打一轮同类请求。
      */
-    private boolean hasReadableEvidenceContent(List<DownstreamEvidenceView> evidenceViews) {
-        for (DownstreamEvidenceView evidenceView : evidenceViews == null ? List.<DownstreamEvidenceView>of() : evidenceViews) {
-            if (evidenceView == null || evidenceView.getContent() == null) {
+    private boolean hasReadableEvidenceContent(List<ExtractorEvidenceInput> evidenceInputs) {
+        for (ExtractorEvidenceInput evidenceInput : evidenceInputs == null ? List.<ExtractorEvidenceInput>of() : evidenceInputs) {
+            if (evidenceInput == null || evidenceInput.getContent() == null) {
                 continue;
             }
-            String normalized = evidenceView.getContent().trim();
+            String normalized = evidenceInput.getContent().trim();
             if (normalized.length() >= 40) {
                 return true;
             }
@@ -1294,18 +1312,21 @@ public class SchemaExtractorAgent extends BaseAgent {
      * 抽取阶段统一把 sources 节点转成 EvidenceFragment，后续分析与写作都只需要消费这一种证据格式。
      */
     private List<EvidenceFragment> buildEvidenceFragments(String stage,
-                                                          List<EvidenceSource> competitorEvidence,
+                                                          List<ExtractorEvidenceInput> evidenceInputs,
                                                           LinkedHashSet<String> inheritedIssueFlags) {
         List<EvidenceFragment> fragments = new ArrayList<>();
-        for (EvidenceSource evidence : competitorEvidence) {
+        for (ExtractorEvidenceInput evidence : evidenceInputs == null ? List.<ExtractorEvidenceInput>of() : evidenceInputs) {
+            if (evidence == null) {
+                continue;
+            }
             fragments.add(EvidenceFragment.builder()
                     .stage(stage)
                     .competitorName(evidence.getCompetitorName())
                     .fieldName("knowledge")
                     .evidenceId(evidence.getEvidenceId())
-                    .sourceUrl(evidence.getUrl())
+                    .sourceUrl(firstSourceUrl(evidence))
                     .title(evidence.getTitle())
-                    .snippet(truncate(evidence.getContentSnippet(), 180))
+                    .snippet(truncate(evidence.getContent(), 180))
                     .issueFlags(new ArrayList<>(inheritedIssueFlags))
                     .build()
                     .normalized());
@@ -1563,9 +1584,9 @@ public class SchemaExtractorAgent extends BaseAgent {
      * 后续分析、写作、报告接口就不需要再猜某个章节到底缺的是值还是缺的是证据。
      */
     private List<SectionEvidenceBundle> buildSectionEvidenceBundles(String competitorName,
-                                                                   ObjectNode schemaJson,
-                                                                   ObjectNode coverage,
-                                                                   Map<String, EvidenceSource> evidenceById) {
+                                                                    ObjectNode schemaJson,
+                                                                    ObjectNode coverage,
+                                                                    Map<String, ExtractorEvidenceInput> evidenceById) {
         List<SectionEvidenceBundle> bundles = new ArrayList<>();
         for (CoverageFieldDefinition definition : COVERAGE_FIELD_DEFINITIONS) {
             JsonNode coverageNode = coverage.path(definition.fieldKey());
@@ -1605,12 +1626,12 @@ public class SchemaExtractorAgent extends BaseAgent {
                                                                String status,
                                                                List<String> evidenceIds,
                                                                List<String> sourceUrls,
-                                                               Map<String, EvidenceSource> evidenceById) {
+                                                               Map<String, ExtractorEvidenceInput> evidenceById) {
         List<EvidenceFragment> fragments = new ArrayList<>();
         if (!evidenceIds.isEmpty()) {
             for (String evidenceId : evidenceIds) {
-                EvidenceSource matched = evidenceById.get(evidenceId);
-                String sourceUrl = matched != null ? matched.getUrl() : sourceUrls.stream().findFirst().orElse(null);
+                ExtractorEvidenceInput matched = evidenceById.get(evidenceId);
+                String sourceUrl = matched != null ? firstSourceUrl(matched) : sourceUrls.stream().findFirst().orElse(null);
                 fragments.add(EvidenceFragment.builder()
                         .stage(stage)
                         .competitorName(competitorName)
@@ -1622,7 +1643,7 @@ public class SchemaExtractorAgent extends BaseAgent {
                         .evidenceId(evidenceId)
                         .sourceUrl(sourceUrl)
                         .title(matched == null ? null : matched.getTitle())
-                        .snippet(matched == null ? null : truncate(matched.getContentSnippet(), 180))
+                        .snippet(matched == null ? null : truncate(matched.getContent(), 180))
                         .issueFlags(isTraceableCoverageStatus(status) ? List.of() : List.of(status))
                         .gapComment(buildCoverageGapComment(status))
                         .build()
@@ -1692,61 +1713,67 @@ public class SchemaExtractorAgent extends BaseAgent {
         return truncate(node.asText(), 120);
     }
 
-    private String competitorNameFromEvidence(List<EvidenceSource> competitorEvidence) {
-        if (competitorEvidence == null || competitorEvidence.isEmpty()) {
+    private String competitorNameFromEvidence(List<ExtractorEvidenceInput> evidenceInputs) {
+        if (evidenceInputs == null || evidenceInputs.isEmpty()) {
             return null;
         }
-        return competitorEvidence.get(0).getCompetitorName();
+        return evidenceInputs.get(0).getCompetitorName();
     }
 
     /**
-     * P1 Task A 先让 Agent 完全消费 Provider 输入包。
-     * 这里把输入包中的统一证据视图恢复成当前 normalize / coverage 所需的最小 EvidenceSource，
-     * 这样可以在不重写整段抽取归一化逻辑的前提下，先完成输入边界迁移。
+     * extractor 内部输入投影需要在进入下游前恢复成轻量证据视图。
+     * 这里只有 evidenceId、来源、质量信号和结构块摘要允许继续往下传，正文与 structuredPayload 必须留在 extractor 内部。
      */
-    private List<EvidenceSource> rebuildEvidenceSources(ExtractorCompetitorInput competitorInput) {
-        List<EvidenceSource> evidences = new ArrayList<>();
-        for (DownstreamEvidenceView evidenceView : competitorInput == null || competitorInput.getEvidenceCatalog() == null
-                ? List.<DownstreamEvidenceView>of()
-                : competitorInput.getEvidenceCatalog()) {
-            if (evidenceView == null) {
-                continue;
+    private List<DownstreamEvidenceView> buildDownstreamEvidenceViews(List<ExtractorEvidenceInput> evidenceInputs) {
+        List<DownstreamEvidenceView> downstreamViews = new ArrayList<>();
+        for (ExtractorEvidenceInput input : evidenceInputs == null ? List.<ExtractorEvidenceInput>of() : evidenceInputs) {
+            DownstreamEvidenceView downstreamEvidenceView = toDownstreamEvidenceView(input);
+            if (downstreamEvidenceView != null) {
+                downstreamViews.add(downstreamEvidenceView);
             }
-            evidences.add(EvidenceSource.builder()
-                    .competitorName(evidenceView.getCompetitorName())
-                    .evidenceId(evidenceView.getEvidenceId())
-                    .title(evidenceView.getTitle())
-                    .url(firstSourceUrl(evidenceView))
-                    .contentSnippet(truncate(evidenceView.getContent(), 180))
-                    .fullContent(evidenceView.getContent())
-                    .pageMetadata(buildPageMetadataFromEvidenceView(evidenceView))
-                    .sourceType(evidenceView.getSourceType())
-                    .build());
         }
-        return evidences;
+        return normalizeDownstreamEvidenceViews(downstreamViews);
     }
 
-    private String buildPageMetadataFromEvidenceView(DownstreamEvidenceView evidenceView) {
-        try {
-            Map<String, Object> metadata = new LinkedHashMap<>();
-            metadata.put("sourceUrls", evidenceView.getSourceUrls() == null ? List.of() : evidenceView.getSourceUrls());
-            metadata.put("issueFlags", evidenceView.getIssueFlags() == null ? List.of() : evidenceView.getIssueFlags());
-            metadata.put("qualitySignals", evidenceView.getQualitySignals() == null ? List.of() : evidenceView.getQualitySignals());
-            metadata.put("structuredBlocks", evidenceView.getStructuredBlocks() == null ? List.of() : evidenceView.getStructuredBlocks());
-            metadata.put("structuredPayload", evidenceView.getStructuredPayload() == null ? Map.of() : evidenceView.getStructuredPayload());
-            return objectMapper.writeValueAsString(metadata);
-        } catch (JsonProcessingException e) {
-            log.warn("failed to rebuild pageMetadata from extractor input view, evidenceId={}",
-                    evidenceView == null ? null : evidenceView.getEvidenceId(), e);
-            return "{}";
-        }
-    }
-
-    private String firstSourceUrl(DownstreamEvidenceView evidenceView) {
-        if (evidenceView == null || evidenceView.getSourceUrls() == null || evidenceView.getSourceUrls().isEmpty()) {
+    private String firstSourceUrl(ExtractorEvidenceInput input) {
+        if (input == null || input.getSourceUrls() == null || input.getSourceUrls().isEmpty()) {
             return null;
         }
-        return evidenceView.getSourceUrls().get(0);
+        return input.getSourceUrls().get(0);
+    }
+
+    /**
+     * 直接从 ExtractorEvidenceInput 回建轻量下游视图。
+     * 这里显式清空正文和 structuredPayload，避免 extractor 内部长文本重新泄漏到共享输出。
+     */
+    private DownstreamEvidenceView toDownstreamEvidenceView(ExtractorEvidenceInput input) {
+        if (input == null) {
+            return null;
+        }
+        return DownstreamEvidenceView.builder()
+                .evidenceId(input.getEvidenceId())
+                .competitorName(input.getCompetitorName())
+                .sourceType(input.getSourceType())
+                .title(input.getTitle())
+                .content("")
+                .sourceUrls(input.getSourceUrls() == null ? List.of() : new ArrayList<>(input.getSourceUrls()))
+                .issueFlags(input.getIssueFlags() == null ? List.of() : new ArrayList<>(input.getIssueFlags()))
+                .qualitySignals(input.getQualitySignals() == null ? List.of() : new ArrayList<>(input.getQualitySignals()))
+                .structuredBlocks(input.getStructuredBlocks() == null ? List.of() : new ArrayList<>(input.getStructuredBlocks()))
+                .structuredPayload(Map.of())
+                .quality(input.getQuality())
+                .build()
+                .normalized();
+    }
+
+    private List<ExtractorEvidenceInput> normalizeEvidenceInputs(List<ExtractorEvidenceInput> inputs) {
+        List<ExtractorEvidenceInput> normalized = new ArrayList<>();
+        for (ExtractorEvidenceInput input : inputs == null ? List.<ExtractorEvidenceInput>of() : inputs) {
+            if (input != null) {
+                normalized.add(input.normalized());
+            }
+        }
+        return normalized;
     }
 
     private record NormalizedSchema(ObjectNode schema,

@@ -790,6 +790,92 @@ class DagExecutorTest {
     }
 
     @Test
+    void shouldPassSharedOutputEnvelopeToDownstreamNodeContext() {
+        Long taskId = 1608L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode collector = TaskNode.builder()
+                .id(161L)
+                .taskId(taskId)
+                .nodeName("collect_sources_web")
+                .displayName("collect_sources_web")
+                .agentType(AgentType.COLLECTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .maxRetries(0)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+
+        TaskNode extractor = TaskNode.builder()
+                .id(162L)
+                .taskId(taskId)
+                .nodeName("extract_schema")
+                .displayName("extract_schema")
+                .agentType(AgentType.EXTRACTOR)
+                .dependsOn("[\"collect_sources_web\"]")
+                .required(true)
+                .retryable(false)
+                .maxRetries(0)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        TaskSnapshotCacheService snapshotCacheService = mock(TaskSnapshotCacheService.class);
+        TaskExecutionLockService lockService = mock(TaskExecutionLockService.class);
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(collector, extractor));
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(lockService.tryAcquireNodeExecutionLock(any(), any(), any(), any())).thenReturn(Boolean.TRUE);
+        when(snapshotCacheService.getCachedSharedOutputEnvelopes(taskId)).thenReturn(Map.of());
+
+        SharedNodeOutputProjector projector = new SharedNodeOutputProjector() {
+            @Override
+            public boolean supports(String outputData) {
+                return outputData != null && outputData.contains("\"sourceUrls\"");
+            }
+
+            @Override
+            public SharedNodeOutputEnvelope project(Long taskId,
+                                                    String nodeName,
+                                                    Long planVersionId,
+                                                    String outputData) {
+                return SharedNodeOutputEnvelope.builder()
+                        .taskId(taskId)
+                        .nodeName(nodeName)
+                        .planVersionId(planVersionId)
+                        .projectionType("SEARCH_SHARED_PROJECTION_V1")
+                        .payloadJson("{\"projectionType\":\"SEARCH_SHARED_PROJECTION_V1\",\"sourceUrls\":[\"https://docs.example.com\"]}")
+                        .sourceUrls(List.of("https://docs.example.com"))
+                        .build();
+            }
+        };
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new CollectorWithStructuredOutputAgent(), new EnvelopeAwareExtractorAgent()),
+                snapshotCacheService,
+                lockService,
+                List.of(projector)
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("shared-envelope-downstream").build());
+
+        assertEquals(TaskNodeStatus.SUCCESS, collector.getStatus());
+        assertEquals(TaskNodeStatus.SUCCESS, extractor.getStatus());
+        assertTrue(extractor.getOutputData().contains("SEARCH_SHARED_PROJECTION_V1"));
+    }
+
+    @Test
     void shouldPublishMinimalSearchProgressAndFallbackAgentOutputWhenCollectorCompletesWithoutStructuredLog() {
         Long taskId = 707L;
         AnalysisTask task = AnalysisTask.builder()
@@ -1983,6 +2069,31 @@ class DagExecutorTest {
                               "selectedTargets":[{"url":"https://docs.example.com"}]
                             }
                             """)
+                    .build();
+        }
+    }
+
+    private static final class EnvelopeAwareExtractorAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.EXTRACTOR;
+        }
+
+        @Override
+        public String getName() {
+            return "envelope-aware-extractor";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            SharedNodeOutputEnvelope envelope = context.getSharedOutputEnvelope("collect_sources_web");
+            if (envelope == null || envelope.getProjectionType() == null) {
+                return AgentResult.failed("missing shared output envelope");
+            }
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("{\"projectionType\":\"" + envelope.getProjectionType() + "\"}")
                     .build();
         }
     }

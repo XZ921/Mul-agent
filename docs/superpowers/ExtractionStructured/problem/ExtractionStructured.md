@@ -169,22 +169,22 @@ return invokeExtractorOnce(
 
 ### 4.2 当前仍未闭合的事实
 
-1. `SchemaExtractorAgent` 的主执行路径已经通过正式 `ExtractorInputProvider` 接收 `ExtractorInputPackage`，但 Provider 第一版底层仍直接读取 repository；输入边界已收口到 Provider 接口，数据源治理和 replay/cache 统一入口仍未完全收口。
+1. `SchemaExtractorAgent` 的主执行路径已经通过正式 `ExtractorInputProvider` 接收 `ExtractorInputPackage`，且 `RepositoryExtractorInputProvider` 已经改成只负责筛选、排序、预算和组包；底层 repository 读取已收口到 `ExtractorEvidenceSourcePort`，当前剩余事项是后续把 replay/cache 替换为新的端口实现，而不是再把输入边界摊回 Agent。
 
 ```java
 ExtractorInputPackage inputPackage = extractorInputProvider.provide(context);
 List<ExtractorCompetitorInput> competitorInputs = inputPackage.getCompetitors();
 ```
 
-2. 结构块型证据、薄正文标记、Prompt 预算和 TopK 已经前移到 `RepositoryExtractorInputProvider`，但 Provider 仍是 repository-backed 第一版实现，尚未接到 replay/cache/正式端口统一输入源。
+2. 结构块型证据、薄正文标记、Prompt 预算和 TopK 已经前移到 `RepositoryExtractorInputProvider`，并且输入载体已正式切换成 `ExtractorEvidenceInput`；Provider 仍是 repository-backed 第一版实现，但 replay/cache 未来只允许通过 `ExtractorEvidenceSourcePort` 替换来源，不再直接复用 `DownstreamEvidenceView` 或在 Agent 内手拼输入。
 
 ```java
-PromptSelection selection = selectPromptEvidence(enrichedUsableViews);
-List<DownstreamEvidenceView> evidenceCatalog = selection.selectedEvidence();
-List<DownstreamEvidenceView> traceableSkippedViews = new ArrayList<>(selection.skippedEvidence());
+PromptSelection selection = selectPromptEvidence(enrichedUsableInputs);
+List<ExtractorEvidenceInput> evidenceCatalog = selection.selectedEvidence();
+List<ExtractorEvidenceInput> traceableSkippedInputs = new ArrayList<>(selection.skippedEvidence());
 ```
 
-这意味着：P1 的输入 Provider 边界和预算控制已经落地，但 Provider 内部数据源收口仍是后续项。
+这意味着：P1 的输入 Provider 边界、内部输入投影和预算控制已经落地，后续要继续推进的是 replay/cache 对来源端口的正式替换。
 
 3. `extractAndNormalize()` 已支持“合法 JSON 但 0 业务字段且正文可读”时的业务语义重试，但该策略目前仍是 P0 阶段内联实现，尚未下沉为可配置策略或 Provider/Invoker 层正式职责。
 
@@ -197,7 +197,7 @@ for (int attempt = 1; attempt <= EXTRACT_JSON_MAX_ATTEMPTS; attempt++) {
 }
 ```
 
-4. Prompt 输入已经完成分层，但 `collectedContent` 仍保留在 Prompt 变量里作为迁移期兼容层；P1 需要继续判断它是否还能完全退出正式模板。
+4. Prompt 输入已经完成分层，`SchemaExtractorAgent` 现在直接消费 `ExtractorEvidenceInput` 的正文、结构块和 structured payload；`collectedContent` 仍保留在 Prompt 变量里作为迁移期兼容层，后续需要继续判断它是否还能完全退出正式模板。
 
 ```java
 promptVariables.put("structuredEvidence", buildStructuredEvidence(evidenceViews));
@@ -215,7 +215,7 @@ for (CompetitorKnowledgeDraft draft : extractorOutput.drafts()) {
 }
 ```
 
-6. `DownstreamEvidenceView.content` 在 extractor 原始节点输出里仍可能存在，但 shared output envelope 和 extractor 轻量投影已经统一经过 sanitizer，跨节点共享不再携带长正文；剩余治理点是 node 原始 output 与 replay 展示的长期边界仍需继续统一。
+6. `DownstreamEvidenceView.content` 已经不再从 extractor 内部输入路径回流出来；shared output envelope、extractor 轻量投影和 Redis cache 都只保留 trace-only 视图，并继续透出 `extractorInput.inputSource / auditRefs`。剩余治理点是 node 原始 output 与 replay 展示的长期边界仍需继续统一。
 
 ```java
 return DownstreamEvidenceView.builder()
@@ -248,7 +248,7 @@ P0 的验收目标不是“报告最终通过”，而是先证明 extractor 对
 
 | Blocking 项 | 当前证据 | 为什么阻塞 |
 | --- | --- | --- |
-| `ExtractorInputProvider` 底层数据源仍未完全收口 | Provider 第一版仍直接访问 repository | 输入边界虽然已从 Agent 类中拔出来，但 replay/cache/正式端口仍未统一到 Provider 内部。 |
+| `ExtractorInputProvider` 底层数据源仍未完全收口 | 来源端口已落地，但当前仍是 `REPOSITORY_BACKED_PORT` 第一版实现 | 输入边界和内部来源端口已经收口，后续只剩 replay/cache/正式端口继续替换来源适配器。 |
 | analyzer 优先级已切换但冲突治理仍需继续观察 | drafts 已优先，snapshot 仅补空字段 | `ExtractResult / drafts` 已成为正式输入，但 live 下的冲突面和 views-only 极简场景仍需继续验证。 |
 | `DownstreamEvidenceView` 的原始节点输出与长期回放边界仍需继续治理 | shared output 已瘦身，但节点原始 output 仍保留完整执行现场 | 长正文已不再跨节点扩散，但 node 原始结果与 replay 展示的长期治理仍未完全结束。 |
 | `CompetitorKnowledge` 实体默认仍是 `DOMAIN` | 实体默认值仍会在未显式设置时补成 `DOMAIN` | extractor 已显式设置 `TASK`，但其它写入路径仍必须被治理，避免历史默认值重新污染长期记忆。 |

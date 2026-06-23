@@ -89,6 +89,12 @@ class SharedNodeOutputProjectorContractTest {
                     }
                   ],
                   "extractorInput": {
+                    "inputSource": "REPOSITORY_BACKED_PORT",
+                    "auditRefs": {
+                      "searchAudit": {
+                        "available": true
+                      }
+                    },
                     "competitors": [
                       {
                         "competitorName": "Acme",
@@ -109,9 +115,48 @@ class SharedNodeOutputProjectorContractTest {
         SharedNodeOutputEnvelope envelope = projector.project(33L, "extract_schema", 7L, rawOutput);
         assertThat(envelope.getProjectionType()).isEqualTo("EXTRACT_SHARED_PROJECTION_V1");
         assertThat(envelope.getSourceUrls()).containsExactly("https://docs.example.com/pricing");
+        assertThat(envelope.getPayloadJson()).contains("\"inputSource\":\"REPOSITORY_BACKED_PORT\"");
+        assertThat(envelope.getPayloadJson()).contains("\"searchAudit\"");
         assertThat(envelope.getPayloadJson()).contains("PRICING_BLOCK");
         assertThat(envelope.getPayloadJson()).doesNotContain("very large body");
         assertThat(envelope.getPayloadJson()).doesNotContain("large structured block body");
+    }
+
+    @Test
+    void shouldNotTreatCollectorOutputAsExtractorSharedProjection() {
+        ExtractSharedNodeOutputProjector projector = new ExtractSharedNodeOutputProjector(new ObjectMapper().findAndRegisterModules());
+        String rawOutput = """
+                {
+                  "sourceUrls": ["https://docs.example.com/reference"],
+                  "searchExecutionTrace": {
+                    "recoveryCheckpoint": "SELECT_TARGETS",
+                    "fallbackDecision": "USE_PLANNED_CANDIDATES"
+                  },
+                  "selectedTargets": [
+                    {
+                      "url": "https://docs.example.com/reference",
+                      "title": "Reference",
+                      "collectedPage": { "content": "very large body" }
+                    }
+                  ],
+                  "evidenceFragments": [
+                    {
+                      "fieldName": "pricing",
+                      "sourceUrl": "https://docs.example.com/reference"
+                    }
+                  ],
+                  "downstreamEvidenceViews": [
+                    {
+                      "evidenceId": "E001",
+                      "title": "Reference",
+                      "sourceType": "DOCS",
+                      "content": "very large body"
+                    }
+                  ]
+                }
+                """;
+
+        assertThat(projector.supports(rawOutput)).isFalse();
     }
 
     @Test
