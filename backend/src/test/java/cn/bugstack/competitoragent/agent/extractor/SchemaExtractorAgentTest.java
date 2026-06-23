@@ -1314,6 +1314,269 @@ class SchemaExtractorAgentTest {
         verify(knowledgeRepository, times(1)).save(any());
     }
 
+    @Test
+    void shouldNormalizeStringStrengthsAndWeaknessesInsteadOfFailingDraftConversion() throws Exception {
+        SchemaExtractorAgent providerOnlyAgent = new SchemaExtractorAgent(
+                logRepository,
+                knowledgeRepository,
+                llmClient,
+                promptService,
+                agentContextAssembler,
+                objectMapper,
+                inputProvider
+        );
+        DownstreamEvidenceView pricingEvidence = DownstreamEvidenceView.builder()
+                .evidenceId("T0050-COLLECT-PRICING")
+                .competitorName("Notion AI")
+                .sourceType("PRICING")
+                .title("Notion AI Pricing")
+                .content("Notion AI offers AI features for team workspaces, with business pricing and enterprise options.")
+                .sourceUrls(List.of("https://www.notion.so/pricing"))
+                .qualitySignals(List.of("LIGHTWEIGHT_CONTENT_READY"))
+                .issueFlags(List.of())
+                .structuredBlocks(List.of())
+                .structuredPayload(Map.of())
+                .quality(DownstreamEvidenceQuality.builder()
+                        .qualityScore(0.88)
+                        .build())
+                .build()
+                .normalized();
+        when(inputProvider.provide(any(AgentContext.class))).thenReturn(ExtractorInputPackage.builder()
+                .taskId(50L)
+                .nodeName("extract_schema")
+                .competitors(List.of(ExtractorCompetitorInput.builder()
+                        .competitorName("Notion AI")
+                        .evidenceCatalog(List.of(pricingEvidence))
+                        .structuredEvidence(List.of())
+                        .readableEvidence(List.of(pricingEvidence))
+                        .skippedEvidence(List.of())
+                        .sourceUrls(List.of("https://www.notion.so/pricing"))
+                        .issueFlags(List.of())
+                        .budget(Map.of(
+                                "maxPromptEvidenceChars", 4000,
+                                "usedPromptEvidenceChars", 92,
+                                "truncated", false
+                        ))
+                        .build()))
+                .build());
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://www.notion.so/product/ai",
+                          "summary": "Notion AI is a workspace AI assistant for docs and collaboration.",
+                          "positioning": "workspace AI assistant",
+                          "targetUsers": ["teams", "knowledge workers"],
+                          "coreFeatures": [],
+                          "pricing": {
+                            "model": "business pricing with AI options",
+                            "evidenceIds": ["T0050-COLLECT-PRICING"],
+                            "sourceUrls": ["https://www.notion.so/pricing"]
+                          },
+                          "strengths": ["深度集成 AI 协作能力"],
+                          "weaknesses": ["企业采购价格透明度有限"],
+                          "sources": [],
+                          "sourceUrls": ["https://www.notion.so/pricing"]
+                        }
+                        """);
+
+        // 真实链路里模型可能把优势/短板返回为字符串数组，抽取器应先归一化成 DTO 对象再交给下游。
+        AgentResult result = providerOnlyAgent.execute(AgentContext.builder()
+                .taskId(50L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        JsonNode draft = objectMapper.readTree(result.getOutputData()).path("drafts").get(0);
+
+        assertEquals("深度集成 AI 协作能力", draft.path("strengths").get(0).path("point").asText());
+        assertEquals("企业采购价格透明度有限", draft.path("weaknesses").get(0).path("point").asText());
+        assertEquals("https://www.notion.so/pricing",
+                draft.path("strengths").get(0).path("sourceUrls").get(0).asText());
+        assertEquals("https://www.notion.so/pricing",
+                draft.path("weaknesses").get(0).path("sourceUrls").get(0).asText());
+        verify(knowledgeRepository, times(1)).save(any());
+    }
+
+    @Test
+    void shouldBackfillScalarCoverageAndStrengthPointFromDescription() throws Exception {
+        SchemaExtractorAgent providerOnlyAgent = new SchemaExtractorAgent(
+                logRepository,
+                knowledgeRepository,
+                llmClient,
+                promptService,
+                agentContextAssembler,
+                objectMapper,
+                inputProvider
+        );
+        DownstreamEvidenceView officialEvidence = DownstreamEvidenceView.builder()
+                .evidenceId("T0050-COLLECT-OFFICIAL")
+                .competitorName("Notion AI")
+                .sourceType("OFFICIAL")
+                .title("Meet your AI team")
+                .content("Notion AI is a workspace AI assistant for teams, docs, search, and automation.")
+                .sourceUrls(List.of("https://www.notion.so/product/ai"))
+                .qualitySignals(List.of("LIGHTWEIGHT_CONTENT_READY"))
+                .issueFlags(List.of())
+                .structuredBlocks(List.of())
+                .structuredPayload(Map.of())
+                .quality(DownstreamEvidenceQuality.builder()
+                        .qualityScore(0.9)
+                        .build())
+                .build()
+                .normalized();
+        DownstreamEvidenceView docsEvidence = DownstreamEvidenceView.builder()
+                .evidenceId("T0050-COLLECT-DOCS")
+                .competitorName("Notion AI")
+                .sourceType("DOCS")
+                .title("Notion AI Help")
+                .content("Notion help documents describe AI writing, enterprise search, automations, and team workflows.")
+                .sourceUrls(List.of("https://www.notion.so/help"))
+                .qualitySignals(List.of("LIGHTWEIGHT_CONTENT_READY"))
+                .issueFlags(List.of())
+                .structuredBlocks(List.of())
+                .structuredPayload(Map.of())
+                .quality(DownstreamEvidenceQuality.builder()
+                        .qualityScore(0.88)
+                        .build())
+                .build()
+                .normalized();
+        when(inputProvider.provide(any(AgentContext.class))).thenReturn(ExtractorInputPackage.builder()
+                .taskId(50L)
+                .nodeName("extract_schema")
+                .competitors(List.of(ExtractorCompetitorInput.builder()
+                        .competitorName("Notion AI")
+                        .evidenceCatalog(List.of(officialEvidence, docsEvidence))
+                        .structuredEvidence(List.of())
+                        .readableEvidence(List.of(officialEvidence, docsEvidence))
+                        .skippedEvidence(List.of())
+                        .sourceUrls(List.of("https://www.notion.so/product/ai", "https://www.notion.so/help"))
+                        .issueFlags(List.of())
+                        .budget(Map.of(
+                                "maxPromptEvidenceChars", 4000,
+                                "usedPromptEvidenceChars", 88,
+                                "truncated", false
+                        ))
+                        .build()))
+                .build());
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://www.notion.so/product/ai",
+                          "summary": "Notion AI is a workspace AI assistant for teams.",
+                          "positioning": "workspace AI collaboration platform",
+                          "targetUsers": ["teams", "knowledge workers"],
+                          "coreFeatures": [],
+                          "pricing": {},
+                          "strengths": [{
+                            "description": "深度集成 AI、企业搜索和自动化能力",
+                            "evidenceIds": ["T0050-COLLECT-OFFICIAL"],
+                            "sourceUrls": ["https://www.notion.so/product/ai"]
+                          }],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://www.notion.so/product/ai", "https://www.notion.so/help"]
+                        }
+                        """);
+
+        // live task 50 中标量字段有业务值但缺字段级引用，优势项也可能只给 description；归一化后不应继续制造质量缺口。
+        AgentResult result = providerOnlyAgent.execute(AgentContext.builder()
+                .taskId(50L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+        JsonNode draft = objectMapper.readTree(result.getOutputData()).path("drafts").get(0);
+        JsonNode coverage = draft.path("evidenceCoverage");
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertEquals("TRACEABLE", coverage.path("summary").path("status").asText());
+        assertEquals("TRACEABLE", coverage.path("positioning").path("status").asText());
+        assertEquals("TRACEABLE", coverage.path("targetUsers").path("status").asText());
+        assertEquals("https://www.notion.so/product/ai",
+                coverage.path("summary").path("sourceUrls").get(0).asText());
+        assertEquals("深度集成 AI、企业搜索和自动化能力",
+                draft.path("strengths").get(0).path("point").asText());
+        verify(knowledgeRepository, times(1)).save(any());
+    }
+
+    @Test
+    void shouldBackfillStrengthPointFromDetailField() throws Exception {
+        SchemaExtractorAgent providerOnlyAgent = new SchemaExtractorAgent(
+                logRepository,
+                knowledgeRepository,
+                llmClient,
+                promptService,
+                agentContextAssembler,
+                objectMapper,
+                inputProvider
+        );
+        DownstreamEvidenceView officialEvidence = DownstreamEvidenceView.builder()
+                .evidenceId("T0050-COLLECT-OFFICIAL")
+                .competitorName("Notion AI")
+                .sourceType("OFFICIAL")
+                .title("Meet your AI team")
+                .content("Notion AI is a workspace AI assistant for teams, docs, search, and automation.")
+                .sourceUrls(List.of("https://www.notion.so/product/ai"))
+                .qualitySignals(List.of("LIGHTWEIGHT_CONTENT_READY"))
+                .issueFlags(List.of())
+                .structuredBlocks(List.of())
+                .structuredPayload(Map.of())
+                .quality(DownstreamEvidenceQuality.builder()
+                        .qualityScore(0.9)
+                        .build())
+                .build()
+                .normalized();
+        when(inputProvider.provide(any(AgentContext.class))).thenReturn(ExtractorInputPackage.builder()
+                .taskId(50L)
+                .nodeName("extract_schema")
+                .competitors(List.of(ExtractorCompetitorInput.builder()
+                        .competitorName("Notion AI")
+                        .evidenceCatalog(List.of(officialEvidence))
+                        .structuredEvidence(List.of())
+                        .readableEvidence(List.of(officialEvidence))
+                        .skippedEvidence(List.of())
+                        .sourceUrls(List.of("https://www.notion.so/product/ai"))
+                        .issueFlags(List.of())
+                        .budget(Map.of(
+                                "maxPromptEvidenceChars", 4000,
+                                "usedPromptEvidenceChars", 88,
+                                "truncated", false
+                        ))
+                        .build()))
+                .build());
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema")))
+                .thenReturn("""
+                        {
+                          "officialUrl": "https://www.notion.so/product/ai",
+                          "summary": "Notion AI is a workspace AI assistant for teams.",
+                          "strengths": [{
+                            "detail": "深度集成 AI 工作流，团队无需切换上下文。",
+                            "evidenceIds": ["T0050-COLLECT-OFFICIAL"],
+                            "sourceUrls": ["https://www.notion.so/product/ai"]
+                          }],
+                          "weaknesses": [],
+                          "sources": [],
+                          "sourceUrls": ["https://www.notion.so/product/ai"]
+                        }
+                        """);
+
+        // 模型会把优势描述写到 detail/content/text 等字段中；这里锁定 detail 变体也必须补齐 point。
+        AgentResult result = providerOnlyAgent.execute(AgentContext.builder()
+                .taskId(50L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+        JsonNode draft = objectMapper.readTree(result.getOutputData()).path("drafts").get(0);
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertEquals("深度集成 AI 工作流，团队无需切换上下文。",
+                draft.path("strengths").get(0).path("point").asText());
+        verify(knowledgeRepository, times(1)).save(any());
+    }
+
     private JsonNode findBundle(JsonNode bundles, String sectionKey) {
         for (JsonNode bundle : bundles) {
             if (sectionKey.equals(bundle.path("sectionKey").asText())) {

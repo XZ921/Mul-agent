@@ -29,7 +29,14 @@ import java.util.Map;
 public class RepositoryExtractorInputProvider implements ExtractorInputProvider {
 
     private static final int DEFAULT_MAX_PROMPT_EVIDENCE_CHARS = 4000;
+    private static final int DIVERSITY_RESERVED_PROMPT_CHARS = 800;
     private static final int THIN_CONTENT_THRESHOLD = 40;
+    private static final List<String> CORE_PROMPT_DIVERSITY_SOURCE_TYPES = List.of(
+            "OFFICIAL",
+            "DOCS",
+            "PRICING",
+            "API_DATA"
+    );
     private static final List<String> READABLE_EXCLUDED_FLAGS = List.of(
             "CONTENT_GAP",
             "COLLECT_FAILED",
@@ -192,6 +199,8 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
     /**
      * P1 Task B 要求在 Provider 层就收口“什么证据真正进入 Prompt”。
      * 这里先按结构块、来源类型、质量分排序，再在总预算内截取，超预算证据转成可追溯的轻量 skipped 视图。
+     * 同时为核心来源类型保留最低预算，避免某一条超长 structured docs 抢占全部 prompt，
+     * 导致 pricing / official / api 等下游关键字段完全没有可读证据。
      */
     private PromptSelection selectPromptEvidence(List<DownstreamEvidenceView> evidences) {
         List<DownstreamEvidenceView> sorted = new ArrayList<>(evidences == null ? List.of() : evidences);
@@ -202,9 +211,11 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
                 .thenComparing(view -> firstNonBlank(view == null ? null : view.getEvidenceId(), "ZZZ")));
         List<DownstreamEvidenceView> selected = new ArrayList<>();
         List<DownstreamEvidenceView> skipped = new ArrayList<>();
+        LinkedHashSet<String> selectedDiversitySourceTypes = new LinkedHashSet<>();
         int usedPromptEvidenceChars = 0;
         boolean truncated = false;
-        for (DownstreamEvidenceView evidence : sorted) {
+        for (int index = 0; index < sorted.size(); index++) {
+            DownstreamEvidenceView evidence = sorted.get(index);
             if (evidence == null) {
                 continue;
             }
@@ -215,16 +226,74 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
                 continue;
             }
             int remainingChars = DEFAULT_MAX_PROMPT_EVIDENCE_CHARS - usedPromptEvidenceChars;
-            if (evidenceChars > remainingChars) {
-                selected.add(truncateEvidenceForPrompt(evidence, remainingChars));
-                usedPromptEvidenceChars = DEFAULT_MAX_PROMPT_EVIDENCE_CHARS;
+            int reservedChars = reservePromptCharsForPendingSourceTypes(
+                    sorted, index + 1, selectedDiversitySourceTypes, evidence);
+            int maxCharsForCurrentEvidence = Math.max(0, remainingChars - reservedChars);
+            if (evidenceChars == 0) {
+                selected.add(evidence);
+                addDiversitySourceType(selectedDiversitySourceTypes, evidence);
+                continue;
+            }
+            if (maxCharsForCurrentEvidence <= 0) {
+                skipped.add(buildTraceOnlySkippedView(evidence, "PROMPT_BUDGET_SKIPPED"));
+                truncated = true;
+                continue;
+            }
+            if (evidenceChars > maxCharsForCurrentEvidence) {
+                DownstreamEvidenceView truncatedEvidence = truncateEvidenceForPrompt(evidence, maxCharsForCurrentEvidence);
+                selected.add(truncatedEvidence);
+                addDiversitySourceType(selectedDiversitySourceTypes, truncatedEvidence);
+                usedPromptEvidenceChars += promptEvidenceChars(truncatedEvidence);
                 truncated = true;
                 continue;
             }
             selected.add(evidence);
+            addDiversitySourceType(selectedDiversitySourceTypes, evidence);
             usedPromptEvidenceChars += evidenceChars;
         }
         return new PromptSelection(selected, skipped, usedPromptEvidenceChars, truncated);
+    }
+
+    /**
+     * 为尚未进入 prompt 的核心来源类型预留最小正文额度。
+     * 这不是提高某类来源的总权重，而是在预算紧张时保证字段覆盖面：
+     * 例如 structured DOCS 很长时，仍要给 PRICING 留出一段可读正文供抽取定价字段。
+     */
+    private int reservePromptCharsForPendingSourceTypes(List<DownstreamEvidenceView> sorted,
+                                                        int startIndex,
+                                                        LinkedHashSet<String> selectedDiversitySourceTypes,
+                                                        DownstreamEvidenceView currentEvidence) {
+        LinkedHashSet<String> reservedSourceTypes = new LinkedHashSet<>(
+                selectedDiversitySourceTypes == null ? List.of() : selectedDiversitySourceTypes);
+        addDiversitySourceType(reservedSourceTypes, currentEvidence);
+        int reservedChars = 0;
+        for (int index = startIndex; index < (sorted == null ? 0 : sorted.size()); index++) {
+            DownstreamEvidenceView candidate = sorted.get(index);
+            String sourceType = diversitySourceType(candidate);
+            if (!hasText(sourceType) || reservedSourceTypes.contains(sourceType)) {
+                continue;
+            }
+            int candidateChars = promptEvidenceChars(candidate);
+            if (candidateChars <= 0) {
+                continue;
+            }
+            reservedSourceTypes.add(sourceType);
+            reservedChars += Math.min(candidateChars, DIVERSITY_RESERVED_PROMPT_CHARS);
+        }
+        return reservedChars;
+    }
+
+    private void addDiversitySourceType(LinkedHashSet<String> selectedDiversitySourceTypes,
+                                        DownstreamEvidenceView evidence) {
+        String sourceType = diversitySourceType(evidence);
+        if (selectedDiversitySourceTypes != null && hasText(sourceType)) {
+            selectedDiversitySourceTypes.add(sourceType);
+        }
+    }
+
+    private String diversitySourceType(DownstreamEvidenceView evidence) {
+        String sourceType = firstNonBlank(evidence == null ? null : evidence.getSourceType(), "");
+        return CORE_PROMPT_DIVERSITY_SOURCE_TYPES.contains(sourceType) ? sourceType : "";
     }
 
     private int structuredPriority(DownstreamEvidenceView evidence) {
@@ -257,12 +326,12 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
 
     private int promptEvidenceChars(DownstreamEvidenceView evidence) {
         String content = evidence == null || evidence.getContent() == null ? "" : evidence.getContent().trim();
-        return Math.min(content.length(), DEFAULT_MAX_PROMPT_EVIDENCE_CHARS);
+        return content.length();
     }
 
     /**
      * 当高优先级证据超出剩余额度时，优先保留它的截断正文，而不是整条丢弃。
-     * 这样 structured / official 证据还能继续进入 Prompt，而后续低优先级证据再转成 skipped trace。
+     * 截断标记也计入预算，确保账面 prompt 预算与实际进入下游的正文长度一致。
      */
     private DownstreamEvidenceView truncateEvidenceForPrompt(DownstreamEvidenceView evidence, int maxChars) {
         if (evidence == null) {
@@ -272,7 +341,10 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
         if (maxChars <= 0 || content.length() <= maxChars) {
             return evidence;
         }
-        String truncatedContent = content.substring(0, maxChars) + "...(truncated)";
+        String truncatedMarker = "...(truncated)";
+        String truncatedContent = maxChars <= truncatedMarker.length()
+                ? truncatedMarker.substring(0, maxChars)
+                : content.substring(0, maxChars - truncatedMarker.length()) + truncatedMarker;
         LinkedHashSet<String> issueFlags = new LinkedHashSet<>(evidence.getIssueFlags() == null ? List.of() : evidence.getIssueFlags());
         issueFlags.add("PROMPT_CONTENT_TRUNCATED");
         return evidence.toBuilder()

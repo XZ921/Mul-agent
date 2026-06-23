@@ -44,8 +44,10 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -1301,6 +1303,191 @@ class DagExecutorTest {
         assertTrue(task.getErrorMessage().contains("人工介入"));
     }
 
+    @Test
+    void shouldClassifyAnalyzerConsumptionFailureAsDownstreamConsumptionGapWhenExtractorSucceeded() {
+        Long taskId = 1004L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode extractSchema = TaskNode.builder()
+                .id(401L)
+                .taskId(taskId)
+                .nodeName("extract_schema")
+                .agentType(AgentType.EXTRACTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+        TaskNode analyzer = TaskNode.builder()
+                .id(402L)
+                .taskId(taskId)
+                .nodeName("analyze_competitors")
+                .agentType(AgentType.ANALYZER)
+                .dependsOn("[\"extract_schema\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+        List<TaskNode> nodes = List.of(extractSchema, analyzer);
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(nodes);
+        when(nodeRepository.findById(any())).thenAnswer(invocation -> {
+            Long nodeId = invocation.getArgument(0);
+            return nodes.stream().filter(node -> node.getId().equals(nodeId)).findFirst();
+        });
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new AlwaysSuccessExtractorAgent(), new AnalyzerConsumptionFailureAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("analyzer-gap-test").build());
+
+        assertEquals(AnalysisTaskStatus.FAILED, task.getStatus());
+        assertEquals(NodeFailureCategory.DOWNSTREAM_CONSUMPTION_GAP, analyzer.getFailureCategory());
+        assertTrue(analyzer.getInterventionReason().contains("analyzer"));
+    }
+
+    @Test
+    void shouldClassifyWriterConsumptionFailureAsDownstreamConsumptionGapWhenAnalyzerSucceeded() {
+        Long taskId = 1005L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode extractSchema = TaskNode.builder()
+                .id(501L)
+                .taskId(taskId)
+                .nodeName("extract_schema")
+                .agentType(AgentType.EXTRACTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+        TaskNode analyzer = TaskNode.builder()
+                .id(502L)
+                .taskId(taskId)
+                .nodeName("analyze_competitors")
+                .agentType(AgentType.ANALYZER)
+                .dependsOn("[\"extract_schema\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+        TaskNode writer = TaskNode.builder()
+                .id(503L)
+                .taskId(taskId)
+                .nodeName("write_report")
+                .agentType(AgentType.WRITER)
+                .dependsOn("[\"analyze_competitors\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(2)
+                .build();
+        List<TaskNode> nodes = List.of(extractSchema, analyzer, writer);
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(nodes);
+        when(nodeRepository.findById(any())).thenAnswer(invocation -> {
+            Long nodeId = invocation.getArgument(0);
+            return nodes.stream().filter(node -> node.getId().equals(nodeId)).findFirst();
+        });
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new AlwaysSuccessExtractorAgent(), new AlwaysSuccessAnalyzerAgent(), new WriterConsumptionFailureAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("writer-gap-test").build());
+
+        assertEquals(AnalysisTaskStatus.FAILED, task.getStatus());
+        assertEquals(NodeFailureCategory.DOWNSTREAM_CONSUMPTION_GAP, writer.getFailureCategory());
+        assertTrue(writer.getInterventionReason().contains("writer"));
+    }
+
+    @Test
+    void shouldNotClassifyExtractorFailureAsDownstreamConsumptionGap() {
+        Long taskId = 1006L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode extractSchema = TaskNode.builder()
+                .id(601L)
+                .taskId(taskId)
+                .nodeName("extract_schema")
+                .agentType(AgentType.EXTRACTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+        TaskNode analyzer = TaskNode.builder()
+                .id(602L)
+                .taskId(taskId)
+                .nodeName("analyze_competitors")
+                .agentType(AgentType.ANALYZER)
+                .dependsOn("[\"extract_schema\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+        List<TaskNode> nodes = List.of(extractSchema, analyzer);
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(nodes);
+        when(nodeRepository.findById(any())).thenAnswer(invocation -> {
+            Long nodeId = invocation.getArgument(0);
+            return nodes.stream().filter(node -> node.getId().equals(nodeId)).findFirst();
+        });
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new ExtractorBusinessFailureAgent(), new AlwaysSuccessAnalyzerAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("extractor-protection-test").build());
+
+        assertEquals(AnalysisTaskStatus.FAILED, task.getStatus());
+        assertNotEquals(NodeFailureCategory.DOWNSTREAM_CONSUMPTION_GAP, extractSchema.getFailureCategory());
+        assertNull(analyzer.getFailureCategory());
+    }
+
     private static TaskExecutionLockService allowingNodeLockService() {
         TaskExecutionLockService lockService = mock(TaskExecutionLockService.class);
         when(lockService.tryAcquireNodeExecutionLock(any(), any(), any(), any())).thenReturn(Boolean.TRUE);
@@ -1696,6 +1883,60 @@ class DagExecutorTest {
                     .status(TaskNodeStatus.SUCCESS)
                     .outputData("{\"analyzed\":true}")
                     .build();
+        }
+    }
+
+    private static final class AnalyzerConsumptionFailureAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.ANALYZER;
+        }
+
+        @Override
+        public String getName() {
+            return "analyzer-consumption-failure";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.failed("analyzer invalid downstream consumption of extract result drafts and evidence coverage");
+        }
+    }
+
+    private static final class WriterConsumptionFailureAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.WRITER;
+        }
+
+        @Override
+        public String getName() {
+            return "writer-consumption-failure";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.failed("writer invalid downstream consumption of analyzer result and evidence bundle");
+        }
+    }
+
+    private static final class ExtractorBusinessFailureAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.EXTRACTOR;
+        }
+
+        @Override
+        public String getName() {
+            return "extractor-business-failure";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.failed("missing business fields, issueFlags=[NO_BUSINESS_FIELDS_EXTRACTED]");
         }
     }
 

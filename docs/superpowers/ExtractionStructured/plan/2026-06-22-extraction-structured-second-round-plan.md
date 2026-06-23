@@ -72,12 +72,20 @@
 
 | Task | 目标 | 状态 |
 | --- | --- | --- |
-| Task 1 | 校准第一轮完成/剩余边界，保护 P0/P1 不被重复实现 | 未开始 |
-| Task 2 | 泛化 `DOWNSTREAM_CONSUMPTION_GAP` workflow 汇总 | 未开始 |
-| Task 3 | 报告侧 coverage 细状态分布 | 未开始 |
-| Task 4 | live 样本补证方案与执行记录 | 未开始 |
-| Task 5 | Provider 数据源治理准备，不做大迁移 | 未开始 |
-| Task 6 | 回归验证与文档回链 | 未开始 |
+| Task 1 | 校准第一轮完成/剩余边界，保护 P0/P1 不被重复实现 | 已完成 |
+| Task 2 | 泛化 `DOWNSTREAM_CONSUMPTION_GAP` workflow 汇总 | 已完成 |
+| Task 3 | 报告侧 coverage 细状态分布 | 已完成 |
+| Task 4 | live 样本补证方案与执行记录 | 已完成 |
+| Task 5 | Provider 数据源治理准备，不做大迁移 | 已完成 |
+| Task 6 | 回归验证与文档回链 | 已完成 |
+
+当前执行记录（2026-06-22）：
+
+- Task 2 已记录于 `docs/superpowers/ExtractionStructured/progress/2026-06-22-downstream-consumption-gap-expansion-progress.md`，并已覆盖 analyzer / writer / extractor 保护测试。
+- Task 3 已记录于 `docs/superpowers/ExtractionStructured/progress/2026-06-22-report-coverage-status-breakdown-progress.md`，报告三层 `statusBreakdown` 已落地。
+- Task 4 已记录于 `docs/superpowers/ExtractionStructured/progress/2026-06-22-coverage-live-sample-plan.md` 与 `live-coverage-samples-20260622-151324/`，live 样本命中 `DOWNSTREAM_CONSUMPTION_GAP`，未命中 `LLM_REFUSED / EVIDENCE_NOT_COVERING / STRUCTURED_BLOCK_DIRECT`。
+- Task 5 已回写到架构规格 `5.1.1 第二轮后的 Provider 数据源治理边界`。
+- Task 6 已完成 fresh 验证命令与第二轮计划自身状态收口。
 
 ---
 
@@ -93,7 +101,7 @@
 - Modify only after Task 6: `docs/superpowers/ExtractionStructured/summary/2026-06-21-extraction-structured-optimization-summary.md`
 - Modify only after Task 6: `docs/superpowers/ExtractionStructured/plan/2026-06-20-extraction-structured-optimization-plan.md`
 
-- [ ] **Step 1: 读取第一轮计划的 P0/P1/P2 状态**
+- [x] **Step 1: 读取第一轮计划的 P0/P1/P2 状态**
 
 Run:
 
@@ -107,7 +115,7 @@ Expected:
 命中 P0/P1/P2 分轮边界、P2 Task A/B/C，以及 2026-06-22 的当前状态补充。
 ```
 
-- [ ] **Step 2: 读取架构规格中仍未闭合的 P2 项**
+- [x] **Step 2: 读取架构规格中仍未闭合的 P2 项**
 
 Run:
 
@@ -121,7 +129,7 @@ Expected:
 确认本轮只推进 workflow 汇总、coverage 细状态透出、live 样本补证和 Provider 数据源治理准备。
 ```
 
-- [ ] **Step 3: 建立执行前代码事实清单**
+- [x] **Step 3: 建立执行前代码事实清单**
 
 Run:
 
@@ -135,7 +143,7 @@ Expected:
 确认 workflow 已有 reviewer 两类归口；ReportService 已有粗聚合；Provider 已存在 repository-backed 第一版。
 ```
 
-- [ ] **Step 4: 写下本轮不重做清单**
+- [x] **Step 4: 写下本轮不重做清单**
 
 不修改代码，只在执行记录中写入下面结论：
 
@@ -176,7 +184,7 @@ Expected:
 - reviewer 节点失败或阻断，且上游 writer 已成功，失败信息或输出说明证据追溯、质量闭环、人工补证据或改写策略无法自动闭合。
 - delivery 类节点如果在当前 DAG 中出现，且上游 reviewer / writer 已成功，失败信息说明交付检查无法通过，也归口为下游消费缺口。
 
-- [ ] **Step 1: 确认 DagExecutorTest 现有测试 fixture 签名**
+- [x] **Step 1: 确认 DagExecutorTest 现有测试 fixture 签名**
 
 Run:
 
@@ -190,7 +198,7 @@ Expected:
 命中 `newDagExecutor` helper、`allowingNodeLockService()` 和 `registryOf()`。如果签名已经变化，后续新增测试必须按现有 helper 实际签名调整，不要照抄本计划里的构造参数。
 ```
 
-- [ ] **Step 2: 写 analyzer 下游失败红灯测试**
+- [x] **Step 2: 写 analyzer 下游失败红灯测试**
 
 Add to `DagExecutorTest`:
 
@@ -260,7 +268,7 @@ Expected before implementation:
 FAIL: analyzer.getFailureCategory() is not DOWNSTREAM_CONSUMPTION_GAP
 ```
 
-- [ ] **Step 3: 写 writer 下游失败红灯测试**
+- [x] **Step 3: 写 writer 下游失败红灯测试**
 
 Add to `DagExecutorTest`:
 
@@ -341,7 +349,7 @@ Expected before implementation:
 FAIL: writer.getFailureCategory() is not DOWNSTREAM_CONSUMPTION_GAP
 ```
 
-- [ ] **Step 4: 写 extractor 失败保护测试**
+- [x] **Step 4: 写 extractor 失败保护测试**
 
 Add to `DagExecutorTest`:
 
@@ -411,7 +419,7 @@ Expected before implementation:
 PASS 或 FAIL 都可接受；该测试用于锁住本轮实现后 extractor 不被误归类。
 ```
 
-- [ ] **Step 5: 添加测试用轻量 Agent**
+- [x] **Step 5: 添加测试用轻量 Agent**
 
 Add to the helper section of `DagExecutorTest`:
 
@@ -515,7 +523,7 @@ private static final class WriterConsumptionFailureAgent implements Agent {
 }
 ```
 
-- [ ] **Step 6: 运行红灯测试**
+- [x] **Step 6: 运行红灯测试**
 
 Run:
 
@@ -529,7 +537,7 @@ Expected:
 至少 analyzer 和 writer 两个新增归类用例失败，说明当前实现只覆盖 reviewer 阻断。
 ```
 
-- [ ] **Step 7: 实现 workflow 泛化分类**
+- [x] **Step 7: 实现 workflow 泛化分类**
 
 Modify `DagExecutor.java` by replacing the existing `classifyDownstreamQualityGateFailure` helper with a broader method name and calling it from `updateTaskFinalStatus`:
 
@@ -616,7 +624,7 @@ private String buildDownstreamConsumptionReason(TaskNode node) {
 
 If `AgentType` has no delivery enum, use nodeName matching only for delivery-like nodes.
 
-- [ ] **Step 8: 保留 reviewer 已有场景**
+- [x] **Step 8: 保留 reviewer 已有场景**
 
 Run:
 
@@ -630,7 +638,7 @@ Expected:
 BUILD SUCCESS
 ```
 
-- [ ] **Step 9: 运行本任务完整测试**
+- [x] **Step 9: 运行本任务完整测试**
 
 Run:
 
@@ -667,7 +675,7 @@ BUILD SUCCESS
 
 新增字段只补细粒度分布，前端旧消费路径不受影响。
 
-- [ ] **Step 1: 确认报告 coverage 既有回归测试**
+- [x] **Step 1: 确认报告 coverage 既有回归测试**
 
 Run:
 
@@ -681,7 +689,7 @@ Expected:
 命中 `shouldAggregateEvidenceCoverageOverview` 和 `shouldTreatStructuredDirectAsTraceableAndExpandedGapStatesAsMissingCoverage`；不应命中 `shouldExposeFineGrainedCoverageStatusBreakdownInReportOverview`，这个新测试由本轮新增。
 ```
 
-- [ ] **Step 2: 写报告细状态红灯测试**
+- [x] **Step 2: 写报告细状态红灯测试**
 
 Add to `ReportServiceTest`:
 
@@ -749,7 +757,7 @@ Expected before implementation:
 Compilation FAIL: getStatusBreakdown() does not exist
 ```
 
-- [ ] **Step 3: 给 DTO 增加细状态分布字段**
+- [x] **Step 3: 给 DTO 增加细状态分布字段**
 
 Modify `ReportResponse.java`:
 
@@ -801,7 +809,7 @@ public static class CompetitorEvidenceCoverage {
 }
 ```
 
-- [ ] **Step 4: 在 ReportService 中保留原始状态**
+- [x] **Step 4: 在 ReportService 中保留原始状态**
 
 Modify `ReportService.java` around coverage helpers:
 
@@ -836,7 +844,7 @@ private record CoverageState(CoverageStatus coarseStatus, String rawStatus) {
 
 Add `import java.util.Locale;` if the file does not already import it. This keeps coarse status and raw status derived from the same parsed coverage map, avoiding duplicate coverage status parsing.
 
-- [ ] **Step 5: 给 SectionCoverageAccumulator 增加状态计数**
+- [x] **Step 5: 给 SectionCoverageAccumulator 增加状态计数**
 
 Modify the accumulator:
 
@@ -863,7 +871,7 @@ private static final class SectionCoverageAccumulator {
 }
 ```
 
-- [ ] **Step 6: 在 buildEvidenceCoverageOverview 中填充分布**
+- [x] **Step 6: 在 buildEvidenceCoverageOverview 中填充分布**
 
 Modify the loop that currently calls `resolveCoverageStatus` to:
 
@@ -906,7 +914,7 @@ Expected behavior:
 粗粒度计数保持旧逻辑；statusBreakdown 记录 TRACEABLE、MISSING_EVIDENCE、EMPTY、LLM_REFUSED、EVIDENCE_NOT_COVERING、STRUCTURED_BLOCK_DIRECT 等原始状态。
 ```
 
-- [ ] **Step 7: 运行报告测试**
+- [x] **Step 7: 运行报告测试**
 
 Run:
 
@@ -936,7 +944,7 @@ BUILD SUCCESS
 - `STRUCTURED_BLOCK_DIRECT`
 - `DOWNSTREAM_CONSUMPTION_GAP`
 
-- [ ] **Step 1: 创建 live 样本计划文档**
+- [x] **Step 1: 创建 live 样本计划文档**
 
 Create `docs/superpowers/ExtractionStructured/progress/2026-06-22-coverage-live-sample-plan.md`:
 
@@ -987,7 +995,7 @@ Create `docs/superpowers/ExtractionStructured/progress/2026-06-22-coverage-live-
 task `50` 已在 `2026-06-22-task-50-extract-schema-rerun-success.md` 中证明成功链路可通过；本计划只补新状态命中样本，不重复证明 task `50` 基础 rerun。
 ```
 
-- [ ] **Step 2: 检查本地服务**
+- [x] **Step 2: 检查本地服务**
 
 Run:
 
@@ -1007,7 +1015,7 @@ If not 200:
 记录为“live 未执行：本地 dev 服务未启动或 task 50 不存在”，不伪造样本结论。
 ```
 
-- [ ] **Step 3: 创建样本目录并采集 rerun 前现场**
+- [x] **Step 3: 创建样本目录并采集 rerun 前现场**
 
 Run:
 
@@ -1027,7 +1035,7 @@ Expected:
 目录创建成功，四个 before 文件可打开。
 ```
 
-- [ ] **Step 4: 执行节点级 rerun**
+- [x] **Step 4: 执行节点级 rerun**
 
 Run:
 
@@ -1046,7 +1054,7 @@ Expected:
 after 文件包含最新节点状态和报告响应。
 ```
 
-- [ ] **Step 5: 搜索 coverage 状态命中**
+- [x] **Step 5: 搜索 coverage 状态命中**
 
 Run:
 
@@ -1060,7 +1068,7 @@ Expected:
 至少命中 coverage 或 failureCategory 相关字段；若没有命中新状态，记录“task 50 成功链路未覆盖新状态”。
 ```
 
-- [ ] **Step 6: 写样本总结**
+- [x] **Step 6: 写样本总结**
 
 Create `$dir\sample-summary.md`:
 
@@ -1101,7 +1109,7 @@ Create `$dir\sample-summary.md`:
 
 本任务只做第二轮后的架构准备，不迁移生产数据源。
 
-- [ ] **Step 1: 读取 Provider 当前职责**
+- [x] **Step 1: 读取 Provider 当前职责**
 
 Run:
 
@@ -1115,7 +1123,7 @@ Expected:
 确认 Provider 已承担输入筛选、排序、预算、薄正文和 skippedEvidence 追溯。
 ```
 
-- [ ] **Step 2: 在架构规格追加 Provider 下一阶段边界**
+- [x] **Step 2: 在架构规格追加 Provider 下一阶段边界**
 
 Append under the Provider / P2 section in `2026-06-21-extraction-structured-architecture-spec.md`:
 
@@ -1131,7 +1139,7 @@ Append under the Provider / P2 section in `2026-06-21-extraction-structured-arch
 - `DownstreamEvidenceView` 继续作为下游轻量视图；如需承载 extractor 内部长正文，应新建输入投影视图，不能把长正文重新塞回 shared output。
 ```
 
-- [ ] **Step 3: 扫描规格中是否出现反向设计**
+- [x] **Step 3: 扫描规格中是否出现反向设计**
 
 Run:
 
@@ -1157,7 +1165,7 @@ Expected:
 - Modify: `docs/superpowers/ExtractionStructured/specs/2026-06-21-extraction-structured-architecture-spec.md`
 - Read: `docs/superpowers/ExtractionStructured/progress/2026-06-22-coverage-live-sample-plan.md`
 
-- [ ] **Step 1: 运行第二轮核心测试**
+- [x] **Step 1: 运行第二轮核心测试**
 
 Run:
 
@@ -1171,7 +1179,7 @@ Expected:
 BUILD SUCCESS
 ```
 
-- [ ] **Step 2: 运行第一轮防回归测试组**
+- [x] **Step 2: 运行第一轮防回归测试组**
 
 Run:
 
@@ -1185,7 +1193,7 @@ Expected:
 BUILD SUCCESS
 ```
 
-- [ ] **Step 3: 运行全量 backend 测试**
+- [x] **Step 3: 运行全量 backend 测试**
 
 Run:
 
@@ -1201,7 +1209,7 @@ BUILD SUCCESS
 
 If this command fails due to unrelated pre-existing tests, record the failing class and rerun the scoped tests from Step 1 and Step 2. Do not claim full backend pass unless Maven prints `BUILD SUCCESS`.
 
-- [ ] **Step 4: 运行限定路径 diff 空白检查**
+- [x] **Step 4: 运行限定路径 diff 空白检查**
 
 Run:
 
@@ -1217,7 +1225,7 @@ Expected:
 
 Do not run raw `git diff --check` as the only judgment because `backend/logs/competitor-agent.log` has historical trailing whitespace.
 
-- [ ] **Step 5: 回写 `ExtractionStructured.md` 当前状态**
+- [x] **Step 5: 回写 `ExtractionStructured.md` 当前状态**
 
 Update the P2 section to this shape:
 
@@ -1225,7 +1233,7 @@ Update the P2 section to this shape:
 | P2 下游消费与质量门禁 | 2026-06-22 第二轮进行中 | `evidenceCoverage` 细化已落地；workflow 正在从 reviewer 两类阻断扩展到 analyzer / writer / reviewer / delivery 统一汇总；task `50` 成功链路已验证 | 剩余为更多 live coverage 状态样本与 Provider 内部数据源治理 |
 ```
 
-- [ ] **Step 6: 回写优化汇总**
+- [x] **Step 6: 回写优化汇总**
 
 Append a second-round progress note:
 
@@ -1238,7 +1246,7 @@ Append a second-round progress note:
 - live 验证不再重复证明 task `50` 基础链路可通过，重点补 coverage 新状态命中样本。
 ```
 
-- [ ] **Step 7: 回写第一轮计划 P2 状态**
+- [x] **Step 7: 回写第一轮计划 P2 状态**
 
 Update the P2 section in `2026-06-20-extraction-structured-optimization-plan.md`:
 
@@ -1250,7 +1258,7 @@ Update the P2 section in `2026-06-20-extraction-structured-optimization-plan.md`
 - task `50` 基础 rerun 成功链路已完成，第二轮只补新状态命中样本。
 ```
 
-- [ ] **Step 8: 文档红旗词扫描**
+- [x] **Step 8: 文档红旗词扫描**
 
 Run:
 
@@ -1263,6 +1271,21 @@ Expected:
 ```text
 无输出
 ```
+
+本轮 fresh 验证记录（2026-06-22）：
+
+- `mvn -pl backend "-Dtest=DagExecutorTest,ReportServiceTest" test`
+  - 结果：`BUILD SUCCESS`，`Tests run: 32, Failures: 0, Errors: 0, Skipped: 0`
+- `mvn -pl backend "-Dtest=DagExecutorTest,QualityReviewAgentTest,ReportWriterAgentTest,ReportServiceTest,CompetitorAnalysisAgentTest,RepositoryExtractorInputProviderTest,SharedNodeOutputProjectorContractTest" test`
+  - 结果：`BUILD SUCCESS`，`Tests run: 64, Failures: 0, Errors: 0, Skipped: 0`
+- `mvn -pl backend test`
+  - 结果：`BUILD SUCCESS`；本轮 surefire 汇总为 `Tests run: 658, Failures: 0, Errors: 0, Skipped: 3`
+- `git diff --check -- backend/src/main/java backend/src/test/java docs/superpowers/ExtractionStructured docs/specs/2026-06-11-business-landscape-and-optimization-roadmap-design.md`
+  - 结果：无 diff-check 错误，仅有工作区 `LF -> CRLF` 提示。
+- 文档红旗词扫描：
+  - 结果：`NO_RED_FLAG_TERMS`
+- 服务状态：
+  - 本轮没有启动 `9093`，最终确认 `PORT_9093_NOT_LISTENING`。
 
 ---
 

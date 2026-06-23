@@ -422,7 +422,7 @@ public class ReportWriterAgent extends BaseAgent {
         if (evidenceFragments.isEmpty()) {
             evidenceFragments = buildEvidenceFragmentsFromEvidence(evidences, issueFlags);
         }
-        sectionEvidenceBundles = ensureWriterSectionBundles(normalized, sectionEvidenceBundles, evidenceFragments, sourceUrls, issueFlags);
+        sectionEvidenceBundles = ensureWriterSectionBundles(normalized, sectionEvidenceBundles, evidenceFragments, sourceUrls);
 
         normalized.putPOJO("sourceUrls", new ArrayList<>(sourceUrls));
         normalized.putPOJO("issueFlags", new ArrayList<>(issueFlags));
@@ -521,14 +521,16 @@ public class ReportWriterAgent extends BaseAgent {
     private List<SectionEvidenceBundle> ensureWriterSectionBundles(ObjectNode normalized,
                                                                   List<SectionEvidenceBundle> inheritedBundles,
                                                                   List<EvidenceFragment> evidenceFragments,
-                                                                  LinkedHashSet<String> sourceUrls,
-                                                                  LinkedHashSet<String> issueFlags) {
+                                                                  LinkedHashSet<String> sourceUrls) {
         List<SectionEvidenceBundle> bundles = new ArrayList<>(normalizeSectionEvidenceBundles(inheritedBundles));
         boolean hasReportConclusion = bundles.stream()
                 .anyMatch(bundle -> "report_conclusion".equals(bundle.getSectionKey()));
         if (!hasReportConclusion) {
             LinkedHashSet<String> missingFields = new LinkedHashSet<>();
-            if (issueFlags.contains("MISSING_EVIDENCE")) {
+            // report_conclusion 只反映“结论章节自身”的缺口。
+            // 如果上游只是 summary/pricing 等其他字段缺证据，但 recommendations 已经产出，
+            // 这里不能把全局 MISSING_EVIDENCE 放大成结论章节缺口，否则会误导后续诊断。
+            if (isWriterRecommendationMissing(normalized)) {
                 missingFields.add("recommendations");
             }
             if (sourceUrls.isEmpty()) {
@@ -552,6 +554,24 @@ public class ReportWriterAgent extends BaseAgent {
                     .normalized());
         }
         return bundles;
+    }
+
+    /**
+     * Writer 兜底生成 report_conclusion 时，只在 recommendations 自身为空时标记章节缺口。
+     * 这样可以避免 analyzer/extractor 的字段级 MISSING_EVIDENCE 被错误提升为结论章节的 SECTION_EVIDENCE_GAP。
+     */
+    private boolean isWriterRecommendationMissing(ObjectNode normalized) {
+        JsonNode recommendations = normalized == null ? null : normalized.path("recommendations");
+        if (recommendations == null || recommendations.isMissingNode() || recommendations.isNull()) {
+            return true;
+        }
+        if (recommendations.isArray()) {
+            return recommendations.isEmpty();
+        }
+        if (recommendations.isTextual()) {
+            return recommendations.asText().isBlank();
+        }
+        return recommendations.isEmpty();
     }
 
     private String firstNonBlank(String primary, String fallback) {

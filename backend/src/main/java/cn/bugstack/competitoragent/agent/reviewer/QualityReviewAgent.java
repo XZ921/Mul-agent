@@ -4,6 +4,7 @@ import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.agent.BaseAgent;
 import cn.bugstack.competitoragent.context.AgentContextAssembler;
+import cn.bugstack.competitoragent.knowledge.TaskKnowledgeSnapshotResolver;
 import cn.bugstack.competitoragent.llm.LlmClient;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.memory.MemoryWritebackService;
@@ -47,6 +48,15 @@ public class QualityReviewAgent extends BaseAgent {
     private static final Pattern EVIDENCE_PATTERN = Pattern.compile("\\[证据[:：]\\s*([^\\]]+)]");
     private static final int MAX_CLAIM_AUDIT_ITEMS = 12;
     private static final int REVIEW_JSON_MAX_ATTEMPTS = 3;
+    private static final List<CoverageFieldRule> COVERAGE_FIELD_RULES = List.of(
+            new CoverageFieldRule("summary", "产品概览", List.of("产品概览", "内容结构", "证据完整性", "概览", "摘要")),
+            new CoverageFieldRule("positioning", "市场定位", List.of("市场定位", "产品定位", "定位")),
+            new CoverageFieldRule("targetUsers", "目标用户", List.of("目标用户", "用户画像", "受众", "用户")),
+            new CoverageFieldRule("coreFeatures", "核心能力", List.of("产品功能", "核心功能", "核心能力", "内容结构", "功能")),
+            new CoverageFieldRule("pricing", "定价策略", List.of("价格策略", "定价策略", "定价", "价格", "计费")),
+            new CoverageFieldRule("strengths", "优势判断", List.of("优势", "竞争优势", "亮点")),
+            new CoverageFieldRule("weaknesses", "短板与风险", List.of("短板", "风险", "不足", "劣势"))
+    );
     private static final List<SectionRule> CLAIM_AUDIT_RULES = List.of(
             new SectionRule("结论", List.of("产品概览", "市场定位", "目标用户", "核心能力", "定价策略", "优势判断", "短板与风险"), "ERROR"),
             new SectionRule("建议", List.of("市场定位", "目标用户", "核心能力", "定价策略", "优势判断", "短板与风险"), "WARNING"),
@@ -106,10 +116,14 @@ public class QualityReviewAgent extends BaseAgent {
         }
 
         List<EvidenceSource> evidences = evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(context.getTaskId());
-        List<CompetitorKnowledge> knowledges = knowledgeRepository.findByTaskIdOrderByIdAsc(context.getTaskId());
+        // Reviewer 只看当前任务有效快照，避免旧 rerun 快照把已修复的 coverage 缺口重新带回质检。
+        List<CompetitorKnowledge> knowledges = TaskKnowledgeSnapshotResolver.resolveCurrentTaskSnapshots(
+                knowledgeRepository.findByTaskIdOrderByIdAsc(context.getTaskId())
+        );
         String evidenceList = buildEvidenceList(evidences);
         String evidenceCoverageSummary = buildEvidenceCoverageSummary(knowledges);
-        CoverageSnapshot coverageSnapshot = buildCoverageSnapshot(knowledges);
+        Set<String> requiredCoverageSections = resolveRequiredCoverageSections(context.getAnalysisDimensions());
+        CoverageSnapshot coverageSnapshot = buildCoverageSnapshot(knowledges, requiredCoverageSections);
         String claimAuditChecklist = buildClaimAuditChecklist(report.getContent(), evidenceCoverageSummary);
         boolean finalPass = isFinalReview(context.getCurrentNodeConfig());
 
@@ -376,7 +390,8 @@ public class QualityReviewAgent extends BaseAgent {
         return String.join("\n", lines);
     }
 
-    private CoverageSnapshot buildCoverageSnapshot(List<CompetitorKnowledge> knowledges) {
+    private CoverageSnapshot buildCoverageSnapshot(List<CompetitorKnowledge> knowledges,
+                                                   Set<String> requiredCoverageSections) {
         LinkedHashSet<String> traceableSections = new LinkedHashSet<>();
         LinkedHashSet<String> structuredDirectSections = new LinkedHashSet<>();
         LinkedHashSet<String> missingSections = new LinkedHashSet<>();
@@ -386,16 +401,23 @@ public class QualityReviewAgent extends BaseAgent {
         if (knowledges != null) {
             for (CompetitorKnowledge knowledge : knowledges) {
                 Map<String, Object> coverage = parseJsonMap(knowledge.getEvidenceCoverage());
-                collectCoverageStatus(coverage, "summary", "产品概览", traceableSections, structuredDirectSections, missingSections, notCoveringSections, refusedSections, emptySections);
-                collectCoverageStatus(coverage, "positioning", "市场定位", traceableSections, structuredDirectSections, missingSections, notCoveringSections, refusedSections, emptySections);
-                collectCoverageStatus(coverage, "targetUsers", "目标用户", traceableSections, structuredDirectSections, missingSections, notCoveringSections, refusedSections, emptySections);
-                collectCoverageStatus(coverage, "coreFeatures", "核心能力", traceableSections, structuredDirectSections, missingSections, notCoveringSections, refusedSections, emptySections);
-                collectCoverageStatus(coverage, "pricing", "定价策略", traceableSections, structuredDirectSections, missingSections, notCoveringSections, refusedSections, emptySections);
-                collectCoverageStatus(coverage, "strengths", "优势判断", traceableSections, structuredDirectSections, missingSections, notCoveringSections, refusedSections, emptySections);
-                collectCoverageStatus(coverage, "weaknesses", "短板与风险", traceableSections, structuredDirectSections, missingSections, notCoveringSections, refusedSections, emptySections);
+                for (CoverageFieldRule rule : COVERAGE_FIELD_RULES) {
+                    collectCoverageStatus(coverage, rule.fieldName(), rule.sectionTitle(), traceableSections, structuredDirectSections, missingSections, notCoveringSections, refusedSections, emptySections);
+                }
             }
         }
-        return new CoverageSnapshot(traceableSections, structuredDirectSections, missingSections, notCoveringSections, refusedSections, emptySections);
+        LinkedHashSet<String> requiredNotCoveringSections = filterRequiredSections(notCoveringSections, requiredCoverageSections);
+        LinkedHashSet<String> requiredRefusedSections = filterRequiredSections(refusedSections, requiredCoverageSections);
+        return new CoverageSnapshot(
+                traceableSections,
+                structuredDirectSections,
+                missingSections,
+                notCoveringSections,
+                refusedSections,
+                emptySections,
+                requiredNotCoveringSections,
+                requiredRefusedSections
+        );
     }
 
     private List<RevisionPlan.RevisionItem> mergeRuleBasedIssues(List<RevisionPlan.RevisionItem> llmItems,
@@ -424,16 +446,49 @@ public class QualityReviewAgent extends BaseAgent {
     private List<RevisionPlan.RevisionItem> filterAlreadySatisfiedLlmIssues(List<RevisionPlan.RevisionItem> llmItems,
                                                                             String reportContent) {
         if (llmItems == null || llmItems.isEmpty() || reportContent == null || reportContent.isBlank()) {
-            return llmItems == null ? List.of() : new ArrayList<>(llmItems);
+            return filterPlaceholderLlmIssues(llmItems);
         }
         List<ReportSection> sections = splitMarkdownSections(reportContent);
         List<RevisionPlan.RevisionItem> filtered = new ArrayList<>();
-        for (RevisionPlan.RevisionItem item : llmItems) {
+        for (RevisionPlan.RevisionItem item : filterPlaceholderLlmIssues(llmItems)) {
             if (!shouldSuppressExplainableLlmIssue(item, sections)) {
                 filtered.add(item);
             }
         }
         return filtered;
+    }
+
+    /**
+     * live 终审里偶尔会出现 UNKNOWN / 通用 / “请补充并完善这一部分” 这类占位问题：
+     * 它们既没有明确章节定位，也没有可执行修订信息，只会徒增 MAJOR 数量并放大人工介入概率。
+     * 这里在进入 diagnoses 之前先剔除纯占位 issue，保留有章节、有具体建议的真实问题。
+     */
+    private List<RevisionPlan.RevisionItem> filterPlaceholderLlmIssues(List<RevisionPlan.RevisionItem> llmItems) {
+        if (llmItems == null || llmItems.isEmpty()) {
+            return List.of();
+        }
+        List<RevisionPlan.RevisionItem> filtered = new ArrayList<>();
+        for (RevisionPlan.RevisionItem item : llmItems) {
+            if (!isPlaceholderLlmIssue(item)) {
+                filtered.add(item);
+            }
+        }
+        return filtered;
+    }
+
+    private boolean isPlaceholderLlmIssue(RevisionPlan.RevisionItem item) {
+        if (item == null) {
+            return true;
+        }
+        String type = safeValue(item.getType(), "").trim();
+        String section = safeValue(item.getSection(), "").trim();
+        String suggestion = safeValue(item.getSuggestion(), "").trim();
+        if (!"unknown".equalsIgnoreCase(type)) {
+            return false;
+        }
+        boolean genericSection = section.isBlank() || "通用".equalsIgnoreCase(section);
+        boolean genericSuggestion = suggestion.isBlank() || "请补充并完善这一部分".equals(suggestion);
+        return genericSection && genericSuggestion;
     }
 
     private boolean shouldSuppressExplainableLlmIssue(RevisionPlan.RevisionItem item,
@@ -570,11 +625,14 @@ public class QualityReviewAgent extends BaseAgent {
                                       List<QualityDiagnosis> diagnoses) {
         boolean hasBlocker = diagnoses.stream()
                 .anyMatch(diagnosis -> "BLOCKER".equalsIgnoreCase(safeValue(diagnosis.getLevel(), "")));
+        boolean hasCoverageGap = diagnoses.stream()
+                .anyMatch(diagnosis -> "coverage_gap".equalsIgnoreCase(safeValue(diagnosis.getType(), "")));
         boolean hasCriticalCoreDimension = dimensions.stream()
                 .map(QualityDimension::normalized)
                 .anyMatch(dimension -> isCoreDimension(dimension.getCode())
                         && "CRITICAL".equalsIgnoreCase(safeValue(dimension.getStatus(), "")));
-        return llmPassed && !hasBlocker && !hasCriticalCoreDimension;
+        // coverage gap 即使不是阻断级，也说明报告仍需自动改写或标注不适用，不能直接放行为通过。
+        return llmPassed && !hasBlocker && !hasCoverageGap && !hasCriticalCoreDimension;
     }
 
     /**
@@ -645,21 +703,23 @@ public class QualityReviewAgent extends BaseAgent {
                 || !coverageSnapshot.notCoveringSections().isEmpty()
                 || !coverageSnapshot.refusedSections().isEmpty()
                 || !coverageSnapshot.emptySections().isEmpty()) {
-            int hardGapCount = coverageSnapshot.missingSections().size()
-                    + coverageSnapshot.notCoveringSections().size()
-                    + coverageSnapshot.refusedSections().size();
+            int blockingGapCount = coverageSnapshot.requiredNotCoveringSections().size()
+                    + coverageSnapshot.requiredRefusedSections().size();
             diagnoses.add(QualityDiagnosis.builder()
                     .dimensionCode("STRUCTURE_COMPLETENESS")
                     .dimensionName("结构完整性")
                     .type("coverage_gap")
                     .section(joinSectionsForSummary(coverageSnapshot))
-                    .severity(hardGapCount >= 2 ? "ERROR" : "WARNING")
+                    // MISSING_EVIDENCE / EMPTY 说明当前字段仍需补证据或补抽取，适合进入自动改写或补源闭环；
+                    // 只有 EVIDENCE_NOT_COVERING / LLM_REFUSED 这类“现有来源明确不支撑”的缺口，才直接升级为阻断级。
+                    .severity(blockingGapCount > 0 ? "ERROR" : "WARNING")
                     .title("结构化字段仍存在覆盖缺口")
                     .detail("上游抽取结果中仍有字段缺证据或为空，说明报告链路输出质量不稳定。")
                     .evidenceBasis("缺证据章节=" + joinSections(coverageSnapshot.missingSections())
                             + "；证据不覆盖章节=" + joinSections(coverageSnapshot.notCoveringSections())
                             + "；模型拒答章节=" + joinSections(coverageSnapshot.refusedSections())
-                            + "；空字段章节=" + joinSections(coverageSnapshot.emptySections()))
+                            + "；空字段章节=" + joinSections(coverageSnapshot.emptySections())
+                            + "；阻断字段=" + joinBlockingSections(coverageSnapshot))
                     .sourceUrls(sourceUrls)
                     .repairSuggestion("请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。")
                     .build()
@@ -945,6 +1005,103 @@ public class QualityReviewAgent extends BaseAgent {
 
     private String joinSections(Set<String> sections) {
         return sections == null || sections.isEmpty() ? "无" : String.join("、", sections);
+    }
+
+    private String joinBlockingSections(CoverageSnapshot coverageSnapshot) {
+        LinkedHashSet<String> blockingSections = new LinkedHashSet<>();
+        blockingSections.addAll(coverageSnapshot.requiredNotCoveringSections());
+        blockingSections.addAll(coverageSnapshot.requiredRefusedSections());
+        return joinSections(blockingSections);
+    }
+
+    /**
+     * analysisDimensions 是本次任务的显式分析边界。
+     * 未提供维度时保持历史 7 字段全量严格门禁；提供维度后，只把命中维度的字段视为阻断候选。
+     */
+    private Set<String> resolveRequiredCoverageSections(String analysisDimensions) {
+        LinkedHashSet<String> requiredSections = new LinkedHashSet<>();
+        if (analysisDimensions == null || analysisDimensions.isBlank()) {
+            for (CoverageFieldRule rule : COVERAGE_FIELD_RULES) {
+                requiredSections.add(rule.sectionTitle());
+            }
+            return requiredSections;
+        }
+        List<String> dimensions = parseAnalysisDimensions(analysisDimensions);
+        if (dimensions.isEmpty()) {
+            for (CoverageFieldRule rule : COVERAGE_FIELD_RULES) {
+                requiredSections.add(rule.sectionTitle());
+            }
+            return requiredSections;
+        }
+        for (CoverageFieldRule rule : COVERAGE_FIELD_RULES) {
+            if (matchesAnalysisDimension(rule, dimensions)) {
+                requiredSections.add(rule.sectionTitle());
+            }
+        }
+        return requiredSections;
+    }
+
+    private List<String> parseAnalysisDimensions(String analysisDimensions) {
+        if (analysisDimensions == null || analysisDimensions.isBlank()) {
+            return List.of();
+        }
+        String normalized = analysisDimensions.trim();
+        if (normalized.startsWith("[") && normalized.endsWith("]")) {
+            try {
+                JsonNode node = objectMapper.readTree(normalized);
+                if (node.isArray()) {
+                    List<String> values = new ArrayList<>();
+                    for (JsonNode item : node) {
+                        String text = item.asText("");
+                        if (!text.isBlank()) {
+                            values.add(text.trim());
+                        }
+                    }
+                    return values;
+                }
+            } catch (JsonProcessingException e) {
+                log.warn("reviewer failed to parse analysisDimensions as json array, raw={}", analysisDimensions, e);
+            }
+        }
+        return Arrays.stream(normalized.split("[,，、;；\\s]+"))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .toList();
+    }
+
+    private boolean matchesAnalysisDimension(CoverageFieldRule rule, List<String> dimensions) {
+        for (String dimension : dimensions) {
+            String normalizedDimension = normalizeDimensionText(dimension);
+            for (String keyword : rule.dimensionKeywords()) {
+                String normalizedKeyword = normalizeDimensionText(keyword);
+                if (!normalizedDimension.isBlank()
+                        && (normalizedDimension.contains(normalizedKeyword) || normalizedKeyword.contains(normalizedDimension))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private String normalizeDimensionText(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toLowerCase(Locale.ROOT)
+                .replace("分析", "")
+                .replace("对比", "")
+                .replace("维度", "")
+                .replace(" ", "");
+    }
+
+    private LinkedHashSet<String> filterRequiredSections(Set<String> sections, Set<String> requiredCoverageSections) {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        for (String section : sections == null ? Set.<String>of() : sections) {
+            if (requiredCoverageSections.contains(section)) {
+                result.add(section);
+            }
+        }
+        return result;
     }
 
     private boolean requiresEvidenceCitation(RevisionPlan.RevisionItem item) {
@@ -1575,6 +1732,9 @@ public class QualityReviewAgent extends BaseAgent {
     private record SectionRule(String reportSection, List<String> coverageSections, String severity) {
     }
 
+    private record CoverageFieldRule(String fieldName, String sectionTitle, List<String> dimensionKeywords) {
+    }
+
     private record ClaimAuditItem(String section,
                                   String claimText,
                                   boolean hasEvidenceCitation,
@@ -1587,7 +1747,9 @@ public class QualityReviewAgent extends BaseAgent {
                                     LinkedHashSet<String> missingSections,
                                     LinkedHashSet<String> notCoveringSections,
                                     LinkedHashSet<String> refusedSections,
-                                    LinkedHashSet<String> emptySections) {
+                                    LinkedHashSet<String> emptySections,
+                                    LinkedHashSet<String> requiredNotCoveringSections,
+                                    LinkedHashSet<String> requiredRefusedSections) {
     }
 
     private record ReportSection(String title, String content) {

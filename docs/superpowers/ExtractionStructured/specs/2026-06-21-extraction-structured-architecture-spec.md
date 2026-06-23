@@ -130,6 +130,16 @@ ExtractorInputProvider
   -> 生成 ExtractorInputPackage
 ```
 
+### 5.1.1 第二轮后的 Provider 数据源治理边界
+
+第二轮不迁移 `RepositoryExtractorInputProvider` 的底层数据源，但要冻结下一阶段的接口边界，避免后续 replay、cache 或正式端口再次绕回 Agent 内部自行拼输入：
+
+- `ExtractorInputProvider` 继续作为 `SchemaExtractorAgent` 的唯一输入入口。
+- repository-backed 实现只保留为第一版适配器，而不是长期架构终态。
+- 后续无论引入正式端口、replay 还是 cache，外部输入都必须先组装成 `ExtractorInputPackage`，再交给 extractor 消费。
+- replay / cache 只能替换 Provider 内部的数据来源，不能绕过 Provider 直接向 Prompt 写入原始证据正文。
+- `DownstreamEvidenceView` 继续只承担下游轻量证据视图职责；如果未来需要承载 extractor 内部长正文，应新建输入投影视图，而不是把长正文重新塞回 shared output。
+
 ### 5.2 ExtractorInputPackage
 
 `ExtractorInputPackage` 应承载 extractor 本次执行需要的全部输入事实：
@@ -445,6 +455,13 @@ Prompt 必须要求模型只返回 JSON，并遵守：
 - Provider 接入 replay / cache / 预算控制；
 - 失败分层扩展到 workflow 汇总；
 - Schema dimensions 结构升级。
+
+当前状态补充（2026-06-22 第二轮后）：
+
+- `ExtractorInputProvider` 已经收口为 extractor 主路径唯一输入入口；
+- `RepositoryExtractorInputProvider` 仍是 repository-backed 第一版适配器；
+- 下一阶段要继续收的是 Provider 内部数据源治理，而不是把输入边界重新摊回 Agent；
+- `DownstreamEvidenceView` 不再回退为跨节点长正文载体，长正文仍只允许停留在正式证据存储或 extractor 一次性输入包内。
 
 ### 后续：长期架构演进
 

@@ -245,6 +245,57 @@ class ReportWriterAgentTest {
     }
 
     @Test
+    void shouldNotPromoteFieldLevelMissingEvidenceToReportConclusionGapWhenRecommendationsExist() throws Exception {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E001")
+                        .title("Docs")
+                        .url("https://docs.notion.so")
+                        .contentSnippet("documentation snippet")
+                        .build()
+        ));
+        when(reportRepository.findByTaskId(1L)).thenReturn(Optional.empty());
+        when(promptService.render(eq("writer"), any())).thenAnswer(invocation -> {
+            Map<String, String> variables = invocation.getArgument(1);
+            return variables.get("analysisResult");
+        });
+        when(llmClient.chat(any(), any())).thenReturn("""
+                # 绔炲搧鎶ュ憡
+                鍩轰簬鐜版湁璇佹嵁鏁寸悊缁撹銆?
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .subjectProduct("Our Product")
+                .reportLanguage("涓枃")
+                .currentNodeName("write_report")
+                .build();
+        context.putSharedOutput("analyze_competitors", """
+                {
+                  "overview": "鍒嗘瀽瀹屾垚",
+                  "recommendations": ["缁х画瑙傚療"],
+                  "issueFlags": ["MISSING_EVIDENCE"]
+                }
+                """);
+
+        AgentResult result = agent.execute(context);
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        JsonNode reportConclusion = findBundle(output.path("sectionEvidenceBundles"), "report_conclusion");
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(reportConclusion.path("sourceUrls").toString().contains("https://docs.notion.so"));
+        assertTrue(reportConclusion.path("missingFields").isArray());
+        assertEquals(0, reportConclusion.path("missingFields").size());
+        assertTrue(reportConclusion.path("issueFlags").isArray());
+        assertEquals(0, reportConclusion.path("issueFlags").size());
+    }
+
+    @Test
     void shouldBackfillWriterSourceUrlsWhenAnalyzerOutputDropsThem() throws Exception {
         when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
                 EvidenceSource.builder()

@@ -105,6 +105,70 @@ class RepositoryExtractorInputProviderTest {
     }
 
     @Test
+    void shouldKeepPricingEvidenceWhenLargeStructuredDocsWouldConsumePromptBudget() {
+        EvidenceSource largeHelpDocs = EvidenceSource.builder()
+                .taskId(3L)
+                .competitorName("Notion")
+                .evidenceId("E201")
+                .title("Help, Support, and Documentation for Notion")
+                .url("https://notion.so/help")
+                .sourceType("DOCS")
+                .fullContent("Notion help center structured metadata. ".repeat(180))
+                .pageMetadata("""
+                        {
+                          "sourceUrls": ["https://notion.so/help"],
+                          "qualitySignals": ["JSON_LD_METADATA_HIT"],
+                          "structuredBlocks": [{"blockType": "JSON_LD_METADATA", "summary": "Help center metadata"}],
+                          "qualityScore": 0.98
+                        }
+                        """)
+                .build();
+        EvidenceSource pricingPage = EvidenceSource.builder()
+                .taskId(3L)
+                .competitorName("Notion")
+                .evidenceId("E202")
+                .title("Notion Pricing")
+                .url("https://notion.so/pricing")
+                .sourceType("PRICING")
+                .fullContent("Free plan, Plus plan, Business plan, Enterprise plan. Pricing is billed per seat.")
+                .pageMetadata("""
+                        {
+                          "sourceUrls": ["https://notion.so/pricing"],
+                          "qualitySignals": ["LIGHTWEIGHT_CONTENT_READY"],
+                          "qualityScore": 0.91
+                        }
+                        """)
+                .build();
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(3L))
+                .thenReturn(List.of(largeHelpDocs, pricingPage));
+
+        ExtractorInputPackage inputPackage = provider.provide(AgentContext.builder()
+                .taskId(3L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+
+        ExtractorCompetitorInput competitorInput = inputPackage.getCompetitors().get(0);
+        assertThat(competitorInput.getEvidenceCatalog())
+                .extracting(DownstreamEvidenceView::getEvidenceId)
+                .contains("E201", "E202");
+        assertThat(competitorInput.getReadableEvidence())
+                .extracting(DownstreamEvidenceView::getEvidenceId)
+                .contains("E202");
+        assertThat(competitorInput.getSourceUrls())
+                .contains("https://notion.so/help", "https://notion.so/pricing");
+        DownstreamEvidenceView helpView = competitorInput.getEvidenceCatalog().stream()
+                .filter(view -> "E201".equals(view.getEvidenceId()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(helpView.getIssueFlags()).contains("PROMPT_CONTENT_TRUNCATED");
+        assertThat(competitorInput.getBudget())
+                .containsEntry("maxPromptEvidenceChars", 4000)
+                .containsEntry("usedPromptEvidenceChars", 4000)
+                .containsEntry("truncated", true);
+    }
+
+    @Test
     void shouldExcludeContentGapFromReadableEvidenceAndMarkThinContentOnly() {
         EvidenceSource contentGap = EvidenceSource.builder()
                 .taskId(1L)

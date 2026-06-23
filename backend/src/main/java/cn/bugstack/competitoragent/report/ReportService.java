@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.report;
 import cn.bugstack.competitoragent.common.BusinessException;
 import cn.bugstack.competitoragent.common.ResultCode;
 import cn.bugstack.competitoragent.context.TaskRagContextSummaryFormatter;
+import cn.bugstack.competitoragent.knowledge.TaskKnowledgeSnapshotResolver;
 import cn.bugstack.competitoragent.model.dto.ReportResponse;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.CollectorSearchAudit;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.CompetitorKnowledgeInfo;
@@ -45,6 +46,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -81,7 +83,11 @@ public class ReportService {
 
         List<ReportResponse.EvidenceInfo> evidenceInfos = evidenceQueryService.listTaskEvidence(taskId);
 
-        List<CompetitorKnowledge> knowledges = knowledgeRepository.findByTaskIdOrderByIdAsc(taskId);
+        // 报告页只应展示当前任务最新的一组 TASK 快照；
+        // 否则 rerun 前的旧 coverage 会和新结果叠加，直接把同一竞品算成两份。
+        List<CompetitorKnowledge> knowledges = TaskKnowledgeSnapshotResolver.resolveCurrentTaskSnapshots(
+                knowledgeRepository.findByTaskIdOrderByIdAsc(taskId)
+        );
         List<CompetitorKnowledgeInfo> knowledgeInfos = knowledges.stream()
                 .map(knowledge -> new CompetitorKnowledgeInfo(
                         knowledge.getCompetitorName(),
@@ -1063,6 +1069,7 @@ public class ReportService {
                     .traceableFields(0)
                     .missingEvidenceFields(0)
                     .emptyFields(0)
+                    .statusBreakdown(Map.of())
                     .sections(List.of())
                     .competitors(List.of())
                     .build();
@@ -1070,6 +1077,7 @@ public class ReportService {
 
         Map<String, SectionCoverageAccumulator> sectionAccumulators = new LinkedHashMap<>();
         List<CompetitorEvidenceCoverage> competitorSummaries = new ArrayList<>();
+        Map<String, Integer> overviewStatusBreakdown = new LinkedHashMap<>();
         int totalFields = 0;
         int traceableFields = 0;
         int missingEvidenceFields = 0;
@@ -1080,19 +1088,25 @@ public class ReportService {
             int competitorTraceable = 0;
             int competitorMissing = 0;
             int competitorEmpty = 0;
+            Map<String, Integer> competitorStatusBreakdown = new LinkedHashMap<>();
             LinkedHashSet<String> missingSections = new LinkedHashSet<>();
             Map<String, Object> evidenceCoverage = knowledge.getEvidenceCoverage() == null ? Map.of() : knowledge.getEvidenceCoverage();
 
             for (CoverageFieldDefinition definition : COVERAGE_FIELD_DEFINITIONS) {
-                CoverageStatus status = resolveCoverageStatus(evidenceCoverage.get(definition.fieldKey()));
+                CoverageState coverageState = resolveCoverageState(evidenceCoverage.get(definition.fieldKey()));
+                CoverageStatus status = coverageState.coarseStatus();
+                String rawStatus = coverageState.rawStatus();
 
                 SectionCoverageAccumulator section = sectionAccumulators.computeIfAbsent(
                         definition.sectionKey(),
                         key -> new SectionCoverageAccumulator(definition.sectionKey(), definition.sectionTitle())
                 );
                 section.totalFields++;
+                section.addRawStatus(rawStatus);
                 competitorTotal++;
                 totalFields++;
+                overviewStatusBreakdown.merge(rawStatus, 1, Integer::sum);
+                competitorStatusBreakdown.merge(rawStatus, 1, Integer::sum);
 
                 switch (status) {
                     case TRACEABLE -> {
@@ -1121,6 +1135,7 @@ public class ReportService {
                     .traceableFields(competitorTraceable)
                     .missingEvidenceFields(competitorMissing)
                     .emptyFields(competitorEmpty)
+                    .statusBreakdown(competitorStatusBreakdown)
                     .missingSections(new ArrayList<>(missingSections))
                     .build());
         }
@@ -1133,6 +1148,7 @@ public class ReportService {
                         .traceableFields(item.traceableFields)
                         .missingEvidenceFields(item.missingEvidenceFields)
                         .emptyFields(item.emptyFields)
+                        .statusBreakdown(new LinkedHashMap<>(item.statusBreakdown))
                         .missingFields(new ArrayList<>(item.missingFields))
                         .build())
                 .toList();
@@ -1142,6 +1158,7 @@ public class ReportService {
                 .traceableFields(traceableFields)
                 .missingEvidenceFields(missingEvidenceFields)
                 .emptyFields(emptyFields)
+                .statusBreakdown(overviewStatusBreakdown)
                 .sections(sections)
                 .competitors(competitorSummaries)
                 .build();
@@ -1550,21 +1567,24 @@ public class ReportService {
         return "采集节点未生成结构化搜索轨迹";
     }
 
-    private CoverageStatus resolveCoverageStatus(Object rawCoverage) {
+    private CoverageState resolveCoverageState(Object rawCoverage) {
         if (!(rawCoverage instanceof Map<?, ?> coverageMap)) {
-            return CoverageStatus.EMPTY;
+            return new CoverageState(CoverageStatus.EMPTY, "EMPTY");
         }
         Object status = coverageMap.get("status");
+        String rawStatus;
         if (status == null) {
             Object hasValue = coverageMap.get("hasValue");
-            return Boolean.TRUE.equals(hasValue) ? CoverageStatus.MISSING_EVIDENCE : CoverageStatus.EMPTY;
+            rawStatus = Boolean.TRUE.equals(hasValue) ? "MISSING_EVIDENCE" : "EMPTY";
+        } else {
+            rawStatus = String.valueOf(status).trim().toUpperCase(Locale.ROOT);
         }
-        String normalized = String.valueOf(status).trim().toUpperCase();
-        return switch (normalized) {
+        CoverageStatus coarseStatus = switch (rawStatus) {
             case "TRACEABLE", "STRUCTURED_BLOCK_DIRECT" -> CoverageStatus.TRACEABLE;
             case "MISSING_EVIDENCE", "PARTIAL", "LLM_REFUSED", "EVIDENCE_NOT_COVERING" -> CoverageStatus.MISSING_EVIDENCE;
             default -> CoverageStatus.EMPTY;
         };
+        return new CoverageState(coarseStatus, rawStatus);
     }
 
     private String displayMissingField(String sectionTitle, String competitorName) {
@@ -1572,6 +1592,13 @@ public class ReportService {
     }
 
     private record CoverageFieldDefinition(String fieldKey, String sectionKey, String sectionTitle) {
+    }
+
+    /**
+     * 报告页同时需要“粗粒度可视化计数”和“细粒度原始状态分布”。
+     * 这里把两者绑定在同一份解析结果里，避免 overview / section / competitor 三处各自重复猜状态。
+     */
+    private record CoverageState(CoverageStatus coarseStatus, String rawStatus) {
     }
 
     private enum CoverageStatus {
@@ -1587,11 +1614,17 @@ public class ReportService {
         private int traceableFields;
         private int missingEvidenceFields;
         private int emptyFields;
+        private final Map<String, Integer> statusBreakdown = new LinkedHashMap<>();
         private final LinkedHashSet<String> missingFields = new LinkedHashSet<>();
 
         private SectionCoverageAccumulator(String sectionKey, String sectionTitle) {
             this.sectionKey = sectionKey;
             this.sectionTitle = sectionTitle;
+        }
+
+        private void addRawStatus(String rawStatus) {
+            String normalizedStatus = rawStatus == null || rawStatus.isBlank() ? "EMPTY" : rawStatus;
+            statusBreakdown.merge(normalizedStatus, 1, Integer::sum);
         }
     }
 }

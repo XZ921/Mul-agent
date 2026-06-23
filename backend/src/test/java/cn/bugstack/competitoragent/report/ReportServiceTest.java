@@ -305,6 +305,131 @@ class ReportServiceTest {
     }
 
     @Test
+    void shouldExposeFineGrainedCoverageStatusBreakdownInReportOverview() {
+        Report report = Report.builder()
+                .id(32L)
+                .taskId(320L)
+                .title("企业级竞品分析")
+                .content("# Report")
+                .summary("summary")
+                .qualityPassed(true)
+                .evidenceCount(1)
+                .build();
+
+        CompetitorKnowledge knowledge = CompetitorKnowledge.builder()
+                .taskId(320L)
+                .competitorName("Notion AI")
+                .summary("summary")
+                .sourceUrls("[\"https://www.notion.so/product/ai\"]")
+                .evidenceCoverage("""
+                        {
+                          "summary": {"status":"LLM_REFUSED","hasValue":false},
+                          "positioning": {"status":"TRACEABLE","hasValue":true},
+                          "targetUsers": {"status":"STRUCTURED_BLOCK_DIRECT","hasValue":true},
+                          "coreFeatures": {"status":"TRACEABLE","hasValue":true},
+                          "pricing": {"status":"EVIDENCE_NOT_COVERING","hasValue":false},
+                          "strengths": {"status":"TRACEABLE","hasValue":true},
+                          "weaknesses": {"status":"EMPTY","hasValue":false}
+                        }
+                        """)
+                .build();
+
+        when(reportRepository.findByTaskId(320L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(320L)).thenReturn(List.of());
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(320L)).thenReturn(List.of(knowledge));
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(320L)).thenReturn(List.of());
+
+        ReportResponse response = reportService.getReport(320L);
+
+        assertNotNull(response.getEvidenceCoverageOverview());
+        assertEquals(7, response.getEvidenceCoverageOverview().getTotalFields());
+        assertEquals(4, response.getEvidenceCoverageOverview().getTraceableFields());
+        assertEquals(2, response.getEvidenceCoverageOverview().getMissingEvidenceFields());
+        assertEquals(1, response.getEvidenceCoverageOverview().getEmptyFields());
+        assertEquals(1, response.getEvidenceCoverageOverview().getStatusBreakdown().get("LLM_REFUSED"));
+        assertEquals(3, response.getEvidenceCoverageOverview().getStatusBreakdown().get("TRACEABLE"));
+        assertEquals(1, response.getEvidenceCoverageOverview().getStatusBreakdown().get("STRUCTURED_BLOCK_DIRECT"));
+        assertEquals(1, response.getEvidenceCoverageOverview().getStatusBreakdown().get("EVIDENCE_NOT_COVERING"));
+        assertEquals(1, response.getEvidenceCoverageOverview().getStatusBreakdown().get("EMPTY"));
+        assertEquals(1, response.getEvidenceCoverageOverview().getSections().stream()
+                .filter(section -> "overview".equals(section.getSectionKey()))
+                .findFirst()
+                .orElseThrow()
+                .getStatusBreakdown()
+                .get("LLM_REFUSED"));
+        assertEquals(1, response.getEvidenceCoverageOverview().getCompetitors().get(0)
+                .getStatusBreakdown()
+                .get("STRUCTURED_BLOCK_DIRECT"));
+    }
+
+    @Test
+    void shouldIgnoreSupersededTaskSnapshotWhenBuildingEvidenceCoverageOverview() {
+        Report report = Report.builder()
+                .id(33L)
+                .taskId(330L)
+                .title("任务级快照去重")
+                .content("# Report")
+                .summary("summary")
+                .qualityPassed(true)
+                .evidenceCount(1)
+                .build();
+
+        CompetitorKnowledge staleSnapshot = CompetitorKnowledge.builder()
+                .id(1L)
+                .taskId(330L)
+                .competitorName("Notion AI")
+                .snapshotScope("TASK")
+                .summary("stale summary")
+                .sourceUrls("[\"https://stale.example.com\"]")
+                .evidenceCoverage("""
+                        {
+                          "summary": {"status":"MISSING_EVIDENCE","hasValue":true},
+                          "positioning": {"status":"MISSING_EVIDENCE","hasValue":true},
+                          "targetUsers": {"status":"MISSING_EVIDENCE","hasValue":true},
+                          "coreFeatures": {"status":"TRACEABLE","hasValue":true},
+                          "pricing": {"status":"TRACEABLE","hasValue":true},
+                          "strengths": {"status":"TRACEABLE","hasValue":true},
+                          "weaknesses": {"status":"EMPTY","hasValue":false}
+                        }
+                        """)
+                .build();
+        CompetitorKnowledge latestSnapshot = CompetitorKnowledge.builder()
+                .id(2L)
+                .taskId(330L)
+                .competitorName("Notion AI")
+                .snapshotScope("TASK")
+                .summary("latest summary")
+                .sourceUrls("[\"https://latest.example.com\"]")
+                .evidenceCoverage("""
+                        {
+                          "summary": {"status":"TRACEABLE","hasValue":true},
+                          "positioning": {"status":"TRACEABLE","hasValue":true},
+                          "targetUsers": {"status":"TRACEABLE","hasValue":true},
+                          "coreFeatures": {"status":"TRACEABLE","hasValue":true},
+                          "pricing": {"status":"TRACEABLE","hasValue":true},
+                          "strengths": {"status":"TRACEABLE","hasValue":true},
+                          "weaknesses": {"status":"EMPTY","hasValue":false}
+                        }
+                        """)
+                .build();
+
+        when(reportRepository.findByTaskId(330L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(330L)).thenReturn(List.of());
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(330L)).thenReturn(List.of(staleSnapshot, latestSnapshot));
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(330L)).thenReturn(List.of());
+
+        ReportResponse response = reportService.getReport(330L);
+
+        assertNotNull(response.getEvidenceCoverageOverview());
+        assertEquals(7, response.getEvidenceCoverageOverview().getTotalFields());
+        assertEquals(6, response.getEvidenceCoverageOverview().getTraceableFields());
+        assertEquals(0, response.getEvidenceCoverageOverview().getMissingEvidenceFields());
+        assertEquals(1, response.getEvidenceCoverageOverview().getEmptyFields());
+        assertEquals(1, response.getEvidenceCoverageOverview().getCompetitors().size());
+        assertEquals("Notion AI", response.getEvidenceCoverageOverview().getCompetitors().get(0).getCompetitorName());
+    }
+
+    @Test
     void shouldExposeTaskRagAuditSummaryToReportResponse() {
         // 报告接口应直接回流任务级检索审计摘要，避免前端再去解析节点原始 outputData。
         Report report = Report.builder()

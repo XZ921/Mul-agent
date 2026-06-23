@@ -1,0 +1,10 @@
+{
+  "taskName": "第八轮下游证据闭环 dev live 验收 - clean rerun",
+  "subjectProduct": "企业级 AI 协作与知识平台",
+  "competitorNames": ["Notion AI"],
+  "competitorUrls": ["https://www.notion.so/product/ai"],
+  "analysisDimensions": ["产品功能", "定价策略", "证据完整性"],
+  "sourceScope": ["官网", "产品文档", "定价页面"],
+  "reportLanguage": "中文",
+  "reportTemplate": "标准版"
+}

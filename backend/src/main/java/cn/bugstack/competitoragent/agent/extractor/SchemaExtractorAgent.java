@@ -416,7 +416,9 @@ public class SchemaExtractorAgent extends BaseAgent {
         }
 
         schemaJson.set("sourceUrls", buildStringArray(topLevelSourceUrls));
-        ObjectNode coverage = buildCoverage(schemaJson, evidenceById);
+        normalizeStrengthWeaknessArrayField(schemaJson, "strengths", topLevelSourceUrls);
+        normalizeStrengthWeaknessArrayField(schemaJson, "weaknesses", topLevelSourceUrls);
+        ObjectNode coverage = buildCoverage(schemaJson, evidenceById, topLevelSourceUrls, modelProvidedSourceUrls);
         schemaJson.set("evidenceCoverage", coverage);
         issueFlags.addAll(collectCoverageIssueFlags(coverage));
         List<EvidenceFragment> evidenceFragments = buildEvidenceFragments("EXTRACT", competitorEvidence, issueFlags);
@@ -499,14 +501,17 @@ public class SchemaExtractorAgent extends BaseAgent {
     /**
      * 对关键字段逐个生成溯源覆盖摘要，供前端、质检和导出阶段直接复用。
      */
-    private ObjectNode buildCoverage(ObjectNode schemaJson, Map<String, EvidenceSource> evidenceById) {
+    private ObjectNode buildCoverage(ObjectNode schemaJson,
+                                     Map<String, EvidenceSource> evidenceById,
+                                     Set<String> topLevelSourceUrls,
+                                     boolean modelProvidedSourceUrls) {
         ObjectNode coverage = objectMapper.createObjectNode();
         for (String fieldName : COVERAGE_FIELDS) {
             JsonNode fieldNode = schemaJson.path(fieldName);
             ObjectNode fieldCoverage = objectMapper.createObjectNode();
 
             List<String> evidenceIds = collectEvidenceIds(fieldNode);
-            LinkedHashSet<String> sourceUrls = new LinkedHashSet<>(readStringList(fieldNode.path("sourceUrls")));
+            LinkedHashSet<String> sourceUrls = new LinkedHashSet<>(collectSourceUrls(fieldNode));
             for (String evidenceId : evidenceIds) {
                 EvidenceSource matched = evidenceById.get(evidenceId);
                 if (matched != null && matched.getUrl() != null && !matched.getUrl().isBlank()) {
@@ -520,6 +525,12 @@ public class SchemaExtractorAgent extends BaseAgent {
             // 避免 task 50 这类“单证据输入但模型忘记写字段级 sourceUrls”被误判成缺证据。
             if (hasValue && evidenceIds.isEmpty() && sourceUrls.isEmpty()) {
                 sourceUrls.addAll(resolveSingleConsumedSourceUrls(evidenceById));
+            }
+            if (hasValue && evidenceIds.isEmpty() && sourceUrls.isEmpty()
+                    && modelProvidedSourceUrls && isScalarCoverageField(fieldName)) {
+                // summary / positioning / targetUsers 常由多条证据综合生成；
+                // 只有模型明确给过顶层 sourceUrls 时，才把它视作字段级来源，系统兜底回填的 sourceUrls 仍保留缺证据信号。
+                sourceUrls.addAll(topLevelSourceUrls == null ? List.of() : topLevelSourceUrls);
             }
             String status = resolveCoverageStatus(fieldName, hasValue, llmRefused, evidenceIds, sourceUrls, evidenceById);
 
@@ -628,6 +639,12 @@ public class SchemaExtractorAgent extends BaseAgent {
         return false;
     }
 
+    private boolean isScalarCoverageField(String fieldName) {
+        return "summary".equals(fieldName)
+                || "positioning".equals(fieldName)
+                || "targetUsers".equals(fieldName);
+    }
+
     private String buildEvidenceSignalText(EvidenceSource evidence) {
         StringBuilder builder = new StringBuilder();
         builder.append(safe(evidence.getTitle())).append(' ')
@@ -726,6 +743,49 @@ public class SchemaExtractorAgent extends BaseAgent {
         LinkedHashSet<String> evidenceIds = new LinkedHashSet<>();
         collectEvidenceIds(node, evidenceIds);
         return new ArrayList<>(evidenceIds);
+    }
+
+    private List<String> collectSourceUrls(JsonNode node) {
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        collectSourceUrls(node, sourceUrls);
+        return new ArrayList<>(sourceUrls);
+    }
+
+    private void collectSourceUrls(JsonNode node, Set<String> sourceUrls) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return;
+        }
+
+        if (node.isObject()) {
+            JsonNode sourceUrlsNode = node.get("sourceUrls");
+            if (sourceUrlsNode != null) {
+                appendSourceUrlValues(sourceUrlsNode, sourceUrls);
+            }
+            node.fields().forEachRemaining(entry -> collectSourceUrls(entry.getValue(), sourceUrls));
+            return;
+        }
+
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                collectSourceUrls(item, sourceUrls);
+            }
+        }
+    }
+
+    private void appendSourceUrlValues(JsonNode node, Set<String> sourceUrls) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return;
+        }
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                appendSourceUrlValues(item, sourceUrls);
+            }
+            return;
+        }
+        String sourceUrl = coerceStringValue(node, List.of("sourceUrl", "url", "href", "value"));
+        if (sourceUrl != null && !sourceUrl.isBlank()) {
+            sourceUrls.add(sourceUrl.trim());
+        }
     }
 
     private void collectEvidenceIds(JsonNode node, Set<String> evidenceIds) {
@@ -1251,6 +1311,80 @@ public class SchemaExtractorAgent extends BaseAgent {
                     .normalized());
         }
         return fragments;
+    }
+
+    /**
+     * strengths / weaknesses 是下游强类型契约，但真实模型偶尔会返回字符串数组。
+     * 这里把裸字符串规整成 {point, sourceUrls}，并为对象项补齐 sourceUrls，避免 DTO 转换失败后整条抽取链中断。
+     */
+    private void normalizeStrengthWeaknessArrayField(ObjectNode schemaJson,
+                                                     String fieldName,
+                                                     Set<String> defaultSourceUrls) {
+        JsonNode fieldNode = schemaJson.get(fieldName);
+        if (fieldNode == null || fieldNode.isMissingNode() || fieldNode.isNull() || !fieldNode.isArray()) {
+            return;
+        }
+
+        ArrayNode normalizedItems = objectMapper.createArrayNode();
+        for (JsonNode item : fieldNode) {
+            appendNormalizedStrengthWeaknessItem(normalizedItems, item, defaultSourceUrls);
+        }
+        schemaJson.set(fieldName, normalizedItems);
+    }
+
+    private void appendNormalizedStrengthWeaknessItem(ArrayNode target,
+                                                      JsonNode item,
+                                                      Set<String> defaultSourceUrls) {
+        if (item == null || item.isMissingNode() || item.isNull()) {
+            return;
+        }
+        if (item.isArray()) {
+            for (JsonNode nestedItem : item) {
+                appendNormalizedStrengthWeaknessItem(target, nestedItem, defaultSourceUrls);
+            }
+            return;
+        }
+        if (item.isObject()) {
+            ObjectNode normalized = ((ObjectNode) item).deepCopy();
+            backfillStrengthWeaknessPoint(normalized);
+            normalizeStringArrayField(normalized, "evidenceIds", List.of("evidenceId", "id", "value"));
+            normalizeStringArrayField(normalized, "sourceUrls", List.of("sourceUrl", "url", "href", "value"));
+            backfillSourceUrlsIfMissing(normalized, defaultSourceUrls);
+            target.add(normalized);
+            return;
+        }
+        String point = item.asText("");
+        if (point.isBlank()) {
+            return;
+        }
+        ObjectNode normalized = objectMapper.createObjectNode();
+        normalized.put("point", point.trim());
+        backfillSourceUrlsIfMissing(normalized, defaultSourceUrls);
+        target.add(normalized);
+    }
+
+    private void backfillSourceUrlsIfMissing(ObjectNode normalized, Set<String> defaultSourceUrls) {
+        if (normalized == null || !collectSourceUrls(normalized).isEmpty()
+                || defaultSourceUrls == null || defaultSourceUrls.isEmpty()) {
+            return;
+        }
+        normalized.set("sourceUrls", buildStringArray(defaultSourceUrls));
+    }
+
+    private void backfillStrengthWeaknessPoint(ObjectNode normalized) {
+        if (normalized == null) {
+            return;
+        }
+        JsonNode pointNode = normalized.path("point");
+        if (pointNode.isValueNode() && !pointNode.asText("").isBlank()) {
+            return;
+        }
+        // 真实模型常把优势/短板正文放在 description/detail/content/summary 等字段中；DTO 只读 point，必须在这里统一补齐。
+        String point = coerceStringValue(normalized, List.of(
+                "description", "name", "title", "value", "text", "detail", "content", "summary"));
+        if (point != null && !point.isBlank()) {
+            normalized.put("point", point.trim());
+        }
     }
 
     private <T> List<T> convertValue(JsonNode node, Class<T> type) {

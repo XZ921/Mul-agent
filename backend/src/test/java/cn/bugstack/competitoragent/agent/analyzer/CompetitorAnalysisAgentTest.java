@@ -375,6 +375,97 @@ class CompetitorAnalysisAgentTest {
         }));
     }
 
+    @Test
+    void shouldPreferLatestTaskSnapshotWhenMultipleTaskSnapshotsExistForSameCompetitor() throws Exception {
+        when(agentContextAssembler.assemble(any(AgentContext.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(2L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .id(1L)
+                        .taskId(2L)
+                        .competitorName("Fallback AI")
+                        .snapshotScope("TASK")
+                        .summary("stale snapshot summary")
+                        .positioning("stale positioning")
+                        .targetUsers("[\"old teams\"]")
+                        .coreFeatures("[]")
+                        .pricing("{\"model\":\"legacy pricing\"}")
+                        .strengths("[]")
+                        .weaknesses("[]")
+                        .sources("[{\"evidenceId\":\"S001\",\"title\":\"Legacy\",\"url\":\"https://legacy.example.com\"}]")
+                        .sourceUrls("[\"https://legacy.example.com\"]")
+                        .evidenceCoverage("{}")
+                        .build(),
+                CompetitorKnowledge.builder()
+                        .id(2L)
+                        .taskId(2L)
+                        .competitorName("Fallback AI")
+                        .snapshotScope("TASK")
+                        .summary("latest snapshot summary")
+                        .positioning("latest positioning")
+                        .targetUsers("[\"latest teams\"]")
+                        .coreFeatures("[]")
+                        .pricing("{\"model\":\"latest pricing\"}")
+                        .strengths("[]")
+                        .weaknesses("[]")
+                        .sources("[{\"evidenceId\":\"S002\",\"title\":\"Latest\",\"url\":\"https://latest.example.com\"}]")
+                        .sourceUrls("[\"https://latest.example.com\"]")
+                        .evidenceCoverage("{}")
+                        .build()
+        ));
+        when(promptService.render(eq("analyzer"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("Analysis"))).thenReturn("""
+                {
+                  "overview": "分析完成",
+                  "featureComparison": "功能完整",
+                  "positioningComparison": "定位清晰",
+                  "pricingComparison": "价格待确认",
+                  "targetUserComparison": "团队用户",
+                  "strengthsSummary": "稳定",
+                  "weaknessesSummary": "待补",
+                  "recommendations": ["继续观察"]
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(2L)
+                .taskName("task")
+                .subjectProduct("Our Product")
+                .analysisDimensions("功能,定位,定价")
+                .currentNodeName("analyze_competitors")
+                .build();
+        context.putSharedOutput("extract_schema", """
+                {
+                  "downstreamEvidenceViews": [
+                    {
+                      "evidenceId": "E010",
+                      "competitorName": "Fallback AI",
+                      "sourceUrls": ["https://latest.example.com"],
+                      "qualitySignals": ["STRUCTURED_BLOCK_HIT"]
+                    }
+                  ]
+                }
+                """);
+
+        AgentResult result = agent.execute(context);
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        verify(promptService).render(eq("analyzer"), argThat(variables -> {
+            try {
+                JsonNode competitorData = objectMapper.readTree(variables.get("competitorData"));
+                JsonNode payload = competitorData.get(0);
+                return "TASK_SNAPSHOT_FALLBACK".equals(payload.path("inputPriority").asText())
+                        && "latest snapshot summary".equals(payload.path("summary").asText())
+                        && "latest positioning".equals(payload.path("positioning").asText())
+                        && "latest pricing".equals(payload.path("pricing").path("model").asText())
+                        && payload.path("sourceUrls").toString().contains("https://latest.example.com");
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }));
+    }
+
     private JsonNode findBundle(JsonNode bundles, String sectionKey) {
         for (JsonNode bundle : bundles) {
             if (sectionKey.equals(bundle.path("sectionKey").asText())) {

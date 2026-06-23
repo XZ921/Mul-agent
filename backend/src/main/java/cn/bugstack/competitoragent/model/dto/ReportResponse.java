@@ -457,6 +457,7 @@ public class ReportResponse {
         private Integer traceableFields;
         private Integer missingEvidenceFields;
         private Integer emptyFields;
+        private Map<String, Integer> statusBreakdown;
         private List<SectionEvidenceCoverage> sections;
         private List<CompetitorEvidenceCoverage> competitors;
     }
@@ -473,6 +474,7 @@ public class ReportResponse {
         private Integer traceableFields;
         private Integer missingEvidenceFields;
         private Integer emptyFields;
+        private Map<String, Integer> statusBreakdown;
         private List<String> missingFields;
     }
 
@@ -487,6 +489,7 @@ public class ReportResponse {
         private Integer traceableFields;
         private Integer missingEvidenceFields;
         private Integer emptyFields;
+        private Map<String, Integer> statusBreakdown;
         private List<String> missingSections;
     }
 

@@ -818,6 +818,7 @@ public class DagExecutor {
         if (resolution == null || nodes == null || nodes.isEmpty()) {
             return;
         }
+        classifyDownstreamConsumptionFailureNodes(nodes);
         if (resolution.getStatus() == AnalysisTaskStatus.FAILED) {
             nodes.stream()
                     .filter(this::isFailedFinalQualityGateNode)
@@ -835,6 +836,73 @@ public class DagExecutor {
                             node,
                             "初审已明确要求人工补证据或调整写作策略，当前阻断属于写作/评审链路的下游消费缺口"));
         }
+    }
+
+    /**
+     * 第二轮需要把“extract_schema 已成功，但 analyzer / writer 无法继续消费运行态产物”的场景
+     * 从普通业务失败里拆出来，统一归口为 DOWNSTREAM_CONSUMPTION_GAP。
+     * 这里故意只覆盖 extractor 之后的消费节点，避免把采集或抽取本身的失败误判为下游质量闭环问题。
+     */
+    private void classifyDownstreamConsumptionFailureNodes(List<TaskNode> nodes) {
+        for (TaskNode node : nodes) {
+            if (!isDownstreamConsumptionFailureNode(node, nodes)) {
+                continue;
+            }
+            markDownstreamConsumptionGap(
+                    node,
+                    buildDownstreamConsumptionGapReason(node));
+        }
+    }
+
+    private boolean isDownstreamConsumptionFailureNode(TaskNode node, List<TaskNode> nodes) {
+        if (node == null || node.getStatus() != TaskNodeStatus.FAILED) {
+            return false;
+        }
+        if (!isDownstreamConsumptionCandidate(node)) {
+            return false;
+        }
+        if (node.getFailureCategory() == NodeFailureCategory.DOWNSTREAM_CONSUMPTION_GAP) {
+            return false;
+        }
+        return switch (node.getAgentType()) {
+            case ANALYZER -> hasSuccessfulNode(nodes, "extract_schema");
+            case WRITER -> hasSuccessfulNode(nodes, "extract_schema")
+                    && hasSuccessfulNode(nodes, "analyze_competitors");
+            case REVIEWER -> hasSuccessfulNode(nodes, "write_report")
+                    || hasSuccessfulNode(nodes, "rewrite_report");
+            default -> false;
+        };
+    }
+
+    private boolean isDownstreamConsumptionCandidate(TaskNode node) {
+        if (node == null || node.getAgentType() == null) {
+            return false;
+        }
+        return switch (node.getAgentType()) {
+            case ANALYZER, WRITER, REVIEWER -> true;
+            default -> false;
+        };
+    }
+
+    private boolean hasSuccessfulNode(List<TaskNode> nodes, String nodeName) {
+        if (nodes == null || nodeName == null || nodeName.isBlank()) {
+            return false;
+        }
+        return nodes.stream()
+                .filter(candidate -> nodeName.equals(candidate.getNodeName()))
+                .anyMatch(candidate -> candidate.getStatus() == TaskNodeStatus.SUCCESS);
+    }
+
+    private String buildDownstreamConsumptionGapReason(TaskNode node) {
+        if (node == null || node.getAgentType() == null) {
+            return "下游节点无法继续消费上游输出，需检查写作、评审或交付链路";
+        }
+        return switch (node.getAgentType()) {
+            case ANALYZER -> "analyzer 无法继续消费 extract_schema 产物，问题已归口为下游消费缺口";
+            case WRITER -> "writer 无法继续消费 analyzer 结果或证据束，问题已归口为下游消费缺口";
+            case REVIEWER -> "reviewer 无法继续消费写作结果或质量闭环上下文，问题已归口为下游消费缺口";
+            default -> "下游节点无法继续消费上游输出，需检查写作、评审或交付链路";
+        };
     }
 
     private boolean isFailedFinalQualityGateNode(TaskNode node) {

@@ -4,6 +4,7 @@ import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.agent.BaseAgent;
 import cn.bugstack.competitoragent.context.AgentContextAssembler;
+import cn.bugstack.competitoragent.knowledge.TaskKnowledgeSnapshotResolver;
 import cn.bugstack.competitoragent.llm.LlmClient;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.model.entity.CompetitorKnowledge;
@@ -78,7 +79,11 @@ public class CompetitorAnalysisAgent extends BaseAgent {
 
     @Override
     protected AgentResult doExecute(AgentContext context) {
-        List<CompetitorKnowledge> knowledges = knowledgeRepository.findByTaskIdOrderByIdAsc(context.getTaskId());
+        // analyzer 只应消费当前任务有效快照。
+        // 否则当 extract_schema 共享输出缺失、回退到 TASK snapshot 时，会错误拿到更旧的一版知识。
+        List<CompetitorKnowledge> knowledges = TaskKnowledgeSnapshotResolver.resolveCurrentTaskSnapshots(
+                knowledgeRepository.findByTaskIdOrderByIdAsc(context.getTaskId())
+        );
         ExtractRuntimeOutput extractorOutput = readExtractRuntimeOutput(context.getSharedOutput("extract_schema"));
         List<DownstreamEvidenceView> downstreamEvidenceViews = extractorOutput.downstreamEvidenceViews();
         if (knowledges.isEmpty() && downstreamEvidenceViews.isEmpty() && extractorOutput.drafts().isEmpty()) {

@@ -355,9 +355,17 @@ ExtractorInputProvider
 2. Provider 第一版已前移结构块优先、来源类型优先、Prompt 总预算与 `PROMPT_BUDGET_SKIPPED` 可追溯跳过视图。
 3. analyzer 已切换为 `ExtractResult.drafts` 优先、`CompetitorKnowledge TASK` 仅补空字段 fallback，并显式回写 `EXTRACT_OUTPUT_FALLBACK_TO_TASK_SNAPSHOT`。
 4. `ExtractSharedOutputSanitizer / ExtractSharedProjection` 已把 extractor shared output 瘦身为轻量投影，跨节点共享不再透传长正文。
-5. `evidenceCoverage` 细化状态已经进入 analyzer / reviewer / report 相关代码与测试；`ReportService` overview 仍是 `TRACEABLE / MISSING_EVIDENCE / EMPTY` 的粗粒度汇总。
+5. `evidenceCoverage` 细化状态已经进入 analyzer / reviewer / report 相关代码与测试；第二轮已在 report overview / section / competitor 三层补出 `statusBreakdown`，保留粗粒度计数的同时暴露 `LLM_REFUSED / EVIDENCE_NOT_COVERING / STRUCTURED_BLOCK_DIRECT` 等细状态分布。
 6. task `50` 的真实链路已在 2026-06-22 通过：`extract_schema` rerun 后整条链路执行到终审通过，`qualityScore=91`、`qualityPassed=true`，说明主阻断已不再停留在 extractor/analyzer 主边界。
-7. workflow 已开始把 reviewer 下游阻断归口到 `DOWNSTREAM_CONSUMPTION_GAP`，但这仍是第一版汇总，而不是所有下游失败形态的完全覆盖。
+7. workflow 第二轮已把 `DOWNSTREAM_CONSUMPTION_GAP` 从 reviewer 两类阻断扩展到 analyzer / writer / reviewer 的 extractor-success 下游消费失败，但这仍不是所有下游失败形态的完全覆盖。
+
+## 2026-06-22 第二轮衔接说明
+
+1. 本轮没有回头重做 P0/P1 主体，而是继续收口剩余的 P2 缺口。
+2. workflow 汇总从 reviewer 两类场景继续扩到 analyzer / writer / reviewer，明确 extractor 成功后的部分下游消费失败应归口为 `DOWNSTREAM_CONSUMPTION_GAP`。
+3. 报告侧在保留 `TRACEABLE / MISSING_EVIDENCE / EMPTY` 粗粒度计数的同时，新增 `statusBreakdown` 暴露 `LLM_REFUSED / EVIDENCE_NOT_COVERING / STRUCTURED_BLOCK_DIRECT` 等细状态分布。
+4. task `50` 的基础 rerun 成功链路不再需要重复证明；当前 live 验证重点是补新状态命中样本。
+5. 2026-06-22 本轮已启动本地 `9093` 服务并执行 task `50` 的 `extract_schema` 节点级 rerun；本次样本命中 `DOWNSTREAM_CONSUMPTION_GAP`，但未命中 `LLM_REFUSED / EVIDENCE_NOT_COVERING / STRUCTURED_BLOCK_DIRECT`。
 
 | 优先级 | 项目 | 改动范围 | 理由 |
 |---|---|---|---|
