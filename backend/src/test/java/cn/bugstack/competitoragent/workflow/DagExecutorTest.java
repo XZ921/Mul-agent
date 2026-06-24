@@ -1469,6 +1469,64 @@ class DagExecutorTest {
     }
 
     @Test
+    void shouldHoldExtractorWhenSuccessfulOutputContainsBlockingSuggestion() {
+        Long taskId = 1007L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode extractSchema = TaskNode.builder()
+                .id(701L)
+                .taskId(taskId)
+                .nodeName("extract_schema")
+                .agentType(AgentType.EXTRACTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+        TaskNode analyzer = TaskNode.builder()
+                .id(702L)
+                .taskId(taskId)
+                .nodeName("analyze_competitors")
+                .agentType(AgentType.ANALYZER)
+                .dependsOn("[\"extract_schema\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+        List<TaskNode> nodes = List.of(extractSchema, analyzer);
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(nodes);
+        when(nodeRepository.findById(any())).thenAnswer(invocation -> {
+            Long nodeId = invocation.getArgument(0);
+            return nodes.stream().filter(node -> node.getId().equals(nodeId)).findFirst();
+        });
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new ExtractorNoBusinessFieldsAgent(), new AlwaysSuccessAnalyzerAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("extractor-suggestion-test").build());
+
+        assertEquals(TaskNodeStatus.WAITING_INTERVENTION, extractSchema.getStatus());
+        assertTrue(extractSchema.getInterventionReason().contains("extract_schema"));
+        assertEquals(TaskNodeStatus.PENDING, analyzer.getStatus());
+    }
+
+    @Test
     void shouldClassifyWriterConsumptionFailureAsDownstreamConsumptionGapWhenAnalyzerSucceeded() {
         Long taskId = 1005L;
         AnalysisTask task = AnalysisTask.builder()
@@ -2048,6 +2106,33 @@ class DagExecutorTest {
         @Override
         public AgentResult execute(AgentContext context) {
             return AgentResult.failed("missing business fields, issueFlags=[NO_BUSINESS_FIELDS_EXTRACTED]");
+        }
+    }
+
+    private static final class ExtractorNoBusinessFieldsAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.EXTRACTOR;
+        }
+
+        @Override
+        public String getName() {
+            return "extractor-no-business-fields";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("""
+                            {
+                              "sourceUrls": [],
+                              "issueFlags": ["NO_BUSINESS_FIELDS_EXTRACTED"],
+                              "evidenceCoverage": {}
+                            }
+                            """)
+                    .build();
         }
     }
 

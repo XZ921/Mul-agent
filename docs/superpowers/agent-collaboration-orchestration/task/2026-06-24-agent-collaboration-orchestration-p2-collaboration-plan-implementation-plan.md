@@ -41,13 +41,13 @@
 5. 不新增数据库表承载 P2 trace；第一版继续复用 `TaskWorkflowEvent` outbox/replay。
 6. 不移除 P1 的 `OrchestrationDecision / DecisionPolicyService / DecisionExecutorAdapter`。
 7. 不调用外部 LLM 生成初始计划；P2 第一版用规则优先服务。后续如果加入 LLM，必须带 try-catch、最大重试次数和规则降级计划。
-8. backend 全量回归的已知历史阻塞是 `ArchitectureWhitelistTest` ledger 路径问题；P2 执行期可以记录该历史阻塞，但任何新增的 `Collaboration / Orchestration / WorkflowFactory / DagExecutor / TaskReplayProjectionService` 失败必须在 P2 范围内修复。
+8. backend 全量回归曾存在 `ArchitectureWhitelistTest` ledger 路径历史阻塞；该阻塞已于 2026-06-24 收尾时解除。后续任何新增的 `Collaboration / Orchestration / WorkflowFactory / DagExecutor / TaskReplayProjectionService` 失败仍必须在 P2 范围内修复。
 
 ---
 
 ## Current Stage
 
-当前阶段：3.4 P2 前置协作规划执行计划已准备进入 Task 1。
+当前阶段：3.4 P2 前置协作规划与抽取后证据缺口决策已完成 Task 1-7 自动化实现和聚合验证；`ArchitectureWhitelistTest` ledger 路径历史阻塞已解除，backend 全量回归通过。
 
 - [x] P0 架构规格冻结：已完成
 - [x] P1 终审失败回流 MVP：已完成自动化 smoke 与聚合回归
@@ -74,7 +74,7 @@
 | `DagExecutor` 接入点侵入主执行循环 | 下游误执行或任务终态错误 | Task 6 只允许在 `executeRunningNode(...)` 成功写回后、节点完成事件发布前后加入受控 hook；不得改写主 while 循环和依赖判定 |
 | `WorkflowEventType` 新枚举存储方式 | 历史事件解析错误 | 当前 `TaskWorkflowEvent.eventType` 已使用 `@Enumerated(EnumType.STRING)`；P2 不得改成 ordinal，也不得重排旧枚举名称语义 |
 | 新增/修改文件数量较多 | 构造器和测试 helper 漏改 | 按 Task 1-7 顺序推进，每个 Task 运行对应小集合测试后再进入下一步 |
-| backend 全量回归存在历史阻塞 | 全量回归无法直接绿色 | 允许记录该历史阻塞；但任何 P2 相关测试失败必须修复，不能借历史问题跳过 |
+| backend 全量回归曾存在历史阻塞 | 全量回归曾无法直接绿色 | `ArchitectureWhitelistTest` ledger 路径问题已于 2026-06-24 解除；后续任何 P2 相关测试失败必须修复，不能借历史问题跳过 |
 
 ---
 
@@ -1245,16 +1245,16 @@ mvn -pl backend test
 Expected:
 
 - 优先目标是 PASS。
-- 如果仍阻塞于既有 `ArchitectureWhitelistTest` ledger 路径问题，按 Risk Register 记录为历史阻塞，不在 P2 范围内扩修。
+- `ArchitectureWhitelistTest` ledger 路径问题已于 2026-06-24 收尾修复；如果后续全量回归出现新失败，应重新按失败模块判断是否进入 P2 范围。
 - 如果失败测试名称包含 `Collaboration`、`Orchestration`、`WorkflowFactory`、`DagExecutor`、`TaskReplayProjectionService`，必须在 P2 范围内修复。
 
 - [ ] **Step 6: 文档回链**
 
 Update docs:
 
-- 总蓝图 3.4：P2 从“计划编写中”更新为“具体执行计划已落地，下一步执行 Task 1”。
-- 稳定演示计划：当前阶段更新为“可开始 P2 Task 1”。
-- 3.4 架构规格 `相关文档`：加入 P2 计划链接。
+- 总蓝图 3.4：P2 状态更新为“Task 1-7 已完成自动化收口”。
+- 稳定演示计划：当前阶段更新为“P2 前置协作规划与抽取后证据缺口决策已完成自动化收口”。
+- 3.4 架构规格：保留 P2 计划链接，并追加 2026-06-24 P2 自动化实现记录。
 - P2 计划底部 `2026-06-24 执行进度` 是唯一任务状态源；执行时每完成一个 task 只更新该区域。
 
 - [ ] **Step 7: 差异检查**
@@ -1319,16 +1319,20 @@ Task 7 是 P2 的唯一聚合验证命令来源。执行者如果需要查总体
 
 ## 2026-06-24 执行进度
 
-当前阶段：P2 可执行计划已落地，等待开始 Task 1 契约红灯测试。
+当前阶段：P2 Task 1-7 已完成实现、文档回链和自动化验证；本轮不提交，由用户自行提交。
 
 - [x] P2 范围边界确认：已完成
 - [x] P2 文件结构确认：已完成
 - [x] P2 任务拆解：已完成
 - [x] P2 验证命令：已完成
-- [ ] Task 1：协作规划契约与红灯测试
-- [ ] Task 2：目标组装与规则前置计划
-- [ ] Task 3：初始计划校验
-- [ ] Task 4：Workflow 受控映射
-- [ ] Task 5：trace / checkpoint / replay
-- [ ] Task 6：抽取后 AgentSuggestion 与证据缺口决策
-- [ ] Task 7：P2 聚合 smoke、文档回链和回归记录
+- [x] Task 1：协作规划契约与红灯测试 - 已完成，`CollaborationGoal / CollaborationPlan / AgentSuggestion` 等契约保留 `sourceUrls / evidenceState`
+- [x] Task 2：目标组装与规则前置计划 - 已完成，`CollaborationGoalAssembler / CollaborationPlanService` 规则优先生成协作计划
+- [x] Task 3：初始计划校验 - 已完成，`InitialPlanReviewService` 校验角色白名单、必需角色、checkpoint 上限和证据边界
+- [x] Task 4：Workflow 受控映射 - 已完成，`WorkflowFactory / ExecutionPlanDefinitionBuilder` 只把已审核协作元数据投影到固定 DAG
+- [x] Task 5：trace / checkpoint / replay - 已完成，新增协作计划和 checkpoint 事件并进入 replay
+- [x] Task 6：抽取后 AgentSuggestion 与证据缺口决策 - 已完成，`extract_schema` 成功输出后的证据缺口会进入 Orchestrator 决策输入
+- [x] Task 7：P2 聚合 smoke、文档回链和回归记录 - 已完成，P2 聚合与 P1+P2 聚合测试通过
+- [x] P2 聚合验证：`mvn -pl backend "-Dtest=CollaborationContractTest,CollaborationGoalAssemblerTest,CollaborationPlanServiceTest,InitialPlanReviewServiceTest,CollaborationTraceServiceTest,ExtractorSuggestionAssemblerTest,WorkflowFactoryTest,WorkflowEventPublisherTest,TaskReplayProjectionServiceTest,OrchestrationDecisionServiceTest,DagExecutorTest,CollaborationPlanningSmokeTest,BackendModuleDependencyTest" test` 通过，63 tests, 0 failures
+- [x] P1+P2 编排聚合验证：`mvn -pl backend "-Dtest=OrchestrationContractTest,OrchestrationDecisionAdapterTest,DecisionPolicyServiceTest,OrchestrationDecisionServiceTest,DecisionExecutorAdapterTest,OrchestrationTraceServiceTest,CompensationGraphAssemblerTest,DynamicTaskGraphServiceTest,DynamicPlanAppenderTest,OrchestrationRuntimeFeedbackSmokeTest,CollaborationContractTest,CollaborationGoalAssemblerTest,CollaborationPlanServiceTest,InitialPlanReviewServiceTest,CollaborationTraceServiceTest,ExtractorSuggestionAssemblerTest,CollaborationPlanningSmokeTest" test` 通过，45 tests, 0 failures
+- [x] backend 全量回归：`mvn -pl backend test` 已执行并通过；既有 `ArchitectureWhitelistTest.ledger_should_cover_all_whitelist_entries` ledger 路径历史阻塞已解除
+- [ ] 后续剩余：不属于 P2 本轮；P3 再扩展 Analyzer / Writer / Conversation / Citation Agent 协作边界，并补真实外部中间件或 LLM live 证据包

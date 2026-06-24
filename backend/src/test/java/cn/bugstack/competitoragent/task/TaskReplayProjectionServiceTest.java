@@ -88,10 +88,26 @@ class TaskReplayProjectionServiceTest {
                 .createdAt(baseTime.minusMinutes(2))
                 .updatedAt(baseTime.minusMinutes(2))
                 .build();
+        TaskWorkflowEvent collaborationEvent = TaskWorkflowEvent.builder()
+                .id(102L)
+                .eventId("evt-collaboration-102")
+                .taskId(42L)
+                .nodeName("collaboration_plan")
+                .planVersionId(12L)
+                .branchKey("root/review-3")
+                .eventType(WorkflowEventType.COLLABORATION_PLAN_RECORDED)
+                .deliveryStatus(TaskWorkflowEvent.STATUS_CONSUMED)
+                .topic("task.collaboration")
+                .tag("collaboration_plan_recorded")
+                .payload("{\"summary\":\"协作计划已记录：cp-task-42-v1\"}")
+                .sourceUrls("[\"https://www.notion.so\"]")
+                .createdAt(baseTime.minusMinutes(3))
+                .updatedAt(baseTime.minusMinutes(3))
+                .build();
 
         when(taskPlanRepository.findByTaskIdOrderByPlanVersionAsc(42L)).thenReturn(List.of(activePlan));
         when(taskPlanRepository.findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(42L)).thenReturn(Optional.of(activePlan));
-        when(taskWorkflowEventRepository.findAll()).thenReturn(List.of(orchestrationEvent));
+        when(taskWorkflowEventRepository.findAll()).thenReturn(List.of(collaborationEvent, orchestrationEvent));
         when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(42L)).thenReturn(List.of());
         when(taskNodeExecutionAttemptRepository.findAll()).thenReturn(List.of());
         when(memorySnapshotRepository.findByTaskIdOrderByIdDesc(42L)).thenReturn(List.of());
@@ -125,7 +141,13 @@ class TaskReplayProjectionServiceTest {
                     assertThat(event.getEventType()).isEqualTo("ORCHESTRATION_DECISION_RECORDED");
                     assertThat(event.getSummary()).contains("Orchestrator 已生成运行期编排决策");
                 });
+        assertThat(replayResponse.getTimeline())
+                .anySatisfy(event -> {
+                    assertThat(event.getEventType()).isEqualTo("COLLABORATION_PLAN_RECORDED");
+                    assertThat(event.getSummary()).contains("协作计划");
+                });
         assertThat(replayResponse.getSourceUrls()).contains("https://www.notion.so/pricing");
+        assertThat(replayResponse.getSourceUrls()).contains("https://www.notion.so");
     }
 
     @Test

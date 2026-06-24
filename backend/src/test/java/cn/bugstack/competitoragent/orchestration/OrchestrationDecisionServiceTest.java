@@ -129,4 +129,69 @@ class OrchestrationDecisionServiceTest {
         assertThat(decisions).hasSize(1);
         assertThat(decisions.get(0).getDecisionType()).isEqualTo("NO_ACTION");
     }
+
+    @Test
+    void shouldCreateSupplementDecisionFromExtractorSuggestionWithSources() {
+        AgentSuggestion suggestion = AgentSuggestion.builder()
+                .suggestionId("as-task-50-extract_schema-1")
+                .taskId(50L)
+                .producerNodeName("extract_schema")
+                .producerAgentType("EXTRACTOR")
+                .suggestionType("EVIDENCE_GAP")
+                .targetSection("pricing")
+                .summary("pricing 字段缺少可验证来源")
+                .severity("HIGH")
+                .confidence(0.75d)
+                .sourceUrls(List.of("https://www.notion.so/pricing"))
+                .suggestedTargetNode("collect_sources")
+                .build()
+                .normalized();
+        OrchestrationContext context = OrchestrationContext.builder()
+                .taskId(50L)
+                .triggerNodeName("extract_schema")
+                .passed(false)
+                .agentSuggestions(List.of(suggestion))
+                .sourceUrls(List.of("https://www.notion.so/pricing"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build();
+
+        List<OrchestrationDecision> decisions = service.decide(context);
+
+        assertThat(decisions).hasSize(1);
+        assertThat(decisions.get(0).getDecisionType()).isEqualTo("APPEND_DYNAMIC_BRANCH");
+        assertThat(decisions.get(0).getActionType()).isEqualTo("SUPPLEMENT_EVIDENCE");
+        assertThat(decisions.get(0).getInputRefs()).containsEntry("agentSuggestionIds", List.of("as-task-50-extract_schema-1"));
+    }
+
+    @Test
+    void shouldWaitForHumanFromExtractorSuggestionWithoutSources() {
+        AgentSuggestion suggestion = AgentSuggestion.builder()
+                .suggestionId("as-task-50-extract_schema-1")
+                .taskId(50L)
+                .producerNodeName("extract_schema")
+                .producerAgentType("EXTRACTOR")
+                .suggestionType("EVIDENCE_GAP")
+                .targetSection("pricing")
+                .summary("pricing 字段缺少可验证来源")
+                .severity("HIGH")
+                .confidence(0.75d)
+                .sourceUrls(List.of())
+                .suggestedTargetNode("collect_sources")
+                .build()
+                .normalized();
+        OrchestrationContext context = OrchestrationContext.builder()
+                .taskId(50L)
+                .triggerNodeName("extract_schema")
+                .passed(false)
+                .agentSuggestions(List.of(suggestion))
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build();
+
+        List<OrchestrationDecision> decisions = service.decide(context);
+
+        assertThat(decisions).hasSize(1);
+        assertThat(decisions.get(0).getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(decisions.get(0).isRequiresHumanIntervention()).isTrue();
+    }
 }

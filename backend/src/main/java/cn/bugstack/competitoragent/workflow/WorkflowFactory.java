@@ -5,6 +5,14 @@ import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.entity.TaskPlan;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.orchestration.CollaborationGoal;
+import cn.bugstack.competitoragent.orchestration.CollaborationGoalAssembler;
+import cn.bugstack.competitoragent.orchestration.CollaborationCheckpoint;
+import cn.bugstack.competitoragent.orchestration.CollaborationPlan;
+import cn.bugstack.competitoragent.orchestration.CollaborationPlanService;
+import cn.bugstack.competitoragent.orchestration.CollaborationTraceService;
+import cn.bugstack.competitoragent.orchestration.InitialPlanReview;
+import cn.bugstack.competitoragent.orchestration.InitialPlanReviewService;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.task.definition.ExecutionPlanDefinition;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -34,6 +42,10 @@ public class WorkflowFactory {
     private final DynamicTaskGraphService dynamicTaskGraphService;
     private final ExecutionPlanDefinitionBuilder executionPlanDefinitionBuilder;
     private final WorkflowPlanAssembler workflowPlanAssembler;
+    private final CollaborationGoalAssembler collaborationGoalAssembler;
+    private final CollaborationPlanService collaborationPlanService;
+    private final InitialPlanReviewService initialPlanReviewService;
+    private final CollaborationTraceService collaborationTraceService;
 
     /**
      * 创建任务时只固化正式计划与初始节点，
@@ -42,6 +54,7 @@ public class WorkflowFactory {
     public List<TaskNode> createWorkflow(AnalysisTask task) {
         WorkflowPlan plan = buildPreviewPlan(task);
         TaskPlan initialPlan = dynamicTaskGraphService.ensureInitialPlan(task.getId(), plan);
+        recordInitialCollaborationTrace(task, initialPlan);
         WorkflowPlan versionedPlan = enrichWorkflowPlan(plan, initialPlan);
         task.setCurrentPlanVersionId(initialPlan.getId());
         task.setCurrentPlanVersion(initialPlan.getPlanVersion());
@@ -115,10 +128,61 @@ public class WorkflowFactory {
      * 让 WorkflowFactory 真正退回到编排器角色，而不是继续自己承担所有细节拼装。
      */
     private WorkflowPlan assembleFormalWorkflowPlan(AnalysisTask task, boolean previewOnly) {
-        ExecutionPlanDefinition executionPlanDefinition = executionPlanDefinitionBuilder.build(task, previewOnly);
+        CollaborationGoal collaborationGoal = collaborationGoalAssembler.assemble(task);
+        CollaborationPlan collaborationPlan = collaborationPlanService.createPlan(collaborationGoal);
+        InitialPlanReview initialPlanReview = initialPlanReviewService.review(collaborationPlan);
+        ExecutionPlanDefinition executionPlanDefinition;
+        if (initialPlanReview.isAllowed()) {
+            executionPlanDefinition = executionPlanDefinitionBuilder.build(
+                    task,
+                    previewOnly,
+                    collaborationPlan,
+                    initialPlanReview
+            );
+        } else {
+            log.warn("collaboration plan review blocked, taskId={}, planId={}, blockedReasons={}",
+                    task.getId(), collaborationPlan.getPlanId(), initialPlanReview.getBlockedReasons());
+            executionPlanDefinition = executionPlanDefinitionBuilder.build(task, previewOnly);
+        }
         WorkflowPlan plan = workflowPlanAssembler.fromExecutionPlan(executionPlanDefinition);
         workflowPlanValidator.validateForCreation(plan);
         return plan;
+    }
+
+    private void recordInitialCollaborationTrace(AnalysisTask task, TaskPlan initialPlan) {
+        CollaborationGoal collaborationGoal = collaborationGoalAssembler.assemble(task);
+        CollaborationPlan collaborationPlan = collaborationPlanService.createPlan(collaborationGoal);
+        InitialPlanReview initialPlanReview = initialPlanReviewService.review(collaborationPlan);
+        Long planVersionId = initialPlan == null ? null : initialPlan.getId();
+        Integer planVersion = initialPlan == null ? null : initialPlan.getPlanVersion();
+        String branchKey = initialPlan == null ? null : initialPlan.getBranchKey();
+        if (initialPlanReview.isAllowed()) {
+            collaborationTraceService.recordPlan(
+                    collaborationGoal,
+                    collaborationPlan,
+                    initialPlanReview,
+                    planVersionId,
+                    planVersion,
+                    branchKey
+            );
+        }
+        CollaborationCheckpoint checkpoint = CollaborationCheckpoint.builder()
+                .checkpointId("cc-" + collaborationPlan.getPlanId())
+                .taskId(task.getId())
+                .goalId(collaborationGoal.getGoalId())
+                .planId(collaborationPlan.getPlanId())
+                .lastReviewId(initialPlanReview.getReviewId())
+                .phase(initialPlanReview.isAllowed() ? "PLAN_APPROVED" : "PLAN_BLOCKED")
+                .mappedWorkflowPlanId(planVersionId)
+                .pendingActions(initialPlanReview.isAllowed() ? List.of() : List.of("FIX_COLLABORATION_PLAN"))
+                .resumeReason(initialPlanReview.isAllowed()
+                        ? "协作计划已通过初始校验，等待 WorkflowPlan 执行。"
+                        : "协作计划初始校验被阻断：" + initialPlanReview.getBlockedReasons())
+                .sourceUrls(collaborationPlan.getSourceUrls())
+                .evidenceState(collaborationPlan.getEvidenceState())
+                .build()
+                .normalized();
+        collaborationTraceService.recordCheckpoint(checkpoint, planVersionId, branchKey);
     }
 
     public void resetWorkflow(Long taskId) {

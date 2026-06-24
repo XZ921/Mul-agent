@@ -65,7 +65,7 @@
 | --- | --- | --- |
 | 任务执行引擎 | DAG、节点状态、动态补图、重跑、恢复、人工接管、任务推进 | 当前大量语义集中在 `DagExecutor`、`WorkflowFactory`、`TaskRuntimeCommandAppService`；技术节点语义和业务阶段语义尚未彻底分层 |
 | 搜索执行引擎 | 搜索计划、候选生成、候选验证、补源顺序、正式选源、搜索现场回放 | 搜索计划和运行时行为已经明显是业务规则，但仍常被当作平台杂项；恢复、缓存、回放、观察的契约未完全稳定 |
-| Agent 协作编排引擎 | Orchestrator Agent、协作目标、协作计划、角色分工、Agent 建议、质量诊断、编排决策、决策校验、协作轨迹 | 当前系统已有多 Agent 能力模块和 DAG 执行底座，但前置协作规划仍由固定模板承担，运行期全局协作决策仍散落在 Reviewer、RevisionDirective、动态补图、恢复与对话动作入口中，尚未形成统一“调研组长”决策层 |
+| Agent 协作编排引擎 | Orchestrator Agent、协作目标、协作计划、角色分工、Agent 建议、质量诊断、编排决策、决策校验、协作轨迹 | 当前系统已有多 Agent 能力模块和 DAG 执行底座；P1 已把终审失败回流纳入 Orchestrator 决策链路，P2 已把规则优先前置协作规划映射到标准 DAG，并把抽取后证据缺口转成受策略保护的决策输入；后续仍需在 P3 收口分析、写作、对话和 Citation Agent 的协作边界 |
 | 质量回流引擎 | 质量问题 -> 补证 / 重写 / 重跑 / 人工接管 的动作转换 | `质量审查` 与 `修订与重写` 之间的桥梁已经存在，但缺少独立引擎视角；质量结果驱动后续图的规则仍分散 |
 | 对话动作引擎 | 意图识别、模式路由、动作预览、确认执行、任务控制提交 | 对话目前更像“大服务聚合层”，缺少动作执行协议、风险确认协议和正式命令协议的清晰边界 |
 
@@ -200,7 +200,7 @@
 - 定位：`Agent 协作编排层` 不是第十条业务链路，而是横跨 `任务执行引擎`、`质量回流引擎` 和 `对话动作引擎` 的协作决策层。
 - 方案：`✅` 已新增架构规格 [2026-06-23-agent-collaboration-orchestration-architecture-spec.md](/E:/java_study/Mul-agnet/docs/superpowers/agent-collaboration-orchestration/specs/2026-06-23-agent-collaboration-orchestration-architecture-spec.md)。
 - P1 实施：`✅` 终审失败回流 MVP 已完成自动化收口，[2026-06-23-agent-collaboration-orchestration-p1-runtime-feedback-mvp-implementation-plan.md](../superpowers/agent-collaboration-orchestration/task/2026-06-23-agent-collaboration-orchestration-p1-runtime-feedback-mvp-implementation-plan.md) 已把动态补图从 `Reviewer revisionDirectives` 直接驱动升级为 `OrchestrationDecision -> DecisionPolicyResult -> DynamicPlanMutation -> DynamicTaskGraphService`。
-- P2 计划：`✅` 前置协作规划与抽取后证据缺口决策具体执行计划已落地，[2026-06-24-agent-collaboration-orchestration-p2-collaboration-plan-implementation-plan.md](../superpowers/agent-collaboration-orchestration/task/2026-06-24-agent-collaboration-orchestration-p2-collaboration-plan-implementation-plan.md) 聚焦 `CollaborationGoal / CollaborationPlan / AgentRoleAssignment / InitialPlanReview / CollaborationCheckpoint`，下一步从 Task 1 契约红灯测试开始，不扩到 P3 的分析、写作、对话和 Citation。
+- P2 实施：`✅` 前置协作规划与抽取后证据缺口决策已完成自动化收口，[2026-06-24-agent-collaboration-orchestration-p2-collaboration-plan-implementation-plan.md](../superpowers/agent-collaboration-orchestration/task/2026-06-24-agent-collaboration-orchestration-p2-collaboration-plan-implementation-plan.md) 已落地 `CollaborationGoal / CollaborationPlan / AgentRoleAssignment / InitialPlanReview / CollaborationCheckpoint / AgentSuggestion`，并验证 `WorkflowFactory / ExecutionPlanDefinitionBuilder / replay / DagExecutor` 只消费受控协作元数据、不生成自由 DAG；P3 的分析、写作、对话和 Citation 仍不在本轮范围内。
 - 阶段边界：3.4 应在 `3.3 提取结构化` 证据边界基本稳定后进入；它采用 Orchestrator-first 双阶段架构，先冻结前置 `CollaborationGoal / CollaborationPlan / AgentRoleAssignment / InitialPlanReview / CollaborationCheckpoint` 与运行期 `AgentSuggestion / QualityDiagnosis / OrchestrationDecision / DecisionPolicyRuleSet / DecisionPolicyResult / DecisionExecutorAdapter / DynamicPlanMutation / DecisionTrace / OrchestratorCheckpoint` 等协作协议，再以终审失败后的质量回流作为 MVP 闭环，不提前把所有节点改成 LLM 自治调度。
 - 风险红线：Reviewer 只输出质量事实，Orchestrator 输出编排决策，DAG / DynamicTaskGraphService 负责安全执行；所有新协议必须保留 `sourceUrls` 或显式 `evidenceState` 证据缺口状态，Citation Agent 可以后移，但来源追溯不能后移。
 - 当前不做：不推倒 `DagExecutor`，不把 `ExecutionPlanDefinitionBuilder` 改成自由智能规划器，不让 Orchestrator 自由生成任意节点，不用 Orchestrator 替代 Citation Agent，不引入新的 Python Agent 运行时作为前置条件。

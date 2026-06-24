@@ -15,6 +15,14 @@ import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.orchestration.AgentSuggestion;
+import cn.bugstack.competitoragent.orchestration.EvidenceState;
+import cn.bugstack.competitoragent.orchestration.ExtractorSuggestionAssembler;
+import cn.bugstack.competitoragent.orchestration.OrchestrationContext;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecision;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionAdapter;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeExecutionAttemptRepository;
@@ -74,6 +82,9 @@ public class DagExecutor {
     private final RuntimeEventEmitter runtimeEventEmitter;
     private final DynamicPlanAppender dynamicPlanAppender;
     private final TaskQuotaCoordinator taskQuotaCoordinator;
+    private final ExtractorSuggestionAssembler extractorSuggestionAssembler;
+    private final OrchestrationDecisionService orchestrationDecisionService;
+    private final OrchestrationTraceService orchestrationTraceService;
     private final List<SharedNodeOutputProjector> sharedNodeOutputProjectors;
 
     @Autowired
@@ -92,6 +103,9 @@ public class DagExecutor {
                        RuntimeEventEmitter runtimeEventEmitter,
                        DynamicPlanAppender dynamicPlanAppender,
                        TaskQuotaCoordinator taskQuotaCoordinator,
+                       ExtractorSuggestionAssembler extractorSuggestionAssembler,
+                       OrchestrationDecisionService orchestrationDecisionService,
+                       OrchestrationTraceService orchestrationTraceService,
                        List<SharedNodeOutputProjector> sharedNodeOutputProjectors) {
         this.nodeRepository = nodeRepository;
         this.taskRepository = taskRepository;
@@ -108,7 +122,47 @@ public class DagExecutor {
         this.runtimeEventEmitter = runtimeEventEmitter;
         this.dynamicPlanAppender = dynamicPlanAppender;
         this.taskQuotaCoordinator = taskQuotaCoordinator;
+        this.extractorSuggestionAssembler = extractorSuggestionAssembler;
+        this.orchestrationDecisionService = orchestrationDecisionService;
+        this.orchestrationTraceService = orchestrationTraceService;
         this.sharedNodeOutputProjectors = sharedNodeOutputProjectors == null ? List.of() : List.copyOf(sharedNodeOutputProjectors);
+    }
+
+    public DagExecutor(TaskNodeRepository nodeRepository,
+                       AnalysisTaskRepository taskRepository,
+                       AgentCapabilityRegistry agentCapabilityRegistry,
+                       ObjectMapper objectMapper,
+                       TaskSnapshotCacheService taskSnapshotCacheService,
+                       TaskExecutionLockService taskExecutionLockService,
+                       TaskEventPublisher taskEventPublisher,
+                       AgentLogService agentLogService,
+                       WorkflowEventPublisher workflowEventPublisher,
+                       TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository,
+                       WorkflowDeadLetterRecordRepository workflowDeadLetterRecordRepository,
+                       RuntimeStateRefresher runtimeStateRefresher,
+                       RuntimeEventEmitter runtimeEventEmitter,
+                       DynamicPlanAppender dynamicPlanAppender,
+                       TaskQuotaCoordinator taskQuotaCoordinator,
+                       List<SharedNodeOutputProjector> sharedNodeOutputProjectors) {
+        this(nodeRepository,
+                taskRepository,
+                agentCapabilityRegistry,
+                objectMapper,
+                taskSnapshotCacheService,
+                taskExecutionLockService,
+                taskEventPublisher,
+                agentLogService,
+                workflowEventPublisher,
+                taskNodeExecutionAttemptRepository,
+                workflowDeadLetterRecordRepository,
+                runtimeStateRefresher,
+                runtimeEventEmitter,
+                dynamicPlanAppender,
+                taskQuotaCoordinator,
+                new ExtractorSuggestionAssembler(objectMapper),
+                new OrchestrationDecisionService(new OrchestrationDecisionAdapter()),
+                null,
+                sharedNodeOutputProjectors);
     }
 
     public DagExecutor(TaskNodeRepository nodeRepository,
@@ -402,6 +456,14 @@ public class DagExecutor {
             }
 
             TaskNode completedNode = applyExecutionResult(taskId, sharedContext, latestNode, result);
+            TaskNode gatedNode = applyExtractorSuggestionGate(taskId, completedNode, result);
+            if (gatedNode.getStatus() == TaskNodeStatus.WAITING_INTERVENTION) {
+                runtimeStateRefresher.refreshRuntimeSnapshot(taskId);
+                runtimeEventEmitter.publishNodeExecutionEvents(taskId, gatedNode);
+                workflowEventPublisher.publishNodeFailed(gatedNode, extractSourceUrls(gatedNode.getOutputData()));
+                syncNodeState(node, gatedNode);
+                return new NodeExecutionResult(gatedNode);
+            }
             runtimeStateRefresher.refreshRuntimeSnapshot(taskId);
             runtimeEventEmitter.publishNodeExecutionEvents(taskId, completedNode);
             if (result.getStatus() == TaskNodeStatus.SUCCESS) {
@@ -414,6 +476,62 @@ public class DagExecutor {
         } finally {
             taskExecutionLockService.releaseNodeExecutionLock(taskId, node.getNodeName(), nodeLockOwner);
         }
+    }
+
+    private TaskNode applyExtractorSuggestionGate(Long taskId, TaskNode completedNode, AgentResult result) {
+        if (result == null
+                || result.getStatus() != TaskNodeStatus.SUCCESS
+                || completedNode == null
+                || !"extract_schema".equals(completedNode.getNodeName())
+                || completedNode.getOutputData() == null
+                || completedNode.getOutputData().isBlank()) {
+            return completedNode;
+        }
+        List<AgentSuggestion> suggestions = extractorSuggestionAssembler.fromExtractorOutput(
+                taskId,
+                completedNode.getNodeName(),
+                completedNode.getOutputData());
+        if (suggestions.isEmpty()) {
+            return completedNode;
+        }
+        List<String> sourceUrls = extractSourceUrls(completedNode.getOutputData());
+        OrchestrationContext orchestrationContext = OrchestrationContext.builder()
+                .taskId(taskId)
+                .planVersionId(completedNode.getPlanVersionId())
+                .branchKey(completedNode.getBranchKey())
+                .triggerNodeName(completedNode.getNodeName())
+                .passed(false)
+                .agentSuggestions(suggestions)
+                .sourceUrls(sourceUrls)
+                .evidenceState(sourceUrls.isEmpty() ? EvidenceState.MISSING_SOURCE : EvidenceState.FULL_SOURCE)
+                .inputSummary("extract_schema 输出后发现证据缺口，进入 Orchestrator 建议决策。")
+                .build()
+                .normalized();
+        List<OrchestrationDecision> decisions = orchestrationDecisionService.decide(orchestrationContext);
+        for (OrchestrationDecision decision : decisions) {
+            recordExtractorDecisionTrace(taskId, completedNode, decision);
+        }
+        return decisions.stream()
+                .filter(decision -> "WAIT_FOR_HUMAN".equals(decision.getDecisionType()))
+                .findFirst()
+                .map(decision -> markExtractorWaitingForIntervention(completedNode, decision))
+                .orElse(completedNode);
+    }
+
+    private void recordExtractorDecisionTrace(Long taskId, TaskNode completedNode, OrchestrationDecision decision) {
+        if (orchestrationTraceService == null || decision == null) {
+            return;
+        }
+        orchestrationTraceService.recordDecision(taskId, completedNode, decision, null, null);
+    }
+
+    private TaskNode markExtractorWaitingForIntervention(TaskNode completedNode, OrchestrationDecision decision) {
+        completedNode.setStatus(TaskNodeStatus.WAITING_INTERVENTION);
+        completedNode.setFailureCategory(NodeFailureCategory.MANUAL_INTERVENTION_REQUIRED);
+        completedNode.setInterventionReason(decision.getReason());
+        completedNode.setErrorMessage(decision.getReason());
+        completedNode.setCompletedAt(LocalDateTime.now());
+        return nodeRepository.save(completedNode);
     }
 
     /**

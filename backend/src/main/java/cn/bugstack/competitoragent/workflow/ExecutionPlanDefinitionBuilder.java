@@ -3,6 +3,9 @@ package cn.bugstack.competitoragent.workflow;
 import cn.bugstack.competitoragent.agent.collector.CollectorNodeConfig;
 import cn.bugstack.competitoragent.model.entity.AnalysisSchema;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
+import cn.bugstack.competitoragent.orchestration.AgentRoleAssignment;
+import cn.bugstack.competitoragent.orchestration.CollaborationPlan;
+import cn.bugstack.competitoragent.orchestration.InitialPlanReview;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
 import cn.bugstack.competitoragent.source.SourceDiscoveryService;
@@ -22,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -43,11 +47,19 @@ public class ExecutionPlanDefinitionBuilder {
     private final CollectorPlanTemplateFactory collectorPlanTemplateFactory;
 
     public ExecutionPlanDefinition build(AnalysisTask task, boolean previewOnly) {
+        return build(task, previewOnly, null, null);
+    }
+
+    public ExecutionPlanDefinition build(AnalysisTask task,
+                                         boolean previewOnly,
+                                         CollaborationPlan collaborationPlan,
+                                         InitialPlanReview initialPlanReview) {
         List<String> competitorNames = parseStringList(task.getCompetitorNames());
         List<String> competitorUrls = parseStringList(task.getCompetitorUrls());
         List<String> dimensions = resolveDimensions(task);
         List<String> requestedScopes = parseStringList(task.getSourceScope());
         Optional<AnalysisSchema> schema = resolveSchema(task.getSchemaId());
+        CollaborationProjection collaborationProjection = resolveCollaborationProjection(collaborationPlan, initialPlanReview);
 
         List<ExecutionPlanDefinition.NodeDefinition> nodes = new ArrayList<>();
         List<String> collectNodeNames = new ArrayList<>();
@@ -116,10 +128,10 @@ public class ExecutionPlanDefinitionBuilder {
                 .retryable(true)
                 .maxRetries(3)
                 .executionOrder(order++)
-                .nodeConfig(toJson(orderedMap(
+                .nodeConfig(toJson(withCollaborationConfig(orderedMap(
                         "dimensions", dimensions,
                         "schemaId", task.getSchemaId()
-                )))
+                ), collaborationProjection, "EXTRACTOR")))
                 .notes("聚合采集证据，并保持 sourceUrls 可追溯")
                 .fallbackOrder(List.of())
                 .sourceUrls(normalizedCollectorSourceUrls)
@@ -138,10 +150,10 @@ public class ExecutionPlanDefinitionBuilder {
                 .retryable(true)
                 .maxRetries(3)
                 .executionOrder(order++)
-                .nodeConfig(toJson(orderedMap(
+                .nodeConfig(toJson(withCollaborationConfig(orderedMap(
                         "competitorCount", competitorNames.size(),
                         "dimensionCount", dimensions.size()
-                )))
+                ), collaborationProjection, "ANALYZER")))
                 .fallbackOrder(List.of())
                 .sourceUrls(normalizedCollectorSourceUrls)
                 .build());
@@ -159,11 +171,11 @@ public class ExecutionPlanDefinitionBuilder {
                 .retryable(true)
                 .maxRetries(3)
                 .executionOrder(order++)
-                .nodeConfig(toJson(orderedMap(
+                .nodeConfig(toJson(withCollaborationConfig(orderedMap(
                         "reportLanguage", task.getReportLanguage(),
                         "reportTemplate", task.getReportTemplate(),
                         "mode", "initial"
-                )))
+                ), collaborationProjection, "WRITER")))
                 .fallbackOrder(List.of())
                 .sourceUrls(normalizedCollectorSourceUrls)
                 .build());
@@ -181,10 +193,10 @@ public class ExecutionPlanDefinitionBuilder {
                 .retryable(true)
                 .maxRetries(3)
                 .executionOrder(order++)
-                .nodeConfig(toJson(orderedMap(
+                .nodeConfig(toJson(withCollaborationConfig(orderedMap(
                         "qualityPolicy", "score>=80 and no ERROR issues",
                         "outputPlan", "revision_plan"
-                )))
+                ), collaborationProjection, "REVIEWER")))
                 .fallbackOrder(List.of())
                 .sourceUrls(normalizedCollectorSourceUrls)
                 .build());
@@ -203,11 +215,11 @@ public class ExecutionPlanDefinitionBuilder {
                 .retryable(true)
                 .maxRetries(3)
                 .executionOrder(order++)
-                .nodeConfig(toJson(orderedMap(
+                .nodeConfig(toJson(withCollaborationConfig(orderedMap(
                         "mode", "revision",
                         "sourceNode", "quality_check",
                         "trigger", "review_failed"
-                )))
+                ), collaborationProjection, "WRITER")))
                 .fallbackOrder(List.of())
                 .sourceUrls(normalizedCollectorSourceUrls)
                 .build());
@@ -226,11 +238,11 @@ public class ExecutionPlanDefinitionBuilder {
                 .retryable(true)
                 .maxRetries(3)
                 .executionOrder(order++)
-                .nodeConfig(toJson(orderedMap(
+                .nodeConfig(toJson(withCollaborationConfig(orderedMap(
                         "qualityPolicy", "final pass after revision",
                         "sourceNode", "rewrite_report",
                         "trigger", "rewrite_executed"
-                )))
+                ), collaborationProjection, "REVIEWER")))
                 .fallbackOrder(List.of())
                 .sourceUrls(normalizedCollectorSourceUrls)
                 .build());
@@ -494,6 +506,48 @@ public class ExecutionPlanDefinitionBuilder {
         }
     }
 
+    private CollaborationProjection resolveCollaborationProjection(CollaborationPlan collaborationPlan,
+                                                                   InitialPlanReview initialPlanReview) {
+        if (collaborationPlan == null || initialPlanReview == null || !initialPlanReview.isAllowed()) {
+            return null;
+        }
+        CollaborationPlan normalizedPlan = collaborationPlan.normalized();
+        InitialPlanReview normalizedReview = initialPlanReview.normalized();
+        if (!normalizedReview.isAllowed()) {
+            return null;
+        }
+        Map<String, AgentRoleAssignment> rolesByType = new LinkedHashMap<>();
+        for (AgentRoleAssignment role : normalizedPlan.getAgentRoleAssignments()) {
+            rolesByType.put(role.getAgentType(), role);
+        }
+        return new CollaborationProjection(
+                normalizedPlan.getGoalId(),
+                normalizedPlan.getPlanId(),
+                normalizedReview.getReviewId(),
+                normalizedPlan.getCheckpoints(),
+                rolesByType
+        );
+    }
+
+    private LinkedHashMap<String, Object> withCollaborationConfig(LinkedHashMap<String, Object> nodeConfig,
+                                                                  CollaborationProjection projection,
+                                                                  String agentType) {
+        if (projection == null) {
+            return nodeConfig;
+        }
+        AgentRoleAssignment role = projection.roleFor(agentType);
+        if (role == null) {
+            return nodeConfig;
+        }
+        nodeConfig.put("collaborationGoalId", projection.goalId());
+        nodeConfig.put("collaborationPlanId", projection.planId());
+        nodeConfig.put("collaborationReviewId", projection.reviewId());
+        nodeConfig.put("collaborationRoleId", role.getRoleId());
+        nodeConfig.put("collaborationQualityGate", role.getQualityGate());
+        nodeConfig.put("orchestratorCheckpoints", projection.checkpoints());
+        return nodeConfig;
+    }
+
     private List<SourcePlan> deduplicateSourcePlans(List<SourcePlan> sourcePlans) {
         if (sourcePlans == null || sourcePlans.isEmpty()) {
             return List.of();
@@ -633,5 +687,16 @@ public class ExecutionPlanDefinitionBuilder {
             map.put(String.valueOf(kvPairs[i]), kvPairs[i + 1]);
         }
         return map;
+    }
+
+    private record CollaborationProjection(String goalId,
+                                           String planId,
+                                           String reviewId,
+                                           List<String> checkpoints,
+                                           Map<String, AgentRoleAssignment> rolesByType) {
+
+        private AgentRoleAssignment roleFor(String agentType) {
+            return rolesByType.get(agentType);
+        }
     }
 }

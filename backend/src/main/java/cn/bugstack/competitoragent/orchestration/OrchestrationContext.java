@@ -35,6 +35,8 @@ public class OrchestrationContext {
     @Builder.Default
     private List<RevisionDirective> legacyRevisionDirectives = List.of();
     @Builder.Default
+    private List<AgentSuggestion> agentSuggestions = List.of();
+    @Builder.Default
     private List<String> sourceUrls = List.of();
     private EvidenceState evidenceState;
     private String inputSummary;
@@ -51,6 +53,11 @@ public class OrchestrationContext {
                 .currentDecisionCount(Math.max(0, currentDecisionCount))
                 .diagnoses(diagnoses == null ? List.of() : diagnoses)
                 .legacyRevisionDirectives(legacyRevisionDirectives == null ? List.of() : legacyRevisionDirectives)
+                // P2 起运行期上下文可以携带业务 Agent 的建议，但建议只作为 Orchestrator 输入，
+                // 不能绕过 DecisionPolicyService 直接执行。
+                .agentSuggestions(agentSuggestions == null ? List.of() : agentSuggestions.stream()
+                        .map(AgentSuggestion::normalized)
+                        .toList())
                 .sourceUrls(normalizedSourceUrls)
                 .evidenceState(evidenceState == null ? resolveEvidenceState(normalizedSourceUrls) : evidenceState)
                 .inputSummary(blankToNull(inputSummary))

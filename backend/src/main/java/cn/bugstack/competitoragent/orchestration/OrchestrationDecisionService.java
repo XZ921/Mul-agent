@@ -25,6 +25,9 @@ public class OrchestrationDecisionService {
             return List.of();
         }
         OrchestrationContext context = rawContext.normalized();
+        if ("extract_schema".equals(context.getTriggerNodeName())) {
+            return decideExtractorSuggestions(context);
+        }
         if (!"quality_check_final".equals(context.getTriggerNodeName())) {
             return List.of(noAction(context, "P1 仅处理 quality_check_final 终审反馈。"));
         }
@@ -65,6 +68,54 @@ public class OrchestrationDecisionService {
                     .normalized());
         }
         return List.of(noAction(context, "当前终审失败未形成阻断诊断或可执行编排动作。"));
+    }
+
+    private List<OrchestrationDecision> decideExtractorSuggestions(OrchestrationContext context) {
+        List<AgentSuggestion> suggestions = context.getAgentSuggestions();
+        if (suggestions == null || suggestions.isEmpty()) {
+            return List.of(noAction(context, "extract_schema 未产生 AgentSuggestion，无需编排动作。"));
+        }
+        for (AgentSuggestion suggestion : suggestions) {
+            if ("ERROR".equalsIgnoreCase(suggestion.getSeverity())) {
+                return List.of(waitForHuman(context, "extract_schema 产生阻塞级建议，需要人工确认：" + suggestion.getSummary()));
+            }
+        }
+        for (AgentSuggestion suggestion : suggestions) {
+            if ("EVIDENCE_GAP".equalsIgnoreCase(suggestion.getSuggestionType())
+                    && (suggestion.getSourceUrls() == null || suggestion.getSourceUrls().isEmpty())) {
+                return List.of(waitForHuman(context, "extract_schema 发现证据缺口但缺少 sourceUrls，禁止自动补图。"));
+            }
+        }
+        for (AgentSuggestion suggestion : suggestions) {
+            if ("EVIDENCE_GAP".equalsIgnoreCase(suggestion.getSuggestionType())) {
+                return List.of(supplementEvidenceFromSuggestion(context, suggestion));
+            }
+        }
+        return List.of(noAction(context, "extract_schema 建议未命中 P2 可执行策略。"));
+    }
+
+    private OrchestrationDecision supplementEvidenceFromSuggestion(OrchestrationContext context,
+                                                                   AgentSuggestion suggestion) {
+        return OrchestrationDecision.builder()
+                .decisionId("od-" + context.getTaskId() + "-" + context.getTriggerNodeName() + "-suggestion-1")
+                .taskId(context.getTaskId())
+                .triggerNodeName(context.getTriggerNodeName())
+                .decisionType("APPEND_DYNAMIC_BRANCH")
+                .actionType("SUPPLEMENT_EVIDENCE")
+                .targetNode(suggestion.getSuggestedTargetNode())
+                .affectedScope("CURRENT_NODE_AND_DOWNSTREAM")
+                .priority(suggestion.getSeverity())
+                .targetSection(suggestion.getTargetSection())
+                .reason(suggestion.getSummary())
+                .requiresHumanIntervention(false)
+                .requiresConfirmation(false)
+                .confidence(suggestion.getConfidence())
+                .suggestedQueries(suggestion.getSuggestedQueries())
+                .inputRefs(buildInputRefs(context))
+                .sourceUrls(suggestion.getSourceUrls())
+                .evidenceState(suggestion.getEvidenceState())
+                .build()
+                .normalized();
     }
 
     private boolean hasBlockingDiagnosis(OrchestrationContext context) {
@@ -130,7 +181,7 @@ public class OrchestrationDecisionService {
     private Map<String, Object> buildInputRefs(OrchestrationContext context) {
         Map<String, Object> refs = new LinkedHashMap<>();
         refs.put("qualityDiagnosisIds", collectDiagnosisRefs(context));
-        refs.put("agentSuggestionIds", List.of());
+        refs.put("agentSuggestionIds", collectSuggestionRefs(context));
         refs.put("triggerNodeName", context == null ? null : context.getTriggerNodeName());
         return refs;
     }
@@ -144,5 +195,18 @@ public class OrchestrationDecisionService {
             diagnosisRefs.add("qd-" + context.getTriggerNodeName() + "-" + (index + 1));
         }
         return diagnosisRefs;
+    }
+
+    private List<String> collectSuggestionRefs(OrchestrationContext context) {
+        List<String> suggestionRefs = new ArrayList<>();
+        if (context == null || context.getAgentSuggestions() == null) {
+            return suggestionRefs;
+        }
+        for (AgentSuggestion suggestion : context.getAgentSuggestions()) {
+            if (suggestion != null && suggestion.getSuggestionId() != null && !suggestion.getSuggestionId().isBlank()) {
+                suggestionRefs.add(suggestion.getSuggestionId());
+            }
+        }
+        return suggestionRefs;
     }
 }

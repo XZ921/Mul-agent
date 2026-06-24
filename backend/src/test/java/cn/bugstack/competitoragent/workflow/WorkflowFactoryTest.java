@@ -4,8 +4,13 @@ import cn.bugstack.competitoragent.config.CollectorProperties;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.entity.TaskPlan;
+import cn.bugstack.competitoragent.orchestration.CollaborationGoalAssembler;
+import cn.bugstack.competitoragent.orchestration.CollaborationPlanService;
+import cn.bugstack.competitoragent.orchestration.CollaborationTraceService;
+import cn.bugstack.competitoragent.orchestration.InitialPlanReviewService;
 import cn.bugstack.competitoragent.repository.AnalysisSchemaRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
+import cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.search.SearchBrowserProperties;
 import cn.bugstack.competitoragent.search.SearchExecutionPlan;
@@ -27,6 +32,7 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -136,6 +142,35 @@ class WorkflowFactoryTest {
         assertEquals("HTTP_ONLY", config.path("searchMode").asText());
         assertFalse(config.path("verifyResultPage").asBoolean());
         assertFalse(config.path("searchRuntimePolicy").path("verifyResultPage").asBoolean());
+    }
+
+    @Test
+    void shouldEmbedApprovedCollaborationPlanIntoExistingWorkflowTemplate() throws Exception {
+        WorkflowFactory workflowFactory = buildWorkflowFactory(buildBrowserProperties());
+        AnalysisTask task = AnalysisTask.builder()
+                .id(88L)
+                .taskName("协作规划任务")
+                .subjectProduct("企业级 RAG 知识库")
+                .competitorNames(objectMapper.writeValueAsString(List.of("Notion AI")))
+                .competitorUrls(objectMapper.writeValueAsString(List.of("https://www.notion.so")))
+                .analysisDimensions(objectMapper.writeValueAsString(List.of("pricing")))
+                .sourceScope(objectMapper.writeValueAsString(List.of("官网", "定价页")))
+                .build();
+
+        WorkflowPlan plan = workflowFactory.buildPlan(task);
+
+        assertThat(plan.getNodes()).anySatisfy(node -> assertThat(node.getNodeName()).isEqualTo("extract_schema"));
+        assertThat(plan.getNodes()).anySatisfy(node -> assertThat(node.getNodeName()).isEqualTo("quality_check_final"));
+        assertThat(plan.getNodes()).noneSatisfy(node -> assertThat(node.getNodeName()).startsWith("role-"));
+
+        WorkflowPlan.WorkflowPlanNode extractNode = plan.getNodes().stream()
+                .filter(node -> "extract_schema".equals(node.getNodeName()))
+                .findFirst()
+                .orElseThrow();
+        JsonNode extractConfig = objectMapper.readTree(extractNode.getNodeConfig());
+        assertThat(extractConfig.path("collaborationPlanId").asText()).isEqualTo("cp-task-88-v1");
+        assertThat(extractConfig.path("collaborationRoleId").asText()).isEqualTo("role-extractor-01");
+        assertThat(extractConfig.path("orchestratorCheckpoints").toString()).contains("after_extract_schema");
     }
 
     @Test
@@ -313,13 +348,23 @@ class WorkflowFactoryTest {
                 objectMapper,
                 collectorPlanTemplateFactory
         );
+        CollaborationGoalAssembler collaborationGoalAssembler = new CollaborationGoalAssembler(objectMapper);
+        CollaborationPlanService collaborationPlanService = new CollaborationPlanService();
+        InitialPlanReviewService initialPlanReviewService = new InitialPlanReviewService();
+        TaskWorkflowEventRepository taskWorkflowEventRepository = Mockito.mock(TaskWorkflowEventRepository.class);
+        when(taskWorkflowEventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        CollaborationTraceService collaborationTraceService = new CollaborationTraceService(taskWorkflowEventRepository, objectMapper);
         return new WorkflowFactory(
                 nodeRepository,
                 new WorkflowPlanValidator(),
                 objectMapper,
                 dynamicTaskGraphService,
                 executionPlanDefinitionBuilder,
-                new WorkflowPlanAssembler()
+                new WorkflowPlanAssembler(),
+                collaborationGoalAssembler,
+                collaborationPlanService,
+                initialPlanReviewService,
+                collaborationTraceService
         );
     }
 

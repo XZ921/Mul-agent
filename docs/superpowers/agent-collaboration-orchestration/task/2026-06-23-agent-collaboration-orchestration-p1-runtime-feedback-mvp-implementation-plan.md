@@ -3125,7 +3125,7 @@ At the bottom of this file add:
 - [x] P1 评估反馈修订：已完成
 - [x] P1 代码实施：已完成
 - [x] P1 聚合回归：94 个测试通过
-- [ ] backend 全量回归：已执行，阻塞于既有 `ArchitectureWhitelistTest` ledger 路径缺失（测试读取 `../docs/superpowers/task/2026-06-10-architecture-whitelist-ledger.md`，当前仓库实际文档位于 `docs/superpowers/task-definition-and-orchestration-contract/task/`），按本计划保持本轮范围不外扩
+- [x] backend 全量回归：P1 执行期曾阻塞于既有 `ArchitectureWhitelistTest` ledger 路径缺失；2026-06-24 后续收尾已修复台账路径解析，backend 全量回归通过
 - [ ] P1 实链演示证据包：待执行
 ```
 
@@ -3246,4 +3246,4 @@ P1 smoke evidence package after implementation:
 - [x] P1 代码实施：已完成
 - [x] P1 聚合回归：96 个测试通过（含 `OrchestrationRuntimeFeedbackSmokeTest`）
 - [x] P1 实链演示证据包：已固化为可复现 Spring Boot/H2 smoke，覆盖终审失败、Orchestrator 决策、策略 allowed、动态补图、checkpoint、replay 与缺来源 `MISSING_SOURCE`
-- [ ] backend 全量回归：历史已执行，仍阻塞于既有 `ArchitectureWhitelistTest` ledger 路径缺失（测试读取 `../docs/superpowers/task/2026-06-10-architecture-whitelist-ledger.md`，当前仓库实际文档位于 `docs/superpowers/task-definition-and-orchestration-contract/task/`），按本计划保持本轮范围不外扩
+- [x] backend 全量回归：历史阻塞 `ArchitectureWhitelistTest` ledger 路径缺失已于 2026-06-24 后续收尾解除，backend 全量回归通过
