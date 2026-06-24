@@ -45,6 +45,11 @@ public class PromptTemplateService {
                     # 任务名称
                     {taskName}
 
+                    # 当前日期
+                    {currentDate}
+                    报告日期、生成日期或撰写日期必须使用上述当前日期。
+                    不要输出“好的、作为一名、以下是”等模型元话术，正文请直接从报告日期或 Markdown 标题开始。
+
                     # 本方产品
                     {subjectProduct}
 

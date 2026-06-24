@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -99,12 +100,14 @@ public class ReportWriterAgent extends BaseAgent {
         String revisionFocus = buildRevisionFocus(revisionPlan);
         NormalizedAnalysisPayload normalizedAnalysis = normalizeAnalysisPayload(analysisResult, evidences);
         String evidenceCitationGuide = buildEvidenceCitationGuide(evidences, revisionMode);
+        String currentDate = LocalDate.now().toString();
 
         // Writer prompt 变量已经超过 Map.of 的 10 对上限，使用有序 Map 保持模板输入稳定可扩展。
         Map<String, String> promptVariables = new LinkedHashMap<>();
         promptVariables.put("taskName", safe(context.getTaskName()));
         promptVariables.put("subjectProduct", safe(context.getSubjectProduct()));
         promptVariables.put("reportLanguage", safe(context.getReportLanguage(), "中文"));
+        promptVariables.put("currentDate", currentDate);
         promptVariables.put("analysisResult", normalizedAnalysis.serializedAnalysis());
         // Writer 在撰写阶段也需要感知统一检索摘要，避免把证据缺口写成确定性结论。
         promptVariables.put("taskRagContext", context.getTaskRagPromptContext());
@@ -122,6 +125,7 @@ public class ReportWriterAgent extends BaseAgent {
                     "你是一名专业的中文竞品分析报告撰写专家，请输出高质量 Markdown 报告。",
                     prompt
             );
+            reportContent = sanitizeReportContent(reportContent, currentDate);
             reportContent = enforceEvidenceTraceabilityForKeySections(reportContent);
 
             // 报告记录是幂等更新：首次创建，后续重写直接覆盖正文和摘要。
@@ -246,6 +250,94 @@ public class ReportWriterAgent extends BaseAgent {
      * Writer 给模型的证据目录需要直接呈现可复制的 `[证据：EID]` 片段。
      * 真实任务中模型会看到 `- [EID] title(url)` 却忘记转成报告内引用，因此这里把报告章节规则和引用样式前置。
      */
+    /**
+     * Writer 的输出必须是可直接交付的报告正文，不能带模型自我说明或过期报告日期。
+     * 这里只处理报告壳层卫生问题，不改写业务判断，避免把清洗逻辑变成新的事实来源。
+     */
+    private String sanitizeReportContent(String reportContent, String currentDate) {
+        if (reportContent == null || reportContent.isBlank()) {
+            return reportContent;
+        }
+        String content = stripMarkdownFence(reportContent.strip());
+        StringBuilder sanitized = new StringBuilder();
+        boolean reportBodyStarted = false;
+        String[] lines = content.split("\\R", -1);
+        for (String line : lines) {
+            String trimmed = line == null ? "" : line.trim();
+            if (trimmed.startsWith("#")) {
+                reportBodyStarted = true;
+            }
+            if (!reportBodyStarted && isLeadingMetaCommentary(trimmed)) {
+                continue;
+            }
+            sanitized.append(normalizeReportDateLine(line, currentDate)).append('\n');
+        }
+        if (sanitized.length() > 0) {
+            sanitized.setLength(sanitized.length() - 1);
+        }
+        return sanitized.toString().strip();
+    }
+
+    private String stripMarkdownFence(String content) {
+        if (content == null || content.isBlank()) {
+            return content;
+        }
+        String trimmed = content.strip();
+        if (!trimmed.startsWith("```")) {
+            return trimmed;
+        }
+        String[] lines = trimmed.split("\\R", -1);
+        if (lines.length < 2 || !lines[lines.length - 1].trim().equals("```")) {
+            return trimmed;
+        }
+        StringBuilder unwrapped = new StringBuilder();
+        for (int index = 1; index < lines.length - 1; index++) {
+            unwrapped.append(lines[index]).append('\n');
+        }
+        if (unwrapped.length() > 0) {
+            unwrapped.setLength(unwrapped.length() - 1);
+        }
+        return unwrapped.toString().strip();
+    }
+
+    private boolean isLeadingMetaCommentary(String trimmedLine) {
+        if (trimmedLine == null || trimmedLine.isBlank()) {
+            return false;
+        }
+        return trimmedLine.startsWith("好的")
+                || trimmedLine.startsWith("当然")
+                || trimmedLine.startsWith("以下是")
+                || trimmedLine.startsWith("我将")
+                || trimmedLine.contains("作为一名")
+                || trimmedLine.contains("报告撰写专家");
+    }
+
+    private String normalizeReportDateLine(String line, String currentDate) {
+        if (line == null || line.isBlank()) {
+            return line;
+        }
+        String trimmed = line.trim();
+        String prefix = resolveReportDatePrefix(trimmed);
+        if (prefix == null) {
+            return line;
+        }
+        String leadingWhitespace = line.substring(0, line.length() - line.stripLeading().length());
+        return leadingWhitespace + prefix + currentDate;
+    }
+
+    private String resolveReportDatePrefix(String trimmedLine) {
+        List<String> labels = List.of("报告日期", "生成日期", "撰写日期", "日期");
+        for (String label : labels) {
+            if (trimmedLine.startsWith(label + "：")) {
+                return label + "：";
+            }
+            if (trimmedLine.startsWith(label + ":")) {
+                return label + ": ";
+            }
+        }
+        return null;
+    }
+
     private String buildEvidenceCitationGuide(List<EvidenceSource> evidences, boolean revisionMode) {
         List<String> lines = new ArrayList<>();
         lines.add("证据引用规则：");

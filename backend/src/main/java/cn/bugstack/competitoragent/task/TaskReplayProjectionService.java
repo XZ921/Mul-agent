@@ -127,7 +127,13 @@ public class TaskReplayProjectionService {
                 executionLogs,
                 taskPlanMap);
         List<ReplayPlanVersionSummary> replayPlanVersions = buildPlanVersionSummaries(planVersions, timeline, checkpoints);
-        List<ReplayNodeSummary> nodeSummaries = buildNodeSummaries(taskNodes, executionAttempts, memorySnapshots, checkpoints);
+        List<String> taskLevelSourceUrls = aggregateTimelineSourceUrls(timeline);
+        List<ReplayNodeSummary> nodeSummaries = buildNodeSummaries(
+                taskNodes,
+                executionAttempts,
+                memorySnapshots,
+                checkpoints,
+                taskLevelSourceUrls);
         TaskRecoveryAdvice recoveryAdvice = taskRecoveryService.buildRecoveryAdvice(taskId);
         List<SearchReplaySnapshotResponse> searchReplays = buildSearchReplays(taskNodes, taskPlanMap);
         List<CollectionReplaySnapshotResponse> collectionReplays = buildCollectionReplays(taskNodes, taskPlanMap);
@@ -261,7 +267,8 @@ public class TaskReplayProjectionService {
     private List<ReplayNodeSummary> buildNodeSummaries(List<TaskNode> taskNodes,
                                                        List<TaskNodeExecutionAttempt> executionAttempts,
                                                        List<MemorySnapshot> memorySnapshots,
-                                                       List<RecoveryCheckpointResponse> checkpoints) {
+                                                       List<RecoveryCheckpointResponse> checkpoints,
+                                                       List<String> taskLevelSourceUrls) {
         Map<Long, TaskNodeExecutionAttempt> latestAttemptMap = new LinkedHashMap<>();
         for (TaskNodeExecutionAttempt executionAttempt : executionAttempts) {
             TaskNodeExecutionAttempt current = latestAttemptMap.get(executionAttempt.getNodeId());
@@ -284,11 +291,17 @@ public class TaskReplayProjectionService {
             RecoveryCheckpointResponse checkpoint = checkpointMap.get(taskNode.getNodeName());
             MemorySnapshot memorySnapshot = memorySnapshotMap.get(taskNode.getNodeName());
             LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+            // 回放节点摘要需要覆盖“未执行但已计划”的场景，避免只看 replay 时丢失计划期来源入口。
+            sourceUrls.addAll(resolveNodeSourceUrls(taskNode));
             if (memorySnapshot != null) {
                 sourceUrls.addAll(normalizeSourceUrls(memorySnapshot.getSourceUrls()));
             }
             if (checkpoint != null) {
                 sourceUrls.addAll(normalizeSourceUrls(checkpoint.getSourceUrls()));
+            }
+            if (sourceUrls.isEmpty() && shouldBackfillTaskLevelSourceUrls(taskNode)) {
+                // 下游源消费节点的计划期来源可能只存在于任务级事件中，回放摘要需兜底暴露以满足可追溯要求。
+                sourceUrls.addAll(normalizeSourceUrls(taskLevelSourceUrls));
             }
             summaries.add(ReplayNodeSummary.builder()
                     .nodeId(taskNode.getId())
@@ -308,10 +321,77 @@ public class TaskReplayProjectionService {
         return summaries;
     }
 
+    private List<String> aggregateTimelineSourceUrls(List<ReplayTimelineEvent> timeline) {
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        for (ReplayTimelineEvent timelineEvent : timeline) {
+            sourceUrls.addAll(normalizeSourceUrls(timelineEvent.getSourceUrls()));
+        }
+        return new ArrayList<>(sourceUrls);
+    }
+
+    private boolean shouldBackfillTaskLevelSourceUrls(TaskNode taskNode) {
+        if (taskNode == null || taskNode.getAgentType() == null) {
+            return false;
+        }
+        return taskNode.getAgentType() == AgentType.COLLECTOR
+                || taskNode.getAgentType() == AgentType.EXTRACTOR
+                || taskNode.getAgentType() == AgentType.ANALYZER
+                || taskNode.getAgentType() == AgentType.WRITER;
+    }
+
     /**
      * 任务级恢复建议优先强调“当前推荐怎么做”。
      * 5.6.c 才会进一步补齐严格的恢复窗口、释放规则和控制语义。
      */
+    private List<String> resolveNodeSourceUrls(TaskNode node) {
+        if (node == null) {
+            return List.of();
+        }
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        collectNestedSourceUrls(readJson(node.getOutputData()), sourceUrls);
+        collectNodeConfigSourceUrls(readJson(node.getNodeConfig()), sourceUrls);
+        return new ArrayList<>(sourceUrls);
+    }
+
+    private void collectNodeConfigSourceUrls(JsonNode config, LinkedHashSet<String> sourceUrls) {
+        if (config == null || config.isMissingNode() || config.isNull()) {
+            return;
+        }
+        appendSourceUrls(sourceUrls, config.get("sourceUrls"));
+        appendSourceUrls(sourceUrls, config.get("competitorUrls"));
+    }
+
+    private void collectNestedSourceUrls(JsonNode node, LinkedHashSet<String> sourceUrls) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return;
+        }
+        if (node.isObject()) {
+            appendSourceUrls(sourceUrls, node.get("sourceUrls"));
+            node.fields().forEachRemaining(entry -> collectNestedSourceUrls(entry.getValue(), sourceUrls));
+            return;
+        }
+        if (node.isArray()) {
+            node.forEach(item -> collectNestedSourceUrls(item, sourceUrls));
+        }
+    }
+
+    private void appendSourceUrls(LinkedHashSet<String> sourceUrls, JsonNode urlsNode) {
+        if (urlsNode == null || urlsNode.isMissingNode() || urlsNode.isNull()) {
+            return;
+        }
+        if (urlsNode.isArray()) {
+            urlsNode.forEach(item -> appendSourceUrl(sourceUrls, item.asText(null)));
+            return;
+        }
+        appendSourceUrl(sourceUrls, urlsNode.asText(null));
+    }
+
+    private void appendSourceUrl(LinkedHashSet<String> sourceUrls, String value) {
+        if (value != null && !value.isBlank()) {
+            sourceUrls.add(value.trim());
+        }
+    }
+
     private TaskRecoveryAdvice buildRecoveryAdvice(List<TaskNode> taskNodes,
                                                    List<RecoveryCheckpointResponse> checkpoints) {
         List<String> manualBlockingNodes = taskNodes.stream()

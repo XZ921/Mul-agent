@@ -159,6 +159,12 @@ public class ReportService {
                 .finalReview(finalReview)
                 .evidenceCount(report.getEvidenceCount())
                 .evidences(evidenceInfos)
+                .sourceUrls(collectReportSourceUrls(
+                        evidenceInfos,
+                        reportDiagnosis,
+                        deliverySummary,
+                        evidenceEntryPoint,
+                        auditSummary))
                 .searchAuditOverview(searchAuditOverview)
                 .taskRagAudits(taskRagAudits)
                 .evidenceCoverageOverview(evidenceCoverageOverview)
@@ -429,6 +435,50 @@ public class ReportService {
             }
         }
         return "建议先回到任务链路补齐关键证据，再决定是否继续重写或导出。";
+    }
+
+    /**
+     * 报告顶层 sourceUrls 是交付主路径的总入口，优先保留证据列表中的原始 URL，
+     * 再合并诊断、交付摘要、证据入口和审计摘要，避免前端到多个嵌套对象里自行拼装。
+     */
+    private List<String> collectReportSourceUrls(List<ReportResponse.EvidenceInfo> evidenceInfos,
+                                                 ReportDiagnosisInfo reportDiagnosis,
+                                                 ReportResponse.DeliverySummaryInfo deliverySummary,
+                                                 ReportResponse.EvidenceEntryPointInfo evidenceEntryPoint,
+                                                 ReportResponse.AuditSummaryInfo auditSummary) {
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        for (ReportResponse.EvidenceInfo evidenceInfo : evidenceInfos == null ? List.<ReportResponse.EvidenceInfo>of() : evidenceInfos) {
+            if (evidenceInfo != null) {
+                appendSourceUrl(sourceUrls, evidenceInfo.getUrl());
+            }
+        }
+        if (reportDiagnosis != null) {
+            appendSourceUrls(sourceUrls, reportDiagnosis.getSourceUrls());
+        }
+        if (deliverySummary != null) {
+            appendSourceUrls(sourceUrls, deliverySummary.getSourceUrls());
+        }
+        if (evidenceEntryPoint != null) {
+            appendSourceUrl(sourceUrls, evidenceEntryPoint.getUrl());
+            appendSourceUrls(sourceUrls, evidenceEntryPoint.getSourceUrls());
+        }
+        if (auditSummary != null) {
+            appendSourceUrls(sourceUrls, auditSummary.getSourceUrls());
+        }
+        return new ArrayList<>(sourceUrls);
+    }
+
+    private void appendSourceUrls(LinkedHashSet<String> sourceUrls, List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return;
+        }
+        values.forEach(value -> appendSourceUrl(sourceUrls, value));
+    }
+
+    private void appendSourceUrl(LinkedHashSet<String> sourceUrls, String value) {
+        if (value != null && !value.isBlank()) {
+            sourceUrls.add(value.trim());
+        }
     }
 
     /**

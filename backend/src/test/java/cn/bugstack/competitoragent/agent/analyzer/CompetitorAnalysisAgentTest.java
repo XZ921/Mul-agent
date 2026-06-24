@@ -120,6 +120,40 @@ class CompetitorAnalysisAgentTest {
     }
 
     @Test
+    void shouldFailWhenCoreAnalysisFieldsAreEmpty() throws Exception {
+        when(agentContextAssembler.assemble(any(AgentContext.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(1L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .summary("workspace ai")
+                        .sourceUrls("[\"https://www.notion.so/product/ai\"]")
+                        .build()
+        ));
+        when(promptService.render(eq("analyzer"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("Analysis"))).thenReturn("""
+                {
+                  "overview": "分析完成",
+                  "sourceUrls": ["https://www.notion.so/product/ai"],
+                  "recommendations": ["继续观察"]
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentResult result = agent.execute(AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .subjectProduct("Our Product")
+                .analysisDimensions("产品功能")
+                .currentNodeName("analyze_competitors")
+                .build());
+
+        assertEquals("FAILED", result.getStatus().name());
+        assertTrue(result.getErrorMessage().contains("结构化分析字段为空"));
+    }
+
+    @Test
     void shouldCarryDownstreamEvidenceViewsFromExtractorToAnalyzer() throws Exception {
         when(agentContextAssembler.assemble(any(AgentContext.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(knowledgeRepository.findByTaskIdOrderByIdAsc(1L)).thenReturn(List.of());

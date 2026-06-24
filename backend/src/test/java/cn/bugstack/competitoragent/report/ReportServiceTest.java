@@ -98,6 +98,52 @@ class ReportServiceTest {
     }
 
     @Test
+    void shouldExposeTopLevelSourceUrlsForReportDeliveryPayload() {
+        Report report = Report.builder()
+                .id(8L)
+                .taskId(710L)
+                .title("真实冒烟报告")
+                .content("# Report")
+                .summary("summary")
+                .qualityPassed(false)
+                .evidenceCount(1)
+                .build();
+        ReportResponse.EvidenceInfo evidence = new ReportResponse.EvidenceInfo(
+                "E710",
+                "Notion AI 官方产品页",
+                "https://notion.so/product/ai",
+                "snippet",
+                "Notion AI",
+                null,
+                "OFFICIAL",
+                "DIRECT",
+                "notion.so",
+                "用户提供入口",
+                null,
+                0.95,
+                true,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                java.util.Map.of()
+        );
+
+        when(reportRepository.findByTaskId(710L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(710L)).thenReturn(List.of(evidence));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(710L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(710L)).thenReturn(List.of());
+
+        ReportResponse response = reportService.getReport(710L);
+
+        assertEquals(List.of("https://notion.so/product/ai"), response.getSourceUrls());
+    }
+
+    @Test
     void shouldAggregateCollectorSearchAuditOverview() {
         Report report = Report.builder()
                 .id(1L)

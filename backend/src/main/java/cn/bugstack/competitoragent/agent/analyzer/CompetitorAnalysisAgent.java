@@ -121,6 +121,9 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                     knowledges,
                     downstreamEvidenceViews,
                     extractorOutput.drafts());
+            if (isCoreAnalysisEmpty(analysisResult)) {
+                return AgentResult.failed("结构化分析字段为空：featureComparison、positioningComparison、pricingComparison、targetUserComparison、strengthsSummary、weaknessesSummary 均未生成，请补充证据或重跑分析节点");
+            }
             // 把最终实际消费的 Task RAG 摘要一并写回运行态输出，方便后续节点和审计接口复核。
             analysisResult.setTaskRagContext(context.getTaskRagPromptContext());
             String outputJson = objectMapper.writeValueAsString(analysisResult);
@@ -292,6 +295,26 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                 .sectionEvidenceBundles(normalizeSectionEvidenceBundles(sectionEvidenceBundles))
                 .downstreamEvidenceViews(normalizeDownstreamEvidenceViews(downstreamEvidenceViews))
                 .build();
+    }
+
+    /**
+     * Analyzer 成功的最低门槛是至少产出一个非 overview 的核心分析字段。
+     * 只有来源 URL、概览或建议时，Writer 会被迫凭空扩写，因此这里直接阻断下游写作。
+     */
+    private boolean isCoreAnalysisEmpty(AnalysisResult analysisResult) {
+        if (analysisResult == null) {
+            return true;
+        }
+        return !hasText(analysisResult.getFeatureComparison())
+                && !hasText(analysisResult.getPositioningComparison())
+                && !hasText(analysisResult.getPricingComparison())
+                && !hasText(analysisResult.getTargetUserComparison())
+                && !hasText(analysisResult.getStrengthsSummary())
+                && !hasText(analysisResult.getWeaknessesSummary());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private Object parseJsonOrFallback(String rawValue) {

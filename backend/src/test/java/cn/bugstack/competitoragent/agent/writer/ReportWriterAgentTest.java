@@ -17,10 +17,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -101,6 +103,58 @@ class ReportWriterAgentTest {
                         && variables.get("taskRagContext").contains("检索查询")
                         && variables.get("taskRagContext").contains("企业版公开合同条款仍不足")
         ));
+    }
+
+    @Test
+    void shouldSanitizeMetaCommentaryAndNormalizeReportDateBeforeSaving() throws Exception {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(1L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E001")
+                        .title("Notion AI")
+                        .url("https://www.notion.so/product/ai")
+                        .build()
+        ));
+        when(reportRepository.findByTaskId(1L)).thenReturn(Optional.empty());
+        when(promptService.render(eq("writer"), any())).thenReturn("writer-prompt");
+        when(llmClient.chat(any(), any())).thenReturn("""
+                好的，作为一名专业的竞品分析报告撰写专家，我将开始撰写。
+                报告日期：2024-05-24
+                # Notion AI 竞品分析报告
+                ## 结论
+                Notion AI 当前公开材料显示其聚焦工作区 AI 能力 [证据：E001]。
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .subjectProduct("Our Product")
+                .reportLanguage("中文")
+                .currentNodeName("write_report")
+                .build();
+        context.putSharedOutput("analyze_competitors", """
+                {
+                  "overview": "分析完成",
+                  "featureComparison": "工作区 AI 能力",
+                  "sourceUrls": ["https://www.notion.so/product/ai"]
+                }
+                """);
+
+        AgentResult result = agent.execute(context);
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        String content = output.path("content").asText();
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertFalse(content.contains("好的，作为一名"));
+        assertFalse(content.contains("2024-05-24"));
+        assertTrue(content.contains("报告日期：" + LocalDate.now()));
+        assertTrue(content.startsWith("报告日期："));
+        verify(promptService).render(eq("writer"), argThat(variables ->
+                LocalDate.now().toString().equals(variables.get("currentDate"))));
+        verify(reportRepository).save(argThat(report -> report.getContent().equals(content)));
     }
 
     @Test

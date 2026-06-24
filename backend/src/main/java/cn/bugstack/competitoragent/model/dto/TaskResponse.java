@@ -95,6 +95,9 @@ public class TaskResponse {
     @Schema(description = "是否允许查看报告")
     private Boolean canViewReport;
 
+    @Schema(description = "是否允许查看已生成但尚未正式交付的草稿报告")
+    private Boolean canViewDraftReport;
+
     @Schema(description = "人工干预规则摘要")
     private String interventionSummary;
 

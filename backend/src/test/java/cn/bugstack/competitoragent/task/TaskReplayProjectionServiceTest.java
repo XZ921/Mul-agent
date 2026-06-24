@@ -151,6 +151,134 @@ class TaskReplayProjectionServiceTest {
     }
 
     @Test
+    void shouldExposePlannedSourceUrlsInNodeSummariesBeforeNodeExecution() {
+        TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
+        TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);
+        TaskNodeRepository taskNodeRepository = mock(TaskNodeRepository.class);
+        TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository = mock(TaskNodeExecutionAttemptRepository.class);
+        MemorySnapshotRepository memorySnapshotRepository = mock(MemorySnapshotRepository.class);
+        AgentExecutionLogRepository agentExecutionLogRepository = mock(AgentExecutionLogRepository.class);
+        RecoveryCheckpointService recoveryCheckpointService = mock(RecoveryCheckpointService.class);
+        TaskRecoveryService taskRecoveryService = mock(TaskRecoveryService.class);
+
+        TaskNode pendingExtractor = TaskNode.builder()
+                .id(501L)
+                .taskId(42L)
+                .nodeName("extract_schema")
+                .displayName("结构化抽取")
+                .agentType(AgentType.EXTRACTOR)
+                .status(TaskNodeStatus.PENDING)
+                .nodeConfig("""
+                        {
+                          "sourceUrls":["https://www.notion.so/product/ai"],
+                          "competitorUrls":["https://www.notion.so"]
+                        }
+                        """)
+                .build();
+
+        when(taskPlanRepository.findByTaskIdOrderByPlanVersionAsc(42L)).thenReturn(List.of());
+        when(taskPlanRepository.findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(42L)).thenReturn(Optional.empty());
+        when(taskWorkflowEventRepository.findAll()).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(42L)).thenReturn(List.of(pendingExtractor));
+        when(taskNodeExecutionAttemptRepository.findAll()).thenReturn(List.of());
+        when(memorySnapshotRepository.findByTaskIdOrderByIdDesc(42L)).thenReturn(List.of());
+        when(agentExecutionLogRepository.findByTaskIdOrderByCreatedAtAsc(42L)).thenReturn(List.of());
+        when(recoveryCheckpointService.listTaskCheckpoints(42L)).thenReturn(List.of());
+        when(taskRecoveryService.buildRecoveryAdvice(42L)).thenReturn(TaskRecoveryAdvice.builder()
+                .recommendedAction("OBSERVE_ONLY")
+                .summary("none")
+                .blockingNodeNames(List.of())
+                .resumeSupported(false)
+                .sourceUrls(List.of())
+                .build());
+
+        ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        TaskReplayProjectionService service = new TaskReplayProjectionService(
+                taskPlanRepository,
+                taskWorkflowEventRepository,
+                taskNodeRepository,
+                taskNodeExecutionAttemptRepository,
+                memorySnapshotRepository,
+                agentExecutionLogRepository,
+                recoveryCheckpointService,
+                taskRecoveryService,
+                objectMapper
+        );
+
+        TaskReplayResponse replayResponse = service.getTaskReplay(42L);
+
+        assertThat(replayResponse.getNodeSummaries()).hasSize(1);
+        assertThat(replayResponse.getNodeSummaries().get(0).getSourceUrls())
+                .containsExactly("https://www.notion.so/product/ai", "https://www.notion.so");
+        assertThat(replayResponse.getSourceUrls())
+                .containsExactly("https://www.notion.so/product/ai", "https://www.notion.so");
+    }
+
+    @Test
+    void shouldBackfillTaskLevelSourceUrlsToDownstreamSourceConsumerNodeSummaries() {
+        TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
+        TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);
+        TaskNodeRepository taskNodeRepository = mock(TaskNodeRepository.class);
+        TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository = mock(TaskNodeExecutionAttemptRepository.class);
+        MemorySnapshotRepository memorySnapshotRepository = mock(MemorySnapshotRepository.class);
+        AgentExecutionLogRepository agentExecutionLogRepository = mock(AgentExecutionLogRepository.class);
+        RecoveryCheckpointService recoveryCheckpointService = mock(RecoveryCheckpointService.class);
+        TaskRecoveryService taskRecoveryService = mock(TaskRecoveryService.class);
+
+        TaskWorkflowEvent taskCreatedEvent = TaskWorkflowEvent.builder()
+                .id(1801L)
+                .eventId("evt-task-created-1801")
+                .taskId(42L)
+                .eventType(WorkflowEventType.TASK_CREATED)
+                .sourceUrls("[\"https://www.notion.so/product/ai\",\"https://www.notion.so\"]")
+                .createdAt(LocalDateTime.of(2026, 6, 24, 17, 0))
+                .build();
+        TaskNode pendingExtractor = TaskNode.builder()
+                .id(502L)
+                .taskId(42L)
+                .nodeName("extract_schema")
+                .displayName("结构化抽取")
+                .agentType(AgentType.EXTRACTOR)
+                .status(TaskNodeStatus.PENDING)
+                .build();
+
+        when(taskPlanRepository.findByTaskIdOrderByPlanVersionAsc(42L)).thenReturn(List.of());
+        when(taskPlanRepository.findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(42L)).thenReturn(Optional.empty());
+        when(taskWorkflowEventRepository.findAll()).thenReturn(List.of(taskCreatedEvent));
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(42L)).thenReturn(List.of(pendingExtractor));
+        when(taskNodeExecutionAttemptRepository.findAll()).thenReturn(List.of());
+        when(memorySnapshotRepository.findByTaskIdOrderByIdDesc(42L)).thenReturn(List.of());
+        when(agentExecutionLogRepository.findByTaskIdOrderByCreatedAtAsc(42L)).thenReturn(List.of());
+        when(recoveryCheckpointService.listTaskCheckpoints(42L)).thenReturn(List.of());
+        when(taskRecoveryService.buildRecoveryAdvice(42L)).thenReturn(TaskRecoveryAdvice.builder()
+                .recommendedAction("OBSERVE_ONLY")
+                .summary("none")
+                .blockingNodeNames(List.of())
+                .resumeSupported(false)
+                .sourceUrls(List.of())
+                .build());
+
+        ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        TaskReplayProjectionService service = new TaskReplayProjectionService(
+                taskPlanRepository,
+                taskWorkflowEventRepository,
+                taskNodeRepository,
+                taskNodeExecutionAttemptRepository,
+                memorySnapshotRepository,
+                agentExecutionLogRepository,
+                recoveryCheckpointService,
+                taskRecoveryService,
+                objectMapper
+        );
+
+        TaskReplayResponse replayResponse = service.getTaskReplay(42L);
+
+        assertThat(replayResponse.getNodeSummaries()).hasSize(1);
+        assertThat(replayResponse.getNodeSummaries().get(0).getSourceUrls())
+                .containsExactly("https://www.notion.so/product/ai", "https://www.notion.so");
+    }
+
+    @Test
     void shouldExposeSearchReplaySnapshotFromCollectorAuditOutput() {
         TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
         TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);

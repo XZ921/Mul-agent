@@ -42,6 +42,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -100,6 +101,7 @@ public class TaskNodeViewAssembler {
                 .canRetry(canRetryTask(resolvedStatus))
                 .canStop(canStopTask(resolvedStatus))
                 .canViewReport(resolvedStatus == AnalysisTaskStatus.SUCCESS)
+                .canViewDraftReport(hasDraftReport(nodes))
                 .interventionSummary(buildTaskInterventionSummary(resolvedStatus))
                 .resumeAdvice(buildTaskResumeAdvice(resolvedStatus))
                 .retryAdvice(buildTaskRetryAdvice(resolvedStatus))
@@ -163,6 +165,7 @@ public class TaskNodeViewAssembler {
                 .originNodeName(node.getOriginNodeName())
                 .inputSummary(truncate(node.getInputData(), 240))
                 .outputSummary(buildOutputSummary(node))
+                .sourceUrls(resolveNodeSourceUrls(node))
                 .aiGovernanceSummary(buildAiGovernanceSummary(node))
                 .statusSummary(buildNodeStatusSummary(node))
                 .inputData(node.getInputData())
@@ -226,6 +229,7 @@ public class TaskNodeViewAssembler {
                 .dynamicNode(node.isDynamicNode())
                 .originNodeName(node.getOriginNodeName())
                 .inputSummary(node.getNodeConfig())
+                .sourceUrls(resolvePreviewNodeSourceUrls(node))
                 .aiGovernanceSummary(null)
                 .status(TaskNodeStatus.PENDING)
                 .nodeNotes(node.getNotes())
@@ -242,6 +246,91 @@ public class TaskNodeViewAssembler {
                 .eventKey(node.getNodeName())
                 .interventionSummary("预览阶段仅展示规划结果。")
                 .build();
+    }
+
+    /**
+     * 草稿报告的可见性只代表 Writer 已经产出过报告内容，不等同于任务正式交付成功。
+     * 真实冒烟中初审失败会把任务停在 STOPPED，但用户仍需要进入已生成草稿继续排障。
+     */
+    private boolean hasDraftReport(List<TaskNode> nodes) {
+        if (nodes == null || nodes.isEmpty()) {
+            return false;
+        }
+        for (TaskNode node : nodes) {
+            if (node == null || node.getStatus() != TaskNodeStatus.SUCCESS) {
+                continue;
+            }
+            if (node.getAgentType() == AgentType.WRITER || isReportWriterNode(node.getNodeName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isReportWriterNode(String nodeName) {
+        return "write_report".equalsIgnoreCase(nodeName) || "rewrite_report".equalsIgnoreCase(nodeName);
+    }
+
+    /**
+     * 节点详情对外显式暴露来源 URL，优先使用运行时产物，再补充计划配置里的入口 URL。
+     * 这样前端不必解析原始 JSON，也能满足报告和节点排障的无幻觉追溯要求。
+     */
+    private List<String> resolveNodeSourceUrls(TaskNode node) {
+        if (node == null) {
+            return List.of();
+        }
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        collectNestedSourceUrls(readJson(node.getOutputData()), sourceUrls);
+        collectNodeConfigSourceUrls(readJson(node.getNodeConfig()), sourceUrls);
+        return new ArrayList<>(sourceUrls);
+    }
+
+    private List<String> resolvePreviewNodeSourceUrls(WorkflowPlan.WorkflowPlanNode node) {
+        if (node == null) {
+            return List.of();
+        }
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        collectNodeConfigSourceUrls(readJson(node.getNodeConfig()), sourceUrls);
+        return new ArrayList<>(sourceUrls);
+    }
+
+    private void collectNodeConfigSourceUrls(JsonNode config, LinkedHashSet<String> sourceUrls) {
+        if (config == null || config.isMissingNode() || config.isNull()) {
+            return;
+        }
+        appendSourceUrls(sourceUrls, config.get("sourceUrls"));
+        appendSourceUrls(sourceUrls, config.get("competitorUrls"));
+    }
+
+    private void collectNestedSourceUrls(JsonNode node, LinkedHashSet<String> sourceUrls) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return;
+        }
+        if (node.isObject()) {
+            appendSourceUrls(sourceUrls, node.get("sourceUrls"));
+            node.fields().forEachRemaining(entry -> collectNestedSourceUrls(entry.getValue(), sourceUrls));
+            return;
+        }
+        if (node.isArray()) {
+            node.forEach(item -> collectNestedSourceUrls(item, sourceUrls));
+        }
+    }
+
+    private void appendSourceUrls(LinkedHashSet<String> sourceUrls, JsonNode urlsNode) {
+        if (urlsNode == null || urlsNode.isMissingNode() || urlsNode.isNull()) {
+            return;
+        }
+        if (urlsNode.isArray()) {
+            urlsNode.forEach(item -> appendSourceUrl(sourceUrls, item.asText(null)));
+            return;
+        }
+        appendSourceUrl(sourceUrls, urlsNode.asText(null));
+    }
+
+    private void appendSourceUrl(LinkedHashSet<String> sourceUrls, String value) {
+        if (value != null && !value.isBlank()) {
+            sourceUrls.add(value.trim());
+        }
     }
 
     private String buildDefaultCurrentStage(List<TaskNode> nodes, AnalysisTaskStatus status) {

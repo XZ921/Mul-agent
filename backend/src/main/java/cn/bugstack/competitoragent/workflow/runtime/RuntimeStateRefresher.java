@@ -6,6 +6,7 @@ import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
+import cn.bugstack.competitoragent.workflow.NodeExecutionRecoveryPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -25,6 +26,7 @@ public class RuntimeStateRefresher {
     private final TaskNodeRepository nodeRepository;
     private final TaskSnapshotCacheService taskSnapshotCacheService;
     private final TaskEventPublisher taskEventPublisher;
+    private final NodeExecutionRecoveryPolicy recoveryPolicy = new NodeExecutionRecoveryPolicy();
 
     /**
      * 根据数据库中的最新任务与节点状态刷新运行时快照。
@@ -32,10 +34,13 @@ public class RuntimeStateRefresher {
     public void refreshRuntimeSnapshot(Long taskId) {
         taskRepository.findById(taskId).ifPresent(task -> {
             List<TaskNode> latestNodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
+            NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
+                    recoveryPolicy.resolveTaskExecution(task, latestNodes);
             TaskProgressSnapshot snapshot = TaskProgressSnapshot.fromTask(
                     task,
-                    task.getStatus(),
-                    task.getErrorMessage(),
+                    // 运行时快照必须以节点权威状态归约任务状态，避免异步链路中任务主表短暂滞后导致 PENDING 覆盖 RUNNING。
+                    resolution.getStatus(),
+                    resolution.getErrorMessage(),
                     latestNodes);
             taskSnapshotCacheService.saveTaskSnapshot(snapshot);
             taskEventPublisher.publishTaskSnapshot(snapshot);

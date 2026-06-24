@@ -1,8 +1,7 @@
 package cn.bugstack.competitoragent.task.assembler;
 
-import cn.bugstack.competitoragent.model.dto.CollectorNodeInsightResponse;
 import cn.bugstack.competitoragent.model.dto.TaskNodeResponse;
-import cn.bugstack.competitoragent.model.entity.AiCallAuditRecord;
+import cn.bugstack.competitoragent.model.dto.TaskResponse;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AgentType;
@@ -12,15 +11,14 @@ import cn.bugstack.competitoragent.repository.AiCallAuditRecordRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.task.TaskRecoveryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -30,75 +28,88 @@ class TaskNodeViewAssemblerTest {
     private final TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
     private final TaskRecoveryService taskRecoveryService = mock(TaskRecoveryService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final TaskNodeViewAssembler assembler = new TaskNodeViewAssembler(
-            aiCallAuditRecordRepository,
-            taskPlanRepository,
-            taskRecoveryService,
-            objectMapper
-    );
+    private TaskNodeViewAssembler assembler;
+
+    @BeforeEach
+    void setUp() {
+        when(taskRecoveryService.getTaskSnapshotOrRebuild(anyLong())).thenReturn(Optional.empty());
+        assembler = new TaskNodeViewAssembler(
+                aiCallAuditRecordRepository,
+                taskPlanRepository,
+                taskRecoveryService,
+                objectMapper
+        );
+    }
 
     @Test
-    void shouldExposeSearchReplayFactsInCollectorInsight() {
-        when(taskPlanRepository.findByTaskIdOrderByPlanVersionAsc(anyLong())).thenReturn(List.of());
-        when(aiCallAuditRecordRepository.findTopByTaskIdAndNodeNameOrderByCreatedAtDesc(anyLong(), anyString()))
-                .thenReturn(Optional.<AiCallAuditRecord>empty());
-
-        TaskNode collectNode = TaskNode.builder()
-                .id(1L)
-                .taskId(42L)
-                .nodeName("collect_sources_docs")
-                .displayName("Collect Docs")
-                .agentType(AgentType.COLLECTOR)
-                .status(TaskNodeStatus.SUCCESS)
-                .nodeConfig("""
-                        {
-                          "competitorName":"Example",
-                          "sourceType":"DOCS",
-                          "sourceScope":["DOCS"],
-                          "competitorUrls":["https://www.example.com"],
-                          "sourceCandidates":[{"url":"https://docs.example.com/reference","sourceType":"DOCS","sourceUrls":["https://docs.example.com/reference"]}],
-                          "searchMode":"HYBRID",
-                          "searchQueries":["Example docs"],
-                          "browserSearchEnabled":true,
-                          "verifyResultPage":true,
-                          "minVerifiedCandidates":1
-                        }
-                        """)
-                .outputData("""
-                        {
-                          "competitor":"Example",
-                          "sourceType":"DOCS",
-                          "selectedTargets":[],
-                          "successCollected":1,
-                          "totalCollected":1,
-                          "sourceUrls":["https://docs.example.com/reference"],
-                          "searchAudit":{
-                            "attemptedTargets":[{"candidate":{"url":"https://docs.example.com/reference","sourceUrls":["https://docs.example.com/reference"]}}],
-                            "discardedCandidates":[{"url":"https://www.example.com/login","sourceType":"DOCS","selectionStage":"DISCARDED","selectionReason":"LOW_SIGNAL_UTILITY_PAGE","sourceUrls":["https://www.example.com/login"]}],
-                            "replayTimeline":[{"stepCode":"SELECT_TARGETS","status":"SUCCESS","sourceUrls":["https://docs.example.com/reference"]}],
-                            "sourceUrls":["https://docs.example.com/reference"]
-                          }
-                        }
-                        """)
-                .build();
+    void shouldExposeDraftReportCapabilityWhenWriterProducedDraftButReviewStoppedTask() {
         AnalysisTask task = AnalysisTask.builder()
-                .id(42L)
-                .taskName("search replay facts")
-                .subjectProduct("Example Product")
-                .competitorNames("[\"Example\"]")
-                .status(AnalysisTaskStatus.SUCCESS)
+                .id(56L)
+                .status(AnalysisTaskStatus.STOPPED)
+                .errorMessage("初审未通过且需要人工介入，请补充证据或调整策略后继续")
                 .build();
+        TaskNode writerNode = node("write_report", AgentType.WRITER, TaskNodeStatus.SUCCESS, 3);
+        TaskNode reviewNode = node("quality_check", AgentType.REVIEWER, TaskNodeStatus.SUCCESS, 4);
+        TaskNode rewriteNode = node("rewrite_report", AgentType.WRITER, TaskNodeStatus.SKIPPED, 5);
+        rewriteNode.setErrorMessage("跳过修订：初审严重失败，需先人工补证据、调整搜索范围或重跑采集链路");
 
-        TaskNodeResponse response = assembler.toNodeResponse(task, collectNode, List.of(collectNode));
+        TaskResponse response = assembler.toTaskResponse(task, List.of(writerNode, reviewNode, rewriteNode));
 
-        CollectorNodeInsightResponse insight = response.getCollectorInsight();
-        assertNotNull(insight);
-        assertNotNull(insight.getSearchAudit());
-        assertEquals(1, insight.getAttemptedTargets().size());
-        assertEquals(1, insight.getDiscardedCandidates().size());
-        assertEquals("SELECT_TARGETS", insight.getSearchReplayTimeline().get(0).getStepCode());
-        assertEquals(insight.getSearchAudit().getAttemptedTargets(), insight.getAttemptedTargets());
-        assertEquals(insight.getSearchAudit().getDiscardedCandidates(), insight.getDiscardedCandidates());
-        assertEquals(insight.getSearchAudit().getReplayTimeline(), insight.getSearchReplayTimeline());
+        assertThat(response.getCanViewReport()).isFalse();
+        assertThat(response.getCanViewDraftReport()).isTrue();
+    }
+
+    @Test
+    void shouldExposeNodeSourceUrlsFromRuntimeOutputAndPlannedConfig() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(57L)
+                .status(AnalysisTaskStatus.RUNNING)
+                .build();
+        TaskNode node = node("extract_schema", AgentType.EXTRACTOR, TaskNodeStatus.SUCCESS, 1);
+        node.setNodeConfig("""
+                {
+                  "sourceUrls": ["https://www.notion.so/product/ai"],
+                  "competitorUrls": ["https://www.notion.so"]
+                }
+                """);
+        node.setOutputData("""
+                {
+                  "sourceUrls": ["https://notion.so/product/ai"],
+                  "results": [
+                    {
+                      "coverage": {
+                        "coreFeatures": {
+                          "sourceUrls": ["https://www.notion.so/help"]
+                        }
+                      }
+                    }
+                  ]
+                }
+                """);
+
+        TaskNodeResponse response = assembler.toNodeResponse(task, node, List.of(node));
+
+        assertThat(response.getSourceUrls()).containsExactly(
+                "https://notion.so/product/ai",
+                "https://www.notion.so/help",
+                "https://www.notion.so/product/ai",
+                "https://www.notion.so"
+        );
+    }
+
+    private TaskNode node(String nodeName, AgentType agentType, TaskNodeStatus status, int executionOrder) {
+        return TaskNode.builder()
+                .taskId(56L)
+                .nodeName(nodeName)
+                .displayName(nodeName)
+                .agentType(agentType)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(true)
+                .maxRetries(3)
+                .retryCount(0)
+                .status(status)
+                .executionOrder(executionOrder)
+                .build();
     }
 }

@@ -66,6 +66,9 @@ public class ReportResponse {
     @Schema(description = "Evidence list")
     private List<EvidenceInfo> evidences;
 
+    @Schema(description = "Report-level source URLs aggregated for delivery and traceability")
+    private List<String> sourceUrls;
+
     @Schema(description = "Search audit overview aggregated from collector nodes")
     private SearchAuditOverview searchAuditOverview;
 

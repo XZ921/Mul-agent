@@ -107,6 +107,9 @@ public class TaskNodeResponse {
     @Schema(description = "Output summary")
     private String outputSummary;
 
+    @Schema(description = "节点可追溯来源 URL 列表")
+    private List<String> sourceUrls;
+
     @Schema(description = "AI 治理摘要")
     private String aiGovernanceSummary;
 
