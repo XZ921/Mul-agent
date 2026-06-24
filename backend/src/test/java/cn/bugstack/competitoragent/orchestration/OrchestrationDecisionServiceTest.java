@@ -194,4 +194,74 @@ class OrchestrationDecisionServiceTest {
         assertThat(decisions.get(0).getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
         assertThat(decisions.get(0).isRequiresHumanIntervention()).isTrue();
     }
+
+    @Test
+    void shouldCreateSupplementDecisionFromAnalyzerSuggestionWithSources() {
+        AgentSuggestion suggestion = AgentSuggestion.builder()
+                .suggestionId("as-task-88-analyze_competitors-1")
+                .taskId(88L)
+                .producerNodeName("analyze_competitors")
+                .producerAgentType("ANALYZER")
+                .suggestionType("ANALYSIS_GAP")
+                .targetSection("analysis")
+                .summary("Analyzer 缺少 pricingComparison")
+                .severity("HIGH")
+                .confidence(0.35d)
+                .sourceUrls(List.of("https://www.notion.so/product/ai"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .suggestedQueries(List.of("pricingComparison official source"))
+                .suggestedTargetNode("collect_sources")
+                .build()
+                .normalized();
+        OrchestrationContext context = OrchestrationContext.builder()
+                .taskId(88L)
+                .triggerNodeName("analyze_competitors")
+                .passed(false)
+                .agentSuggestions(List.of(suggestion))
+                .sourceUrls(List.of("https://www.notion.so/product/ai"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .build();
+
+        List<OrchestrationDecision> decisions = service.decide(context);
+
+        assertThat(decisions).hasSize(1);
+        assertThat(decisions.get(0).getDecisionType()).isEqualTo("APPEND_DYNAMIC_BRANCH");
+        assertThat(decisions.get(0).getActionType()).isEqualTo("SUPPLEMENT_EVIDENCE");
+        assertThat(decisions.get(0).getInputRefs())
+                .containsEntry("agentSuggestionIds", List.of("as-task-88-analyze_competitors-1"));
+    }
+
+    @Test
+    void shouldWaitForHumanFromAnalyzerSuggestionWithoutSources() {
+        AgentSuggestion suggestion = AgentSuggestion.builder()
+                .suggestionId("as-task-88-analyze_competitors-1")
+                .taskId(88L)
+                .producerNodeName("analyze_competitors")
+                .producerAgentType("ANALYZER")
+                .suggestionType("ANALYSIS_GAP")
+                .targetSection("analysis")
+                .summary("Analyzer 缺少 pricingComparison")
+                .severity("HIGH")
+                .confidence(0.35d)
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .suggestedQueries(List.of("pricingComparison official source"))
+                .suggestedTargetNode("collect_sources")
+                .build()
+                .normalized();
+        OrchestrationContext context = OrchestrationContext.builder()
+                .taskId(88L)
+                .triggerNodeName("analyze_competitors")
+                .passed(false)
+                .agentSuggestions(List.of(suggestion))
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build();
+
+        List<OrchestrationDecision> decisions = service.decide(context);
+
+        assertThat(decisions).hasSize(1);
+        assertThat(decisions.get(0).getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(decisions.get(0).isRequiresHumanIntervention()).isTrue();
+    }
 }

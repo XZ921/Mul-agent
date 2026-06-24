@@ -121,11 +121,18 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                     knowledges,
                     downstreamEvidenceViews,
                     extractorOutput.drafts());
-            if (isCoreAnalysisEmpty(analysisResult)) {
-                return AgentResult.failed("结构化分析字段为空：featureComparison、positioningComparison、pricingComparison、targetUserComparison、strengthsSummary、weaknessesSummary 均未生成，请补充证据或重跑分析节点");
-            }
-            // 把最终实际消费的 Task RAG 摘要一并写回运行态输出，方便后续节点和审计接口复核。
+            applyAnalysisGapMetadata(analysisResult);
+            // 统一回填任务级 RAG 摘要，确保缺口返回和正常返回都保留同一份可追溯上下文。
             analysisResult.setTaskRagContext(context.getTaskRagPromptContext());
+            if (isCoreAnalysisEmpty(analysisResult)) {
+                analysisResult.getIssueFlags().add("ANALYSIS_CORE_FIELDS_EMPTY");
+                String outputJson = objectMapper.writeValueAsString(analysisResult);
+                return AgentResult.success(outputJson,
+                        "竞品分析存在核心字段缺口，等待 Orchestrator 决策",
+                        System.currentTimeMillis(),
+                        llmClient.getModelName(),
+                        llmClient.getLastTokenUsage().toJson());
+            }
             String outputJson = objectMapper.writeValueAsString(analysisResult);
             return AgentResult.success(outputJson,
                     "竞品分析完成：共处理 " + knowledges.size() + " 个竞品",
@@ -295,6 +302,86 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                 .sectionEvidenceBundles(normalizeSectionEvidenceBundles(sectionEvidenceBundles))
                 .downstreamEvidenceViews(normalizeDownstreamEvidenceViews(downstreamEvidenceViews))
                 .build();
+    }
+
+    /**
+     * 在 Analyzer 内部统一补齐缺口元数据，避免 Writer 或编排层重复猜测分析质量。
+     */
+    private void applyAnalysisGapMetadata(AnalysisResult analysisResult) {
+        if (analysisResult == null) {
+            return;
+        }
+        List<String> missingDimensions = collectMissingAnalysisDimensions(analysisResult);
+        String gapSeverity = resolveAnalysisGapSeverity(missingDimensions);
+        analysisResult.setMissingAnalysisDimensions(missingDimensions);
+        analysisResult.setAnalysisGapSeverity(gapSeverity);
+        analysisResult.setAnalysisConfidence(resolveAnalysisConfidence(gapSeverity));
+        analysisResult.setAnalysisEvidenceState(resolveAnalysisEvidenceState(
+                analysisResult.getSourceUrls(),
+                missingDimensions));
+    }
+
+    /**
+     * 根据核心结构化字段完整度生成缺失维度列表，明确告诉下游缺的是哪类分析结论。
+     */
+    private List<String> collectMissingAnalysisDimensions(AnalysisResult analysisResult) {
+        List<String> missing = new ArrayList<>();
+        if (!hasText(analysisResult.getFeatureComparison())) {
+            missing.add("featureComparison");
+        }
+        if (!hasText(analysisResult.getPositioningComparison())) {
+            missing.add("positioningComparison");
+        }
+        if (!hasText(analysisResult.getPricingComparison())) {
+            missing.add("pricingComparison");
+        }
+        if (!hasText(analysisResult.getTargetUserComparison())) {
+            missing.add("targetUserComparison");
+        }
+        if (!hasText(analysisResult.getStrengthsSummary())) {
+            missing.add("strengthsSummary");
+        }
+        if (!hasText(analysisResult.getWeaknessesSummary())) {
+            missing.add("weaknessesSummary");
+        }
+        return missing;
+    }
+
+    /**
+     * 缺口严重度只由核心分析字段缺失比例决定，业务动作仍由编排策略层裁决。
+     */
+    private String resolveAnalysisGapSeverity(List<String> missingDimensions) {
+        if (missingDimensions == null || missingDimensions.isEmpty()) {
+            return "NONE";
+        }
+        if (missingDimensions.size() >= 6) {
+            return "HIGH";
+        }
+        return missingDimensions.size() >= 3 ? "MEDIUM" : "LOW";
+    }
+
+    /**
+     * 置信度与缺口严重度保持单向映射，便于回放时复原 Analyzer 自评依据。
+     */
+    private String resolveAnalysisConfidence(String gapSeverity) {
+        return switch (gapSeverity) {
+            case "NONE" -> "HIGH";
+            case "LOW", "MEDIUM" -> "MEDIUM";
+            default -> "LOW";
+        };
+    }
+
+    /**
+     * 无来源时必须标记为 MISSING_SOURCE；有来源但仍缺维度时标记为 PARTIAL_SOURCE。
+     */
+    private String resolveAnalysisEvidenceState(List<String> sourceUrls, List<String> missingDimensions) {
+        if (sourceUrls == null || sourceUrls.isEmpty()) {
+            return "MISSING_SOURCE";
+        }
+        if (missingDimensions != null && !missingDimensions.isEmpty()) {
+            return "PARTIAL_SOURCE";
+        }
+        return "FULL_SOURCE";
     }
 
     /**

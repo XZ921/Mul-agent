@@ -1041,6 +1041,8 @@ QualityDiagnosis ERROR + MISSING_SOURCE -> WAIT_FOR_HUMAN 或规则化补证
 
 2026-06-24 P2 自动化实现记录：规则优先的 `CollaborationGoal -> CollaborationPlan -> InitialPlanReview` 已接入 `WorkflowFactory / ExecutionPlanDefinitionBuilder`，只向现有标准 DAG 投影角色、质量门槛和 checkpoint 元数据；`COLLABORATION_PLAN_RECORDED / COLLABORATION_CHECKPOINT_UPDATED` 已进入 replay；`extract_schema` 输出后的 `AgentSuggestion` 已接入 `OrchestrationDecisionService / DagExecutor`，缺业务字段或缺来源证据时会进入受策略保护的补证或人工介入路径。P2 聚合测试、P1+P2 编排聚合测试与 backend 全量回归均已通过；既有 `ArchitectureWhitelistTest` ledger 路径问题已于同日解除。
 
+2026-06-24 P3-1 自动化实现记录：Analyzer 输出新增 `analysisConfidence / missingAnalysisDimensions / analysisGapSeverity / analysisEvidenceState`，`AnalyzerSuggestionAssembler` 已把分析缺口转换成标准 `AgentSuggestion`；`OrchestrationDecisionService / DagExecutor` 已支持 `analyze_competitors` 触发的受策略保护决策，缺来源时进入 `WAIT_FOR_HUMAN -> WAITING_INTERVENTION`，有来源时保留受审计放行轨迹。`DagExecutorTest`、`CollaborationPlanningSmokeTest`、`TaskReplayProjectionServiceTest`、P3-1 局部聚合、P1+P2+P3-1 编排聚合与 `mvn -pl backend test` 全量回归均已通过；Writer、Conversation 和 Citation 仍未进入本轮范围。
+
 ### live 验收
 
 以真实竞品分析任务验证：

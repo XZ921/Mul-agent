@@ -16,6 +16,7 @@ import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.orchestration.AgentSuggestion;
+import cn.bugstack.competitoragent.orchestration.AnalyzerSuggestionAssembler;
 import cn.bugstack.competitoragent.orchestration.EvidenceState;
 import cn.bugstack.competitoragent.orchestration.ExtractorSuggestionAssembler;
 import cn.bugstack.competitoragent.orchestration.OrchestrationContext;
@@ -83,6 +84,7 @@ public class DagExecutor {
     private final DynamicPlanAppender dynamicPlanAppender;
     private final TaskQuotaCoordinator taskQuotaCoordinator;
     private final ExtractorSuggestionAssembler extractorSuggestionAssembler;
+    private final AnalyzerSuggestionAssembler analyzerSuggestionAssembler;
     private final OrchestrationDecisionService orchestrationDecisionService;
     private final OrchestrationTraceService orchestrationTraceService;
     private final List<SharedNodeOutputProjector> sharedNodeOutputProjectors;
@@ -104,6 +106,7 @@ public class DagExecutor {
                        DynamicPlanAppender dynamicPlanAppender,
                        TaskQuotaCoordinator taskQuotaCoordinator,
                        ExtractorSuggestionAssembler extractorSuggestionAssembler,
+                       AnalyzerSuggestionAssembler analyzerSuggestionAssembler,
                        OrchestrationDecisionService orchestrationDecisionService,
                        OrchestrationTraceService orchestrationTraceService,
                        List<SharedNodeOutputProjector> sharedNodeOutputProjectors) {
@@ -123,9 +126,51 @@ public class DagExecutor {
         this.dynamicPlanAppender = dynamicPlanAppender;
         this.taskQuotaCoordinator = taskQuotaCoordinator;
         this.extractorSuggestionAssembler = extractorSuggestionAssembler;
+        this.analyzerSuggestionAssembler = analyzerSuggestionAssembler;
         this.orchestrationDecisionService = orchestrationDecisionService;
         this.orchestrationTraceService = orchestrationTraceService;
         this.sharedNodeOutputProjectors = sharedNodeOutputProjectors == null ? List.of() : List.copyOf(sharedNodeOutputProjectors);
+    }
+
+    public DagExecutor(TaskNodeRepository nodeRepository,
+                       AnalysisTaskRepository taskRepository,
+                       AgentCapabilityRegistry agentCapabilityRegistry,
+                       ObjectMapper objectMapper,
+                       TaskSnapshotCacheService taskSnapshotCacheService,
+                       TaskExecutionLockService taskExecutionLockService,
+                       TaskEventPublisher taskEventPublisher,
+                       AgentLogService agentLogService,
+                       WorkflowEventPublisher workflowEventPublisher,
+                       TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository,
+                       WorkflowDeadLetterRecordRepository workflowDeadLetterRecordRepository,
+                       RuntimeStateRefresher runtimeStateRefresher,
+                       RuntimeEventEmitter runtimeEventEmitter,
+                       DynamicPlanAppender dynamicPlanAppender,
+                       TaskQuotaCoordinator taskQuotaCoordinator,
+                       ExtractorSuggestionAssembler extractorSuggestionAssembler,
+                       OrchestrationDecisionService orchestrationDecisionService,
+                       OrchestrationTraceService orchestrationTraceService,
+                       List<SharedNodeOutputProjector> sharedNodeOutputProjectors) {
+        this(nodeRepository,
+                taskRepository,
+                agentCapabilityRegistry,
+                objectMapper,
+                taskSnapshotCacheService,
+                taskExecutionLockService,
+                taskEventPublisher,
+                agentLogService,
+                workflowEventPublisher,
+                taskNodeExecutionAttemptRepository,
+                workflowDeadLetterRecordRepository,
+                runtimeStateRefresher,
+                runtimeEventEmitter,
+                dynamicPlanAppender,
+                taskQuotaCoordinator,
+                extractorSuggestionAssembler,
+                new AnalyzerSuggestionAssembler(objectMapper),
+                orchestrationDecisionService,
+                orchestrationTraceService,
+                sharedNodeOutputProjectors);
     }
 
     public DagExecutor(TaskNodeRepository nodeRepository,
@@ -160,6 +205,7 @@ public class DagExecutor {
                 dynamicPlanAppender,
                 taskQuotaCoordinator,
                 new ExtractorSuggestionAssembler(objectMapper),
+                new AnalyzerSuggestionAssembler(objectMapper),
                 new OrchestrationDecisionService(new OrchestrationDecisionAdapter()),
                 null,
                 sharedNodeOutputProjectors);
@@ -456,7 +502,7 @@ public class DagExecutor {
             }
 
             TaskNode completedNode = applyExecutionResult(taskId, sharedContext, latestNode, result);
-            TaskNode gatedNode = applyExtractorSuggestionGate(taskId, completedNode, result);
+            TaskNode gatedNode = applyAgentSuggestionGate(taskId, completedNode, result);
             if (gatedNode.getStatus() == TaskNodeStatus.WAITING_INTERVENTION) {
                 runtimeStateRefresher.refreshRuntimeSnapshot(taskId);
                 runtimeEventEmitter.publishNodeExecutionEvents(taskId, gatedNode);
@@ -478,19 +524,15 @@ public class DagExecutor {
         }
     }
 
-    private TaskNode applyExtractorSuggestionGate(Long taskId, TaskNode completedNode, AgentResult result) {
+    private TaskNode applyAgentSuggestionGate(Long taskId, TaskNode completedNode, AgentResult result) {
         if (result == null
                 || result.getStatus() != TaskNodeStatus.SUCCESS
                 || completedNode == null
-                || !"extract_schema".equals(completedNode.getNodeName())
                 || completedNode.getOutputData() == null
                 || completedNode.getOutputData().isBlank()) {
             return completedNode;
         }
-        List<AgentSuggestion> suggestions = extractorSuggestionAssembler.fromExtractorOutput(
-                taskId,
-                completedNode.getNodeName(),
-                completedNode.getOutputData());
+        List<AgentSuggestion> suggestions = buildAgentSuggestions(taskId, completedNode);
         if (suggestions.isEmpty()) {
             return completedNode;
         }
@@ -503,29 +545,52 @@ public class DagExecutor {
                 .passed(false)
                 .agentSuggestions(suggestions)
                 .sourceUrls(sourceUrls)
-                .evidenceState(sourceUrls.isEmpty() ? EvidenceState.MISSING_SOURCE : EvidenceState.FULL_SOURCE)
-                .inputSummary("extract_schema 输出后发现证据缺口，进入 Orchestrator 建议决策。")
+                .evidenceState(sourceUrls.isEmpty() ? EvidenceState.MISSING_SOURCE : EvidenceState.PARTIAL_SOURCE)
+                .inputSummary(completedNode.getNodeName() + " 输出后发现 AgentSuggestion，进入 Orchestrator 决策。")
                 .build()
                 .normalized();
         List<OrchestrationDecision> decisions = orchestrationDecisionService.decide(orchestrationContext);
         for (OrchestrationDecision decision : decisions) {
-            recordExtractorDecisionTrace(taskId, completedNode, decision);
+            recordAgentDecisionTrace(taskId, completedNode, decision);
         }
         return decisions.stream()
                 .filter(decision -> "WAIT_FOR_HUMAN".equals(decision.getDecisionType()))
                 .findFirst()
-                .map(decision -> markExtractorWaitingForIntervention(completedNode, decision))
+                .map(decision -> markNodeWaitingForIntervention(completedNode, decision))
                 .orElse(completedNode);
     }
 
-    private void recordExtractorDecisionTrace(Long taskId, TaskNode completedNode, OrchestrationDecision decision) {
+    /**
+     * AgentSuggestion 是运行期协作决策的统一入口。
+     * 当前只允许 Extractor 和 Analyzer 进入该 gate，避免误拦截 Writer / Reviewer。
+     */
+    private List<AgentSuggestion> buildAgentSuggestions(Long taskId, TaskNode completedNode) {
+        if (completedNode == null || completedNode.getNodeName() == null) {
+            return List.of();
+        }
+        if ("extract_schema".equals(completedNode.getNodeName())) {
+            return extractorSuggestionAssembler.fromExtractorOutput(
+                    taskId,
+                    completedNode.getNodeName(),
+                    completedNode.getOutputData());
+        }
+        if ("analyze_competitors".equals(completedNode.getNodeName())) {
+            return analyzerSuggestionAssembler.fromAnalyzerOutput(
+                    taskId,
+                    completedNode.getNodeName(),
+                    completedNode.getOutputData());
+        }
+        return List.of();
+    }
+
+    private void recordAgentDecisionTrace(Long taskId, TaskNode completedNode, OrchestrationDecision decision) {
         if (orchestrationTraceService == null || decision == null) {
             return;
         }
         orchestrationTraceService.recordDecision(taskId, completedNode, decision, null, null);
     }
 
-    private TaskNode markExtractorWaitingForIntervention(TaskNode completedNode, OrchestrationDecision decision) {
+    private TaskNode markNodeWaitingForIntervention(TaskNode completedNode, OrchestrationDecision decision) {
         completedNode.setStatus(TaskNodeStatus.WAITING_INTERVENTION);
         completedNode.setFailureCategory(NodeFailureCategory.MANUAL_INTERVENTION_REQUIRED);
         completedNode.setInterventionReason(decision.getReason());

@@ -28,8 +28,11 @@ public class OrchestrationDecisionService {
         if ("extract_schema".equals(context.getTriggerNodeName())) {
             return decideExtractorSuggestions(context);
         }
+        if ("analyze_competitors".equals(context.getTriggerNodeName())) {
+            return decideAnalyzerSuggestions(context);
+        }
         if (!"quality_check_final".equals(context.getTriggerNodeName())) {
-            return List.of(noAction(context, "P1 仅处理 quality_check_final 终审反馈。"));
+            return List.of(noAction(context, "P1/P2/P3-1 当前仅处理 extract_schema、analyze_competitors 和 quality_check_final 反馈。"));
         }
         if (context.isPassed()) {
             return List.of(noAction(context, "当前终审已通过，无需追加编排动作。"));
@@ -92,6 +95,29 @@ public class OrchestrationDecisionService {
             }
         }
         return List.of(noAction(context, "extract_schema 建议未命中 P2 可执行策略。"));
+    }
+
+    /**
+     * Analyzer 只提交分析缺口事实，是否自动补证或转人工介入必须由 Orchestrator 统一裁决，
+     * 避免分析节点直接决定后续编排动作，保证策略链路可审计、可回放。
+     */
+    private List<OrchestrationDecision> decideAnalyzerSuggestions(OrchestrationContext context) {
+        List<AgentSuggestion> suggestions = context.getAgentSuggestions();
+        if (suggestions == null || suggestions.isEmpty()) {
+            return List.of(noAction(context, "analyze_competitors 未产生 AgentSuggestion，无需编排动作。"));
+        }
+        for (AgentSuggestion suggestion : suggestions) {
+            if ("ANALYSIS_GAP".equalsIgnoreCase(suggestion.getSuggestionType())
+                    && (suggestion.getSourceUrls() == null || suggestion.getSourceUrls().isEmpty())) {
+                return List.of(waitForHuman(context, "Analyzer 发现分析缺口但缺少 sourceUrls，禁止自动补证。"));
+            }
+        }
+        for (AgentSuggestion suggestion : suggestions) {
+            if ("ANALYSIS_GAP".equalsIgnoreCase(suggestion.getSuggestionType())) {
+                return List.of(supplementEvidenceFromSuggestion(context, suggestion));
+            }
+        }
+        return List.of(noAction(context, "Analyzer 建议未命中 P3-1 可执行策略。"));
     }
 
     private OrchestrationDecision supplementEvidenceFromSuggestion(OrchestrationContext context,

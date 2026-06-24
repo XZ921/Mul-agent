@@ -16,6 +16,8 @@ import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.orchestration.DecisionExecutorAdapter;
 import cn.bugstack.competitoragent.orchestration.DecisionPolicyService;
+import cn.bugstack.competitoragent.orchestration.AnalyzerSuggestionAssembler;
+import cn.bugstack.competitoragent.orchestration.ExtractorSuggestionAssembler;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionAdapter;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
 import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
@@ -56,6 +58,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -491,6 +495,7 @@ class DagExecutorTest {
 
         AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
         TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        OrchestrationTraceService orchestrationTraceService = mock(OrchestrationTraceService.class);
         when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId))
@@ -1315,6 +1320,7 @@ class DagExecutorTest {
 
         AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
         TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        OrchestrationTraceService orchestrationTraceService = mock(OrchestrationTraceService.class);
         when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(nodes);
@@ -1385,6 +1391,7 @@ class DagExecutorTest {
 
         AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
         TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        OrchestrationTraceService orchestrationTraceService = mock(OrchestrationTraceService.class);
         when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(nodes);
@@ -1524,6 +1531,84 @@ class DagExecutorTest {
         assertEquals(TaskNodeStatus.WAITING_INTERVENTION, extractSchema.getStatus());
         assertTrue(extractSchema.getInterventionReason().contains("extract_schema"));
         assertEquals(TaskNodeStatus.PENDING, analyzer.getStatus());
+    }
+
+    @Test
+    void shouldHoldAnalyzerWhenSuccessfulOutputContainsBlockingAnalysisSuggestion() {
+        Long taskId = 1008L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode extractSchema = TaskNode.builder()
+                .id(801L)
+                .taskId(taskId)
+                .nodeName("extract_schema")
+                .agentType(AgentType.EXTRACTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+        TaskNode analyzer = TaskNode.builder()
+                .id(802L)
+                .taskId(taskId)
+                .nodeName("analyze_competitors")
+                .agentType(AgentType.ANALYZER)
+                .dependsOn("[\"extract_schema\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+        TaskNode writer = TaskNode.builder()
+                .id(803L)
+                .taskId(taskId)
+                .nodeName("write_report")
+                .agentType(AgentType.WRITER)
+                .dependsOn("[\"analyze_competitors\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(2)
+                .build();
+        List<TaskNode> nodes = List.of(extractSchema, analyzer, writer);
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        OrchestrationTraceService orchestrationTraceService = mock(OrchestrationTraceService.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(nodes);
+        when(nodeRepository.findById(any())).thenAnswer(invocation -> {
+            Long nodeId = invocation.getArgument(0);
+            return nodes.stream().filter(node -> node.getId().equals(nodeId)).findFirst();
+        });
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new AlwaysSuccessExtractorAgent(), new AnalyzerAnalysisGapAgent(), new AlwaysSuccessWriterAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService(),
+                List.of(),
+                orchestrationTraceService
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("analyzer-suggestion-test").build());
+
+        assertEquals(TaskNodeStatus.WAITING_INTERVENTION, analyzer.getStatus());
+        assertEquals(TaskNodeStatus.PENDING, writer.getStatus());
+        assertTrue(analyzer.getInterventionReason().contains("Analyzer"));
+        verify(orchestrationTraceService, atLeastOnce())
+                .recordDecision(eq(taskId), eq(analyzer), argThat(decision ->
+                                "WAIT_FOR_HUMAN".equals(decision.getDecisionType())
+                                        && "analyze_competitors".equals(decision.getTriggerNodeName())
+                                        && decision.getInputRefs().containsKey("agentSuggestionIds")),
+                        isNull(), isNull());
     }
 
     @Test
@@ -1674,6 +1759,23 @@ class DagExecutorTest {
                                               TaskSnapshotCacheService snapshotCacheService,
                                               TaskExecutionLockService lockService,
                                               List<SharedNodeOutputProjector> sharedNodeOutputProjectors) {
+        return newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                agents,
+                snapshotCacheService,
+                lockService,
+                sharedNodeOutputProjectors,
+                mock(OrchestrationTraceService.class));
+    }
+
+    private static DagExecutor newDagExecutor(TaskNodeRepository nodeRepository,
+                                              AnalysisTaskRepository taskRepository,
+                                              List<Agent> agents,
+                                              TaskSnapshotCacheService snapshotCacheService,
+                                              TaskExecutionLockService lockService,
+                                              List<SharedNodeOutputProjector> sharedNodeOutputProjectors,
+                                              OrchestrationTraceService orchestrationTraceService) {
         TaskEventPublisher taskEventPublisher = mock(TaskEventPublisher.class);
         AgentLogService agentLogService = mock(AgentLogService.class);
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
@@ -1702,6 +1804,10 @@ class DagExecutorTest {
                         mock(DecisionExecutorAdapter.class),
                         mock(OrchestrationTraceService.class)),
                 mock(TaskQuotaCoordinator.class),
+                new ExtractorSuggestionAssembler(objectMapper),
+                new AnalyzerSuggestionAssembler(objectMapper),
+                new OrchestrationDecisionService(new OrchestrationDecisionAdapter()),
+                orchestrationTraceService,
                 sharedNodeOutputProjectors
         );
     }
@@ -2051,6 +2157,53 @@ class DagExecutorTest {
             return AgentResult.builder()
                     .status(TaskNodeStatus.SUCCESS)
                     .outputData("{\"analyzed\":true}")
+                    .build();
+        }
+    }
+
+    private static final class AnalyzerAnalysisGapAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.ANALYZER;
+        }
+
+        @Override
+        public String getName() {
+            return "analyzer-gap-agent";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.success("""
+                    {
+                      "analysisConfidence": "LOW",
+                      "analysisGapSeverity": "HIGH",
+                      "analysisEvidenceState": "MISSING_SOURCE",
+                      "missingAnalysisDimensions": ["featureComparison", "pricingComparison"],
+                      "sourceUrls": []
+                    }
+                    """, "Analyzer 存在分析缺口");
+        }
+    }
+
+    private static final class AlwaysSuccessWriterAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.WRITER;
+        }
+
+        @Override
+        public String getName() {
+            return "always-success-writer";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("{\"written\":true}")
                     .build();
         }
     }

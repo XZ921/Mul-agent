@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -43,6 +44,54 @@ class CompetitorAnalysisAgentTest {
             agentContextAssembler,
             objectMapper
     );
+
+    @Test
+    void shouldExposeAnalysisGapMetadataWhenCoreDimensionsMissing() throws Exception {
+        when(agentContextAssembler.assemble(any(AgentContext.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(88L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .id(1L)
+                        .taskId(88L)
+                        .competitorName("Notion AI")
+                        .snapshotScope("TASK")
+                        .summary("Notion AI provides workspace AI capabilities")
+                        .sourceUrls("[\"https://www.notion.so/product/ai\"]")
+                        .evidenceCoverage("{}")
+                        .build()
+        ));
+        when(promptService.render(eq("analyzer"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("Analysis"))).thenReturn("""
+                {
+                  "overview": "Only overview exists, but no structured cross-competitor analysis yet.",
+                  "sourceUrls": ["https://www.notion.so/product/ai"]
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(88L)
+                .taskName("p3-analyzer-gap")
+                .subjectProduct("Our Product")
+                .analysisDimensions("feature,positioning,pricing,target-user,strengths,weaknesses")
+                .currentNodeName("analyze_competitors")
+                .build();
+
+        AgentResult result = agent.execute(context);
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        assertEquals("LOW", output.path("analysisConfidence").asText());
+        assertEquals("HIGH", output.path("analysisGapSeverity").asText());
+        assertEquals("PARTIAL_SOURCE", output.path("analysisEvidenceState").asText());
+        assertThat(output.path("missingAnalysisDimensions"))
+                .extracting(JsonNode::asText)
+                .contains("featureComparison", "positioningComparison", "pricingComparison",
+                        "targetUserComparison", "strengthsSummary", "weaknessesSummary");
+        assertThat(output.path("issueFlags"))
+                .extracting(JsonNode::asText)
+                .contains("ANALYSIS_CORE_FIELDS_EMPTY");
+    }
 
     @Test
     void shouldNormalizeDriftedAnalysisFieldsAndCarryTraceabilityFlags() throws Exception {
@@ -120,7 +169,7 @@ class CompetitorAnalysisAgentTest {
     }
 
     @Test
-    void shouldFailWhenCoreAnalysisFieldsAreEmpty() throws Exception {
+    void shouldReturnStructuredGapWhenCoreAnalysisFieldsAreEmpty() throws Exception {
         when(agentContextAssembler.assemble(any(AgentContext.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(knowledgeRepository.findByTaskIdOrderByIdAsc(1L)).thenReturn(List.of(
                 CompetitorKnowledge.builder()
@@ -145,12 +194,20 @@ class CompetitorAnalysisAgentTest {
                 .taskId(1L)
                 .taskName("task")
                 .subjectProduct("Our Product")
-                .analysisDimensions("产品功能")
+                .analysisDimensions("feature")
                 .currentNodeName("analyze_competitors")
                 .build());
 
-        assertEquals("FAILED", result.getStatus().name());
-        assertTrue(result.getErrorMessage().contains("结构化分析字段为空"));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(result.getOutputSummary().contains("Orchestrator"));
+        assertEquals("HIGH", output.path("analysisGapSeverity").asText());
+        assertEquals("LOW", output.path("analysisConfidence").asText());
+        assertEquals("PARTIAL_SOURCE", output.path("analysisEvidenceState").asText());
+        assertThat(output.path("issueFlags"))
+                .extracting(JsonNode::asText)
+                .contains("ANALYSIS_CORE_FIELDS_EMPTY");
     }
 
     @Test
