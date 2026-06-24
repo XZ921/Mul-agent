@@ -125,6 +125,30 @@ public class WorkflowEventPublisher {
                 .build());
     }
 
+    /**
+     * 记录 Orchestrator 运行期决策事件。
+     * 这里仅负责把编排层 payload 收口为统一 workflow event，具体决策语义由 OrchestrationTraceService 组装。
+     */
+    public void publishOrchestrationEvent(Long taskId,
+                                          String nodeName,
+                                          Long planVersionId,
+                                          String branchKey,
+                                          WorkflowEventType eventType,
+                                          Map<String, Object> payload,
+                                          List<String> sourceUrls) {
+        stage(WorkflowEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .taskId(taskId)
+                .nodeName(nodeName)
+                .planVersionId(planVersionId)
+                .branchKey(branchKey)
+                .eventType(eventType)
+                .payload(payload == null ? Map.of() : payload)
+                .sourceUrls(sourceUrls == null ? List.of() : sourceUrls)
+                .occurredAt(LocalDateTime.now())
+                .build());
+    }
+
     private void stage(WorkflowEvent workflowEvent) {
         outboxService.stage(workflowEvent);
     }

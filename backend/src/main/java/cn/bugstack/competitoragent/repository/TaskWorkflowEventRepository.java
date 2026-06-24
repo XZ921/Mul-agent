@@ -23,6 +23,9 @@ public interface TaskWorkflowEventRepository extends JpaRepository<TaskWorkflowE
 
     void deleteByTaskId(Long taskId);
 
+    Optional<TaskWorkflowEvent> findFirstByTaskIdAndEventTypeOrderByCreatedAtDesc(Long taskId,
+                                                                                  WorkflowEventType eventType);
+
     boolean existsByTaskIdAndEventTypeAndDeliveryStatusIn(Long taskId,
                                                           WorkflowEventType eventType,
                                                           Collection<String> deliveryStatuses);

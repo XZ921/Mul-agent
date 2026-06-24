@@ -53,6 +53,82 @@ import static org.mockito.Mockito.when;
 class TaskReplayProjectionServiceTest {
 
     @Test
+    void shouldExposeOrchestrationDecisionEventsInReplayTimeline() {
+        TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
+        TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);
+        TaskNodeRepository taskNodeRepository = mock(TaskNodeRepository.class);
+        TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository = mock(TaskNodeExecutionAttemptRepository.class);
+        MemorySnapshotRepository memorySnapshotRepository = mock(MemorySnapshotRepository.class);
+        AgentExecutionLogRepository agentExecutionLogRepository = mock(AgentExecutionLogRepository.class);
+        RecoveryCheckpointService recoveryCheckpointService = mock(RecoveryCheckpointService.class);
+        TaskRecoveryService taskRecoveryService = mock(TaskRecoveryService.class);
+
+        LocalDateTime baseTime = LocalDateTime.of(2026, 6, 23, 15, 0, 0);
+        TaskPlan activePlan = TaskPlan.builder()
+                .id(12L)
+                .taskId(42L)
+                .planVersion(3)
+                .branchKey("root/review-3")
+                .active(true)
+                .createdAt(baseTime.minusMinutes(10))
+                .build();
+        TaskWorkflowEvent orchestrationEvent = TaskWorkflowEvent.builder()
+                .id(101L)
+                .eventId("evt-orchestration-101")
+                .taskId(42L)
+                .nodeName("quality_check_final")
+                .planVersionId(12L)
+                .branchKey("root/review-3")
+                .eventType(WorkflowEventType.ORCHESTRATION_DECISION_RECORDED)
+                .deliveryStatus(TaskWorkflowEvent.STATUS_CONSUMED)
+                .topic("task.orchestration")
+                .tag("orchestration_decision_recorded")
+                .payload("{\"summary\":\"Orchestrator 已生成运行期编排决策\"}")
+                .sourceUrls("[\"https://www.notion.so/pricing\"]")
+                .createdAt(baseTime.minusMinutes(2))
+                .updatedAt(baseTime.minusMinutes(2))
+                .build();
+
+        when(taskPlanRepository.findByTaskIdOrderByPlanVersionAsc(42L)).thenReturn(List.of(activePlan));
+        when(taskPlanRepository.findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(42L)).thenReturn(Optional.of(activePlan));
+        when(taskWorkflowEventRepository.findAll()).thenReturn(List.of(orchestrationEvent));
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(42L)).thenReturn(List.of());
+        when(taskNodeExecutionAttemptRepository.findAll()).thenReturn(List.of());
+        when(memorySnapshotRepository.findByTaskIdOrderByIdDesc(42L)).thenReturn(List.of());
+        when(agentExecutionLogRepository.findByTaskIdOrderByCreatedAtAsc(42L)).thenReturn(List.of());
+        when(recoveryCheckpointService.listTaskCheckpoints(42L)).thenReturn(List.of());
+        when(taskRecoveryService.buildRecoveryAdvice(42L)).thenReturn(TaskRecoveryAdvice.builder()
+                .recommendedAction("OBSERVE_ONLY")
+                .summary("none")
+                .blockingNodeNames(List.of())
+                .resumeSupported(false)
+                .sourceUrls(List.of())
+                .build());
+
+        ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        TaskReplayProjectionService service = new TaskReplayProjectionService(
+                taskPlanRepository,
+                taskWorkflowEventRepository,
+                taskNodeRepository,
+                taskNodeExecutionAttemptRepository,
+                memorySnapshotRepository,
+                agentExecutionLogRepository,
+                recoveryCheckpointService,
+                taskRecoveryService,
+                objectMapper
+        );
+
+        TaskReplayResponse replayResponse = service.getTaskReplay(42L);
+
+        assertThat(replayResponse.getTimeline())
+                .anySatisfy(event -> {
+                    assertThat(event.getEventType()).isEqualTo("ORCHESTRATION_DECISION_RECORDED");
+                    assertThat(event.getSummary()).contains("Orchestrator 已生成运行期编排决策");
+                });
+        assertThat(replayResponse.getSourceUrls()).contains("https://www.notion.so/pricing");
+    }
+
+    @Test
     void shouldExposeSearchReplaySnapshotFromCollectorAuditOutput() {
         TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
         TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);

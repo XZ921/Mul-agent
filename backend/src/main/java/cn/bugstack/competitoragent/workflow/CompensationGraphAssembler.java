@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.workflow;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.entity.TaskPlan;
 import cn.bugstack.competitoragent.model.enums.AgentType;
+import cn.bugstack.competitoragent.orchestration.DynamicPlanMutation;
 import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -96,6 +97,75 @@ public class CompensationGraphAssembler {
                     derivedBranchKey);
         }
 
+        return dynamicNodes;
+    }
+
+    /**
+     * 基于 Orchestrator 已校验的动态计划变更生成节点。
+     * P1 先复用现有补图模板，确保新决策不会绕过 DAG 执行层。
+     */
+    public List<WorkflowPlan.WorkflowPlanNode> assembleDynamicNodes(TaskPlan parentPlan,
+                                                                    TaskNode triggerNode,
+                                                                    DynamicPlanMutation rawMutation,
+                                                                    int startOrder,
+                                                                    String derivedBranchKey) {
+        if (rawMutation == null || parentPlan == null || triggerNode == null) {
+            return List.of();
+        }
+        DynamicPlanMutation mutation = rawMutation.normalized();
+        if (!"APPEND_NODES".equals(mutation.getMutationType())) {
+            return List.of();
+        }
+
+        List<WorkflowPlan.WorkflowPlanNode> dynamicNodes = new ArrayList<>();
+        int order = startOrder;
+        int planVersion = parentPlan.getPlanVersion() + 1;
+        List<String> collectorDependencies = new ArrayList<>();
+        if ("CREATE_SUPPLEMENT_BRANCH".equals(mutation.getDynamicAction())) {
+            int collectorCount = Math.max(1, mutation.getNodeTemplates().size());
+            for (int index = 0; index < collectorCount; index++) {
+                WorkflowPlan.WorkflowPlanNode template = mutation.getNodeTemplates().isEmpty()
+                        ? null
+                        : mutation.getNodeTemplates().get(index);
+                String nodeName = "collect_revision_evidence_v" + planVersion + "_" + (index + 1);
+                dynamicNodes.add(WorkflowPlan.WorkflowPlanNode.builder()
+                        .nodeName(nodeName)
+                        .displayName(template == null || template.getDisplayName() == null
+                                ? "补充证据采集"
+                                : template.getDisplayName())
+                        .agentType(AgentType.COLLECTOR.name())
+                        .dependsOn(List.of(triggerNode.getNodeName()))
+                        .required(true)
+                        .executionOrder(order++)
+                        .nodeConfig(template == null || template.getNodeConfig() == null
+                                ? "{}"
+                                : template.getNodeConfig())
+                        .notes("Orchestrator 决策触发的动态补证分支")
+                        .branchKey(derivedBranchKey)
+                        .dynamicNode(true)
+                        .originNodeName(triggerNode.getNodeName())
+                        .build());
+                collectorDependencies.add(nodeName);
+            }
+            appendExtractAnalyzeRewriteReviewChain(
+                    dynamicNodes,
+                    triggerNode,
+                    collectorDependencies,
+                    planVersion,
+                    order,
+                    derivedBranchKey);
+            return dynamicNodes;
+        }
+        if ("CREATE_REWRITE_BRANCH".equals(mutation.getDynamicAction())) {
+            appendRewriteReviewChain(
+                    dynamicNodes,
+                    triggerNode,
+                    List.of(triggerNode.getNodeName()),
+                    planVersion,
+                    order,
+                    derivedBranchKey);
+            return dynamicNodes;
+        }
         return dynamicNodes;
     }
 

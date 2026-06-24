@@ -11,6 +11,10 @@ import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.orchestration.DecisionExecutorAdapter;
+import cn.bugstack.competitoragent.orchestration.DecisionPolicyService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
@@ -91,7 +95,11 @@ class DagExecutorWorkflowEventTest {
                         nodeRepository,
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
-                        new ObjectMapper()),
+                        new ObjectMapper(),
+                        mock(OrchestrationDecisionService.class),
+                        mock(DecisionPolicyService.class),
+                        mock(DecisionExecutorAdapter.class),
+                        mock(OrchestrationTraceService.class)),
                 mock(TaskQuotaCoordinator.class)
         );
 

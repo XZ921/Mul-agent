@@ -3,6 +3,10 @@ package cn.bugstack.competitoragent.workflow;
 import cn.bugstack.competitoragent.agent.capability.AgentCapabilityRegistry;
 import cn.bugstack.competitoragent.event.TaskEventPublisher;
 import cn.bugstack.competitoragent.log.AgentLogService;
+import cn.bugstack.competitoragent.orchestration.DecisionExecutorAdapter;
+import cn.bugstack.competitoragent.orchestration.DecisionPolicyService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeExecutionAttemptRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
@@ -68,7 +72,11 @@ class DagExecutorRuntimeDependencyTest {
                         mock(TaskNodeRepository.class),
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
-                        new ObjectMapper()),
+                        new ObjectMapper(),
+                        mock(OrchestrationDecisionService.class),
+                        mock(DecisionPolicyService.class),
+                        mock(DecisionExecutorAdapter.class),
+                        mock(OrchestrationTraceService.class)),
                 mock(TaskQuotaCoordinator.class)
         );
 

@@ -3116,14 +3116,17 @@ At the bottom of this file add:
 ```md
 ## 2026-06-23 执行进度
 
-当前阶段：P1 运行期反馈 MVP 可执行计划已落稿
+当前阶段：P1 运行期反馈 MVP 已完成自动化收口
 
 - [x] 架构规格阅读：已完成
 - [x] 稳定演示版计划阅读：已完成
 - [x] 当前代码边界核对：已完成
 - [x] 第一份可执行计划：已完成
 - [x] P1 评估反馈修订：已完成
-- [ ] P1 代码实施：待执行
+- [x] P1 代码实施：已完成
+- [x] P1 聚合回归：94 个测试通过
+- [ ] backend 全量回归：已执行，阻塞于既有 `ArchitectureWhitelistTest` ledger 路径缺失（测试读取 `../docs/superpowers/task/2026-06-10-architecture-whitelist-ledger.md`，当前仓库实际文档位于 `docs/superpowers/task-definition-and-orchestration-contract/task/`），按本计划保持本轮范围不外扩
+- [ ] P1 实链演示证据包：待执行
 ```
 
 - [ ] **Step 5: 提交 Task 10**
@@ -3164,7 +3167,7 @@ mvn -pl backend "-Dtest=BackendModuleDependencyTest" test
 Run P1 aggregate:
 
 ```powershell
-mvn -pl backend "-Dtest=OrchestrationContractTest,OrchestrationDecisionAdapterTest,DecisionPolicyServiceTest,OrchestrationDecisionServiceTest,DecisionExecutorAdapterTest,OrchestrationTraceServiceTest,CompensationGraphAssemblerTest,DynamicTaskGraphServiceTest,DynamicPlanAppenderTest,DagExecutorTest,DagExecutorWorkflowEventTest,DagExecutorRuntimeDependencyTest,PromptTemplateServiceTest,QualityReviewAgentTest,TaskReplayProjectionServiceTest,WorkflowEventPublisherTest,BackendModuleDependencyTest" test
+mvn -pl backend "-Dtest=OrchestrationContractTest,OrchestrationDecisionAdapterTest,DecisionPolicyServiceTest,OrchestrationDecisionServiceTest,DecisionExecutorAdapterTest,OrchestrationTraceServiceTest,CompensationGraphAssemblerTest,DynamicTaskGraphServiceTest,DynamicPlanAppenderTest,DagExecutorTest,DagExecutorWorkflowEventTest,DagExecutorRuntimeDependencyTest,PromptTemplateServiceTest,QualityReviewAgentTest,TaskReplayProjectionServiceTest,WorkflowEventPublisherTest,BackendModuleDependencyTest,OrchestrationRuntimeFeedbackSmokeTest" test
 ```
 
 Run backend full regression:
@@ -3184,6 +3187,17 @@ Manual smoke after implementation:
 6. 确认新分支包含 collect_revision_evidence_vN_1、extract_revision_patch_vN、analyze_revision_patch_vN、rewrite_revision_patch_vN、quality_check_revision_patch_vN。
 7. GET /api/task/{taskId}/replay 能看到 Orchestrator 决策和 checkpoint。
 8. 缺 sourceUrls 的决策必须显示 evidenceState=MISSING_SOURCE。
+```
+
+P1 smoke evidence package after implementation:
+
+```text
+证据形态：可复现 Spring Boot/H2 smoke，不依赖本地 PostgreSQL、Redis、RocketMQ 或外部 LLM/API。
+测试入口：backend/src/test/java/cn/bugstack/competitoragent/integration/OrchestrationRuntimeFeedbackSmokeTest.java
+覆盖链路：真实 Spring MVC + H2 Repository + DagExecutor + DynamicPlanAppender + OrchestrationTraceService + replay 投影。
+替换边界：仅 mock 外部搜索、LLM、浏览器、Redis 锁与 RocketMQ 基础设施。
+验证结果：mvn -pl backend "-Dtest=OrchestrationRuntimeFeedbackSmokeTest" test -> 2 tests, 0 failures。
+聚合结果：mvn -pl backend "-Dtest=...OrchestrationRuntimeFeedbackSmokeTest" test -> 96 tests, 0 failures。
 ```
 
 ---
@@ -3222,11 +3236,14 @@ Manual smoke after implementation:
 
 ## 2026-06-23 执行进度
 
-当前阶段：P1 运行期反馈 MVP 可执行计划已落稿
+当前阶段：P1 运行期反馈 MVP 已完成自动化收口，并完成可复现 smoke 证据包
 
 - [x] 架构规格阅读：已完成
 - [x] 稳定演示版计划阅读：已完成
 - [x] 当前代码边界核对：已完成
 - [x] 第一份可执行计划：已完成
 - [x] P1 评估反馈修订：已完成
-- [ ] P1 代码实施：待执行
+- [x] P1 代码实施：已完成
+- [x] P1 聚合回归：96 个测试通过（含 `OrchestrationRuntimeFeedbackSmokeTest`）
+- [x] P1 实链演示证据包：已固化为可复现 Spring Boot/H2 smoke，覆盖终审失败、Orchestrator 决策、策略 allowed、动态补图、checkpoint、replay 与缺来源 `MISSING_SOURCE`
+- [ ] backend 全量回归：历史已执行，仍阻塞于既有 `ArchitectureWhitelistTest` ledger 路径缺失（测试读取 `../docs/superpowers/task/2026-06-10-architecture-whitelist-ledger.md`，当前仓库实际文档位于 `docs/superpowers/task-definition-and-orchestration-contract/task/`），按本计划保持本轮范围不外扩

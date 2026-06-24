@@ -13,8 +13,11 @@ import java.util.Locale;
 
 /**
  * 修订驱动指令。
- * 该对象把 Reviewer 的诊断结果压缩成“下游编排该做什么”的统一语义，
- * 既能服务报告页展示，也能直接驱动动态补图、局部回流和人工处理入口。
+ * <p>
+ * 3.4 P1 之后，该对象只作为 Reviewer 兼容期展示/修订建议载体。
+ * 新的动态补图不得再把 orchestrationAction 当作唯一正式决策来源，
+ * 必须先经 OrchestrationDecisionAdapter 转成 OrchestrationDecision，
+ * 再由 DecisionPolicyService 校验后交给 DecisionExecutorAdapter。
  */
 @Data
 @Builder(toBuilder = true)

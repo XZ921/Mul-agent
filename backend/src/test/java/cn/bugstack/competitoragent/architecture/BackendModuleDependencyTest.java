@@ -18,9 +18,11 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static cn.bugstack.competitoragent.architecture.ArchitecturePackageMapping.COLLECTION_PACKAGES;
 import static cn.bugstack.competitoragent.architecture.ArchitecturePackageMapping.CONVERSATION_PACKAGES;
@@ -38,6 +40,11 @@ import static cn.bugstack.competitoragent.architecture.ArchitecturePackageMappin
         importOptions = ImportOption.DoNotIncludeTests.class
 )
 class BackendModuleDependencyTest {
+
+    @Test
+    void taskPackageMappingShouldIncludeRuntimeOrchestrationPackage() {
+        assertThat(TASK_PACKAGES).contains("cn.bugstack.competitoragent.orchestration..");
+    }
 
     @ArchTest
     static final ArchRule runtime_baseline_should_not_depend_on_repositories_or_entities =

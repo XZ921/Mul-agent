@@ -1055,6 +1055,8 @@ QualityDiagnosis ERROR + MISSING_SOURCE -> WAIT_FOR_HUMAN 或规则化补证
 ## 13. 相关文档
 
 - [AI 竞品分析 Agent 协作系统业务全景与功能优化路线图设计](../../../specs/2026-06-11-business-landscape-and-optimization-roadmap-design.md)
+- [3.4 P1 终审失败回流 MVP 可执行计划](../task/2026-06-23-agent-collaboration-orchestration-p1-runtime-feedback-mvp-implementation-plan.md)
+- [3.4 P2 前置协作规划与抽取后证据缺口决策可执行计划](../task/2026-06-24-agent-collaboration-orchestration-p2-collaboration-plan-implementation-plan.md)
 - [3.3 提取结构化架构规格](../../ExtractionStructured/specs/2026-06-21-extraction-structured-architecture-spec.md)
 - [提取结构化链路诊断](../../ExtractionStructured/problem/ExtractionStructured.md)
 - [搜索与采集架构 1 设计](../../search-and-collection/specs/2026-06-17-search-and-collection-architecture-design.md)

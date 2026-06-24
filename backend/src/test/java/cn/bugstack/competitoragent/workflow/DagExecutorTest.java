@@ -14,6 +14,11 @@ import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.orchestration.DecisionExecutorAdapter;
+import cn.bugstack.competitoragent.orchestration.DecisionPolicyService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionAdapter;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
@@ -593,7 +598,11 @@ class DagExecutorTest {
                         nodeRepository,
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
-                        new ObjectMapper().findAndRegisterModules()),
+                        new ObjectMapper().findAndRegisterModules(),
+                        mock(OrchestrationDecisionService.class),
+                        mock(DecisionPolicyService.class),
+                        mock(DecisionExecutorAdapter.class),
+                        mock(OrchestrationTraceService.class)),
                 mock(TaskQuotaCoordinator.class)
         );
 
@@ -930,7 +939,11 @@ class DagExecutorTest {
                         nodeRepository,
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
-                        new ObjectMapper().findAndRegisterModules()),
+                        new ObjectMapper().findAndRegisterModules(),
+                        mock(OrchestrationDecisionService.class),
+                        mock(DecisionPolicyService.class),
+                        mock(DecisionExecutorAdapter.class),
+                        mock(OrchestrationTraceService.class)),
                 mock(TaskQuotaCoordinator.class)
         );
 
@@ -1013,7 +1026,11 @@ class DagExecutorTest {
                         nodeRepository,
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
-                        new ObjectMapper().findAndRegisterModules()),
+                        new ObjectMapper().findAndRegisterModules(),
+                        mock(OrchestrationDecisionService.class),
+                        mock(DecisionPolicyService.class),
+                        mock(DecisionExecutorAdapter.class),
+                        mock(OrchestrationTraceService.class)),
                 mock(TaskQuotaCoordinator.class)
         );
 
@@ -1221,7 +1238,11 @@ class DagExecutorTest {
                         nodeRepository,
                         dynamicTaskGraphService,
                         taskPlanRepository,
-                        mapper),
+                        mapper,
+                        new OrchestrationDecisionService(new OrchestrationDecisionAdapter()),
+                        new DecisionPolicyService(),
+                        new DecisionExecutorAdapter(mapper),
+                        mock(OrchestrationTraceService.class)),
                 mock(TaskQuotaCoordinator.class)
         );
 
@@ -1617,7 +1638,11 @@ class DagExecutorTest {
                         nodeRepository,
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
-                        objectMapper),
+                        objectMapper,
+                        mock(OrchestrationDecisionService.class),
+                        mock(DecisionPolicyService.class),
+                        mock(DecisionExecutorAdapter.class),
+                        mock(OrchestrationTraceService.class)),
                 mock(TaskQuotaCoordinator.class),
                 sharedNodeOutputProjectors
         );

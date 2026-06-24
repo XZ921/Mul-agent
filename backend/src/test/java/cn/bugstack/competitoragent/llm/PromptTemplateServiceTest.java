@@ -5,11 +5,25 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PromptTemplateServiceTest {
 
     private final PromptTemplateService promptTemplateService = new PromptTemplateService(new ObjectMapper());
+
+    @Test
+    void reviewerDefaultTemplateShouldNotAskForOrchestrationAction() {
+        String template = promptTemplateService.getTemplate("reviewer");
+
+        assertFalse(template.contains("orchestrationAction"));
+        assertFalse(template.contains("CREATE_SUPPLEMENT_BRANCH"));
+        assertFalse(template.contains("CREATE_RERUN_BRANCH"));
+        assertFalse(template.contains("CREATE_REWRITE_BRANCH"));
+        assertTrue(template.contains("# 职责边界"));
+        assertTrue(template.contains("你只输出质量事实、证据缺口、修订建议"));
+        assertTrue(template.contains("由 Orchestrator 根据质量诊断另行决策"));
+    }
 
     @Test
     void shouldRenderDedicatedTaskRagContextTemplate() {

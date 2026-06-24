@@ -86,6 +86,11 @@ public class PromptTemplateService {
 
                     # 关键结论审查清单
                     {claimAuditChecklist}
+
+                    # 职责边界
+                    你只输出质量事实、证据缺口、修订建议。
+                    不要输出任何运行期编排动作字段、补证分支、重跑分支或改写分支的动作枚举。
+                    最终是否补证、重跑、改写或人工介入，由 Orchestrator 根据质量诊断另行决策。
                     """),
             new AbstractMap.SimpleEntry<>("extractor", """
                     你是一名竞品信息结构化抽取专家。

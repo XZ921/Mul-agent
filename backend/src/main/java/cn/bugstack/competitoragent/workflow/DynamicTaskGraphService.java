@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.workflow;
 
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.entity.TaskPlan;
+import cn.bugstack.competitoragent.orchestration.DynamicPlanMutation;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
 import lombok.RequiredArgsConstructor;
@@ -78,6 +79,48 @@ public class DynamicTaskGraphService {
                 derivedPlan,
                 triggerNode == null ? null : triggerNode.getNodeName(),
                 "DYNAMIC_BACKFLOW",
+                branchSuffix));
+    }
+
+    /**
+     * 基于 Orchestrator 已校验的动态计划变更派生新的计划版本。
+     * 该入口只消费策略校验后的 mutation，避免运行期补图继续直接依赖 Reviewer 指令语义。
+     */
+    public TaskPlan createDynamicPlan(TaskPlan parentPlan,
+                                      TaskNode triggerNode,
+                                      DynamicPlanMutation mutation,
+                                      WorkflowPlan baseWorkflowPlan) {
+        String branchSuffix = "review-" + (parentPlan.getPlanVersion() + 1);
+        String parentBranchKey = normalizeBranchKey(parentPlan.getBranchKey());
+        String derivedBranchKey = parentBranchKey + "/" + branchSuffix;
+        List<WorkflowPlan.WorkflowPlanNode> dynamicNodes = compensationGraphAssembler.assembleDynamicNodes(
+                parentPlan,
+                triggerNode,
+                mutation,
+                nextExecutionOrder(baseWorkflowPlan),
+                derivedBranchKey);
+        List<WorkflowPlan.WorkflowPlanNode> mergedNodes = new ArrayList<>(baseWorkflowPlan.getNodes());
+        mergedNodes.addAll(dynamicNodes);
+
+        WorkflowPlan derivedPlan = baseWorkflowPlan.toBuilder()
+                .planVersion(parentPlan.getPlanVersion() + 1)
+                .parentPlanVersionId(parentPlan.getId())
+                .branchKey(derivedBranchKey)
+                .dynamicPlan(true)
+                .nodes(mergedNodes)
+                .build();
+
+        taskPlanRepository.findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(parentPlan.getTaskId())
+                .ifPresent(activePlan -> {
+                    activePlan.setActive(false);
+                    taskPlanRepository.save(activePlan);
+                });
+
+        return taskPlanRepository.save(taskPlanVersioner.createDerivedPlan(
+                parentPlan,
+                derivedPlan,
+                triggerNode == null ? null : triggerNode.getNodeName(),
+                mutation == null ? "DYNAMIC_BACKFLOW" : mutation.getBranchReason(),
                 branchSuffix));
     }
 

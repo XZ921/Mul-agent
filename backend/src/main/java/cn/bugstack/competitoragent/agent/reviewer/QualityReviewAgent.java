@@ -201,6 +201,8 @@ public class QualityReviewAgent extends BaseAgent {
             // 评审节点把实际参考过的 Task RAG 摘要写回输出，便于解释当前结论为何判为证据不足。
             output.put("taskRagContext", context.getTaskRagPromptContext());
             output.put("revisionPlan", objectMapper.readTree(revisionPlanJson));
+            // 3.4 P1 起，revisionDirectives 只作为兼容期修订建议输出；
+            // 真实编排动作由 OrchestrationDecisionService 读取质量事实后统一决策。
             output.put("revisionDirectives", objectMapper.valueToTree(revisionDirectives));
             output.put("nextActions", resolveNextActions(reviewJson, finalPass, passed, items, revisionDirectives));
 

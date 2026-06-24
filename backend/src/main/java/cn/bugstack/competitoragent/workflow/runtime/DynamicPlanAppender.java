@@ -5,11 +5,22 @@ import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.entity.TaskPlan;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.orchestration.DecisionExecutorAdapter;
+import cn.bugstack.competitoragent.orchestration.DecisionPolicyResult;
+import cn.bugstack.competitoragent.orchestration.DecisionPolicyRuleSet;
+import cn.bugstack.competitoragent.orchestration.DecisionPolicyService;
+import cn.bugstack.competitoragent.orchestration.DynamicPlanMutation;
+import cn.bugstack.competitoragent.orchestration.EvidenceState;
+import cn.bugstack.competitoragent.orchestration.OrchestrationContext;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecision;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.workflow.DynamicTaskGraphService;
 import cn.bugstack.competitoragent.workflow.WorkflowPlan;
+import cn.bugstack.competitoragent.workflow.contract.QualityDiagnosis;
 import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -38,6 +49,10 @@ public class DynamicPlanAppender {
     private final DynamicTaskGraphService dynamicTaskGraphService;
     private final TaskPlanRepository taskPlanRepository;
     private final ObjectMapper objectMapper;
+    private final OrchestrationDecisionService orchestrationDecisionService;
+    private final DecisionPolicyService decisionPolicyService;
+    private final DecisionExecutorAdapter decisionExecutorAdapter;
+    private final OrchestrationTraceService orchestrationTraceService;
 
     /**
      * 当终审节点触发动态回流条件时，创建并挂载新的动态计划。
@@ -51,17 +66,21 @@ public class DynamicPlanAppender {
             return false;
         }
 
-        List<RevisionDirective> directives = readRevisionDirectives(reviewOutput);
-        if (directives.isEmpty()) {
-            return false;
-        }
-
         TaskPlan parentPlan = resolveParentPlan(completedNode);
         if (parentPlan == null) {
             return false;
         }
 
-        return taskRepository.findById(taskId).map(task -> appendDynamicPlan(taskId, task, nodes, nodeMap, completedNode, parentPlan, directives))
+        List<RevisionDirective> directives = readRevisionDirectives(reviewOutput);
+        return taskRepository.findById(taskId).map(task -> appendDynamicPlan(
+                        taskId,
+                        task,
+                        nodes,
+                        nodeMap,
+                        completedNode,
+                        parentPlan,
+                        reviewOutput,
+                        directives))
                 .orElse(false);
     }
 
@@ -71,6 +90,7 @@ public class DynamicPlanAppender {
                                       Map<String, TaskNode> nodeMap,
                                       TaskNode completedNode,
                                       TaskPlan parentPlan,
+                                      JsonNode reviewOutput,
                                       List<RevisionDirective> directives) {
         if (task.getCurrentPlanVersionId() == null || !task.getCurrentPlanVersionId().equals(parentPlan.getId())) {
             return false;
@@ -81,26 +101,52 @@ public class DynamicPlanAppender {
             return false;
         }
 
-        TaskPlan derivedPlan = dynamicTaskGraphService.createDynamicPlan(parentPlan, completedNode, directives, baseWorkflowPlan);
-        List<TaskNode> dynamicNodes = materializeDynamicNodes(taskId, completedNode, derivedPlan, nodeMap);
-        if (dynamicNodes.isEmpty()) {
+        OrchestrationContext orchestrationContext = buildOrchestrationContext(taskId, completedNode, reviewOutput, directives);
+        List<OrchestrationDecision> decisions = orchestrationDecisionService.decide(orchestrationContext);
+        if (decisions.isEmpty()) {
             return false;
         }
 
-        nodeRepository.saveAll(dynamicNodes);
-        nodes.addAll(dynamicNodes);
-        nodes.sort(java.util.Comparator.comparingInt(TaskNode::getExecutionOrder));
-        for (TaskNode dynamicNode : dynamicNodes) {
-            nodeMap.put(dynamicNode.getNodeName(), dynamicNode);
-        }
+        DecisionPolicyRuleSet ruleSet = DecisionPolicyRuleSet.builder().build();
+        for (OrchestrationDecision decision : decisions) {
+            DecisionPolicyResult policyResult = decisionPolicyService.evaluate(
+                    decision,
+                    ruleSet,
+                    orchestrationContext.getCurrentDecisionCount(),
+                    task.getStatus() == null ? null : task.getStatus().name(),
+                    completedNode.getStatus() == null ? null : completedNode.getStatus().name());
+            DynamicPlanMutation mutation = decisionExecutorAdapter.toMutation(
+                    decision,
+                    policyResult,
+                    parentPlan.getId(),
+                    parentPlan.getPlanVersion() + 1);
+            orchestrationTraceService.recordDecision(taskId, completedNode, decision, policyResult, mutation);
+            if (!policyResult.isAllowed() || !"APPEND_NODES".equals(mutation.getMutationType())) {
+                continue;
+            }
+            TaskPlan derivedPlan = dynamicTaskGraphService.createDynamicPlan(parentPlan, completedNode, mutation, baseWorkflowPlan);
+            List<TaskNode> dynamicNodes = materializeDynamicNodes(taskId, completedNode, derivedPlan, nodeMap);
+            if (dynamicNodes.isEmpty()) {
+                continue;
+            }
 
-        task.setCurrentPlanVersionId(derivedPlan.getId());
-        task.setCurrentPlanVersion(derivedPlan.getPlanVersion());
-        task.setErrorMessage(null);
-        taskRepository.save(task);
-        log.info("dynamic backflow plan attached, taskId={}, triggerNode={}, planVersion={}, dynamicNodeCount={}",
-                taskId, completedNode.getNodeName(), derivedPlan.getPlanVersion(), dynamicNodes.size());
-        return true;
+            nodeRepository.saveAll(dynamicNodes);
+            nodes.addAll(dynamicNodes);
+            nodes.sort(java.util.Comparator.comparingInt(TaskNode::getExecutionOrder));
+            for (TaskNode dynamicNode : dynamicNodes) {
+                nodeMap.put(dynamicNode.getNodeName(), dynamicNode);
+            }
+
+            task.setCurrentPlanVersionId(derivedPlan.getId());
+            task.setCurrentPlanVersion(derivedPlan.getPlanVersion());
+            task.setErrorMessage(null);
+            taskRepository.save(task);
+            orchestrationTraceService.recordCheckpoint(taskId, completedNode, derivedPlan, decision, mutation, ruleSet);
+            log.info("dynamic backflow plan attached through orchestration decision, taskId={}, triggerNode={}, planVersion={}, dynamicNodeCount={}",
+                    taskId, completedNode.getNodeName(), derivedPlan.getPlanVersion(), dynamicNodes.size());
+            return true;
+        }
+        return false;
     }
 
     private boolean shouldCreateDynamicBackflow(TaskNode completedNode, JsonNode reviewOutput) {
@@ -143,6 +189,57 @@ public class DynamicPlanAppender {
             log.warn("failed to parse revision directives from reviewer output", e);
         }
         return List.of();
+    }
+
+    private OrchestrationContext buildOrchestrationContext(Long taskId,
+                                                           TaskNode completedNode,
+                                                           JsonNode reviewOutput,
+                                                           List<RevisionDirective> directives) {
+        List<String> sourceUrls = readSourceUrls(reviewOutput);
+        return OrchestrationContext.builder()
+                .taskId(taskId)
+                .planVersionId(completedNode.getPlanVersionId())
+                .branchKey(completedNode.getBranchKey())
+                .triggerNodeName(completedNode.getNodeName())
+                .reviewStage(reviewOutput.path("reviewStage").asText(""))
+                .passed(reviewOutput.path("passed").asBoolean(false))
+                .requiresHumanIntervention(reviewOutput.path("requiresHumanIntervention").asBoolean(false))
+                .diagnoses(readDiagnoses(reviewOutput))
+                .legacyRevisionDirectives(directives == null ? List.of() : directives)
+                .sourceUrls(sourceUrls)
+                .evidenceState(sourceUrls.isEmpty() ? EvidenceState.MISSING_SOURCE : EvidenceState.FULL_SOURCE)
+                .inputSummary(reviewOutput.path("summary").asText("终审失败后进入 Orchestrator 反馈决策"))
+                .build()
+                .normalized();
+    }
+
+    private List<QualityDiagnosis> readDiagnoses(JsonNode jsonNode) {
+        if (jsonNode == null || !jsonNode.has("diagnoses") || !jsonNode.get("diagnoses").isArray()) {
+            return List.of();
+        }
+        try {
+            List<QualityDiagnosis> diagnoses = objectMapper.convertValue(
+                    jsonNode.get("diagnoses"),
+                    new TypeReference<List<QualityDiagnosis>>() {
+                    });
+            return diagnoses.stream().map(QualityDiagnosis::normalized).toList();
+        } catch (IllegalArgumentException e) {
+            log.warn("failed to parse quality diagnoses from reviewer output", e);
+            return List.of();
+        }
+    }
+
+    private List<String> readSourceUrls(JsonNode jsonNode) {
+        if (jsonNode == null || !jsonNode.has("sourceUrls") || !jsonNode.get("sourceUrls").isArray()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.convertValue(jsonNode.get("sourceUrls"), new TypeReference<List<String>>() {
+            });
+        } catch (IllegalArgumentException e) {
+            log.warn("failed to parse source urls from reviewer output", e);
+            return List.of();
+        }
     }
 
     private TaskPlan resolveParentPlan(TaskNode completedNode) {

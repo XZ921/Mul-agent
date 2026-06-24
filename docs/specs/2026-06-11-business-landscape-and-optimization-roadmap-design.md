@@ -150,8 +150,8 @@
 | 提取结构化 | ✅ [ExtractionStructured.md](/E:/java_study/Mul-agnet/docs/superpowers/ExtractionStructured/problem/ExtractionStructured.md) | ✅ [架构规格](/E:/java_study/Mul-agnet/docs/superpowers/ExtractionStructured/specs/2026-06-21-extraction-structured-architecture-spec.md) + [实施总计划](/E:/java_study/Mul-agnet/docs/superpowers/ExtractionStructured/plan/2026-06-20-extraction-structured-optimization-plan.md) | 🟡 第八轮第一阶段已落地 `DownstreamEvidenceView`、`TASK` 快照边界和 `0` 业务字段阻断；2026-06-21 已完成 P0（Prompt 分层、字段指引、0 字段语义重试、结构块型证据入口、`schemaId / dimensions` 注入）自动化收口，P1 再收 analyzer 优先级与运行态边界 | ⬜ 待在真实采集 -> 真提取 -> 真分析 -> 真报告链路上完成闭环验收 |
 | 分析推理 | ⬜ | ⬜ | ⬜ | ⬜ |
 | 报告写作 | ⬜ | ⬜ | ⬜ | ⬜ |
-| 质量审查 | ⬜ | ⬜ | ⬜ | ⬜ |
-| 修订与重写 | ⬜ | ⬜ | ⬜ | ⬜ |
+| 质量审查 | ✅ [QualityReview.md](/E:/java_study/Mul-agnet/docs/superpowers/quality-review/problem/QualityReview.md) | ✅ [2026-06-24-quality-review-closure-plan.md](/E:/java_study/Mul-agnet/docs/superpowers/quality-review/plan/2026-06-24-quality-review-closure-plan.md) | 🟡 P1 已完成 Reviewer / Orchestrator 职责边界收口，质量事实输出、兼容修订建议和终审失败回流 smoke 已有自动化证据 | ⬜ 待补真实外部中间件 / LLM live 证据包 |
+| 修订与重写 | ✅ [RevisionAndRewrite.md](/E:/java_study/Mul-agnet/docs/superpowers/revision-and-rewrite/problem/RevisionAndRewrite.md) | ✅ [2026-06-24-revision-and-rewrite-closure-plan.md](/E:/java_study/Mul-agnet/docs/superpowers/revision-and-rewrite/plan/2026-06-24-revision-and-rewrite-closure-plan.md) | 🟡 P1 已把终审失败动态补图升级为 `OrchestrationDecision -> DecisionPolicyResult -> DynamicPlanMutation -> DynamicTaskGraphService`，并保留 `RevisionDirective` 兼容输入 | ⬜ 待补真实动态补图 live 证据包 |
 | 对话协同 | ⬜ | ⬜ | ⬜ | ⬜ |
 | 交付与审计 | ⬜ | ⬜ | ⬜ | ⬜ |
 
@@ -199,6 +199,8 @@
 
 - 定位：`Agent 协作编排层` 不是第十条业务链路，而是横跨 `任务执行引擎`、`质量回流引擎` 和 `对话动作引擎` 的协作决策层。
 - 方案：`✅` 已新增架构规格 [2026-06-23-agent-collaboration-orchestration-architecture-spec.md](/E:/java_study/Mul-agnet/docs/superpowers/agent-collaboration-orchestration/specs/2026-06-23-agent-collaboration-orchestration-architecture-spec.md)。
+- P1 实施：`✅` 终审失败回流 MVP 已完成自动化收口，[2026-06-23-agent-collaboration-orchestration-p1-runtime-feedback-mvp-implementation-plan.md](../superpowers/agent-collaboration-orchestration/task/2026-06-23-agent-collaboration-orchestration-p1-runtime-feedback-mvp-implementation-plan.md) 已把动态补图从 `Reviewer revisionDirectives` 直接驱动升级为 `OrchestrationDecision -> DecisionPolicyResult -> DynamicPlanMutation -> DynamicTaskGraphService`。
+- P2 计划：`✅` 前置协作规划与抽取后证据缺口决策具体执行计划已落地，[2026-06-24-agent-collaboration-orchestration-p2-collaboration-plan-implementation-plan.md](../superpowers/agent-collaboration-orchestration/task/2026-06-24-agent-collaboration-orchestration-p2-collaboration-plan-implementation-plan.md) 聚焦 `CollaborationGoal / CollaborationPlan / AgentRoleAssignment / InitialPlanReview / CollaborationCheckpoint`，下一步从 Task 1 契约红灯测试开始，不扩到 P3 的分析、写作、对话和 Citation。
 - 阶段边界：3.4 应在 `3.3 提取结构化` 证据边界基本稳定后进入；它采用 Orchestrator-first 双阶段架构，先冻结前置 `CollaborationGoal / CollaborationPlan / AgentRoleAssignment / InitialPlanReview / CollaborationCheckpoint` 与运行期 `AgentSuggestion / QualityDiagnosis / OrchestrationDecision / DecisionPolicyRuleSet / DecisionPolicyResult / DecisionExecutorAdapter / DynamicPlanMutation / DecisionTrace / OrchestratorCheckpoint` 等协作协议，再以终审失败后的质量回流作为 MVP 闭环，不提前把所有节点改成 LLM 自治调度。
 - 风险红线：Reviewer 只输出质量事实，Orchestrator 输出编排决策，DAG / DynamicTaskGraphService 负责安全执行；所有新协议必须保留 `sourceUrls` 或显式 `evidenceState` 证据缺口状态，Citation Agent 可以后移，但来源追溯不能后移。
 - 当前不做：不推倒 `DagExecutor`，不把 `ExecutionPlanDefinitionBuilder` 改成自由智能规划器，不让 Orchestrator 自由生成任意节点，不用 Orchestrator 替代 Citation Agent，不引入新的 Python Agent 运行时作为前置条件。
@@ -209,8 +211,8 @@
 | --- | --- | --- | --- |
 | 分析推理 | ⬜ 待写 `docs/superpowers/<专题>/problem/AnalysisReasoning.md` 或等价专题文档 | ⬜ | 先诊断，后方案 |
 | 报告写作 | ⬜ 待写 `docs/superpowers/<专题>/problem/ReportWriting.md` 或等价专题文档 | ⬜ | 先诊断，后方案 |
-| 质量审查 | ⬜ 待写 `docs/superpowers/<专题>/problem/QualityReview.md` 或等价专题文档 | ⬜ | 先诊断，后方案 |
-| 修订与重写 | ⬜ 待写 `docs/superpowers/<专题>/problem/RevisionAndRewrite.md` 或等价专题文档 | ⬜ | 先诊断，后方案 |
+| 质量审查 | ✅ [QualityReview.md](/E:/java_study/Mul-agnet/docs/superpowers/quality-review/problem/QualityReview.md) | ✅ [2026-06-24-quality-review-closure-plan.md](/E:/java_study/Mul-agnet/docs/superpowers/quality-review/plan/2026-06-24-quality-review-closure-plan.md) | 已收口 Reviewer 与 Orchestrator 职责边界；live 证据后续补齐 |
+| 修订与重写 | ✅ [RevisionAndRewrite.md](/E:/java_study/Mul-agnet/docs/superpowers/revision-and-rewrite/problem/RevisionAndRewrite.md) | ✅ [2026-06-24-revision-and-rewrite-closure-plan.md](/E:/java_study/Mul-agnet/docs/superpowers/revision-and-rewrite/plan/2026-06-24-revision-and-rewrite-closure-plan.md) | 已收口动态补图由 Orchestrator 决策驱动；live 证据后续补齐 |
 | 对话协同 | ⬜ 待写 `docs/superpowers/<专题>/problem/ConversationCollaboration.md` 或等价专题文档 | ⬜ | 先诊断，后方案 |
 | 交付与审计 | ⬜ 待写 `docs/superpowers/<专题>/problem/DeliveryAndAudit.md` 或等价专题文档 | ⬜ | 先诊断，后方案 |
 

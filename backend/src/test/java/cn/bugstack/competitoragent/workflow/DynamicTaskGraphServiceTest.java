@@ -3,6 +3,8 @@ package cn.bugstack.competitoragent.workflow;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.entity.TaskPlan;
 import cn.bugstack.competitoragent.model.enums.AgentType;
+import cn.bugstack.competitoragent.orchestration.DynamicPlanMutation;
+import cn.bugstack.competitoragent.orchestration.EvidenceState;
 import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -92,6 +94,74 @@ class DynamicTaskGraphServiceTest {
         assertThat(planCaptor.getAllValues()).hasSize(2);
         assertThat(planCaptor.getAllValues().get(0).isActive()).isFalse();
         assertThat(planCaptor.getAllValues().get(1).getBranchKey()).isEqualTo("root/review-2");
+    }
+
+    @Test
+    void shouldCreateDynamicBackflowPlanForOrchestrationMutation() throws Exception {
+        cn.bugstack.competitoragent.repository.TaskPlanRepository repository =
+                mock(cn.bugstack.competitoragent.repository.TaskPlanRepository.class);
+        when(repository.findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(21L))
+                .thenReturn(Optional.of(TaskPlan.builder().id(8L).taskId(21L).planVersion(1).branchKey("root").active(true).planSnapshot("{}").build()));
+        when(repository.save(any(TaskPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DynamicTaskGraphService service = new DynamicTaskGraphService(
+                repository,
+                new TaskPlanVersioner(new ObjectMapper()),
+                new CompensationGraphAssembler(new ObjectMapper()));
+
+        TaskPlan parentPlan = TaskPlan.builder()
+                .id(8L)
+                .taskId(21L)
+                .planVersion(1)
+                .branchKey("root")
+                .planType("INITIAL")
+                .active(true)
+                .planSnapshot("{}")
+                .build();
+        TaskNode triggerNode = TaskNode.builder()
+                .taskId(21L)
+                .nodeName("quality_check_final")
+                .displayName("质量终审")
+                .agentType(AgentType.REVIEWER)
+                .planVersionId(8L)
+                .branchKey("root")
+                .build();
+        WorkflowPlan basePlan = WorkflowPlan.builder()
+                .planVersionId(8L)
+                .planVersion(1)
+                .branchKey("root")
+                .nodes(List.of(WorkflowPlan.WorkflowPlanNode.builder()
+                        .nodeName("quality_check_final")
+                        .displayName("质量终审")
+                        .agentType(AgentType.REVIEWER.name())
+                        .dependsOn(List.of("rewrite_report"))
+                        .executionOrder(6)
+                        .branchKey("root")
+                        .build()))
+                .build();
+        DynamicPlanMutation mutation = DynamicPlanMutation.builder()
+                .mutationId("dpm-od-001")
+                .decisionId("od-001")
+                .mutationType("APPEND_NODES")
+                .branchReason("ORCHESTRATOR_DECISION")
+                .dynamicAction("CREATE_SUPPLEMENT_BRANCH")
+                .nodeTemplates(List.of(WorkflowPlan.WorkflowPlanNode.builder()
+                        .nodeName("collect_revision_evidence_v2_1")
+                        .displayName("补充证据采集")
+                        .agentType(AgentType.COLLECTOR.name())
+                        .nodeConfig("{\"decisionId\":\"od-001\"}")
+                        .build()))
+                .sourceUrls(List.of("https://www.notion.so/pricing"))
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build();
+
+        TaskPlan derivedPlan = service.createDynamicPlan(parentPlan, triggerNode, mutation, basePlan);
+
+        assertThat(derivedPlan.getPlanVersion()).isEqualTo(2);
+        assertThat(derivedPlan.getPlanType()).isEqualTo("ORCHESTRATOR_DECISION");
+        assertThat(derivedPlan.getBranchKey()).isEqualTo("root/review-2");
+        assertThat(derivedPlan.getPlanSnapshot()).contains("collect_revision_evidence_v2_1");
+        assertThat(derivedPlan.getPlanSnapshot()).contains("quality_check_revision_patch_v2");
     }
 
     @Test

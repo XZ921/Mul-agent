@@ -21,6 +21,7 @@ final class ArchitecturePackageMapping {
     static final List<String> TASK_PACKAGES = List.of(
             "cn.bugstack.competitoragent.task..",
             "cn.bugstack.competitoragent.workflow..",
+            "cn.bugstack.competitoragent.orchestration..",
             "cn.bugstack.competitoragent.event.."
     );
 
