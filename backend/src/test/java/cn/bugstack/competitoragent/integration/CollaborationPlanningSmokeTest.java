@@ -32,6 +32,7 @@ import cn.bugstack.competitoragent.orchestration.OrchestrationDecision;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionAdapter;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
 import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
+import cn.bugstack.competitoragent.orchestration.WriterSuggestionAssembler;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.AnalysisSchemaRepository;
@@ -258,6 +259,96 @@ class CollaborationPlanningSmokeTest {
         assertThat(analyzer.getInterventionReason()).contains("Analyzer");
     }
 
+    @Test
+    void shouldRouteWriterCitationGapSuggestionToOrchestratorDecision() {
+        ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        WriterSuggestionAssembler assembler = new WriterSuggestionAssembler(objectMapper);
+        OrchestrationDecisionService orchestrationDecisionService =
+                new OrchestrationDecisionService(new OrchestrationDecisionAdapter());
+
+        List<AgentSuggestion> suggestions = assembler.fromWriterOutput(99L, "write_report", """
+                {
+                  "citationGapSeverity": "ERROR",
+                  "writerEvidenceState": "MISSING_SOURCE",
+                  "sectionCitationGaps": [
+                    {
+                      "targetSection": "report_conclusion",
+                      "summary": "报告结论缺少可用来源",
+                      "severity": "ERROR",
+                      "sourceUrls": [],
+                      "evidenceState": "MISSING_SOURCE"
+                    }
+                  ]
+                }
+                """);
+
+        List<OrchestrationDecision> decisions = orchestrationDecisionService.decide(OrchestrationContext.builder()
+                .taskId(99L)
+                .triggerNodeName("write_report")
+                .agentSuggestions(suggestions)
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build());
+
+        assertThat(decisions).hasSize(1);
+        assertThat(decisions.get(0).getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(decisions.get(0).getInputRefs())
+                .containsEntry("agentSuggestionIds", List.of("as-task-99-write_report-1"));
+    }
+
+    @Test
+    void shouldRouteWriterCitationGapThroughDagExecutorGateBeforeReviewer() {
+        Long taskId = 1199L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+        TaskNode analyzer = TaskNode.builder()
+                .id(11991L)
+                .taskId(taskId)
+                .nodeName("analyze_competitors")
+                .agentType(AgentType.ANALYZER)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+        TaskNode writer = TaskNode.builder()
+                .id(11992L)
+                .taskId(taskId)
+                .nodeName("write_report")
+                .agentType(AgentType.WRITER)
+                .dependsOn("[\"analyze_competitors\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+        TaskNode reviewer = TaskNode.builder()
+                .id(11993L)
+                .taskId(taskId)
+                .nodeName("quality_check")
+                .agentType(AgentType.REVIEWER)
+                .dependsOn("[\"write_report\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(2)
+                .build();
+
+        DagExecutor executor = newDagExecutorForSmoke(
+                task,
+                List.of(analyzer, writer, reviewer),
+                List.of(new SmokeAnalyzerReadyAgent(), new SmokeWriterMissingSourceCitationAgent(), new SmokeReviewerAgent()));
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("p3-2-smoke").build());
+
+        assertThat(writer.getStatus()).isEqualTo(TaskNodeStatus.WAITING_INTERVENTION);
+        assertThat(reviewer.getStatus()).isEqualTo(TaskNodeStatus.PENDING);
+        assertThat(writer.getInterventionReason()).contains("Writer");
+    }
+
     private ExecutionPlanDefinitionBuilder executionPlanDefinitionBuilder(ObjectMapper objectMapper) {
         SearchBrowserProperties searchBrowserProperties = new SearchBrowserProperties();
         searchBrowserProperties.setEnabled(false);
@@ -389,6 +480,7 @@ class CollaborationPlanningSmokeTest {
                 mock(TaskQuotaCoordinator.class),
                 new ExtractorSuggestionAssembler(objectMapper),
                 new AnalyzerSuggestionAssembler(objectMapper),
+                new WriterSuggestionAssembler(objectMapper),
                 new OrchestrationDecisionService(new OrchestrationDecisionAdapter()),
                 mock(OrchestrationTraceService.class),
                 List.of());
@@ -458,6 +550,85 @@ class CollaborationPlanningSmokeTest {
             return AgentResult.builder()
                     .status(TaskNodeStatus.SUCCESS)
                     .outputData("{\"written\":true}")
+                    .build();
+        }
+    }
+
+    private static final class SmokeAnalyzerReadyAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.ANALYZER;
+        }
+
+        @Override
+        public String getName() {
+            return "smoke-analyzer-ready";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("{\"analysis\":\"ready\",\"sourceUrls\":[\"https://www.notion.so/product/ai\"]}")
+                    .build();
+        }
+    }
+
+    private static final class SmokeWriterMissingSourceCitationAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.WRITER;
+        }
+
+        @Override
+        public String getName() {
+            return "smoke-writer-missing-source";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("""
+                            {
+                              "content": "# 竞品报告",
+                              "writerEvidenceState": "MISSING_SOURCE",
+                              "citationGapSeverity": "ERROR",
+                              "sourceUrls": [],
+                              "sectionCitationGaps": [
+                                {
+                                  "targetSection": "report_conclusion",
+                                  "summary": "报告结论缺少可用来源",
+                                  "severity": "ERROR",
+                                  "sourceUrls": [],
+                                  "evidenceState": "MISSING_SOURCE"
+                                }
+                              ]
+                            }
+                            """)
+                    .build();
+        }
+    }
+
+    private static final class SmokeReviewerAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.REVIEWER;
+        }
+
+        @Override
+        public String getName() {
+            return "smoke-reviewer";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("{\"reviewed\":true}")
                     .build();
         }
     }

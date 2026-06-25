@@ -38,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -89,6 +90,9 @@ class ConversationServiceTest {
     @Mock
     private ReportQueryFacade reportQueryFacade;
 
+    @Mock
+    private ConversationOrchestrationDecisionQueryService orchestrationDecisionQueryService;
+
     private ConversationService conversationService;
 
     @BeforeEach
@@ -111,8 +115,10 @@ class ConversationServiceTest {
                 taskRuntimeFacade,
                 knowledgeRetrievalFacade,
                 reportQueryFacade,
+                orchestrationDecisionQueryService,
                 new ObjectMapper()
         );
+        lenient().when(orchestrationDecisionQueryService.findLatestDecision(any())).thenReturn(Optional.empty());
     }
 
     @Test
@@ -401,7 +407,13 @@ class ConversationServiceTest {
         when(modeRouter.route(recognitionResult, 205L)).thenReturn(ConversationMode.TASK_ACTION);
         when(taskQueryFacade.getTask(205L)).thenReturn(taskResponse);
         when(taskQueryFacade.getTaskNodes(205L)).thenReturn(List.of());
-        when(taskActionTranslator.buildTaskActionPreview(request.getMessage(), 205L, taskResponse, List.of())).thenReturn(preview);
+        when(taskActionTranslator.buildTaskActionPreview(
+                request.getMessage(),
+                205L,
+                taskResponse,
+                List.of(),
+                null
+        )).thenReturn(preview);
         when(conversationAgent.composeActionPreviewAnswer(request.getMessage(), preview)).thenReturn("请先确认本次重跑影响范围。");
         when(intentDecisionRepository.save(any(IntentDecision.class))).thenAnswer(invocation -> {
             IntentDecision decision = invocation.getArgument(0);
@@ -497,7 +509,13 @@ class ConversationServiceTest {
         when(modeRouter.route(previewRecognitionResult, 305L)).thenReturn(ConversationMode.TASK_ACTION);
         when(taskQueryFacade.getTask(305L)).thenReturn(taskResponse);
         when(taskQueryFacade.getTaskNodes(305L)).thenReturn(List.of());
-        when(taskActionTranslator.buildTaskActionPreview(previewRequest.getMessage(), 305L, taskResponse, List.of())).thenReturn(preview);
+        when(taskActionTranslator.buildTaskActionPreview(
+                previewRequest.getMessage(),
+                305L,
+                taskResponse,
+                List.of(),
+                null
+        )).thenReturn(preview);
         when(taskActionTranslator.buildExecutionPlan(any(ConversationActionConfirmationRequest.class), eq(305L))).thenReturn(
                 TaskActionTranslator.TaskActionExecutionPlan.builder()
                         .actionType("RERUN_NODE")
@@ -616,7 +634,8 @@ class ConversationServiceTest {
                 request.getMessage(),
                 288L,
                 List.of(),
-                List.of("https://docs.example.com")
+                List.of("https://docs.example.com"),
+                null
         )).thenReturn(ConversationResponse.TaskActionPreview.builder()
                 .title("研究模式")
                 .sourceUrls(List.of("https://docs.example.com"))
@@ -646,5 +665,141 @@ class ConversationServiceTest {
 
         assertNotNull(response);
         verify(knowledgeRetrievalFacade).retrieveForTask(288L, "这个任务有哪些公开证据？", "conversation");
+    }
+
+    @Test
+    void shouldMergeResearchSourcesAndKeepOrchestrationDecisionSummary() {
+        ConversationMessageRequest request = new ConversationMessageRequest();
+        request.setTaskId(388L);
+        request.setPageType("TASK_DETAIL");
+        request.setMessage("What should I do next?");
+
+        IntentRecognitionService.RecognitionResult recognitionResult = IntentRecognitionService.RecognitionResult.builder()
+                .mode(ConversationMode.RESEARCH)
+                .intentType("TASK_RESEARCH")
+                .decisionReason("Need research preview with orchestration context")
+                .highRiskAction(false)
+                .requiresConfirmation(false)
+                .build();
+
+        TaskResponse taskResponse = TaskResponse.builder()
+                .id(388L)
+                .taskName("orchestration-preview")
+                .currentStage("ANALYZE")
+                .statusSummary("Need preview plus orchestration context")
+                .build();
+
+        ConversationOrchestrationDecisionView decisionView = ConversationOrchestrationDecisionView.builder()
+                .decisionId("od-388-analyze-human")
+                .taskId(388L)
+                .triggerNodeName("analyze_competitors")
+                .decisionType("WAIT_FOR_HUMAN")
+                .actionType("MANUAL_REVIEW")
+                .targetNode("collect_sources_web")
+                .affectedScope("CURRENT_NODE_ONLY")
+                .reason("Analyzer found missing source evidence")
+                .requiresHumanIntervention(true)
+                .requiresConfirmation(false)
+                .evidenceState("MISSING_SOURCE")
+                .sourceUrls(List.of("https://ops.example.com/analyzer-gap"))
+                .build();
+
+        ConversationResponse.OrchestrationDecisionSummary decisionSummary =
+                ConversationResponse.OrchestrationDecisionSummary.builder()
+                        .decisionId("od-388-analyze-human")
+                        .taskId(388L)
+                        .triggerNodeName("analyze_competitors")
+                        .decisionType("WAIT_FOR_HUMAN")
+                        .actionType("MANUAL_REVIEW")
+                        .targetNode("collect_sources_web")
+                        .affectedScope("CURRENT_NODE_ONLY")
+                        .reason("Analyzer found missing source evidence")
+                        .requiresHumanIntervention(true)
+                        .requiresConfirmation(false)
+                        .evidenceState("MISSING_SOURCE")
+                        .sourceUrls(List.of("https://ops.example.com/analyzer-gap"))
+                        .build();
+        ConversationResponse.TaskActionPreview preview = ConversationResponse.TaskActionPreview.builder()
+                .actionType("SUPPLEMENT_EVIDENCE")
+                .taskId(388L)
+                .targetNodeName("collect_sources_web")
+                .title("Research preview")
+                .actionSummary("Show research action without dropping orchestration context")
+                .impactSummary("Affects evidence collection and downstream analysis")
+                .riskLevel("MEDIUM")
+                .requiresConfirmation(true)
+                .confirmationHint("Review the evidence before continuing")
+                .executable(false)
+                .orchestrationDecision(decisionSummary)
+                .sourceUrls(List.of(
+                        "https://docs.example.com/pricing",
+                        "https://ops.example.com/analyzer-gap"
+                ))
+                .build();
+        List<ConversationResponse.RetrievalEvidence> evidences = List.of(
+                ConversationResponse.RetrievalEvidence.builder()
+                        .evidenceId("TASK-DOC-388-1")
+                        .title("知识检索 / SOURCE_URL")
+                        .snippet("pricing page found")
+                        .sourceCategory("KNOWLEDGE_FACADE")
+                        .sourceUrl("https://docs.example.com/pricing")
+                        .build()
+        );
+
+        when(conversationSessionRepository.save(any(ConversationSession.class))).thenAnswer(invocation -> {
+            ConversationSession session = invocation.getArgument(0);
+            if (session.getId() == null) {
+                session.setId(3880L);
+            }
+            return session;
+        });
+        when(formDraftRepository.findTopByConversationSessionIdOrderByUpdatedAtDesc(3880L)).thenReturn(Optional.empty());
+        when(intentRecognitionService.recognize(eq(request), any(ConversationSession.class), eq(false))).thenReturn(recognitionResult);
+        when(modeRouter.route(recognitionResult, 388L)).thenReturn(ConversationMode.RESEARCH);
+        when(taskQueryFacade.getTask(388L)).thenReturn(taskResponse);
+        when(taskQueryFacade.getTaskNodes(388L)).thenReturn(List.of());
+        when(orchestrationDecisionQueryService.findLatestDecision(388L)).thenReturn(Optional.of(decisionView));
+        when(knowledgeRetrievalFacade.retrieveForTask(388L, "What should I do next?", "conversation"))
+                .thenReturn(new KnowledgeRetrievalFacade.RetrievalResultView(
+                        List.of("https://docs.example.com/pricing"),
+                        "Missing source evidence",
+                        "pricing page found",
+                        List.of("DOC-388-1"),
+                        List.of("TASK-DOC-388-1")
+                ));
+        when(taskActionTranslator.buildResearchPreview(
+                request.getMessage(),
+                388L,
+                List.of(),
+                List.of("https://docs.example.com/pricing"),
+                decisionView
+        )).thenReturn(preview);
+        when(conversationAgent.composeResearchAnswer(
+                request.getMessage(),
+                preview,
+                evidences,
+                "Missing source evidence"
+        )).thenReturn("Need more evidence before continuing");
+        when(intentDecisionRepository.save(any(IntentDecision.class))).thenAnswer(invocation -> {
+            IntentDecision decision = invocation.getArgument(0);
+            decision.setId(3881L);
+            return decision;
+        });
+
+        ConversationResponse response = conversationService.handleMessage(request);
+
+        assertNotNull(response.getTaskActionPreview());
+        assertNotNull(response.getTaskActionPreview().getOrchestrationDecision());
+        assertEquals("od-388-analyze-human", response.getTaskActionPreview().getOrchestrationDecision().getDecisionId());
+        assertEquals("MISSING_SOURCE", response.getTaskActionPreview().getOrchestrationDecision().getEvidenceState());
+        assertTrue(response.getSourceUrls().contains("https://docs.example.com/pricing"));
+        assertTrue(response.getSourceUrls().contains("https://ops.example.com/analyzer-gap"));
+        verify(taskActionTranslator).buildResearchPreview(
+                request.getMessage(),
+                388L,
+                List.of(),
+                List.of("https://docs.example.com/pricing"),
+                decisionView
+        );
     }
 }

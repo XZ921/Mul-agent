@@ -52,6 +52,7 @@ public class ConversationService {
     private final TaskRuntimeFacade taskRuntimeFacade;
     private final KnowledgeRetrievalFacade knowledgeRetrievalFacade;
     private final ReportQueryFacade reportQueryFacade;
+    private final ConversationOrchestrationDecisionQueryService orchestrationDecisionQueryService;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -173,8 +174,9 @@ public class ConversationService {
                                                          TaskResponse taskResponse,
                                                          List<TaskNodeResponse> nodeResponses,
                                                          IntentRecognitionService.RecognitionResult recognitionResult) {
+        ConversationOrchestrationDecisionView decisionView = resolveLatestDecision(taskId);
         ConversationResponse.TaskActionPreview preview =
-                taskActionTranslator.buildTaskActionPreview(request.getMessage(), taskId, taskResponse, nodeResponses);
+                taskActionTranslator.buildTaskActionPreview(request.getMessage(), taskId, taskResponse, nodeResponses, decisionView);
         String taskRagContextSummary = resolveTaskRagContextSummary(selectFocusNode(nodeResponses), nodeResponses);
         return ConversationResponse.builder()
                 .mode(ConversationMode.TASK_ACTION.name())
@@ -192,13 +194,15 @@ public class ConversationService {
                                                        Long taskId,
                                                        List<TaskNodeResponse> nodeResponses,
                                                        IntentRecognitionService.RecognitionResult recognitionResult) {
+        ConversationOrchestrationDecisionView decisionView = resolveLatestDecision(taskId);
         KnowledgeRetrievalFacade.RetrievalResultView retrievalResult = retrieveSafely(taskId, request.getMessage());
         List<ConversationResponse.RetrievalEvidence> evidences = toRetrievalEvidences(retrievalResult);
         ConversationResponse.TaskActionPreview preview = taskActionTranslator.buildResearchPreview(
                 request.getMessage(),
                 taskId,
                 nodeResponses,
-                retrievalResult.sourceUrls()
+                retrievalResult.sourceUrls(),
+                decisionView
         );
         String taskRagContextSummary = resolveTaskRagContextSummary(selectFocusNode(nodeResponses), nodeResponses);
         return ConversationResponse.builder()
@@ -209,7 +213,7 @@ public class ConversationService {
                         evidences,
                         retrievalResult.gapSummary()))
                 .taskRagContextSummary(taskRagContextSummary)
-                .sourceUrls(retrievalResult.sourceUrls())
+                .sourceUrls(mergeSourceUrls(retrievalResult.sourceUrls(), preview == null ? null : preview.getSourceUrls()))
                 .taskActionPreview(preview)
                 .retrievalEvidences(evidences)
                 .intentDecision(toIntentSummary(ConversationMode.RESEARCH, recognitionResult, preview))
@@ -368,6 +372,38 @@ public class ConversationService {
                     .build());
         }
         return evidences;
+    }
+
+    /**
+     * 对话层只读消费最近一次编排决策，不在这里重算编排逻辑。
+     * 查询失败时要安静降级到既有预览链路，避免历史脏事件把整个对话入口打断。
+     */
+    private ConversationOrchestrationDecisionView resolveLatestDecision(Long taskId) {
+        try {
+            return orchestrationDecisionQueryService.findLatestDecision(taskId).orElse(null);
+        } catch (Exception e) {
+            log.warn("conversation orchestration decision lookup degraded, taskId={}", taskId, e);
+            return null;
+        }
+    }
+
+    private List<String> mergeSourceUrls(List<String> primary, List<String> secondary) {
+        java.util.LinkedHashSet<String> merged = new java.util.LinkedHashSet<>();
+        if (primary != null) {
+            for (String sourceUrl : primary) {
+                if (sourceUrl != null && !sourceUrl.isBlank()) {
+                    merged.add(sourceUrl.trim());
+                }
+            }
+        }
+        if (secondary != null) {
+            for (String sourceUrl : secondary) {
+                if (sourceUrl != null && !sourceUrl.isBlank()) {
+                    merged.add(sourceUrl.trim());
+                }
+            }
+        }
+        return new ArrayList<>(merged);
     }
 
     private ConversationSession resolveSession(ConversationMessageRequest request) {

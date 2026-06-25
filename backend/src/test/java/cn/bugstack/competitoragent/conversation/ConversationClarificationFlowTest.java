@@ -72,6 +72,9 @@ class ConversationClarificationFlowTest {
     @Mock
     private ReportQueryFacade reportQueryFacade;
 
+    @Mock
+    private ConversationOrchestrationDecisionQueryService orchestrationDecisionQueryService;
+
     private ConversationService conversationService;
 
     private final AtomicReference<ConversationSession> persistedSession = new AtomicReference<>();
@@ -110,8 +113,10 @@ class ConversationClarificationFlowTest {
                 taskRuntimeFacade,
                 knowledgeRetrievalFacade,
                 reportQueryFacade,
+                orchestrationDecisionQueryService,
                 new ObjectMapper()
         );
+        when(orchestrationDecisionQueryService.findLatestDecision(any())).thenReturn(Optional.empty());
     }
 
     @Test

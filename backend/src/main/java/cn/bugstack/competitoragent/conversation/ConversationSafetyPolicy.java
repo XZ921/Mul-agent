@@ -46,6 +46,11 @@ public class ConversationSafetyPolicy {
         if (preview != null && Boolean.TRUE.equals(preview.getRequiresConfirmation())) {
             requiresConfirmation = true;
         }
+        if (preview != null
+                && Boolean.FALSE.equals(preview.getRequiresConfirmation())
+                && "WAIT_FOR_HUMAN".equalsIgnoreCase(safe(preview.getActionType()))) {
+            requiresConfirmation = false;
+        }
 
         String riskLevel = resolveRiskLevel(highRiskAction, preview);
         if (RISK_HIGH.equals(riskLevel) || RISK_MEDIUM.equals(riskLevel)) {
@@ -124,6 +129,15 @@ public class ConversationSafetyPolicy {
                 .impactScope(impactScope)
                 .impactSummary(preview.getImpactSummary())
                 .riskLevel(riskLevel)
+                .orchestrationDecisionId(preview.getOrchestrationDecision() == null
+                        ? null
+                        : preview.getOrchestrationDecision().getDecisionId())
+                .orchestrationDecisionType(preview.getOrchestrationDecision() == null
+                        ? null
+                        : preview.getOrchestrationDecision().getDecisionType())
+                .orchestrationEvidenceState(preview.getOrchestrationDecision() == null
+                        ? null
+                        : preview.getOrchestrationDecision().getEvidenceState())
                 .build();
     }
 

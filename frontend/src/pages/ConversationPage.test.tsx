@@ -59,6 +59,17 @@ function buildConversationResponse(
       requiresConfirmation: true,
       confirmationHint: '确认后再进入既有任务动作入口。',
       executable: false,
+      orchestrationDecision: {
+        decisionId: 'od-42-analyze-human',
+        triggerNodeName: 'analyze_competitors',
+        decisionType: 'WAIT_FOR_HUMAN',
+        actionType: 'MANUAL_REVIEW',
+        reason: 'Analyzer 发现关键结论缺少可回指来源。',
+        requiresHumanIntervention: true,
+        requiresConfirmation: false,
+        evidenceState: 'MISSING_SOURCE',
+        sourceUrls: ['https://docs.notion.so/security'],
+      },
       sourceUrls: ['https://docs.notion.so/security'],
     },
     retrievalEvidences: [
@@ -133,6 +144,9 @@ describe('ConversationPage', () => {
     expect(await screen.findByText('当前最需要先补的是官方安全说明，再决定是否重写结论。')).toBeInTheDocument()
     expect(screen.getByText('报告当前卡在证据补强阶段。')).toBeInTheDocument()
     expect(screen.getByText('补充证据预览')).toBeInTheDocument()
+    expect(screen.getByText('编排决策')).toBeInTheDocument()
+    expect(screen.getByText('等待人工介入')).toBeInTheDocument()
+    expect(screen.getByText('缺少可回指来源')).toBeInTheDocument()
     expect(screen.getByText('会影响结论段落以及后续终审判断。')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Notion 安全文档' })).toHaveAttribute(
       'href',

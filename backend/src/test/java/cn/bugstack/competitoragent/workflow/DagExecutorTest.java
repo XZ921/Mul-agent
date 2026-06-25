@@ -21,6 +21,7 @@ import cn.bugstack.competitoragent.orchestration.ExtractorSuggestionAssembler;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionAdapter;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
 import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
+import cn.bugstack.competitoragent.orchestration.WriterSuggestionAssembler;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
@@ -1612,6 +1613,83 @@ class DagExecutorTest {
     }
 
     @Test
+    void shouldHoldWriterWhenSuccessfulOutputContainsMissingSourceCitationGap() {
+        Long taskId = 1012L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+        TaskNode analyzer = TaskNode.builder()
+                .id(1201L)
+                .taskId(taskId)
+                .nodeName("analyze_competitors")
+                .agentType(AgentType.ANALYZER)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+        TaskNode writer = TaskNode.builder()
+                .id(1202L)
+                .taskId(taskId)
+                .nodeName("write_report")
+                .agentType(AgentType.WRITER)
+                .dependsOn("[\"analyze_competitors\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+        TaskNode reviewer = TaskNode.builder()
+                .id(1203L)
+                .taskId(taskId)
+                .nodeName("quality_check")
+                .agentType(AgentType.REVIEWER)
+                .dependsOn("[\"write_report\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(2)
+                .build();
+        List<TaskNode> nodes = List.of(analyzer, writer, reviewer);
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        OrchestrationTraceService orchestrationTraceService = mock(OrchestrationTraceService.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(nodes);
+        when(nodeRepository.findById(any())).thenAnswer(invocation -> {
+            Long nodeId = invocation.getArgument(0);
+            return nodes.stream().filter(node -> node.getId().equals(nodeId)).findFirst();
+        });
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new AlwaysSuccessAnalyzerAgent(), new WriterCitationGapAgent(), new AlwaysSuccessReviewerAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService(),
+                List.of(),
+                orchestrationTraceService
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("writer-citation-gap-test").build());
+
+        assertEquals(TaskNodeStatus.WAITING_INTERVENTION, writer.getStatus());
+        assertEquals(TaskNodeStatus.PENDING, reviewer.getStatus());
+        assertTrue(writer.getInterventionReason().contains("Writer"));
+        verify(orchestrationTraceService, atLeastOnce())
+                .recordDecision(eq(taskId), eq(writer), argThat(decision ->
+                                "WAIT_FOR_HUMAN".equals(decision.getDecisionType())
+                                        && "write_report".equals(decision.getTriggerNodeName())
+                                        && decision.getInputRefs().containsKey("agentSuggestionIds")),
+                        isNull(), isNull());
+    }
+
+    @Test
     void shouldClassifyWriterConsumptionFailureAsDownstreamConsumptionGapWhenAnalyzerSucceeded() {
         Long taskId = 1005L;
         AnalysisTask task = AnalysisTask.builder()
@@ -1806,6 +1884,7 @@ class DagExecutorTest {
                 mock(TaskQuotaCoordinator.class),
                 new ExtractorSuggestionAssembler(objectMapper),
                 new AnalyzerSuggestionAssembler(objectMapper),
+                new WriterSuggestionAssembler(objectMapper),
                 new OrchestrationDecisionService(new OrchestrationDecisionAdapter()),
                 orchestrationTraceService,
                 sharedNodeOutputProjectors
@@ -2204,6 +2283,66 @@ class DagExecutorTest {
             return AgentResult.builder()
                     .status(TaskNodeStatus.SUCCESS)
                     .outputData("{\"written\":true}")
+                    .build();
+        }
+    }
+
+    private static final class WriterCitationGapAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.WRITER;
+        }
+
+        @Override
+        public String getName() {
+            return "writer-citation-gap";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("""
+                            {
+                              "content": "# 竞品报告",
+                              "writerEvidenceState": "MISSING_SOURCE",
+                              "citationGapSeverity": "ERROR",
+                              "sourceUrls": [],
+                              "sectionCitationGaps": [
+                                {
+                                  "targetSection": "report_conclusion",
+                                  "sectionTitle": "报告结论",
+                                  "summary": "报告结论缺少可用来源",
+                                  "severity": "ERROR",
+                                  "sourceUrls": [],
+                                  "evidenceState": "MISSING_SOURCE",
+                                  "missingFields": ["recommendations"]
+                                }
+                              ]
+                            }
+                            """)
+                    .build();
+        }
+    }
+
+    private static final class AlwaysSuccessReviewerAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.REVIEWER;
+        }
+
+        @Override
+        public String getName() {
+            return "always-success-reviewer";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("{\"reviewed\":true}")
                     .build();
         }
     }

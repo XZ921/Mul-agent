@@ -2,6 +2,8 @@ import {
   buildConversationEntryUrl,
   buildConversationMessageRequest,
   getConversationActionHint,
+  getConversationEvidenceStateText,
+  getConversationOrchestrationDecisionText,
   readConversationEntryContext,
 } from './conversationPresentation'
 
@@ -69,5 +71,15 @@ describe('conversationPresentation', () => {
         sourceUrls: [],
       }),
     ).toContain('统一入口')
+  })
+
+  it('describes orchestration evidence states and decision summaries', () => {
+    expect(getConversationEvidenceStateText('MISSING_SOURCE')).toBe('缺少可回指来源')
+    expect(
+      getConversationOrchestrationDecisionText({
+        decisionType: 'WAIT_FOR_HUMAN',
+        actionType: 'MANUAL_REVIEW',
+      }),
+    ).toBe('等待人工介入')
   })
 })

@@ -1663,18 +1663,28 @@ git commit -m "docs: record p3-2 writer citation gap execution"
 
 ## 2026-06-24 执行进度
 
-当前阶段：P3-2 执行 1 计划已完成，等待按任务执行。
+当前阶段：P3-2 执行 1 已完成自动化实现、smoke、replay 与文档回链。
 - [x] 读取 P2 最新真实 smoke、P3-1 Task 6 进度、3.4 架构规格和总蓝图
 - [x] 确认 P3-2 执行 1 范围：Writer 章节引用缺口，不做 Citation Agent
 - [x] 编写 P3-2 执行 1 可执行计划
-- [ ] Task 1：WriterCitationGap 契约与检测器
-- [ ] Task 2：ReportWriterAgent 输出引用缺口元数据
-- [ ] Task 3：WriterSuggestionAssembler
-- [ ] Task 4：Orchestrator / DagExecutor Writer suggestion gate
-- [ ] Task 5：replay / smoke / 文档回链
+- [x] Task 1：WriterCitationGap 契约与检测器
+- [x] Task 2：ReportWriterAgent 输出引用缺口元数据
+- [x] Task 3：WriterSuggestionAssembler
+- [x] Task 4：Orchestrator / DagExecutor Writer suggestion gate
+- [x] Task 5：replay / smoke / 文档回链
 
-当前阶段：P3-2 执行 1 计划编写完成
+当前阶段：P3-2 执行 1 自动化收口完成
 - [x] 信息采集：已完成
 - [x] 数据分析：已完成
 - [x] 报告撰写：已完成
-- [ ] 质检复核：待执行
+- [x] 质检复核：已完成
+
+- [x] Task 1：已完成，`WriterCitationGap / WriterCitationGapInspector` 已冻结 Writer 章节引用缺口事实，`WriterCitationGapInspectorTest` 红灯转绿
+- [x] Task 2：已完成，`ReportWriterAgent` 已输出 `writerEvidenceState / citationGapSeverity / missingCitationSections / sectionCitationGaps`
+- [x] Task 3：已完成，`WriterSuggestionAssembler` 已把 Writer 引用缺口转换成标准 `AgentSuggestion`
+- [x] Task 4：已完成，`OrchestrationDecisionService / DagExecutor` 已支持 `write_report / rewrite_report` 触发的 Writer suggestion gate
+- [x] Task 5：已完成，`CollaborationPlanningSmokeTest / TaskReplayProjectionServiceTest`、总蓝图、架构规格、稳定演示计划与本文执行进度均已回链
+- [x] P3-2 局部聚合验证：`mvn -pl backend "-Dtest=ReportWriterAgentTest,WriterCitationGapInspectorTest,WriterSuggestionAssemblerTest,OrchestrationDecisionServiceTest,DagExecutorTest,CollaborationPlanningSmokeTest,TaskReplayProjectionServiceTest" test` 通过，63 tests, 0 failures
+- [x] P1+P2+P3-1+P3-2 编排聚合验证：`mvn -pl backend "-Dtest=OrchestrationContractTest,OrchestrationDecisionAdapterTest,DecisionPolicyServiceTest,OrchestrationDecisionServiceTest,OrchestrationTraceServiceTest,CompensationGraphAssemblerTest,DynamicTaskGraphServiceTest,DynamicPlanAppenderTest,OrchestrationRuntimeFeedbackSmokeTest,CollaborationContractTest,CollaborationGoalAssemblerTest,CollaborationPlanServiceTest,InitialPlanReviewServiceTest,CollaborationTraceServiceTest,ExtractorSuggestionAssemblerTest,AnalyzerSuggestionAssemblerTest,WriterSuggestionAssemblerTest,CollaborationPlanningSmokeTest,DagExecutorTest" test` 通过，80 tests, 0 failures
+- [x] backend 全量回归：`mvn -pl backend test` 已执行并通过
+- [ ] 后续剩余：不属于 P3-2 执行 1 本轮；P3-3 再把 Conversation 动作预览接到 `OrchestrationDecision`，P3-4 再补完整 Citation Agent 与逐句引用核查

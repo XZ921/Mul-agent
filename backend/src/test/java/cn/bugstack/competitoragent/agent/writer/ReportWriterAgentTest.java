@@ -43,6 +43,7 @@ class ReportWriterAgentTest {
     private final PromptTemplateService promptService = mock(PromptTemplateService.class);
     private final AgentContextAssembler agentContextAssembler = mock(AgentContextAssembler.class);
     private final MemoryWritebackService memoryWritebackService = mock(MemoryWritebackService.class);
+    private final WriterCitationGapInspector writerCitationGapInspector = new WriterCitationGapInspector();
     private final ReportWriterAgent agent = new ReportWriterAgent(
             logRepository,
             reportRepository,
@@ -51,7 +52,8 @@ class ReportWriterAgentTest {
             promptService,
             agentContextAssembler,
             memoryWritebackService,
-            objectMapper
+            objectMapper,
+            writerCitationGapInspector
     );
 
     @Test
@@ -399,6 +401,46 @@ class ReportWriterAgentTest {
         assertEquals("CONCLUSION", findBundle(output.path("sectionEvidenceBundles"), "report_conclusion").path("sectionType").asText());
         assertTrue(findBundle(output.path("sectionEvidenceBundles"), "report_conclusion").path("sourceUrls").toString().contains("https://docs.notion.so"));
         assertTrue(findBundle(output.path("sectionEvidenceBundles"), "report_conclusion").path("issueFlags").toString().contains("SECTION_EVIDENCE_GAP"));
+    }
+
+    @Test
+    void shouldExposeWriterCitationGapMetadataWhenReportConclusionHasNoSources() throws Exception {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of());
+        when(reportRepository.findByTaskId(1L)).thenReturn(Optional.empty());
+        when(promptService.render(eq("writer"), any())).thenReturn("writer-prompt");
+        when(llmClient.chat(any(), any())).thenReturn("""
+                # 竞品报告
+                ## 建议
+                建议推进连接器生态。
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .subjectProduct("Our Product")
+                .reportLanguage("中文")
+                .currentNodeName("write_report")
+                .build();
+        context.putSharedOutput("analyze_competitors", """
+                {
+                  "overview": "分析完成",
+                  "recommendations": []
+                }
+                """);
+
+        AgentResult result = agent.execute(context);
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertEquals("ERROR", output.path("citationGapSeverity").asText());
+        assertEquals("MISSING_SOURCE", output.path("writerEvidenceState").asText());
+        assertTrue(output.path("missingCitationSections").toString().contains("report_conclusion"));
+        assertTrue(output.path("sectionCitationGaps").isArray());
+        assertEquals("report_conclusion", output.path("sectionCitationGaps").get(0).path("targetSection").asText());
+        assertTrue(output.path("issueFlags").toString().contains("WRITER_CITATION_GAP"));
+        assertTrue(output.path("issueFlags").toString().contains("WRITER_MISSING_SOURCE"));
     }
 
     @Test

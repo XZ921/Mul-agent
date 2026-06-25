@@ -26,6 +26,17 @@ public interface TaskWorkflowEventRepository extends JpaRepository<TaskWorkflowE
     Optional<TaskWorkflowEvent> findFirstByTaskIdAndEventTypeOrderByCreatedAtDesc(Long taskId,
                                                                                   WorkflowEventType eventType);
 
+    /**
+     * 对话入口只需要“最近一次编排决策事件”这个稳定读模型入口，
+     * 不应该在上层再次感知 workflow 内部枚举常量。
+     */
+    default Optional<TaskWorkflowEvent> findLatestOrchestrationDecisionEvent(Long taskId) {
+        return findFirstByTaskIdAndEventTypeOrderByCreatedAtDesc(
+                taskId,
+                WorkflowEventType.ORCHESTRATION_DECISION_RECORDED
+        );
+    }
+
     boolean existsByTaskIdAndEventTypeAndDeliveryStatusIn(Long taskId,
                                                           WorkflowEventType eventType,
                                                           Collection<String> deliveryStatuses);

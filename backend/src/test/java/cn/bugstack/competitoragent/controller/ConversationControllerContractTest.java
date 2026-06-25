@@ -94,4 +94,60 @@ class ConversationControllerContractTest {
 
         verify(conversationService).handleMessage(any());
     }
+
+    @Test
+    void shouldExposeOrchestrationDecisionSummaryInTaskActionPreviewContract() throws Exception {
+        when(conversationService.handleMessage(any())).thenReturn(ConversationResponse.builder()
+                .sessionId(3880L)
+                .mode("RESEARCH")
+                .answer("Need more evidence before continuing")
+                .sourceUrls(java.util.List.of("https://docs.example.com/pricing", "https://ops.example.com/analyzer-gap"))
+                .taskActionPreview(ConversationResponse.TaskActionPreview.builder()
+                        .actionType("SUPPLEMENT_EVIDENCE")
+                        .taskId(388L)
+                        .targetNodeName("collect_sources_web")
+                        .title("Research preview")
+                        .actionSummary("Show research action without dropping orchestration context")
+                        .impactSummary("Affects evidence collection and downstream analysis")
+                        .riskLevel("MEDIUM")
+                        .requiresConfirmation(true)
+                        .confirmationHint("Review the evidence before continuing")
+                        .executable(false)
+                        .orchestrationDecision(ConversationResponse.OrchestrationDecisionSummary.builder()
+                                .decisionId("od-388-analyze-human")
+                                .taskId(388L)
+                                .triggerNodeName("analyze_competitors")
+                                .decisionType("WAIT_FOR_HUMAN")
+                                .actionType("MANUAL_REVIEW")
+                                .targetNode("collect_sources_web")
+                                .affectedScope("CURRENT_NODE_ONLY")
+                                .reason("Analyzer found missing source evidence")
+                                .requiresHumanIntervention(true)
+                                .requiresConfirmation(false)
+                                .evidenceState("MISSING_SOURCE")
+                                .sourceUrls(java.util.List.of("https://ops.example.com/analyzer-gap"))
+                                .build())
+                        .sourceUrls(java.util.List.of(
+                                "https://docs.example.com/pricing",
+                                "https://ops.example.com/analyzer-gap"
+                        ))
+                        .build())
+                .build());
+
+        mockMvc.perform(post("/api/conversation/message")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": 3880,
+                                  "pageType": "TASK_DETAIL",
+                                  "message": "What should I do next?"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.taskActionPreview.orchestrationDecision.decisionId").value("od-388-analyze-human"))
+                .andExpect(jsonPath("$.data.taskActionPreview.orchestrationDecision.evidenceState").value("MISSING_SOURCE"))
+                .andExpect(jsonPath("$.data.sourceUrls[0]").value("https://docs.example.com/pricing"));
+
+        verify(conversationService).handleMessage(any());
+    }
 }

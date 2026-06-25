@@ -66,7 +66,7 @@ public class ConversationResponse {
     private List<RetrievalEvidence> retrievalEvidences = new ArrayList<>();
 
     @Data
-    @Builder
+    @Builder(toBuilder = true)
     @NoArgsConstructor
     @AllArgsConstructor
     @Schema(description = "意图审计摘要")
@@ -117,6 +117,28 @@ public class ConversationResponse {
         private Boolean requiresConfirmation;
         private String confirmationHint;
         private Boolean executable;
+        private OrchestrationDecisionSummary orchestrationDecision;
+        @Builder.Default
+        private List<String> sourceUrls = new ArrayList<>();
+    }
+
+    @Data
+    @Builder(toBuilder = true)
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Schema(description = "瀵硅瘽棰勮涓殑缂栨帓鍐崇瓥鎽樿")
+    public static class OrchestrationDecisionSummary {
+        private String decisionId;
+        private Long taskId;
+        private String triggerNodeName;
+        private String decisionType;
+        private String actionType;
+        private String targetNode;
+        private String affectedScope;
+        private String reason;
+        private Boolean requiresHumanIntervention;
+        private Boolean requiresConfirmation;
+        private String evidenceState;
         @Builder.Default
         private List<String> sourceUrls = new ArrayList<>();
     }

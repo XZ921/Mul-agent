@@ -2,6 +2,7 @@ import type {
   ConversationActionConfirmationRequest,
   ConversationIntentDecision,
   ConversationMessageRequest,
+  ConversationOrchestrationDecisionSummary,
   ConversationPageType,
   ConversationTaskActionExecutionResult,
   ConversationTaskActionPreview,
@@ -165,6 +166,41 @@ export function getConversationRiskText(riskLevel?: string | null) {
   if (riskLevel === 'MEDIUM') return '中影响'
   if (riskLevel === 'LOW') return '低影响'
   return '需人工判断'
+}
+
+export function getConversationEvidenceStateText(evidenceState?: string | null) {
+  if (evidenceState === 'MISSING_SOURCE') return '缺少可回指来源'
+  if (evidenceState === 'SUFFICIENT') return '证据充分'
+  if (evidenceState === 'INSUFFICIENT') return '证据不足'
+  if (evidenceState === 'CONFLICTING') return '证据冲突'
+  return evidenceState || '待确认'
+}
+
+export function getConversationOrchestrationDecisionText(
+  decision?: ConversationOrchestrationDecisionSummary | null,
+) {
+  if (!decision) {
+    return '无最近编排决策摘要'
+  }
+  const decisionType = (decision.decisionType || '').toUpperCase()
+  const actionType = (decision.actionType || '').toUpperCase()
+  if (decisionType === 'WAIT_FOR_HUMAN' || actionType === 'MANUAL_REVIEW') {
+    return '等待人工介入'
+  }
+  if (decisionType === 'APPEND_DYNAMIC_BRANCH' || actionType === 'SUPPLEMENT_EVIDENCE') {
+    return '建议先补充证据'
+  }
+  if (
+    decisionType === 'REWRITE_ONLY'
+    || actionType === 'REWRITE_SECTION'
+    || actionType === 'REWRITE_CLAIM'
+  ) {
+    return '建议重写当前结论'
+  }
+  if (decisionType === 'NO_ACTION' || actionType === 'NO_ACTION') {
+    return '当前无需额外动作'
+  }
+  return `${decision.decisionType || '编排决策'} / ${decision.actionType || '待确认动作'}`
 }
 
 export function getConversationActionHint(preview?: ConversationTaskActionPreview | null) {

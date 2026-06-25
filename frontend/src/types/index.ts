@@ -393,6 +393,9 @@ export interface ConversationActionConfirmationRequest {
   impactScope?: string | null
   impactSummary?: string | null
   riskLevel?: string | null
+  orchestrationDecisionId?: string | null
+  orchestrationDecisionType?: string | null
+  orchestrationEvidenceState?: string | null
 }
 
 export interface ConversationMessageRequest {
@@ -428,6 +431,21 @@ export interface ConversationFormDraft {
   previewSummary?: string | null
 }
 
+export interface ConversationOrchestrationDecisionSummary {
+  decisionId?: string | null
+  taskId?: number | null
+  triggerNodeName?: string | null
+  decisionType?: string | null
+  actionType?: string | null
+  targetNode?: string | null
+  affectedScope?: string | null
+  reason?: string | null
+  requiresHumanIntervention?: boolean | null
+  requiresConfirmation?: boolean | null
+  evidenceState?: string | null
+  sourceUrls?: string[]
+}
+
 export interface ConversationTaskActionPreview {
   actionType?: string | null
   taskId?: number | null
@@ -439,6 +457,7 @@ export interface ConversationTaskActionPreview {
   requiresConfirmation?: boolean | null
   confirmationHint?: string | null
   executable?: boolean | null
+  orchestrationDecision?: ConversationOrchestrationDecisionSummary | null
   sourceUrls?: string[]
 }
 

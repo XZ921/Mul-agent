@@ -217,6 +217,72 @@ class TaskReplayProjectionServiceTest {
     }
 
     @Test
+    void shouldProjectWriterOrchestrationDecisionTrace() {
+        TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
+        TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);
+        TaskNodeRepository taskNodeRepository = mock(TaskNodeRepository.class);
+        TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository = mock(TaskNodeExecutionAttemptRepository.class);
+        MemorySnapshotRepository memorySnapshotRepository = mock(MemorySnapshotRepository.class);
+        AgentExecutionLogRepository agentExecutionLogRepository = mock(AgentExecutionLogRepository.class);
+        RecoveryCheckpointService recoveryCheckpointService = mock(RecoveryCheckpointService.class);
+        TaskRecoveryService taskRecoveryService = mock(TaskRecoveryService.class);
+
+        TaskWorkflowEvent event = TaskWorkflowEvent.builder()
+                .taskId(99L)
+                .nodeName("write_report")
+                .eventType(WorkflowEventType.ORCHESTRATION_DECISION_RECORDED)
+                .payload("""
+                        {
+                          "decisionId": "od-99-write_report-human",
+                          "triggerNodeName": "write_report",
+                          "decisionType": "WAIT_FOR_HUMAN",
+                          "sourceUrls": [],
+                          "evidenceState": "MISSING_SOURCE"
+                        }
+                        """)
+                .sourceUrls("[]")
+                .createdAt(LocalDateTime.of(2026, 6, 24, 19, 30))
+                .build();
+
+        when(taskPlanRepository.findByTaskIdOrderByPlanVersionAsc(99L)).thenReturn(List.of());
+        when(taskPlanRepository.findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(99L)).thenReturn(Optional.empty());
+        when(taskWorkflowEventRepository.findAll()).thenReturn(List.of(event));
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(99L)).thenReturn(List.of());
+        when(taskNodeExecutionAttemptRepository.findAll()).thenReturn(List.of());
+        when(memorySnapshotRepository.findByTaskIdOrderByIdDesc(99L)).thenReturn(List.of());
+        when(agentExecutionLogRepository.findByTaskIdOrderByCreatedAtAsc(99L)).thenReturn(List.of());
+        when(recoveryCheckpointService.listTaskCheckpoints(99L)).thenReturn(List.of());
+        when(taskRecoveryService.buildRecoveryAdvice(99L)).thenReturn(TaskRecoveryAdvice.builder()
+                .recommendedAction("OBSERVE_ONLY")
+                .summary("none")
+                .blockingNodeNames(List.of())
+                .resumeSupported(false)
+                .sourceUrls(List.of())
+                .build());
+
+        ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        TaskReplayProjectionService projectionService = new TaskReplayProjectionService(
+                taskPlanRepository,
+                taskWorkflowEventRepository,
+                taskNodeRepository,
+                taskNodeExecutionAttemptRepository,
+                memorySnapshotRepository,
+                agentExecutionLogRepository,
+                recoveryCheckpointService,
+                taskRecoveryService,
+                objectMapper
+        );
+
+        TaskReplayResponse replay = projectionService.getTaskReplay(99L);
+
+        assertThat(replay.getTimeline())
+                .anySatisfy(item -> {
+                    assertThat(item.getNodeName()).isEqualTo("write_report");
+                    assertThat(item.getEventType()).isEqualTo("ORCHESTRATION_DECISION_RECORDED");
+                });
+    }
+
+    @Test
     void shouldExposePlannedSourceUrlsInNodeSummariesBeforeNodeExecution() {
         TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
         TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);

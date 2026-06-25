@@ -1043,6 +1043,10 @@ QualityDiagnosis ERROR + MISSING_SOURCE -> WAIT_FOR_HUMAN 或规则化补证
 
 2026-06-24 P3-1 自动化实现记录：Analyzer 输出新增 `analysisConfidence / missingAnalysisDimensions / analysisGapSeverity / analysisEvidenceState`，`AnalyzerSuggestionAssembler` 已把分析缺口转换成标准 `AgentSuggestion`；`OrchestrationDecisionService / DagExecutor` 已支持 `analyze_competitors` 触发的受策略保护决策，缺来源时进入 `WAIT_FOR_HUMAN -> WAITING_INTERVENTION`，有来源时保留受审计放行轨迹。`DagExecutorTest`、`CollaborationPlanningSmokeTest`、`TaskReplayProjectionServiceTest`、P3-1 局部聚合、P1+P2+P3-1 编排聚合与 `mvn -pl backend test` 全量回归均已通过；Writer、Conversation 和 Citation 仍未进入本轮范围。
 
+2026-06-24 P3-2 执行 1 自动化实现记录：Writer 输出新增 `writerEvidenceState / citationGapSeverity / missingCitationSections / sectionCitationGaps`，`WriterSuggestionAssembler` 已把章节引用缺口转换成标准 `AgentSuggestion`；`OrchestrationDecisionService / DagExecutor` 已支持 `write_report / rewrite_report` 触发的受控决策，无来源章节缺口进入 `WAIT_FOR_HUMAN -> WAITING_INTERVENTION`，有来源但引用不完整的章节记录 `REWRITE_ONLY / REWRITE_SECTION` 决策轨迹。Citation Agent 仍未进入本轮范围。
+
+2026-06-24 P3-3 自动化实现记录：Conversation 动作预览已接入最近一次 `ORCHESTRATION_DECISION_RECORDED` 事件，只读提取 `OrchestrationDecision` 摘要并展示到统一对话入口；`TaskActionTranslator` 已支持 `SUPPLEMENT_EVIDENCE / REWRITE_ONLY / WAIT_FOR_HUMAN` 三类决策预览映射，`WAIT_FOR_HUMAN` 不生成确认执行对象；前端 `TaskActionPreviewCard` 已展示 Orchestrator 决策原因、证据状态和来源链接。Conversation 仍不创建编排决策，不直接执行人工介入动作，Citation Agent 仍留在 P3-4。
+
 ### live 验收
 
 以真实竞品分析任务验证：

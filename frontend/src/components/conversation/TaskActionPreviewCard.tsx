@@ -7,7 +7,9 @@ import {
   compactConversationUrl,
   getConversationActionHint,
   getConversationConfirmationMessage,
+  getConversationEvidenceStateText,
   getConversationImpactScopeText,
+  getConversationOrchestrationDecisionText,
   getConversationRiskText,
 } from '../../utils/conversationPresentation'
 
@@ -29,6 +31,7 @@ export default function TaskActionPreviewCard({
   onConfirm,
 }: TaskActionPreviewCardProps) {
   const sourceUrls = (preview.sourceUrls || []).filter(Boolean)
+  const orchestrationDecision = preview.orchestrationDecision
   const confirmationMessage = getConversationConfirmationMessage(confirmationRequest, preview)
   const canConfirm = Boolean(preview.requiresConfirmation && confirmationRequest)
 
@@ -40,11 +43,32 @@ export default function TaskActionPreviewCard({
             {getConversationRiskText(preview.riskLevel)}
           </Tag>
           {preview.requiresConfirmation && <Tag color="gold">需要你先确认</Tag>}
+          {orchestrationDecision?.requiresHumanIntervention && <Tag color="magenta">需要人工介入</Tag>}
         </Space>
         <Paragraph strong style={{ marginBottom: 0 }}>
           {preview.title || '当前建议已准备好'}
         </Paragraph>
         {preview.actionSummary && <Paragraph style={{ marginBottom: 0 }}>{preview.actionSummary}</Paragraph>}
+        {orchestrationDecision && (
+          <Descriptions size="small" column={1} bordered>
+            <Descriptions.Item label="编排决策">
+              {getConversationOrchestrationDecisionText(orchestrationDecision)}
+            </Descriptions.Item>
+            {orchestrationDecision.triggerNodeName && (
+              <Descriptions.Item label="触发节点">
+                {orchestrationDecision.triggerNodeName}
+              </Descriptions.Item>
+            )}
+            {orchestrationDecision.reason && (
+              <Descriptions.Item label="原因">
+                {orchestrationDecision.reason}
+              </Descriptions.Item>
+            )}
+            <Descriptions.Item label="证据状态">
+              {getConversationEvidenceStateText(orchestrationDecision.evidenceState)}
+            </Descriptions.Item>
+          </Descriptions>
+        )}
         {(preview.impactSummary || confirmationRequest?.impactScope || confirmationMessage) && (
           <Descriptions size="small" column={1} bordered>
             {preview.impactSummary && (

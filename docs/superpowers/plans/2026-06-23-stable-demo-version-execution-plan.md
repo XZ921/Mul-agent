@@ -265,7 +265,7 @@
 
 ## 6. 进度可视化格式
 
-当前阶段：3.4 P2 前置协作规划与抽取后证据缺口决策已完成自动化收口；稳定演示版可展示任务开始前协作计划、受控 DAG 映射、trace/replay 和缺证据人工介入链路
+当前阶段：3.4 P3-3 已把 Conversation 动作预览接入 Orchestrator 决策摘要；稳定演示版可从统一对话入口解释最近编排决策、证据状态、来源链接和人工确认边界
 
 - [x] Day 1：范围冻结与蓝图回链 - 已完成
 - [x] Day 2：P1 契约与策略测试 - 已完成
@@ -320,7 +320,8 @@
 - [ ] 前端能打开任务列表、任务详情和报告页。
 - [ ] 固定样例任务能创建。
 - [ ] 固定样例任务能执行到报告生成或可解释的质量阻塞。
-- [ ] `sourceUrls` 或 `evidenceState` 在报告、诊断、编排决策中可见。
+- [x] `sourceUrls` 或 `evidenceState` 在报告、诊断、编排决策中可见；P3-2 执行 1 已补 Writer 章节引用缺口轨迹。
+- [x] Conversation 动作预览能展示最近 `OrchestrationDecision` 的原因、`evidenceState` 和 `sourceUrls`，且人工介入决策不会被误执行。
 - [ ] `quality_check_final` 后能产生可回放的 Orchestrator 决策。
 - [ ] `DecisionPolicyService` 能阻止非法动作。
 - [ ] `DecisionExecutorAdapter` 能生成 `DynamicPlanMutation`。

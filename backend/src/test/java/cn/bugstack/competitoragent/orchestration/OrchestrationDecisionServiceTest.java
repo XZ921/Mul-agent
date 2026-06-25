@@ -264,4 +264,71 @@ class OrchestrationDecisionServiceTest {
         assertThat(decisions.get(0).getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
         assertThat(decisions.get(0).isRequiresHumanIntervention()).isTrue();
     }
+
+    @Test
+    void shouldWaitForHumanFromWriterCitationGapWithoutSources() {
+        AgentSuggestion suggestion = AgentSuggestion.builder()
+                .suggestionId("as-task-77-write_report-1")
+                .taskId(77L)
+                .producerNodeName("write_report")
+                .producerAgentType("WRITER")
+                .suggestionType("CITATION_GAP")
+                .targetSection("report_conclusion")
+                .summary("报告结论缺少可用来源")
+                .severity("ERROR")
+                .confidence(0.25d)
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .suggestedQueries(List.of("report_conclusion official citation evidence"))
+                .suggestedTargetNode("collect_sources")
+                .build()
+                .normalized();
+
+        List<OrchestrationDecision> decisions = service.decide(OrchestrationContext.builder()
+                .taskId(77L)
+                .triggerNodeName("write_report")
+                .agentSuggestions(List.of(suggestion))
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build());
+
+        assertThat(decisions).hasSize(1);
+        assertThat(decisions.get(0).getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(decisions.get(0).isRequiresHumanIntervention()).isTrue();
+        assertThat(decisions.get(0).getInputRefs())
+                .containsEntry("agentSuggestionIds", List.of("as-task-77-write_report-1"));
+    }
+
+    @Test
+    void shouldRecordRewriteDecisionFromWriterCitationGapWithSources() {
+        AgentSuggestion suggestion = AgentSuggestion.builder()
+                .suggestionId("as-task-77-write_report-1")
+                .taskId(77L)
+                .producerNodeName("write_report")
+                .producerAgentType("WRITER")
+                .suggestionType("CITATION_GAP")
+                .targetSection("pricing")
+                .summary("定价章节已有来源但缺逐句引用")
+                .severity("HIGH")
+                .confidence(0.70d)
+                .sourceUrls(List.of("https://www.notion.so/pricing"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .suggestedTargetNode("rewrite_report")
+                .build()
+                .normalized();
+
+        List<OrchestrationDecision> decisions = service.decide(OrchestrationContext.builder()
+                .taskId(77L)
+                .triggerNodeName("write_report")
+                .agentSuggestions(List.of(suggestion))
+                .sourceUrls(List.of("https://www.notion.so/pricing"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .build());
+
+        assertThat(decisions).hasSize(1);
+        assertThat(decisions.get(0).getDecisionType()).isEqualTo("REWRITE_ONLY");
+        assertThat(decisions.get(0).getActionType()).isEqualTo("REWRITE_SECTION");
+        assertThat(decisions.get(0).getTargetNode()).isEqualTo("rewrite_report");
+        assertThat(decisions.get(0).getTargetSection()).isEqualTo("pricing");
+    }
 }

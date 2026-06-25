@@ -31,6 +31,9 @@ public class OrchestrationDecisionService {
         if ("analyze_competitors".equals(context.getTriggerNodeName())) {
             return decideAnalyzerSuggestions(context);
         }
+        if (isWriterTrigger(context.getTriggerNodeName())) {
+            return decideWriterSuggestions(context);
+        }
         if (!"quality_check_final".equals(context.getTriggerNodeName())) {
             return List.of(noAction(context, "P1/P2/P3-1 当前仅处理 extract_schema、analyze_competitors 和 quality_check_final 反馈。"));
         }
@@ -120,6 +123,33 @@ public class OrchestrationDecisionService {
         return List.of(noAction(context, "Analyzer 建议未命中 P3-1 可执行策略。"));
     }
 
+    private boolean isWriterTrigger(String triggerNodeName) {
+        return "write_report".equals(triggerNodeName) || "rewrite_report".equals(triggerNodeName);
+    }
+
+    /**
+     * Writer 只提交章节引用缺口事实，编排层根据来源状态决定阻断还是留痕。
+     * 无来源缺口必须阻断，已有来源但引用不完整时先记录重写决策，继续交给 Reviewer 做质量收口。
+     */
+    private List<OrchestrationDecision> decideWriterSuggestions(OrchestrationContext context) {
+        List<AgentSuggestion> suggestions = context.getAgentSuggestions();
+        if (suggestions == null || suggestions.isEmpty()) {
+            return List.of(noAction(context, context.getTriggerNodeName() + " 未产生 AgentSuggestion，无需编排动作。"));
+        }
+        for (AgentSuggestion suggestion : suggestions) {
+            if ("CITATION_GAP".equalsIgnoreCase(suggestion.getSuggestionType())
+                    && (suggestion.getSourceUrls() == null || suggestion.getSourceUrls().isEmpty())) {
+                return List.of(waitForHuman(context, "Writer 发现章节引用缺口但缺少 sourceUrls，禁止继续质检。"));
+            }
+        }
+        for (AgentSuggestion suggestion : suggestions) {
+            if ("CITATION_GAP".equalsIgnoreCase(suggestion.getSuggestionType())) {
+                return List.of(rewriteSectionFromSuggestion(context, suggestion));
+            }
+        }
+        return List.of(noAction(context, "Writer 建议未命中 P3-2 可执行策略。"));
+    }
+
     private OrchestrationDecision supplementEvidenceFromSuggestion(OrchestrationContext context,
                                                                    AgentSuggestion suggestion) {
         return OrchestrationDecision.builder()
@@ -130,6 +160,30 @@ public class OrchestrationDecisionService {
                 .actionType("SUPPLEMENT_EVIDENCE")
                 .targetNode(suggestion.getSuggestedTargetNode())
                 .affectedScope("CURRENT_NODE_AND_DOWNSTREAM")
+                .priority(suggestion.getSeverity())
+                .targetSection(suggestion.getTargetSection())
+                .reason(suggestion.getSummary())
+                .requiresHumanIntervention(false)
+                .requiresConfirmation(false)
+                .confidence(suggestion.getConfidence())
+                .suggestedQueries(suggestion.getSuggestedQueries())
+                .inputRefs(buildInputRefs(context))
+                .sourceUrls(suggestion.getSourceUrls())
+                .evidenceState(suggestion.getEvidenceState())
+                .build()
+                .normalized();
+    }
+
+    private OrchestrationDecision rewriteSectionFromSuggestion(OrchestrationContext context,
+                                                               AgentSuggestion suggestion) {
+        return OrchestrationDecision.builder()
+                .decisionId("od-" + context.getTaskId() + "-" + context.getTriggerNodeName() + "-writer-suggestion-1")
+                .taskId(context.getTaskId())
+                .triggerNodeName(context.getTriggerNodeName())
+                .decisionType("REWRITE_ONLY")
+                .actionType("REWRITE_SECTION")
+                .targetNode("rewrite_report")
+                .affectedScope("CURRENT_NODE_ONLY")
                 .priority(suggestion.getSeverity())
                 .targetSection(suggestion.getTargetSection())
                 .reason(suggestion.getSummary())

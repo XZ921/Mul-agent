@@ -41,4 +41,13 @@ public class ConversationActionConfirmationRequest {
 
     @Schema(description = "风险等级", example = "HIGH")
     private String riskLevel;
+
+    @Schema(description = "关联的编排决策 ID")
+    private String orchestrationDecisionId;
+
+    @Schema(description = "关联的编排决策类型", example = "WAIT_FOR_HUMAN")
+    private String orchestrationDecisionType;
+
+    @Schema(description = "关联的编排证据状态", example = "MISSING_SOURCE")
+    private String orchestrationEvidenceState;
 }

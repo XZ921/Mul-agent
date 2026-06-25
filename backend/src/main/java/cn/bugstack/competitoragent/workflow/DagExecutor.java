@@ -24,6 +24,7 @@ import cn.bugstack.competitoragent.orchestration.OrchestrationDecision;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionAdapter;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
 import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
+import cn.bugstack.competitoragent.orchestration.WriterSuggestionAssembler;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeExecutionAttemptRepository;
@@ -85,6 +86,7 @@ public class DagExecutor {
     private final TaskQuotaCoordinator taskQuotaCoordinator;
     private final ExtractorSuggestionAssembler extractorSuggestionAssembler;
     private final AnalyzerSuggestionAssembler analyzerSuggestionAssembler;
+    private final WriterSuggestionAssembler writerSuggestionAssembler;
     private final OrchestrationDecisionService orchestrationDecisionService;
     private final OrchestrationTraceService orchestrationTraceService;
     private final List<SharedNodeOutputProjector> sharedNodeOutputProjectors;
@@ -107,6 +109,7 @@ public class DagExecutor {
                        TaskQuotaCoordinator taskQuotaCoordinator,
                        ExtractorSuggestionAssembler extractorSuggestionAssembler,
                        AnalyzerSuggestionAssembler analyzerSuggestionAssembler,
+                       WriterSuggestionAssembler writerSuggestionAssembler,
                        OrchestrationDecisionService orchestrationDecisionService,
                        OrchestrationTraceService orchestrationTraceService,
                        List<SharedNodeOutputProjector> sharedNodeOutputProjectors) {
@@ -127,6 +130,7 @@ public class DagExecutor {
         this.taskQuotaCoordinator = taskQuotaCoordinator;
         this.extractorSuggestionAssembler = extractorSuggestionAssembler;
         this.analyzerSuggestionAssembler = analyzerSuggestionAssembler;
+        this.writerSuggestionAssembler = writerSuggestionAssembler;
         this.orchestrationDecisionService = orchestrationDecisionService;
         this.orchestrationTraceService = orchestrationTraceService;
         this.sharedNodeOutputProjectors = sharedNodeOutputProjectors == null ? List.of() : List.copyOf(sharedNodeOutputProjectors);
@@ -168,6 +172,7 @@ public class DagExecutor {
                 taskQuotaCoordinator,
                 extractorSuggestionAssembler,
                 new AnalyzerSuggestionAssembler(objectMapper),
+                new WriterSuggestionAssembler(objectMapper),
                 orchestrationDecisionService,
                 orchestrationTraceService,
                 sharedNodeOutputProjectors);
@@ -206,6 +211,7 @@ public class DagExecutor {
                 taskQuotaCoordinator,
                 new ExtractorSuggestionAssembler(objectMapper),
                 new AnalyzerSuggestionAssembler(objectMapper),
+                new WriterSuggestionAssembler(objectMapper),
                 new OrchestrationDecisionService(new OrchestrationDecisionAdapter()),
                 null,
                 sharedNodeOutputProjectors);
@@ -562,7 +568,7 @@ public class DagExecutor {
 
     /**
      * AgentSuggestion 是运行期协作决策的统一入口。
-     * 当前只允许 Extractor 和 Analyzer 进入该 gate，避免误拦截 Writer / Reviewer。
+     * 当前只允许 Extractor、Analyzer 和 Writer 进入该 gate，避免误拦截 Reviewer 或动态恢复节点。
      */
     private List<AgentSuggestion> buildAgentSuggestions(Long taskId, TaskNode completedNode) {
         if (completedNode == null || completedNode.getNodeName() == null) {
@@ -576,6 +582,12 @@ public class DagExecutor {
         }
         if ("analyze_competitors".equals(completedNode.getNodeName())) {
             return analyzerSuggestionAssembler.fromAnalyzerOutput(
+                    taskId,
+                    completedNode.getNodeName(),
+                    completedNode.getOutputData());
+        }
+        if ("write_report".equals(completedNode.getNodeName()) || "rewrite_report".equals(completedNode.getNodeName())) {
+            return writerSuggestionAssembler.fromWriterOutput(
                     taskId,
                     completedNode.getNodeName(),
                     completedNode.getOutputData());

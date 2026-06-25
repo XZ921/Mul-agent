@@ -42,6 +42,7 @@ public class ReportWriterAgent extends BaseAgent {
     private final PromptTemplateService promptService;
     private final MemoryWritebackService memoryWritebackService;
     private final ObjectMapper objectMapper;
+    private final WriterCitationGapInspector writerCitationGapInspector;
 
     public ReportWriterAgent(AgentExecutionLogRepository logRepository,
                              ReportRepository reportRepository,
@@ -50,7 +51,8 @@ public class ReportWriterAgent extends BaseAgent {
                              PromptTemplateService promptService,
                              AgentContextAssembler agentContextAssembler,
                              MemoryWritebackService memoryWritebackService,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper,
+                             WriterCitationGapInspector writerCitationGapInspector) {
         super(logRepository, agentContextAssembler);
         this.reportRepository = reportRepository;
         this.evidenceRepository = evidenceRepository;
@@ -58,6 +60,7 @@ public class ReportWriterAgent extends BaseAgent {
         this.promptService = promptService;
         this.memoryWritebackService = memoryWritebackService;
         this.objectMapper = objectMapper;
+        this.writerCitationGapInspector = writerCitationGapInspector;
     }
 
     @Override
@@ -127,6 +130,13 @@ public class ReportWriterAgent extends BaseAgent {
             );
             reportContent = sanitizeReportContent(reportContent, currentDate);
             reportContent = enforceEvidenceTraceabilityForKeySections(reportContent);
+            WriterCitationGapInspector.InspectionResult citationInspection = writerCitationGapInspector.inspect(
+                    reportContent,
+                    normalizedAnalysis.sectionEvidenceBundles(),
+                    normalizedAnalysis.sourceUrls());
+            List<String> outputIssueFlags = mergeIssueFlags(
+                    normalizedAnalysis.issueFlags(),
+                    citationInspection.issueFlags());
 
             // 报告记录是幂等更新：首次创建，后续重写直接覆盖正文和摘要。
             Report report = reportRepository.findByTaskId(context.getTaskId())
@@ -149,9 +159,13 @@ public class ReportWriterAgent extends BaseAgent {
             output.put("summary", report.getSummary());
             output.put("revisionMode", revisionMode);
             output.put("sourceUrls", normalizedAnalysis.sourceUrls());
+            output.put("writerEvidenceState", citationInspection.evidenceState());
+            output.put("citationGapSeverity", citationInspection.severity());
+            output.put("missingCitationSections", citationInspection.missingCitationSections());
+            output.put("sectionCitationGaps", citationInspection.gaps());
             // 报告输出保留本次写作真正使用的 Task RAG 摘要，方便报告页和审计页直接回查。
             output.put("taskRagContext", context.getTaskRagPromptContext());
-            output.put("issueFlags", normalizedAnalysis.issueFlags());
+            output.put("issueFlags", outputIssueFlags);
             output.put("evidenceFragments", normalizedAnalysis.evidenceFragments());
             output.put("sectionEvidenceBundles", normalizedAnalysis.sectionEvidenceBundles());
             output.put("revisionFocus", revisionFocus);
@@ -671,6 +685,21 @@ public class ReportWriterAgent extends BaseAgent {
             return primary;
         }
         return fallback;
+    }
+
+    /**
+     * Writer 输出的问题标记需要同时保留 Analyzer 上游缺口和本阶段引用缺口，
+     * 这样 Orchestrator 才能区分“上游分析缺证据”与“写作阶段章节引用缺口”两个来源。
+     */
+    private List<String> mergeIssueFlags(List<String> upstreamIssueFlags, List<String> writerIssueFlags) {
+        LinkedHashSet<String> merged = new LinkedHashSet<>();
+        if (upstreamIssueFlags != null) {
+            merged.addAll(upstreamIssueFlags);
+        }
+        if (writerIssueFlags != null) {
+            merged.addAll(writerIssueFlags);
+        }
+        return new ArrayList<>(merged);
     }
 
     /**
