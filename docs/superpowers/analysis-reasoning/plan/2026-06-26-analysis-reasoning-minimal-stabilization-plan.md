@@ -1,0 +1,120 @@
+# AnalysisReasoning 最小稳固方案 - 2026-06-26
+
+当前阶段：分析推理最小稳固切片方案
+- [x] 信息采集：已完成
+- [x] 数据分析：已完成
+- [x] 方案边界确认：已完成
+- [ ] 实施计划：待执行
+- [ ] 代码实施：待执行
+- [ ] 自动化验证：待执行
+- [ ] 实链验证：待执行
+
+## 1. 背景结论
+
+本方案承接 3.5 收敛决策：当前不进入 4.x，不接 Tavily，不扩大 `pendingActions`，也不把 `AnalysisReasoning / ReportWriting / ConversationCollaboration / DeliveryAudit` 四条链路做全量实现。
+
+`AnalysisReasoning` 的诊断结论已经明确：Analyzer 不是没有接上 3.4 协议，而是链路内仍存在分析结论密度和章节证据聚合质量问题。`AnalysisResult` 已经具备 `sourceUrls / missingAnalysisDimensions / analysisGapSeverity / analysisEvidenceState / sectionEvidenceBundles` 等正式字段，`AnalyzerSuggestionAssembler` 也已经能把分析缺口转为 `AgentSuggestion -> OrchestrationDecision`。因此本轮只做 Analyzer 内部最小质量补丁。
+
+## 2. 目标
+
+在不改变协作 runtime 的前提下，让 Analyzer 输出更稳定地满足下游 Writer 和 Citation Agent 的最小证据需求：
+
+1. Analyzer Prompt 明确要求逐维度输出结构化分析，并要求无证据时留空或标记缺口，不能用概览或泛泛判断填充核心字段。
+2. Analyzer 章节证据束只聚合与当前章节匹配的 `DownstreamEvidenceView`，避免把同一批 evidence view 粗暴塞进所有章节。
+3. 对 views-only 场景，如果证据视图和章节匹配且有来源，则对应章节可以视为可追溯；如果不匹配，则保留 `SECTION_EVIDENCE_GAP`。
+4. 保持现有 `AnalysisResult` 契约不扩字段，继续让编排层通过既有 `analysisGapSeverity / analysisEvidenceState / sourceUrls` 消费缺口。
+
+## 3. 非目标
+
+1. 不进入 4.x runtime，不改固定 DAG、不引入自由智能规划器。
+2. 不修改 `AgentSuggestion / OrchestrationDecision / DecisionPolicyResult / DynamicPlanMutation` 协议。
+3. 不拆 `CompetitorAnalysisAgent` 为新的子域服务，本轮只允许小范围私有方法调整。
+4. 不新增数据库字段，不新增 Flyway migration。
+5. 不改前端页面，不改 report/export DTO 的公开契约。
+6. 不接 Tavily，不改变搜索与采集 owner。
+7. 不把 `AnalysisReasoning` 标记为实链验证完成。
+
+## 4. 设计方案
+
+### 4.1 Prompt 最小加固
+
+当前 `analyzer` 默认模板只包含本方产品、分析维度和竞品数据，缺少输出契约约束。本轮优先新增 `backend/src/main/resources/prompts/analyzer.txt`，通过现有 `PromptTemplateService.registerTemplate(...)` 覆盖内联默认模板。
+
+模板需要明确：
+
+1. 只能返回 JSON 对象。
+2. 顶层必须包含 `overview / featureComparison / positioningComparison / pricingComparison / targetUserComparison / strengthsSummary / weaknessesSummary / opportunities / risks / recommendations / sourceUrls`。
+3. 每个核心分析字段必须基于 `competitorData` 中的 `sourceUrls / evidenceCoverage / downstreamEvidenceViews / structuredBlocks`。
+4. 某个维度缺证据时，对应字段返回 `null` 或空字符串，并在 `issueFlags` 中保留缺口，不允许用泛泛结论填充。
+5. `sourceUrls` 只放真实输入中出现过的来源，不允许生成新 URL。
+
+### 4.2 章节证据束匹配规则
+
+`CompetitorAnalysisAgent.buildSectionEvidenceBundles(...)` 当前会把同一竞品的 `DownstreamEvidenceView` 同时加入所有章节，造成 Writer 看到过粗的章节证据。本轮增加轻量匹配规则：
+
+| 分析章节 | 匹配信号 |
+| --- | --- |
+| `features` | `FEATURE_LIST / FEATURE_BLOCK / FEATURE_*` 结构块、`FEATURE` 质量信号、正文或标题包含 feature / 功能 / capability |
+| `pricing` | `PRICING_BLOCK / PRICING_*` 结构块、`PRICING` 质量信号、正文或标题包含 pricing / price / plan / 定价 / 价格 |
+| `targetUsers` | `TARGET_USER / USER_SEGMENT` 结构块、正文或标题包含 user / customer / audience / 用户 / 客户 |
+| `positioning` | `POSITIONING / MARKET` 结构块、正文或标题包含 positioning / market / segment / 定位 / 市场 |
+| `strengths` | `STRENGTH / PRO / ADVANTAGE` 结构块或质量信号 |
+| `weaknesses` | `WEAKNESS / CON / RISK / LIMITATION` 结构块或质量信号 |
+| `overview` | 可接受任意有来源的概览型证据，但不能替代其他章节证据 |
+
+匹配规则只用于减少错误聚合，不用于生成新事实。匹配失败时，该 evidence view 仍保留在 `downstreamEvidenceViews` 顶层审计字段里，但不会进入不相关章节的 `evidenceFragments`。
+
+### 4.3 views-only 可追溯口径
+
+当 `extract_schema` 只提供 `downstreamEvidenceViews`，没有 draft bundle 或 repository coverage 时，Analyzer 当前可能同时出现“有来源片段但章节仍标缺口”的灰区。本轮调整为：
+
+1. 如果 view 与章节匹配，且 view 或片段存在 `sourceUrls`，该章节对当前竞品视为 traceable。
+2. 如果 view 不匹配章节，即使有来源，也不能让该章节通过。
+3. 如果 view 缺少来源，则保留 `MISSING_SOURCE_URL / SECTION_EVIDENCE_GAP`。
+
+这能减少“pricing 明明有结构化证据，但 pricing bundle 仍被标缺口”的误判，同时避免“pricing 证据污染 feature 章节”。
+
+## 5. 执行计划
+
+| 步骤 | 核心目标 | 预期耗时 | 前置依赖 | 状态 |
+| --- | --- | --- | --- | --- |
+| Step 1 | 为 Analyzer prompt 契约补测试，确认模板包含逐维度、sourceUrls 和缺证据留空规则 | 10 分钟 | 本方案确认 | 待执行 |
+| Step 2 | 新增 `prompts/analyzer.txt`，让默认模板具备稳定输出约束 | 10 分钟 | Step 1 红灯 | 待执行 |
+| Step 3 | 为章节证据束匹配补 Analyzer 测试，覆盖 pricing view 不污染 feature bundle | 20 分钟 | 现有 `CompetitorAnalysisAgentTest` 可运行 | 待执行 |
+| Step 4 | 在 `CompetitorAnalysisAgent` 内实现私有匹配方法和 views-only traceable 判定 | 30 分钟 | Step 3 红灯 | 待执行 |
+| Step 5 | 跑 Analyzer、Writer、Orchestrator 相关聚焦回归，确认协议不回归 | 20 分钟 | Step 4 完成 | 待执行 |
+| Step 6 | 更新总路线图进度，不把实施和实链验证提前标绿 | 10 分钟 | 自动化通过 | 待执行 |
+
+## 6. 验收口径
+
+自动化验收至少覆盖：
+
+1. `PromptTemplateService` 渲染的 `analyzer` 模板包含明确 JSON 字段、`sourceUrls` 和缺证据留空规则。
+2. 只有 pricing 结构化证据时，`pricing` bundle 聚合该来源，`features` bundle 不应包含同一 pricing 片段。
+3. views-only pricing 证据有来源时，`pricing.missingFields` 不应继续包含 `pricingComparison`。
+4. 无来源或无匹配证据时，章节继续保留 `SECTION_EVIDENCE_GAP`，不能静默放行。
+5. `AnalyzerSuggestionAssemblerTest` 继续通过，证明本轮没有改坏 3.4 协议消费。
+6. `ReportWriterAgentTest` 继续通过，证明 Writer 对 Analyzer 输出的兼容逻辑没有被破坏。
+
+建议命令：
+
+```powershell
+mvn -pl backend "-Dtest=CompetitorAnalysisAgentTest,AnalyzerSuggestionAssemblerTest,ReportWriterAgentTest" test
+```
+
+如新增 `PromptTemplateServiceTest` 或扩展已有模板测试，应一并加入聚焦命令。
+
+## 7. 风险与回滚
+
+1. Prompt 变严格后，Analyzer 可能更频繁输出缺口。该结果可接受，因为本轮目标是减少无证据分析继续流向 Writer，而不是强行提高通过率。
+2. 章节匹配规则可能漏掉少量弱相关证据。规则应保持保守，宁可标缺口，也不把不相关来源塞入章节证据束。
+3. 如果真实任务显示匹配规则过窄，后续只能补充匹配词或结构块类型，不应回退到“所有 evidence view 进入所有章节”的粗粒度聚合。
+
+## 8. 路线图状态
+
+本方案完成后，`AnalysisReasoning` 状态应更新为：
+
+- 诊断：已完成。
+- 方案：已完成，但仅代表最小稳固切片，不代表分析推理全量重构。
+- 实施：待执行。
+- 实链验证：待执行。
