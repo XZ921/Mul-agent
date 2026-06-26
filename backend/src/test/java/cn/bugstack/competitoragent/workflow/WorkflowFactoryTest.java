@@ -174,6 +174,53 @@ class WorkflowFactoryTest {
     }
 
     @Test
+    void shouldInsertCitationNodesIntoWorkflowTemplateBeforeReviewer() throws Exception {
+        WorkflowFactory workflowFactory = buildWorkflowFactory(buildBrowserProperties());
+        AnalysisTask task = AnalysisTask.builder()
+                .id(99L)
+                .taskName("citation workflow")
+                .subjectProduct("企业级 RAG 知识库")
+                .competitorNames(objectMapper.writeValueAsString(List.of("Notion AI")))
+                .competitorUrls(objectMapper.writeValueAsString(List.of("https://www.notion.so")))
+                .analysisDimensions(objectMapper.writeValueAsString(List.of("pricing", "security")))
+                .sourceScope(objectMapper.writeValueAsString(List.of("官网", "定价页")))
+                .build();
+
+        WorkflowPlan plan = workflowFactory.buildPlan(task);
+
+        WorkflowPlan.WorkflowPlanNode writeNode = findNode(plan, "write_report");
+        WorkflowPlan.WorkflowPlanNode citationNode = findNode(plan, "citation_check");
+        WorkflowPlan.WorkflowPlanNode qualityNode = findNode(plan, "quality_check");
+        WorkflowPlan.WorkflowPlanNode rewriteNode = findNode(plan, "rewrite_report");
+        WorkflowPlan.WorkflowPlanNode citationRevisionNode = findNode(plan, "citation_check_revision");
+        WorkflowPlan.WorkflowPlanNode finalQualityNode = findNode(plan, "quality_check_final");
+
+        assertThat(citationNode.getAgentType()).isEqualTo("CITATION");
+        assertThat(citationNode.getDependsOn()).containsExactly("write_report");
+        assertThat(qualityNode.getDependsOn()).containsExactly("citation_check");
+        assertThat(citationRevisionNode.getAgentType()).isEqualTo("CITATION");
+        assertThat(citationRevisionNode.getDependsOn()).containsExactly("rewrite_report");
+        assertThat(finalQualityNode.getDependsOn()).containsExactly("citation_check_revision");
+        assertThat(writeNode.getExecutionOrder()).isLessThan(citationNode.getExecutionOrder());
+        assertThat(citationNode.getExecutionOrder()).isLessThan(qualityNode.getExecutionOrder());
+        assertThat(rewriteNode.getExecutionOrder()).isLessThan(citationRevisionNode.getExecutionOrder());
+        assertThat(citationRevisionNode.getExecutionOrder()).isLessThan(finalQualityNode.getExecutionOrder());
+
+        JsonNode citationConfig = objectMapper.readTree(citationNode.getNodeConfig());
+        assertThat(citationConfig.path("sourceNode").asText()).isEqualTo("write_report");
+        assertThat(citationConfig.path("mode").asText()).isEqualTo("initial");
+        assertThat(citationConfig.path("minCoverageRate").asDouble()).isEqualTo(0.85d);
+        assertThat(citationConfig.path("trustPolicy").asText()).isEqualTo("official-first");
+
+        assertThat(plan.getStages()).anySatisfy(stage -> {
+            if ("DELIVER".equals(stage.getStageCode())) {
+                assertThat(stage.getSummary()).contains("引用");
+                assertThat(stage.getDetail()).contains("Citation");
+            }
+        });
+    }
+
+    @Test
     void shouldDeduplicateDuplicateUrlsAcrossSourcePlans() throws Exception {
         SourceDiscoveryService sourceDiscoveryService = (competitorName, providedUrls, requestedScopes) -> List.of(
                 SourcePlan.builder()
@@ -382,6 +429,13 @@ class WorkflowFactoryTest {
                         .qualityScore(0.90)
                         .build()
         );
+    }
+
+    private WorkflowPlan.WorkflowPlanNode findNode(WorkflowPlan plan, String nodeName) {
+        return plan.getNodes().stream()
+                .filter(node -> nodeName.equals(node.getNodeName()))
+                .findFirst()
+                .orElseThrow();
     }
 
     private static class PreviewAwareSourceDiscoveryService implements SourceDiscoveryService {

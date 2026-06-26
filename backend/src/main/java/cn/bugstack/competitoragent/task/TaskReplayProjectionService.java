@@ -336,7 +336,8 @@ public class TaskReplayProjectionService {
         return taskNode.getAgentType() == AgentType.COLLECTOR
                 || taskNode.getAgentType() == AgentType.EXTRACTOR
                 || taskNode.getAgentType() == AgentType.ANALYZER
-                || taskNode.getAgentType() == AgentType.WRITER;
+                || taskNode.getAgentType() == AgentType.WRITER
+                || taskNode.getAgentType() == AgentType.CITATION;
     }
 
     /**

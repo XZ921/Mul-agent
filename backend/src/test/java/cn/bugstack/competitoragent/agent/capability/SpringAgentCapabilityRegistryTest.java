@@ -52,6 +52,16 @@ class SpringAgentCapabilityRegistryTest {
         assertNotNull(capability);
     }
 
+    @Test
+    void shouldResolveCitationAgentCapability() {
+        SpringAgentCapabilityRegistry registry =
+                new SpringAgentCapabilityRegistry(List.of(new StubAgent(AgentType.CITATION, "citation-output")));
+
+        AgentCapability capability = registry.resolve(AgentType.CITATION);
+
+        assertNotNull(capability);
+    }
+
     /**
      * 这里保留一个最小 Agent 假实现，用来证明 runtime registry 只关心 AgentType -> AgentCapability 映射，
      * 而不要求测试直接接触 DagExecutor 或其他编排层依赖。
@@ -74,6 +84,36 @@ class SpringAgentCapabilityRegistryTest {
                     .status(TaskNodeStatus.SUCCESS)
                     .outputData("collector-output")
                     .outputSummary("collector-success")
+                    .build();
+        }
+    }
+
+    private static final class StubAgent implements Agent {
+
+        private final AgentType type;
+        private final String output;
+
+        private StubAgent(AgentType type, String output) {
+            this.type = type;
+            this.output = output;
+        }
+
+        @Override
+        public AgentType getType() {
+            return type;
+        }
+
+        @Override
+        public String getName() {
+            return "stub-" + type.name().toLowerCase();
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData(output)
+                    .outputSummary("stub-success")
                     .build();
         }
     }

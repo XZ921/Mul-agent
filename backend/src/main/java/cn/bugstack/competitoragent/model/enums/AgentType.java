@@ -23,7 +23,10 @@ public enum AgentType {
     WRITER("撰写 Agent"),
 
     @Schema(description = "质检 Agent — 检查报告完整性与证据充分性")
-    REVIEWER("质检 Agent");
+    REVIEWER("质检 Agent"),
+
+    @Schema(description = "引用核查 Agent — 检查报告引用覆盖和来源可信度")
+    CITATION("引用核查 Agent");
 
     private final String description;
 

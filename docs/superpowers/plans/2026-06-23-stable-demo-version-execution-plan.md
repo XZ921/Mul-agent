@@ -90,7 +90,7 @@
 1. 不补完 6 条旧链路的全部诊断/方案/实链验证。
 2. 不重写 `DagExecutor`。
 3. 不把 `ExecutionPlanDefinitionBuilder` 改成自由智能规划器。
-4. 不做完整 Citation Agent。
+4. 不做 Citation 外部二次抓取、LLM 语义核验和大规模报告页重设计。
 5. 不接管所有对话动作执行。
 6. 不扩展搜索采集能力，不重开 Playwright / RSS / news discovery 大专题。
 7. 不做大规模前端重设计，只保证演示路径可见、可讲、可点。
@@ -265,7 +265,7 @@
 
 ## 6. 进度可视化格式
 
-当前阶段：3.4 P3-3 已把 Conversation 动作预览接入 Orchestrator 决策摘要；稳定演示版可从统一对话入口解释最近编排决策、证据状态、来源链接和人工确认边界
+当前阶段：3.4 P3-4 已把独立 Citation Agent 接入 Writer 与 Reviewer 之间；稳定演示版可解释报告引用覆盖、证据编号有效性、来源可信度、编排阻断原因和后续重写建议。
 
 - [x] Day 1：范围冻结与蓝图回链 - 已完成
 - [x] Day 2：P1 契约与策略测试 - 已完成
@@ -276,6 +276,7 @@
 - [x] Day 7：P1 可复现 smoke 证据包 - 已完成（真实外部中间件/live dev 演示脚本仍可后续增强）
 - [x] P2 计划：前置协作规划与抽取后证据缺口决策具体执行计划 - 已完成
 - [x] P2 Task 1-7：协作规划契约、受控映射、trace/replay、抽取后决策、聚合 smoke 与文档回链 - 已完成（`ArchitectureWhitelistTest` ledger 路径历史阻塞已解除，backend 全量回归通过）
+- [x] P3-4：独立 Citation Agent、固定 DAG 引用核查、replay/smoke 与 backend 全量回归 - 已完成
 
 执行过程中统一用下面结构更新进度，建议保存到 `docs/superpowers/stable-demo/progress/2026-06-23-demo-progress.md`。
 
@@ -322,6 +323,7 @@
 - [ ] 固定样例任务能执行到报告生成或可解释的质量阻塞。
 - [x] `sourceUrls` 或 `evidenceState` 在报告、诊断、编排决策中可见；P3-2 执行 1 已补 Writer 章节引用缺口轨迹。
 - [x] Conversation 动作预览能展示最近 `OrchestrationDecision` 的原因、`evidenceState` 和 `sourceUrls`，且人工介入决策不会被误执行。
+- [x] Citation Agent 能在 Reviewer 前发现无引用、未知证据编号或低可信来源，并把缺口写入可回放 `OrchestrationDecision`。
 - [ ] `quality_check_final` 后能产生可回放的 Orchestrator 决策。
 - [ ] `DecisionPolicyService` 能阻止非法动作。
 - [ ] `DecisionExecutorAdapter` 能生成 `DynamicPlanMutation`。

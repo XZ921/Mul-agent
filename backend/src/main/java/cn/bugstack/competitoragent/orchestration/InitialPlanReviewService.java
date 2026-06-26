@@ -18,7 +18,7 @@ public class InitialPlanReviewService {
     private static final String UNMAPPED_TEMPLATE = "UNMAPPED";
     private static final int MAX_CHECKPOINT_COUNT = 2;
     private static final List<String> ALLOWED_AGENT_TYPES = List.of(
-            "COLLECTOR", "EXTRACTOR", "ANALYZER", "WRITER", "REVIEWER"
+            "COLLECTOR", "EXTRACTOR", "ANALYZER", "WRITER", "CITATION", "REVIEWER"
     );
     private static final List<String> REQUIRED_AGENT_TYPES = ALLOWED_AGENT_TYPES;
     private static final List<String> REQUIRED_CHECKPOINTS = List.of("after_extract_schema", "quality_check_final");

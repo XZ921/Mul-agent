@@ -1690,6 +1690,82 @@ class DagExecutorTest {
     }
 
     @Test
+    void shouldHoldCitationNodeWhenSuccessfulOutputContainsBlockingCitationSuggestion() {
+        Long taskId = 1013L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+        TaskNode writer = TaskNode.builder()
+                .id(1301L)
+                .taskId(taskId)
+                .nodeName("write_report")
+                .agentType(AgentType.WRITER)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+        TaskNode citation = TaskNode.builder()
+                .id(1302L)
+                .taskId(taskId)
+                .nodeName("citation_check")
+                .agentType(AgentType.CITATION)
+                .dependsOn("[\"write_report\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+        TaskNode reviewer = TaskNode.builder()
+                .id(1303L)
+                .taskId(taskId)
+                .nodeName("quality_check")
+                .agentType(AgentType.REVIEWER)
+                .dependsOn("[\"citation_check\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(2)
+                .build();
+        List<TaskNode> nodes = List.of(writer, citation, reviewer);
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        OrchestrationTraceService orchestrationTraceService = mock(OrchestrationTraceService.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(nodes);
+        when(nodeRepository.findById(any())).thenAnswer(invocation -> {
+            Long nodeId = invocation.getArgument(0);
+            return nodes.stream().filter(node -> node.getId().equals(nodeId)).findFirst();
+        });
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new AlwaysSuccessWriterAgent(), new CitationBlockingAgent(), new AlwaysSuccessReviewerAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService(),
+                List.of(),
+                orchestrationTraceService
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("citation-gate-test").build());
+
+        assertEquals(TaskNodeStatus.WAITING_INTERVENTION, citation.getStatus());
+        assertEquals(TaskNodeStatus.PENDING, reviewer.getStatus());
+        verify(orchestrationTraceService, atLeastOnce())
+                .recordDecision(eq(taskId), eq(citation), argThat(decision ->
+                                "WAIT_FOR_HUMAN".equals(decision.getDecisionType())
+                                        && "citation_check".equals(decision.getTriggerNodeName())
+                                        && decision.getInputRefs().containsKey("agentSuggestionIds")),
+                        isNull(), isNull());
+    }
+
+    @Test
     void shouldClassifyWriterConsumptionFailureAsDownstreamConsumptionGapWhenAnalyzerSucceeded() {
         Long taskId = 1005L;
         AnalysisTask task = AnalysisTask.builder()
@@ -2318,6 +2394,45 @@ class DagExecutorTest {
                                   "sourceUrls": [],
                                   "evidenceState": "MISSING_SOURCE",
                                   "missingFields": ["recommendations"]
+                                }
+                              ]
+                            }
+                            """)
+                    .build();
+        }
+    }
+
+    private static final class CitationBlockingAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.CITATION;
+        }
+
+        @Override
+        public String getName() {
+            return "citation-blocking-agent";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("""
+                            {
+                              "citationRiskSeverity": "ERROR",
+                              "citationEvidenceState": "MISSING_SOURCE",
+                              "citationIssues": [
+                                {
+                                  "issueId": "ci-1",
+                                  "issueType": "MISSING_CITATION",
+                                  "severity": "ERROR",
+                                  "targetSection": "action_suggestion",
+                                  "claimId": "claim-1",
+                                  "summary": "行动建议缺少引用",
+                                  "sourceUrls": [],
+                                  "evidenceState": "MISSING_SOURCE",
+                                  "suggestedQueries": ["action_suggestion official evidence"]
                                 }
                               ]
                             }

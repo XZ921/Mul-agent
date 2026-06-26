@@ -331,4 +331,70 @@ class OrchestrationDecisionServiceTest {
         assertThat(decisions.get(0).getTargetNode()).isEqualTo("rewrite_report");
         assertThat(decisions.get(0).getTargetSection()).isEqualTo("pricing");
     }
+
+    @Test
+    void shouldWaitForHumanWhenCitationSuggestionHasMissingSource() {
+        AgentSuggestion suggestion = AgentSuggestion.builder()
+                .suggestionId("as-task-90-citation_check-citation-1")
+                .taskId(90L)
+                .producerNodeName("citation_check")
+                .producerAgentType("CITATION")
+                .suggestionType("CITATION_VERIFICATION_GAP")
+                .targetSection("action_suggestion")
+                .summary("行动建议缺少引用")
+                .severity("ERROR")
+                .confidence(0.25d)
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .suggestedQueries(List.of("action_suggestion official evidence"))
+                .suggestedTargetNode("rewrite_report")
+                .build()
+                .normalized();
+
+        List<OrchestrationDecision> decisions = service.decide(OrchestrationContext.builder()
+                .taskId(90L)
+                .triggerNodeName("citation_check")
+                .agentSuggestions(List.of(suggestion))
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build());
+
+        assertThat(decisions).hasSize(1);
+        assertThat(decisions.get(0).getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(decisions.get(0).getActionType()).isEqualTo("MANUAL_REVIEW");
+    }
+
+    @Test
+    void shouldRewriteClaimWhenCitationSuggestionHasSourceBackedWeakSupport() {
+        AgentSuggestion suggestion = AgentSuggestion.builder()
+                .suggestionId("as-task-90-citation_check-citation-1")
+                .taskId(90L)
+                .producerNodeName("citation_check")
+                .producerAgentType("CITATION")
+                .suggestionType("CITATION_VERIFICATION_GAP")
+                .targetSection("pricing")
+                .summary("定价结论引用来源可信度不足")
+                .severity("HIGH")
+                .confidence(0.70d)
+                .sourceUrls(List.of("https://mirror.example.net/notion-ai"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .suggestedQueries(List.of("pricing official docs"))
+                .suggestedTargetNode("rewrite_report")
+                .build()
+                .normalized();
+
+        List<OrchestrationDecision> decisions = service.decide(OrchestrationContext.builder()
+                .taskId(90L)
+                .triggerNodeName("citation_check")
+                .agentSuggestions(List.of(suggestion))
+                .sourceUrls(List.of("https://mirror.example.net/notion-ai"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .build());
+
+        assertThat(decisions).hasSize(1);
+        assertThat(decisions.get(0).getDecisionType()).isEqualTo("REWRITE_ONLY");
+        assertThat(decisions.get(0).getActionType()).isEqualTo("REWRITE_CLAIM");
+        assertThat(decisions.get(0).getTargetNode()).isEqualTo("rewrite_report");
+        assertThat(decisions.get(0).getTargetSection()).isEqualTo("pricing");
+    }
 }

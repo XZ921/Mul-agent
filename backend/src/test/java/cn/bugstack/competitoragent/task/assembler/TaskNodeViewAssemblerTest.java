@@ -97,6 +97,29 @@ class TaskNodeViewAssemblerTest {
         );
     }
 
+    @Test
+    void shouldBuildCitationNodeConfigSummary() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(58L)
+                .status(AnalysisTaskStatus.RUNNING)
+                .build();
+        TaskNode node = node("citation_check", AgentType.CITATION, TaskNodeStatus.PENDING, 2);
+        node.setNodeConfig("""
+                {
+                  "sourceNode": "write_report",
+                  "minCoverageRate": 0.85,
+                  "trustPolicy": "official-first"
+                }
+                """);
+
+        TaskNodeResponse response = assembler.toNodeResponse(task, node, List.of(node));
+
+        assertThat(response.getConfigSummaryData()).isNotNull();
+        assertThat(response.getConfigSummaryData().getSummaryText()).isEqualTo("引用核查：write_report，最低覆盖率 0.85");
+        assertThat(response.getConfigSummaryData().getSourceNode()).isEqualTo("write_report");
+        assertThat(response.getConfigSummaryData().getQualityPolicy()).isEqualTo("official-first");
+    }
+
     private TaskNode node(String nodeName, AgentType agentType, TaskNodeStatus status, int executionOrder) {
         return TaskNode.builder()
                 .taskId(56L)

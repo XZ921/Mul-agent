@@ -17,6 +17,7 @@ import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.orchestration.AgentSuggestion;
 import cn.bugstack.competitoragent.orchestration.AnalyzerSuggestionAssembler;
+import cn.bugstack.competitoragent.orchestration.CitationSuggestionAssembler;
 import cn.bugstack.competitoragent.orchestration.EvidenceState;
 import cn.bugstack.competitoragent.orchestration.ExtractorSuggestionAssembler;
 import cn.bugstack.competitoragent.orchestration.OrchestrationContext;
@@ -87,6 +88,7 @@ public class DagExecutor {
     private final ExtractorSuggestionAssembler extractorSuggestionAssembler;
     private final AnalyzerSuggestionAssembler analyzerSuggestionAssembler;
     private final WriterSuggestionAssembler writerSuggestionAssembler;
+    private final CitationSuggestionAssembler citationSuggestionAssembler;
     private final OrchestrationDecisionService orchestrationDecisionService;
     private final OrchestrationTraceService orchestrationTraceService;
     private final List<SharedNodeOutputProjector> sharedNodeOutputProjectors;
@@ -110,6 +112,7 @@ public class DagExecutor {
                        ExtractorSuggestionAssembler extractorSuggestionAssembler,
                        AnalyzerSuggestionAssembler analyzerSuggestionAssembler,
                        WriterSuggestionAssembler writerSuggestionAssembler,
+                       CitationSuggestionAssembler citationSuggestionAssembler,
                        OrchestrationDecisionService orchestrationDecisionService,
                        OrchestrationTraceService orchestrationTraceService,
                        List<SharedNodeOutputProjector> sharedNodeOutputProjectors) {
@@ -131,9 +134,55 @@ public class DagExecutor {
         this.extractorSuggestionAssembler = extractorSuggestionAssembler;
         this.analyzerSuggestionAssembler = analyzerSuggestionAssembler;
         this.writerSuggestionAssembler = writerSuggestionAssembler;
+        this.citationSuggestionAssembler = citationSuggestionAssembler;
         this.orchestrationDecisionService = orchestrationDecisionService;
         this.orchestrationTraceService = orchestrationTraceService;
         this.sharedNodeOutputProjectors = sharedNodeOutputProjectors == null ? List.of() : List.copyOf(sharedNodeOutputProjectors);
+    }
+
+    public DagExecutor(TaskNodeRepository nodeRepository,
+                       AnalysisTaskRepository taskRepository,
+                       AgentCapabilityRegistry agentCapabilityRegistry,
+                       ObjectMapper objectMapper,
+                       TaskSnapshotCacheService taskSnapshotCacheService,
+                       TaskExecutionLockService taskExecutionLockService,
+                       TaskEventPublisher taskEventPublisher,
+                       AgentLogService agentLogService,
+                       WorkflowEventPublisher workflowEventPublisher,
+                       TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository,
+                       WorkflowDeadLetterRecordRepository workflowDeadLetterRecordRepository,
+                       RuntimeStateRefresher runtimeStateRefresher,
+                       RuntimeEventEmitter runtimeEventEmitter,
+                       DynamicPlanAppender dynamicPlanAppender,
+                       TaskQuotaCoordinator taskQuotaCoordinator,
+                       ExtractorSuggestionAssembler extractorSuggestionAssembler,
+                       AnalyzerSuggestionAssembler analyzerSuggestionAssembler,
+                       WriterSuggestionAssembler writerSuggestionAssembler,
+                       OrchestrationDecisionService orchestrationDecisionService,
+                       OrchestrationTraceService orchestrationTraceService,
+                       List<SharedNodeOutputProjector> sharedNodeOutputProjectors) {
+        this(nodeRepository,
+                taskRepository,
+                agentCapabilityRegistry,
+                objectMapper,
+                taskSnapshotCacheService,
+                taskExecutionLockService,
+                taskEventPublisher,
+                agentLogService,
+                workflowEventPublisher,
+                taskNodeExecutionAttemptRepository,
+                workflowDeadLetterRecordRepository,
+                runtimeStateRefresher,
+                runtimeEventEmitter,
+                dynamicPlanAppender,
+                taskQuotaCoordinator,
+                extractorSuggestionAssembler,
+                analyzerSuggestionAssembler,
+                writerSuggestionAssembler,
+                new CitationSuggestionAssembler(objectMapper),
+                orchestrationDecisionService,
+                orchestrationTraceService,
+                sharedNodeOutputProjectors);
     }
 
     public DagExecutor(TaskNodeRepository nodeRepository,
@@ -173,6 +222,7 @@ public class DagExecutor {
                 extractorSuggestionAssembler,
                 new AnalyzerSuggestionAssembler(objectMapper),
                 new WriterSuggestionAssembler(objectMapper),
+                new CitationSuggestionAssembler(objectMapper),
                 orchestrationDecisionService,
                 orchestrationTraceService,
                 sharedNodeOutputProjectors);
@@ -212,6 +262,7 @@ public class DagExecutor {
                 new ExtractorSuggestionAssembler(objectMapper),
                 new AnalyzerSuggestionAssembler(objectMapper),
                 new WriterSuggestionAssembler(objectMapper),
+                new CitationSuggestionAssembler(objectMapper),
                 new OrchestrationDecisionService(new OrchestrationDecisionAdapter()),
                 null,
                 sharedNodeOutputProjectors);
@@ -568,7 +619,7 @@ public class DagExecutor {
 
     /**
      * AgentSuggestion 是运行期协作决策的统一入口。
-     * 当前只允许 Extractor、Analyzer 和 Writer 进入该 gate，避免误拦截 Reviewer 或动态恢复节点。
+     * 当前允许 Extractor、Analyzer、Writer 和 Citation 进入该 gate，避免误拦截 Reviewer 或动态恢复节点。
      */
     private List<AgentSuggestion> buildAgentSuggestions(Long taskId, TaskNode completedNode) {
         if (completedNode == null || completedNode.getNodeName() == null) {
@@ -588,6 +639,13 @@ public class DagExecutor {
         }
         if ("write_report".equals(completedNode.getNodeName()) || "rewrite_report".equals(completedNode.getNodeName())) {
             return writerSuggestionAssembler.fromWriterOutput(
+                    taskId,
+                    completedNode.getNodeName(),
+                    completedNode.getOutputData());
+        }
+        if ("citation_check".equals(completedNode.getNodeName())
+                || "citation_check_revision".equals(completedNode.getNodeName())) {
+            return citationSuggestionAssembler.fromCitationOutput(
                     taskId,
                     completedNode.getNodeName(),
                     completedNode.getOutputData());
@@ -1064,6 +1122,8 @@ public class DagExecutor {
             case ANALYZER -> hasSuccessfulNode(nodes, "extract_schema");
             case WRITER -> hasSuccessfulNode(nodes, "extract_schema")
                     && hasSuccessfulNode(nodes, "analyze_competitors");
+            case CITATION -> hasSuccessfulNode(nodes, "write_report")
+                    || hasSuccessfulNode(nodes, "rewrite_report");
             case REVIEWER -> hasSuccessfulNode(nodes, "write_report")
                     || hasSuccessfulNode(nodes, "rewrite_report");
             default -> false;
@@ -1075,7 +1135,7 @@ public class DagExecutor {
             return false;
         }
         return switch (node.getAgentType()) {
-            case ANALYZER, WRITER, REVIEWER -> true;
+            case ANALYZER, WRITER, REVIEWER, CITATION -> true;
             default -> false;
         };
     }
@@ -1096,6 +1156,7 @@ public class DagExecutor {
         return switch (node.getAgentType()) {
             case ANALYZER -> "analyzer 无法继续消费 extract_schema 产物，问题已归口为下游消费缺口";
             case WRITER -> "writer 无法继续消费 analyzer 结果或证据束，问题已归口为下游消费缺口";
+            case CITATION -> "citation 无法继续消费 write_report/rewrite_report 输出，问题已归口为下游消费缺口";
             case REVIEWER -> "reviewer 无法继续消费写作结果或质量闭环上下文，问题已归口为下游消费缺口";
             default -> "下游节点无法继续消费上游输出，需检查写作、评审或交付链路";
         };

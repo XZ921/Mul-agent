@@ -969,6 +969,16 @@ public class TaskNodeViewAssembler {
                     .sourceNode(textOrNull(config, "sourceNode"))
                     .build();
         }
+        if (agentType == AgentType.CITATION) {
+            String sourceNode = defaultIfBlank(textOrNull(config, "sourceNode"), "write_report");
+            String minCoverageRate = defaultIfBlank(textOrNull(config, "minCoverageRate"), "0.85");
+            String trustPolicy = defaultIfBlank(textOrNull(config, "trustPolicy"), "official-first");
+            return TaskNodeConfigSummary.builder()
+                    .summaryText("引用核查：" + sourceNode + "，最低覆盖率 " + minCoverageRate)
+                    .qualityPolicy(trustPolicy)
+                    .sourceNode(sourceNode)
+                    .build();
+        }
         if (agentType == AgentType.REVIEWER) {
             String policy = defaultIfBlank(textOrNull(config, "qualityPolicy"), "标准质量评审");
             String sourceNode = textOrNull(config, "sourceNode");

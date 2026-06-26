@@ -136,10 +136,18 @@ class CollaborationPlanningSmokeTest {
         List<TaskNode> nodes = workflowFactory.createWorkflow(task);
 
         assertThat(nodes).anySatisfy(node -> assertThat(node.getNodeName()).isEqualTo("extract_schema"));
+        assertThat(nodes).anySatisfy(node -> assertThat(node.getNodeName()).isEqualTo("citation_check"));
+        assertThat(nodes).anySatisfy(node -> assertThat(node.getNodeName()).isEqualTo("citation_check_revision"));
         assertThat(nodes).anySatisfy(node -> assertThat(node.getNodeName()).isEqualTo("quality_check_final"));
+        assertThat(nodes).anySatisfy(node -> {
+            if ("quality_check".equals(node.getNodeName())) {
+                assertThat(node.getDependsOn()).contains("citation_check");
+            }
+        });
         assertThat(workflowEvents).anySatisfy(event -> {
             assertThat(event.getEventType()).isEqualTo(WorkflowEventType.COLLABORATION_PLAN_RECORDED);
             assertThat(event.getPayload()).contains("cp-task-88-v1");
+            assertThat(event.getPayload()).contains("CITATION");
             assertThat(event.getSourceUrls()).contains("https://www.notion.so");
         });
 
@@ -347,6 +355,59 @@ class CollaborationPlanningSmokeTest {
         assertThat(writer.getStatus()).isEqualTo(TaskNodeStatus.WAITING_INTERVENTION);
         assertThat(reviewer.getStatus()).isEqualTo(TaskNodeStatus.PENDING);
         assertThat(writer.getInterventionReason()).contains("Writer");
+    }
+
+    @Test
+    void shouldRouteCitationGapThroughDagExecutorGateBeforeReviewer() {
+        Long taskId = 1299L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+        TaskNode writer = TaskNode.builder()
+                .id(12991L)
+                .taskId(taskId)
+                .nodeName("write_report")
+                .agentType(AgentType.WRITER)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+        TaskNode citation = TaskNode.builder()
+                .id(12992L)
+                .taskId(taskId)
+                .nodeName("citation_check")
+                .agentType(AgentType.CITATION)
+                .dependsOn("[\"write_report\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+        TaskNode reviewer = TaskNode.builder()
+                .id(12993L)
+                .taskId(taskId)
+                .nodeName("quality_check")
+                .agentType(AgentType.REVIEWER)
+                .dependsOn("[\"citation_check\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(2)
+                .build();
+
+        DagExecutor executor = newDagExecutorForSmoke(
+                task,
+                List.of(writer, citation, reviewer),
+                List.of(new SmokeWriterAgent(), new SmokeCitationMissingSourceAgent(), new SmokeReviewerAgent()));
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("p3-4-smoke").build());
+
+        assertThat(citation.getStatus()).isEqualTo(TaskNodeStatus.WAITING_INTERVENTION);
+        assertThat(reviewer.getStatus()).isEqualTo(TaskNodeStatus.PENDING);
+        assertThat(citation.getInterventionReason()).contains("Citation");
     }
 
     private ExecutionPlanDefinitionBuilder executionPlanDefinitionBuilder(ObjectMapper objectMapper) {
@@ -604,6 +665,44 @@ class CollaborationPlanningSmokeTest {
                                   "severity": "ERROR",
                                   "sourceUrls": [],
                                   "evidenceState": "MISSING_SOURCE"
+                                }
+                              ]
+                            }
+                            """)
+                    .build();
+        }
+    }
+
+    private static final class SmokeCitationMissingSourceAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.CITATION;
+        }
+
+        @Override
+        public String getName() {
+            return "smoke-citation-missing-source";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("""
+                            {
+                              "citationRiskSeverity": "ERROR",
+                              "citationEvidenceState": "MISSING_SOURCE",
+                              "citationIssues": [
+                                {
+                                  "issueId": "ci-1",
+                                  "issueType": "MISSING_CITATION",
+                                  "severity": "ERROR",
+                                  "targetSection": "action_suggestion",
+                                  "summary": "行动建议缺少引用",
+                                  "sourceUrls": [],
+                                  "evidenceState": "MISSING_SOURCE",
+                                  "suggestedQueries": ["action_suggestion official evidence"]
                                 }
                               ]
                             }

@@ -181,13 +181,36 @@ public class ExecutionPlanDefinitionBuilder {
                 .build());
 
         nodes.add(ExecutionPlanDefinition.NodeDefinition.builder()
+                .nodeName("citation_check")
+                .displayName("报告引用核查")
+                .agentType("CITATION")
+                .stageCode("DELIVER")
+                .goal("核查首版报告引用覆盖、证据编号有效性和来源可信度")
+                .summary("在质量初审前确认报告结论可回指来源")
+                .dependsOn(List.of("write_report"))
+                .required(true)
+                .allowFailedDependency(false)
+                .retryable(true)
+                .maxRetries(2)
+                .executionOrder(order++)
+                .nodeConfig(toJson(withCollaborationConfig(orderedMap(
+                        "sourceNode", "write_report",
+                        "mode", "initial",
+                        "minCoverageRate", 0.85d,
+                        "trustPolicy", "official-first"
+                ), collaborationProjection, "CITATION")))
+                .fallbackOrder(List.of())
+                .sourceUrls(normalizedCollectorSourceUrls)
+                .build());
+
+        nodes.add(ExecutionPlanDefinition.NodeDefinition.builder()
                 .nodeName("quality_check")
                 .displayName("报告质量初审")
                 .agentType("REVIEWER")
                 .stageCode("DELIVER")
                 .goal("检查报告是否满足交付要求")
                 .summary("对首版报告执行质量审核并输出修订计划")
-                .dependsOn(List.of("write_report"))
+                .dependsOn(List.of("citation_check"))
                 .required(true)
                 .allowFailedDependency(false)
                 .retryable(true)
@@ -225,6 +248,31 @@ public class ExecutionPlanDefinitionBuilder {
                 .build());
 
         nodes.add(ExecutionPlanDefinition.NodeDefinition.builder()
+                .nodeName("citation_check_revision")
+                .displayName("修订报告引用复核")
+                .agentType("CITATION")
+                .notes("仅在改写完成后执行，用于终审前复核引用闭环")
+                .stageCode("DELIVER")
+                .goal("复核修订报告引用覆盖、证据编号有效性和来源可信度")
+                .summary("在终审前确认修订后的报告结论可回指来源")
+                .dependsOn(List.of("rewrite_report"))
+                .required(false)
+                .allowFailedDependency(false)
+                .retryable(true)
+                .maxRetries(2)
+                .executionOrder(order++)
+                .nodeConfig(toJson(withCollaborationConfig(orderedMap(
+                        "sourceNode", "rewrite_report",
+                        "mode", "revision",
+                        "trigger", "rewrite_executed",
+                        "minCoverageRate", 0.90d,
+                        "trustPolicy", "official-first"
+                ), collaborationProjection, "CITATION")))
+                .fallbackOrder(List.of())
+                .sourceUrls(normalizedCollectorSourceUrls)
+                .build());
+
+        nodes.add(ExecutionPlanDefinition.NodeDefinition.builder()
                 .nodeName("quality_check_final")
                 .displayName("报告终审复核")
                 .agentType("REVIEWER")
@@ -232,7 +280,7 @@ public class ExecutionPlanDefinitionBuilder {
                 .stageCode("DELIVER")
                 .goal("确认改写后的报告满足最终交付标准")
                 .summary("仅在执行过改写后进入终审复核")
-                .dependsOn(List.of("rewrite_report"))
+                .dependsOn(List.of("citation_check_revision"))
                 .required(false)
                 .allowFailedDependency(false)
                 .retryable(true)
@@ -332,8 +380,8 @@ public class ExecutionPlanDefinitionBuilder {
         stages.add(ExecutionPlanDefinition.StageDefinition.builder()
                 .stageCode("DELIVER")
                 .title("输出与复核")
-                .summary("生成报告并在必要时进入评审改写闭环")
-                .detail("质量门槛未达标时，系统会自动生成修订计划并执行复核")
+                .summary("生成报告、执行引用核查，并在必要时进入评审改写闭环")
+                .detail("交付阶段会依次经过 Writer、Citation、Reviewer；质量或引用门槛未达标时，系统会自动生成修订计划并执行复核")
                 .sourceUrls(collectorSourceUrls)
                 .build());
         return stages;

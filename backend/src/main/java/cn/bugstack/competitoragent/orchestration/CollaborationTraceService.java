@@ -32,7 +32,8 @@ public class CollaborationTraceService {
 
     /**
      * 记录已经通过初始校验的协作计划。
-     * payload 保留 goal / plan / review 的关键 ID 和证据状态，sourceUrls 单独落列便于 replay 聚合。
+     * payload 保留 goal / plan / review 的关键 ID、角色列表和证据状态，
+     * 这样 replay / smoke 能直接看出当前协作计划是否已经把 Citation 等角色纳入正式编排。
      */
     public TaskWorkflowEvent recordPlan(CollaborationGoal goal,
                                         CollaborationPlan plan,
@@ -53,6 +54,9 @@ public class CollaborationTraceService {
         payload.put("planVersion", planVersion);
         payload.put("evidenceState", normalizedPlan.getEvidenceState());
         payload.put("checkpoints", normalizedPlan.getCheckpoints());
+        payload.put("agentTypes", normalizedPlan.getAgentRoleAssignments().stream()
+                .map(AgentRoleAssignment::getAgentType)
+                .toList());
         return saveEvent(
                 normalizedPlan.getTaskId(),
                 "collaboration_plan",

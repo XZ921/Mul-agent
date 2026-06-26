@@ -283,6 +283,100 @@ class TaskReplayProjectionServiceTest {
     }
 
     @Test
+    void shouldProjectCitationDecisionTraceAndBackfillTaskLevelSourceUrls() {
+        TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
+        TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);
+        TaskNodeRepository taskNodeRepository = mock(TaskNodeRepository.class);
+        TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository = mock(TaskNodeExecutionAttemptRepository.class);
+        MemorySnapshotRepository memorySnapshotRepository = mock(MemorySnapshotRepository.class);
+        AgentExecutionLogRepository agentExecutionLogRepository = mock(AgentExecutionLogRepository.class);
+        RecoveryCheckpointService recoveryCheckpointService = mock(RecoveryCheckpointService.class);
+        TaskRecoveryService taskRecoveryService = mock(TaskRecoveryService.class);
+
+        TaskWorkflowEvent taskCreatedEvent = TaskWorkflowEvent.builder()
+                .id(2801L)
+                .eventId("evt-task-created-2801")
+                .taskId(77L)
+                .eventType(WorkflowEventType.TASK_CREATED)
+                .sourceUrls("[\"https://www.notion.so/product/ai\",\"https://www.notion.so/pricing\"]")
+                .createdAt(LocalDateTime.of(2026, 6, 25, 14, 0))
+                .build();
+        TaskWorkflowEvent citationDecisionEvent = TaskWorkflowEvent.builder()
+                .id(2802L)
+                .eventId("evt-citation-decision-2802")
+                .taskId(77L)
+                .nodeName("citation_check")
+                .eventType(WorkflowEventType.ORCHESTRATION_DECISION_RECORDED)
+                .payload("""
+                        {
+                          "summary": "Citation Agent 发现引用缺口，需人工介入",
+                          "decisionType": "WAIT_FOR_HUMAN",
+                          "evidenceState": "MISSING_SOURCE"
+                        }
+                        """)
+                .sourceUrls("[\"https://www.notion.so/product/ai\"]")
+                .createdAt(LocalDateTime.of(2026, 6, 25, 14, 5))
+                .build();
+        TaskNode citationNode = TaskNode.builder()
+                .id(2803L)
+                .taskId(77L)
+                .nodeName("citation_check")
+                .displayName("报告引用核查")
+                .agentType(AgentType.CITATION)
+                .status(TaskNodeStatus.WAITING_INTERVENTION)
+                .outputData("""
+                        {
+                          "citationRiskSeverity": "ERROR",
+                          "citationEvidenceState": "MISSING_SOURCE"
+                        }
+                        """)
+                .build();
+
+        when(taskPlanRepository.findByTaskIdOrderByPlanVersionAsc(77L)).thenReturn(List.of());
+        when(taskPlanRepository.findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(77L)).thenReturn(Optional.empty());
+        when(taskWorkflowEventRepository.findAll()).thenReturn(List.of(taskCreatedEvent, citationDecisionEvent));
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(77L)).thenReturn(List.of(citationNode));
+        when(taskNodeExecutionAttemptRepository.findAll()).thenReturn(List.of());
+        when(memorySnapshotRepository.findByTaskIdOrderByIdDesc(77L)).thenReturn(List.of());
+        when(agentExecutionLogRepository.findByTaskIdOrderByCreatedAtAsc(77L)).thenReturn(List.of());
+        when(recoveryCheckpointService.listTaskCheckpoints(77L)).thenReturn(List.of());
+        when(taskRecoveryService.buildRecoveryAdvice(77L)).thenReturn(TaskRecoveryAdvice.builder()
+                .recommendedAction("OBSERVE_ONLY")
+                .summary("none")
+                .blockingNodeNames(List.of())
+                .resumeSupported(false)
+                .sourceUrls(List.of())
+                .build());
+
+        ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        TaskReplayProjectionService service = new TaskReplayProjectionService(
+                taskPlanRepository,
+                taskWorkflowEventRepository,
+                taskNodeRepository,
+                taskNodeExecutionAttemptRepository,
+                memorySnapshotRepository,
+                agentExecutionLogRepository,
+                recoveryCheckpointService,
+                taskRecoveryService,
+                objectMapper
+        );
+
+        TaskReplayResponse replayResponse = service.getTaskReplay(77L);
+
+        assertThat(replayResponse.getTimeline())
+                .anySatisfy(event -> {
+                    assertThat(event.getNodeName()).isEqualTo("citation_check");
+                    assertThat(event.getEventType()).isEqualTo("ORCHESTRATION_DECISION_RECORDED");
+                    assertThat(event.getSummary()).contains("Citation Agent");
+                    assertThat(event.getSourceUrls()).contains("https://www.notion.so/product/ai");
+                });
+        assertThat(replayResponse.getNodeSummaries()).hasSize(1);
+        assertThat(replayResponse.getNodeSummaries().get(0).getNodeName()).isEqualTo("citation_check");
+        assertThat(replayResponse.getNodeSummaries().get(0).getSourceUrls())
+                .containsExactly("https://www.notion.so/product/ai", "https://www.notion.so/pricing");
+    }
+
+    @Test
     void shouldExposePlannedSourceUrlsInNodeSummariesBeforeNodeExecution() {
         TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
         TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);

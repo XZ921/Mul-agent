@@ -32,11 +32,24 @@ class CollaborationPlanServiceTest {
         assertThat(plan.getPlanId()).isEqualTo("cp-task-88-v1");
         assertThat(plan.getPlanningMode()).isEqualTo("ORCHESTRATOR_FIRST");
         assertThat(plan.getAgentRoleAssignments()).extracting(AgentRoleAssignment::getAgentType)
-                .containsExactlyInAnyOrder("COLLECTOR", "EXTRACTOR", "ANALYZER", "WRITER", "REVIEWER");
+                .containsExactlyInAnyOrder("COLLECTOR", "EXTRACTOR", "ANALYZER", "WRITER", "CITATION", "REVIEWER");
         assertThat(plan.getCheckpoints()).containsExactly("after_extract_schema", "quality_check_final");
         assertThat(plan.getAgentRoleAssignments())
                 .allSatisfy(role -> assertThat(role.getQualityGate()).isNotBlank());
         assertThat(plan.getSourceUrls()).containsExactly("https://www.notion.so");
         assertThat(plan.getEvidenceState()).isEqualTo(EvidenceState.FULL_SOURCE);
+
+        AgentRoleAssignment citationRole = plan.getAgentRoleAssignments().stream()
+                .filter(role -> "CITATION".equals(role.getAgentType()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(citationRole.getDependsOn()).containsExactly("role-writer-01");
+        assertThat(citationRole.getQualityGate()).contains("citation");
+
+        AgentRoleAssignment reviewerRole = plan.getAgentRoleAssignments().stream()
+                .filter(role -> "REVIEWER".equals(role.getAgentType()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(reviewerRole.getDependsOn()).containsExactly("role-citation-01");
     }
 }

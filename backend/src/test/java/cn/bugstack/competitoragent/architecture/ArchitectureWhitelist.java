@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.architecture;
 
 import cn.bugstack.competitoragent.agent.BaseAgent;
 import cn.bugstack.competitoragent.agent.analyzer.CompetitorAnalysisAgent;
+import cn.bugstack.competitoragent.agent.citation.CitationAgent;
 import cn.bugstack.competitoragent.agent.collector.CollectorAgent;
 import cn.bugstack.competitoragent.agent.extractor.SchemaExtractorAgent;
 import cn.bugstack.competitoragent.agent.reviewer.QualityReviewAgent;
@@ -63,6 +64,13 @@ final class ArchitectureWhitelist {
                     "agent_classes_should_not_access_task_repositories",
                     ReportWriterAgent.class.getName(),
                     "report 生成 Agent 当前仍直接读取证据与报告持久化对象，phase4b 之前不在本阶段提前改造其历史实现。",
+                    "phase5-modularization-evaluation-task",
+                    "B"
+            ),
+            new Exemption(
+                    "agent_classes_should_not_access_task_repositories",
+                    CitationAgent.class.getName(),
+                    "P3-4 Citation Agent 当前沿用既有 Agent 直连 repository 读取证据的模式，先保证 Reviewer 前引用核查闭环稳定，后续与 phase5 模块化评估一起回收。",
                     "phase5-modularization-evaluation-task",
                     "B"
             ),

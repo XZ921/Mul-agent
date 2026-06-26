@@ -1,0 +1,230 @@
+[
+  {
+    "name": "douyin_open_platform_docs",
+    "status": 200,
+    "returned": 5,
+    "results": [
+      {
+        "rank": 1,
+        "score": 0.68420124,
+        "domain": "open.douyin.com",
+        "title": "平台简介 - 抖音开放平台",
+        "url": "https://open.douyin.com/platform/resource/docs/accession-guide/platform-introduction",
+        "contentLength": 1056,
+        "rawContentLength": 1048,
+        "preview": "技术侧快捷对接，工具丰富 对于各类通用的接入能力，我们提供接入方案文档便于您快速接入。 （如果有您需要的能力，但我们没有覆盖，请您联系我们，联系方式请见“五、联系我们”） 以上能力如何接入？详见：能力图谱 以上功能如何查看？首页-咨询中心，会给您满意的答案 # 五、联系我们 如果有咨询、对接和商务合作方面的需求，你可以以工单的形式向我们反馈或者您可以发送相关信息到我们的官方邮箱（反馈邮箱：feedback-openplatform@do"
+      },
+      {
+        "rank": 2,
+        "score": 0.6493346,
+        "domain": "open.douyin.com",
+        "title": "抖音内容发布接入方案",
+        "url": "https://open.douyin.com/platform/resource/docs/ability/content-management/douyin-publish-solution",
+        "contentLength": 419,
+        "rawContentLength": 557,
+        "preview": "# 抖音内容发布接入方案 # 功能介绍 本文档面向期望以open\\_api的形式对接抖音开放平台，直接发布视频或图片内容至抖音的开发者 # 支持范围 应用场景： 使用限制： 适用平台：移动应用、网站应用、有拍摄能力的硬件设备等 权限范围：针对全部审核通过的应用默认开通该权限 # 产品优势 支持查看授权帐号发布的全部视频、查看视频审核状态、删除视频、查看视频的实时播放和互动数据 # 对接流程 发布携带组件能力清单： 目前该能力仍在内测中，"
+      },
+      {
+        "rank": 3,
+        "score": 0.4920179,
+        "domain": "open.douyin.com",
+        "title": "SDK概述 - 抖音开放平台",
+        "url": "https://open.douyin.com/platform/resource/docs/develop/summarize/sdk",
+        "contentLength": 518,
+        "rawContentLength": 561,
+        "preview": "# SDK概述 抖音开放平台SDK目前提供了抖音登录 & 授权以及分享至抖音的基本能力。您可以通过接入抖音开放平台SDK来使用抖音授权登录您的应用或者分享图片或视频到抖音。 ## 分享至抖音 第三方App通过接入该功能，让用户可以从第三方App分享内容到抖音。目前抖音支持的内容格式为单图、多图、单视频及多视频；申请权限后还可使用分享内容携带话题、分享内容携带小程序，具体申请流程请查看链接。除此之外，我们支持通过管理中心查看可视化的分享内"
+      },
+      {
+        "rank": 4,
+        "score": 0.4450718,
+        "domain": "open.douyin.com",
+        "title": "查询视频分享结果及数据 - 抖音开放平台",
+        "url": "https://open.douyin.com/platform/resource/docs/openapi/video-management/douyin/search-video/video-share-result",
+        "contentLength": 1207,
+        "rawContentLength": 1389,
+        "preview": "# 查询视频分享结果及数据 Scope: aweme.share 不需要用户授权 该接口用获取 share\\_id；该接口适用于抖音。 share\\_id 可以用于： 生成 share\\_id 时 need\\_callback 字段要传 true 才会有回调。 接入步骤： 回调信息参数 `{ \"event\": \"create_video\", \"from_user_id\": \"\", \"client_key\": \"\", \"msg_id\": "
+      },
+      {
+        "rank": 5,
+        "score": 0.37607357,
+        "domain": "open.douyin.com",
+        "title": "获取open - 抖音开放平台",
+        "url": "https://open.douyin.com/platform/resource/docs/openapi/tools-ability/jsb-management/open-ticket",
+        "contentLength": 2177,
+        "rawContentLength": 2261,
+        "preview": "参数名称 参数类型 参数描述 参数示例 extra struct logId string 标识请求的唯一id 202008121419360101980821035705926A now i64 毫秒级时间戳 1597213176393 error\\_code i32 错误码 0 description string 错误码描述 sub\\_error\\_code i32 子错误码 0 sub\\_error\\_description s"
+      }
+    ]
+  },
+  {
+    "name": "bilibili_open_platform_docs",
+    "status": 200,
+    "returned": 5,
+    "results": [
+      {
+        "rank": 1,
+        "score": 0.8005209,
+        "domain": "openhome.bilibili.com",
+        "title": "哔哩哔哩开放平台",
+        "url": "https://openhome.bilibili.com/doc",
+        "contentLength": 874,
+        "rawContentLength": 1920,
+        "preview": "Image 1: logoImage 2主站 开放平台 开平文档中心 开平管理中心Image 3账号管理 应用管理 授权管理 直播创作者服务中心 互动玩法 Image 4登录 | 注册 ### OPEN API 账号授权 包括B站账号授权、账号绑定的能力 用户管理 包括获取用户公开信息的能力 视频管理 包括视频稿件的发布、删除和查询的能力 数据开放 包括用户授权后的用户数据、稿件数据等能力 专栏管理 包括专栏稿件的发布、删除和查询的能力"
+      },
+      {
+        "rank": 2,
+        "score": 0.7722049,
+        "domain": "openhome.bilibili.com",
+        "title": "哔哩哔哩开放平台",
+        "url": "https://openhome.bilibili.com/doc/4/0eaa4d3e-c4c0-f874-6f3c-e083aa939a1b",
+        "contentLength": 1852,
+        "rawContentLength": 4773,
+        "preview": "Image 1: logoImage 2主站 开放平台 开平文档中心 开平管理中心Image 3账号管理 应用管理 授权管理 直播创作者服务中心 互动玩法 Image 4登录 | 注册 Image 5 ## 开放平台文档 搜索 Image 6 新手指引 Image 7 接入指引 Image 8 开放能力 账号授权 接口签名和状态码 接口权限白名单 Image 9 用户管理 Image 10 视频稿件管理 Image 11 专栏稿件管理 "
+      },
+      {
+        "rank": 3,
+        "score": 0.73755574,
+        "domain": "open.bilibili.com",
+        "title": "哔哩哔哩开放平台",
+        "url": "https://open.bilibili.com/doc/4/8673959e-f7bb-56e6-6e68-d225f971b81b",
+        "contentLength": 1759,
+        "rawContentLength": 17773,
+        "preview": "Image 1: logoImage 2主站 开放平台 开平文档中心 开平管理中心Image 3账号管理 应用管理 授权管理 直播创作者服务中心 互动玩法 Image 4登录 | 注册 Image 5 ## 开放平台文档 搜索 Image 6 新手指引 Image 7 接入指引 Image 8 开放能力 账号授权 接口签名和状态码 接口权限白名单 Image 9 用户管理 Image 10 视频稿件管理 Image 11 专栏稿件管理 "
+      },
+      {
+        "rank": 4,
+        "score": 0.69249696,
+        "domain": "open.bilibili.com",
+        "title": "哔哩哔哩开放平台",
+        "url": "https://open.bilibili.com/agreement/developer-service",
+        "contentLength": 1812,
+        "rawContentLength": 9375,
+        "preview": "一、定义 1.开放平台：即哔哩哔哩开放平台，指哔哩哔哩自主研发、运营并提供 API 接口或其他中立技术支持的平台系统（ 以 在开放平台 获得哔哩哔哩提供的 API 接口权限、技术材料等资源，以获得实现批量发布稿件、完善应用程度等功能的服务。 2.开发者/您：指 同意并接受本协议、哔哩哔哩平台服务条款，根据哔哩哔哩的指定方式、流程完成开放平台入驻流程 的自然人、法人 或其他组织。开发者应使用其拥有所有合法资质或获得合法授权运营的应用接入开"
+      },
+      {
+        "rank": 5,
+        "score": 0.6811549,
+        "domain": "open-live.bilibili.com",
+        "title": "哔哩哔哩直播开放文档",
+        "url": "https://open-live.bilibili.com/document/eba8e2e1-847d-e908-2e5c-7a1ec7d9266f",
+        "contentLength": 1638,
+        "rawContentLength": 7530,
+        "preview": "Image 1: logoImage 2主站 开放平台 开平文档中心 开平管理中心Image 3账号管理 应用管理 授权管理 直播创作者服务中心 互动玩法 Image 4登录 | 注册 ## 开放平台-直播&互玩接入文档 搜索 Image 5 新手指引 Image 6 开放能力 统一鉴权 & 错误码 Image 7 互动玩法 应用API列表 H5插件API列表 Image 8 消息长链 Image 9 互动面板 Image 10 站内版"
+      }
+    ]
+  },
+  {
+    "name": "douyin_rules_help_docs",
+    "status": 200,
+    "returned": 5,
+    "results": [
+      {
+        "rank": 1,
+        "score": 0.6947383,
+        "domain": "douyin.com",
+        "title": "抖音推荐算法机制",
+        "url": "https://www.douyin.com/search/%E6%8A%96%E9%9F%B3%E6%8E%A8%E8%8D%90%E7%AE%97%E6%B3%95%E6%9C%BA%E5%88%B6",
+        "contentLength": 44,
+        "rawContentLength": 0,
+        "preview": "抖音推荐算法最核心的逻辑就是从所有作者发布的视频中挑选出用户最有可能喜欢的作品进行推荐。"
+      },
+      {
+        "rank": 2,
+        "score": 0.59457535,
+        "domain": "douyin.com",
+        "title": "抖音社区自律公约 - 抖音规则中心",
+        "url": "https://www.douyin.com/rule/policy",
+        "contentLength": 1964,
+        "rawContentLength": 27308,
+        "preview": "平台禁止制作、发布或传播以下内容或借助平台服务实施以下行为： 未经平台允许，采用自动化手段或明显异于常人的、远高于正常用户频率地创建账号、群聊，发布视频、音频、图文内容或评论、私信，或进行关注、点赞、抓取数据等违规行为； 大量发布、重复上传无特定目标的视频、评论、私信或群聊内容，且存在下列一项或多项行为： 向观看者承诺他们会看到某些内容，但却将观看者引导至其他网站； 向观看者承诺他们可以快速赚钱，借此在抖音之外的平台上获取点击次数、观看"
+      },
+      {
+        "rank": 3,
+        "score": 0.5439058,
+        "domain": "creator.douyin.com",
+        "title": "抖音创作者中心",
+        "url": "https://creator.douyin.com",
+        "contentLength": 81,
+        "rawContentLength": 0,
+        "preview": "抖音创作服务平台是抖音创作者的专属服务平台，支持用户作为创作者和管理机构两种登陆方式，并通过提供授权管理、内容管理、互动管理及数据管理等服务助力抖音用户高效运营！"
+      },
+      {
+        "rank": 4,
+        "score": 0.5230555,
+        "domain": "douyin.com",
+        "title": "抖音推荐机制最新算法 - 抖音",
+        "url": "https://www.douyin.com/zhuanti/7208151153329227837",
+        "contentLength": 1253,
+        "rawContentLength": 11419,
+        "preview": "## 相关推荐: 经销商说iPhone涨价猛销量必腰折 被wps背刺了 苹果20款新品曝光 DeepSeek识图认不出梁文峰 折叠屏iPhone屏幕通过量产认证 豆包专业版发布 雷军谈与董明珠赌约 WPS回应被指背刺用户 AI算力拉动光通信景气上行 库克释放涨价信号 ## 热门推荐: 张月团928票 斯塔默也没逃过英国换相“魔咒” 黄灿灿造型幻视宋雨琦 85岁大爷离婚后买喜糖感谢民警 时代少年团 洛阳 侵华日军曾实施输马血人体实验 套餐"
+      },
+      {
+        "rank": 5,
+        "score": 0.405567,
+        "domain": "douyin.com",
+        "title": "“抖音”用户服务协议 - 【抖音】记录美好生活-Douyin.com",
+        "url": "https://www.douyin.com/agreements?id=6773906068725565448",
+        "contentLength": 2243,
+        "rawContentLength": 15438,
+        "preview": "4.2 您不得制作、复制、发布、传播以下违法违规内容： （1）反对宪法确定的基本原则的； （2）危害国家安全，泄露国家秘密，颠覆国家政权，破坏国家统一的； （3）损害国家荣誉和利益的； （4）歪曲、丑化、亵渎、否定英雄烈士事迹和精神，以侮辱、诽谤或者其他方式侵害英雄烈士的姓名、肖像、名誉、荣誉的； （5）宣扬恐怖主义、极端主义或者煽动实施恐怖活动、极端主义活动的； （6）宣扬民族仇恨、民族歧视，破坏民族团结的； （7）破坏国家宗教政策，"
+      }
+    ]
+  },
+  {
+    "name": "bilibili_creator_rules_docs",
+    "status": 200,
+    "returned": 5,
+    "results": [
+      {
+        "rank": 1,
+        "score": 0.6369636,
+        "domain": "bilibili.com",
+        "title": "“bilibili创作激励计划”规则 - 哔哩哔哩",
+        "url": "https://www.bilibili.com/read/cv173108",
+        "contentLength": 1927,
+        "rawContentLength": 2958,
+        "preview": "2. 如果参加“bilibili创作激励计划“的稿件在其他平台上的发布时间早于bilibili，一经发现，违规稿件永久取消参加“bilibili创作激励计划“的资格，不获得任何激励收益，违规UP主将被警告并重点监测；违反2次，暂停该UP主10天激励收益；违反3次及以上，bilibili保有永久取消该UP主参加“bilibili创作激励计划“的权利； 3. 如果参加“bilibili创作激励计划“的稿件含有侵犯任何第三方合法权益的内容，一"
+      },
+      {
+        "rank": 2,
+        "score": 0.48982134,
+        "domain": "bilibili.com",
+        "title": "哔哩哔哩协议汇总",
+        "url": "https://www.bilibili.com/blackboard/topic/activity-cn8bxPLzz.html",
+        "contentLength": 512,
+        "rawContentLength": 1175,
+        "preview": "哔哩哔哩协议汇总 一、基础协议规范 三、站内公告 高风险行业相关内容专项整治行动 上线日期：2020年6月17日 上线日期：2019年9月5日 上线日期：2019年7月11日 上线日期：2019年3月29日 上线日期：2019年3月7日 上线日期：2018年9月1日 上线日期：2018年5月23日 上线日期：2018年3月15日 上线日期：2018年3月2日 上线日期：2018年1月25日 上线日期：2018年1月22日 上线日期：20"
+      },
+      {
+        "rank": 3,
+        "score": 0.47475353,
+        "domain": "bilibili.com",
+        "title": "bilibili作品推广怎么做？ - 哔哩哔哩",
+        "url": "https://www.bilibili.com/read/cv9357730",
+        "contentLength": 1523,
+        "rawContentLength": 2338,
+        "preview": "必剪 视频定位：视频投稿就要从一而终，不要今天来游戏区溜一圈，明天去美食区溜一圈，真的很没劲~没人愿意看哦 # 二、基础数据优化 基础数据很重要，非常重要，超级重要！一定要优化！这是你的视频得到二次推荐的引擎，基础数据月好，你得到平台的推荐量也越多~ 视频引导视频结尾一定一定要跪求观众三连，很少人会看视频激动到主动给你三连，除非自己不要脸的给个提醒，求个关注+三连。 b站活动很多UP主苦恼：都知道B站对活动有流量扶持，甚至有的活动话题能"
+      },
+      {
+        "rank": 4,
+        "score": 0.40825373,
+        "domain": "bilibili.com",
+        "title": "b站视频推广引流机制，bilibili视频推广到首页方法 - 哔哩哔哩",
+        "url": "http://www.bilibili.com/read/cv12025020",
+        "contentLength": 1557,
+        "rawContentLength": 2883,
+        "preview": "目录 二、数据优化 三、流量加持 商业起飞 b站视频推广引流机制，bilibili视频推广到首页方法 蓝狮问道 2021年07月06日 11:05 哔哩哔哩(bilibili)基于创作的视频社区，被粉丝们亲切的称为“B站”。目前B站活跃用户超过2亿，每天视频播放量超过1亿，原创投稿总数超过1000万。 蓝狮问道作为哔哩哔哩的广告服务商，旨在通过自身专业的服务团队结合哔哩哔哩的用户属性、投放规则、定向类型等为广大合作客户提供更优质的广告服"
+      },
+      {
+        "rank": 5,
+        "score": 0.3152303,
+        "domain": "ir.bilibili.com",
+        "title": "[PDF] 哔哩哔哩2022年度环境、社会及管治报告",
+        "url": "https://ir.bilibili.com/media/ljbpv3eo/esg-cs.pdf",
+        "contentLength": 2376,
+        "rawContentLength": 71242,
+        "preview": "\u0007 花火平台 \u0007 对花火平台进行6 大能力升级，提升合规管控、第三方 监督能力，为UP 主提供更加良好的商业环境。 我们为处于不同成长阶段的UP 主提供持续的创作支持。我 们持续优化创作学院与创作中心，并对创作工具优化升级， 提供更丰富的创作资源，为UP 主提供创作支持。 UP 主创作支持 \u0007 流量扶持助力成长 \u0007 \u0007 持续对中长尾UP 主进行流量扶持，Story-Mode 竖屏视 频为更多中长尾UP 主开辟高效的内容分发渠道，帮助更 "
+      }
+    ]
+  }
+]

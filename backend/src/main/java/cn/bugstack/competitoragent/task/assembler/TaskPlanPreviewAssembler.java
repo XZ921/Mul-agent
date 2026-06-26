@@ -181,6 +181,15 @@ public class TaskPlanPreviewAssembler {
                     .sourceNode(textOrNull(config, "sourceNode"))
                     .build();
         }
+        if ("CITATION".equals(agentType)) {
+            String sourceNode = defaultIfBlank(textOrNull(config, "sourceNode"), "write_report");
+            String minCoverageRate = defaultIfBlank(textOrNull(config, "minCoverageRate"), "0.85");
+            return TaskNodeConfigSummary.builder()
+                    .summaryText("核查 " + sourceNode + " 引用覆盖，最低覆盖率 " + minCoverageRate)
+                    .sourceNode(sourceNode)
+                    .qualityPolicy(defaultIfBlank(textOrNull(config, "trustPolicy"), "official-first"))
+                    .build();
+        }
         if ("REVIEWER".equals(agentType)) {
             return TaskNodeConfigSummary.builder()
                     .summaryText(node.getSummary())

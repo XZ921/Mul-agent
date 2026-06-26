@@ -1,0 +1,405 @@
+{
+  "dimension": "推荐算法 / 内容分发机制",
+  "method": {
+    "search_depth": "advanced",
+    "include_raw_content": true,
+    "max_results_per_query": 5,
+    "queries": [
+      "抖音 哔哩哔哩 推荐算法 对比",
+      "抖音 B站 推荐机制 内容分发 差异",
+      "抖音 bilibili 推荐系统 流量分发 算法 对比"
+    ],
+    "dedupe": "按规范化 URL 去重，移除 hash 和常见 tracking query 参数",
+    "qualityRule": {
+      "strong": "同时覆盖抖音、B站/哔哩哔哩、推荐/分发算法，且 raw_content >= 1500 字符",
+      "medium": "覆盖平台之一和算法主题，且 raw_content >= 1500 字符",
+      "weak": "只命中部分关键词或正文较弱",
+      "irrelevant": "缺少核心竞品分析信号"
+    }
+  },
+  "counts": {
+    "totalQueries": 3,
+    "rawResultCount": 15,
+    "uniqueUrlCount": 14,
+    "duplicateUrlCount": 1,
+    "strongCount": 9,
+    "mediumCount": 4,
+    "weakCount": 1,
+    "irrelevantCount": 0,
+    "rawContentUsableCount": 13,
+    "hasRawContentCount": 14,
+    "bothPlatformsAndAlgorithmCount": 10,
+    "domainCount": 10
+  },
+  "uniqueResults": [
+    {
+      "index": 1,
+      "normalizedUrl": "https://m.okjike.com/originalPosts/6242857401726c0010804f79?s=ewoidSI6ICI1ZDE1YzEzNmM3ZmUwODAwMTg0YTgwYTMiCn0%3D",
+      "url": "https://m.okjike.com/originalPosts/6242857401726c0010804f79?s=ewoidSI6ICI1ZDE1YzEzNmM3ZmUwODAwMTg0YTgwYTMiCn0%3D",
+      "title": "此前分析过多次抖音、快手和视频号的推荐算法差异（见扩展阅读）",
+      "score": 0.8156003,
+      "firstQuery": "抖音 B站 推荐机制 内容分发 差异",
+      "queryHits": [
+        "抖音 B站 推荐机制 内容分发 差异"
+      ],
+      "ranks": [
+        {
+          "query": "抖音 B站 推荐机制 内容分发 差异",
+          "rank": 1
+        }
+      ],
+      "contentPreview": "➡️抖音在分发上主要采取【中心化模式】，对精品内容不断赋予流量曝光，打造“引爆”效果。  \n抖音采用中心化的分发机制，投放内容先根据账号权重在种子流量池试验，再根据完播率、点赞比、评论数、转发率等维度决定内容能否被分发至更高一级流量池，经过多轮筛选且反馈较好的头部内容会不断获得曝光，极少数优秀内容会被放入顶级流量池，几乎无差别地推荐给所有用户，故切换不同抖音账号刷到相同短视频的概率会更高。  \n此外，抖音的“挖坟”机制使得爆款视频可能带动之前的作品数据转好并被二次推荐。  \n中心化算法下，抖音更容易打造爆款内容，适",
+      "hasDouyin": true,
+      "hasBilibili": true,
+      "hasAlgorithm": true,
+      "rawUsable": true,
+      "rawLen": 5136,
+      "contentLen": 2231,
+      "grade": "strong",
+      "reason": "同时覆盖抖音、B站/哔哩哔哩、推荐/分发算法，且正文足够长"
+    },
+    {
+      "index": 2,
+      "normalizedUrl": "http://www.21jingji.com/article/20211224/herald/62c22dd486d395d66fff62c646f61dce.html",
+      "url": "http://www.21jingji.com/article/20211224/herald/62c22dd486d395d66fff62c646f61dce.html",
+      "title": "\"我在B站生活，在抖音工作\" - 21经济网",
+      "score": 0.7933146,
+      "firstQuery": "抖音 哔哩哔哩 推荐算法 对比",
+      "queryHits": [
+        "抖音 哔哩哔哩 推荐算法 对比"
+      ],
+      "ranks": [
+        {
+          "query": "抖音 哔哩哔哩 推荐算法 对比",
+          "rank": 1
+        }
+      ],
+      "contentPreview": "从用户角度来看，在这种内容刷新模式下，用户并不会和创作者产生过多交集。\n\n以抖音上爆火的 BGM 举例，许多热门歌曲其实已经被用户耳熟能详，可是，大部分用户并不知晓谁是作者。\n\n但也正因为这种单列下滑形式，用户的反馈，即 —— 下滑、点赞、收藏、留存时间等操作，会非常及时地被抖音捕捉，所以抖音可以迅速地挖掘用户的喜好，来判断推送何类内容可以让用户“刷更久”。\n\n此前有一名抖音 MCN 公司的老板告诉运营社：\n\n“在抖音，完播率最为重要：需要争议性选题，视频要有引导性，循序渐进地引导用户看完视频。”\n\n也正式因为这样",
+      "hasDouyin": true,
+      "hasBilibili": true,
+      "hasAlgorithm": true,
+      "rawUsable": true,
+      "rawLen": 13762,
+      "contentLen": 2326,
+      "grade": "strong",
+      "reason": "同时覆盖抖音、B站/哔哩哔哩、推荐/分发算法，且正文足够长"
+    },
+    {
+      "index": 3,
+      "normalizedUrl": "https://www.reddit.com/r/China_irl/comments/1dvu5et/%E5%93%94%E5%93%A9%E5%93%94%E5%93%A9%E7%9A%84%E6%8E%A8%E8%8D%90%E7%AE%97%E6%B3%95%E7%B3%9F%E7%B3%95%E4%BF%A1%E6%81%AF%E6%B5%81%E4%B8%8D%E6%8E%A8%E8%8D%90%E6%97%A7%E8%A7%86%E9%A2%91",
+      "url": "https://www.reddit.com/r/China_irl/comments/1dvu5et/%E5%93%94%E5%93%A9%E5%93%94%E5%93%A9%E7%9A%84%E6%8E%A8%E8%8D%90%E7%AE%97%E6%B3%95%E7%B3%9F%E7%B3%95%E4%BF%A1%E6%81%AF%E6%B5%81%E4%B8%8D%E6%8E%A8%E8%8D%90%E6%97%A7%E8%A7%86%E9%A2%91",
+      "title": "哔哩哔哩的推荐算法糟糕,信息流不推荐旧视频 : r/China_irl",
+      "score": 0.7621591,
+      "firstQuery": "抖音 哔哩哔哩 推荐算法 对比",
+      "queryHits": [
+        "抖音 哔哩哔哩 推荐算法 对比",
+        "抖音 bilibili 推荐系统 流量分发 算法 对比"
+      ],
+      "ranks": [
+        {
+          "query": "抖音 哔哩哔哩 推荐算法 对比",
+          "rank": 2
+        },
+        {
+          "query": "抖音 bilibili 推荐系统 流量分发 算法 对比",
+          "rank": 3
+        }
+      ],
+      "contentPreview": "# 哔哩哔哩的推荐算法糟糕,信息流不推荐旧视频 : r/China_irl\nSkip to main content哔哩哔哩的推荐算法糟糕,信息流不推荐旧视频 : r/China_irl\n\nOpen menu Open navigation\n\nOpen comment sort options\n\n   Best \n   Top \n   New (Default) \n   Controversial \n   Old \n   Q&A \n\nImage 8: u/yesterday223 avatar\n\nyesterday",
+      "hasDouyin": true,
+      "hasBilibili": true,
+      "hasAlgorithm": true,
+      "rawUsable": true,
+      "rawLen": 40749,
+      "contentLen": 1733,
+      "grade": "strong",
+      "reason": "同时覆盖抖音、B站/哔哩哔哩、推荐/分发算法，且正文足够长"
+    },
+    {
+      "index": 4,
+      "normalizedUrl": "https://m.36kr.com/p/666546701916417",
+      "url": "https://m.36kr.com/p/666546701916417",
+      "title": "哔哩哔哩与抖音谁更有前景？-36氪",
+      "score": 0.7498395,
+      "firstQuery": "抖音 bilibili 推荐系统 流量分发 算法 对比",
+      "queryHits": [
+        "抖音 bilibili 推荐系统 流量分发 算法 对比"
+      ],
+      "ranks": [
+        {
+          "query": "抖音 bilibili 推荐系统 流量分发 算法 对比",
+          "rank": 1
+        }
+      ],
+      "contentPreview": "## 第二，抖音以推荐为主的流量分发机制，B 站是以人为主的内容匹配机制。\n\n抖音的分发几乎都是完全依赖算法的，大多数用户都在看推荐页面。关注列表的渗透率只有 5%。这对产品整体体验当然是优势：确保用户刷到的每个视频都足够吸引人，这也就能上瘾了。\n\nB 站虽说也有推荐，但主要用在“不知道该看什么内容”的场景。B 站的用户关注 up 主的行为非常活跃，而且很多用户是通过动态来获取信息的。“失踪人口回归”、“有生之年”这些催更概念，在抖音不太可能出现（大家也不缺可看的内容）。\n\n## 第三，抖音和 B 站不同的商业模式",
+      "hasDouyin": true,
+      "hasBilibili": true,
+      "hasAlgorithm": true,
+      "rawUsable": true,
+      "rawLen": 3586,
+      "contentLen": 2357,
+      "grade": "strong",
+      "reason": "同时覆盖抖音、B站/哔哩哔哩、推荐/分发算法，且正文足够长"
+    },
+    {
+      "index": 5,
+      "normalizedUrl": "https://www.woshipm.com/share/6214868.html",
+      "url": "https://www.woshipm.com/share/6214868.html",
+      "title": "竞品分析：抖音& 哔哩哔哩| 人人都是产品经理",
+      "score": 0.7123327,
+      "firstQuery": "抖音 哔哩哔哩 推荐算法 对比",
+      "queryHits": [
+        "抖音 哔哩哔哩 推荐算法 对比"
+      ],
+      "ranks": [
+        {
+          "query": "抖音 哔哩哔哩 推荐算法 对比",
+          "rank": 3
+        }
+      ],
+      "contentPreview": "## 用户分析\n\n### 1. 用户画像\n\n根据图像数据：\n\n 从性别分布来看：抖音男性占比略多于女性；哔哩哔哩女性略多于男性。这种性别差异在一定程度上影响了平台内容的创作和传播方向。\n 从年龄分布来看：抖音的用户群里覆盖各个年龄段，其中25-35岁青年用户占比最大；而哔哩哔哩24岁以下的用户占比高达72.44%，几乎呈垄断局面。哔哩哔哩的内容风格更加年轻化、潮流化。\n 从消费分布来看：两者主要消费用户都集中在中等消费者。\n 从地域分布来看：抖音用户在一线、二线、三线城市分布较为均匀，在下沉市场也有较高的渗透率；哔",
+      "hasDouyin": true,
+      "hasBilibili": true,
+      "hasAlgorithm": true,
+      "rawUsable": true,
+      "rawLen": 7893,
+      "contentLen": 2086,
+      "grade": "strong",
+      "reason": "同时覆盖抖音、B站/哔哩哔哩、推荐/分发算法，且正文足够长"
+    },
+    {
+      "index": 6,
+      "normalizedUrl": "https://search.bilibili.com/all?keyword=%E6%8A%96%E9%9F%B3%E7%AE%97%E6%B3%95",
+      "url": "https://search.bilibili.com/all?keyword=%E6%8A%96%E9%9F%B3%E7%AE%97%E6%B3%95",
+      "title": "抖音算法-哔哩哔哩_bilibili",
+      "score": 0.6952351,
+      "firstQuery": "抖音 哔哩哔哩 推荐算法 对比",
+      "queryHits": [
+        "抖音 哔哩哔哩 推荐算法 对比"
+      ],
+      "ranks": [
+        {
+          "query": "抖音 哔哩哔哩 推荐算法 对比",
+          "rank": 4
+        }
+      ],
+      "contentPreview": "摸鱼的Prof\\_Qin · 2020-10-23\n\n6550\n\n07:30\n\n### 抖音的算法，正在成为全球最强大的文化输出工具，TikTok背后的地缘政治\n\n凯哥是个程序员 · 06-09\n\n27241\n\n06:39\n\n### 一条视频搞懂视频抖音推荐算法 #人工智能 #大模型 #推荐算法 #ai #姜学长\n\n清华姜学长 · 06-05\n\n4.4万23\n\n58:09\n\n### 简单的用Python爬取抖音评论，并实现可视化词云图 （附源码），适合新手小白的教程！零基础也能学会！\n\n轻松学Python · 20",
+      "hasDouyin": true,
+      "hasBilibili": true,
+      "hasAlgorithm": true,
+      "rawUsable": true,
+      "rawLen": 11189,
+      "contentLen": 2322,
+      "grade": "strong",
+      "reason": "同时覆盖抖音、B站/哔哩哔哩、推荐/分发算法，且正文足够长"
+    },
+    {
+      "index": 7,
+      "normalizedUrl": "https://pdf.dfcfw.com/pdf/H3_AP202302231583652277_1.pdf",
+      "url": "https://pdf.dfcfw.com/pdf/H3_AP202302231583652277_1.pdf",
+      "title": "[PDF] 详解B 站生态护城河及用户规模天花板哔哩哔哩-SW（9626.HK）",
+      "score": 0.69498676,
+      "firstQuery": "抖音 bilibili 推荐系统 流量分发 算法 对比",
+      "queryHits": [
+        "抖音 bilibili 推荐系统 流量分发 算法 对比"
+      ],
+      "ranks": [
+        {
+          "query": "抖音 bilibili 推荐系统 流量分发 算法 对比",
+          "rank": 2
+        }
+      ],
+      "contentPreview": "4.4 分发机制：基于用户反馈，并不仅取决于播放量 相比于播放量，B 站更看重视频质量和用户互动。B 站的目标不仅是产 出优质的内容，而是构建一个能产生优质内容的机制，而这个机制的核心 就是UP 主，所以B 站一直把服务UP 主作为公司最重要的工作。截至22 年 6 月，B 站有2964 名员工全职为UP 主服务，而且他们服务的不仅仅是知名 UP 主，更多的工作内容是服务中小UP 主，甚至是不知名的新UP 主。 B 站的推荐算法如下：视频的得分=硬币0.4+收藏0.3+弹幕0.4+评论 0.4+播放0.25+点赞0",
+      "hasDouyin": true,
+      "hasBilibili": true,
+      "hasAlgorithm": true,
+      "rawUsable": true,
+      "rawLen": 76846,
+      "contentLen": 2392,
+      "grade": "strong",
+      "reason": "同时覆盖抖音、B站/哔哩哔哩、推荐/分发算法，且正文足够长"
+    },
+    {
+      "index": 8,
+      "normalizedUrl": "https://www.woshipm.com/evaluating/2589190.html",
+      "url": "https://www.woshipm.com/evaluating/2589190.html",
+      "title": "竞品分析报告：B站VS A站&抖音 - 人人都是产品经理",
+      "score": 0.6599319,
+      "firstQuery": "抖音 B站 推荐机制 内容分发 差异",
+      "queryHits": [
+        "抖音 B站 推荐机制 内容分发 差异"
+      ],
+      "ranks": [
+        {
+          "query": "抖音 B站 推荐机制 内容分发 差异",
+          "rank": 2
+        }
+      ],
+      "contentPreview": "4.1.3 核心功能流程分析\n\n（1） 比较总结：\n\n1. A站在用户进入APP后优先显示的是精选视频UGC（相当于B站的热门视频版块），这种功能设计考虑到了新人刚加入A站还没有足够时间去收集他的观看喜好，无法使用算法给其推荐有趣的视频，用大部分Z世代人群喜欢看的热门视频作为切入点，有助于抓住客户的第一印象提升新用户留存率。\n2. 而同样是在已登录状态下，B站恰恰相反地将推荐作为第一选项，有效地增加了老用户的活跃度及观看时长。缺点是对新注册用户和游客不太友好，相对来说增加了留存率下跌的概率。\n3. A站视频全屏播放",
+      "hasDouyin": true,
+      "hasBilibili": true,
+      "hasAlgorithm": true,
+      "rawUsable": true,
+      "rawLen": 15648,
+      "contentLen": 2072,
+      "grade": "strong",
+      "reason": "同时覆盖抖音、B站/哔哩哔哩、推荐/分发算法，且正文足够长"
+    },
+    {
+      "index": 9,
+      "normalizedUrl": "https://m.bilibili.com/search?keyword=%E8%A7%86%E9%A2%91%E6%8E%A8%E8%8D%90%E6%9C%BA%E5%88%B6&from_source=article",
+      "url": "https://m.bilibili.com/search?keyword=%E8%A7%86%E9%A2%91%E6%8E%A8%E8%8D%90%E6%9C%BA%E5%88%B6&from_source=article",
+      "title": "视频推荐机制-哔哩哔哩_bilibili",
+      "score": 0.5106191,
+      "firstQuery": "抖音 bilibili 推荐系统 流量分发 算法 对比",
+      "queryHits": [
+        "抖音 bilibili 推荐系统 流量分发 算法 对比"
+      ],
+      "ranks": [
+        {
+          "query": "抖音 bilibili 推荐系统 流量分发 算法 对比",
+          "rank": 4
+        }
+      ],
+      "contentPreview": "b站新功能：听视频功能。如何使用听视频功能，听视频功能真的太棒啦！不方便看视频，做家务，想要一些背景声音，眼睛疲劳躺平，等等这些时候都可听视频\n\n### b站新功能：听视频功能。如何使用听视频功能，听视频功能真的太棒啦！不方便看视频，做家务，想要一些背景声音，眼睛疲劳躺平，等等这些时候都可听视频\n\n教你怎么在b站里制作分集视频，保证你一看就会\n\n### 教你怎么在b站里制作分集视频，保证你一看就会\n\n抖音、小红书、b站、视频号4个平台区别，一条视频讲清楚，全部肺腑之言，看你适合做哪个\n\n### 抖音、小红书、b站、",
+      "hasDouyin": true,
+      "hasBilibili": true,
+      "hasAlgorithm": true,
+      "rawUsable": true,
+      "rawLen": 7716,
+      "contentLen": 2040,
+      "grade": "strong",
+      "reason": "同时覆盖抖音、B站/哔哩哔哩、推荐/分发算法，且正文足够长"
+    },
+    {
+      "index": 10,
+      "normalizedUrl": "https://www.woshipm.com/pd/3883884.html",
+      "url": "https://www.woshipm.com/pd/3883884.html",
+      "title": "一文带你看懂B站视频推荐 | 人人都是产品经理",
+      "score": 0.5439058,
+      "firstQuery": "抖音 B站 推荐机制 内容分发 差异",
+      "queryHits": [
+        "抖音 B站 推荐机制 内容分发 差异"
+      ],
+      "ranks": [
+        {
+          "query": "抖音 B站 推荐机制 内容分发 差异",
+          "rank": 3
+        }
+      ],
+      "contentPreview": "综上，本文得出一份有关用户信息和行为的Tag标签。\n\n从B站首页，我们可以发现，目前基于兴趣的推荐视频一般可以分为这几种：已关注、高赞视频、新星计划、关注的人赞过、广告和互动视频，这些标签正是基于内容或用户的tag标签推送到了用户面前，但单一的tag处理，推荐精确度上还有可以优化的空间。\n\n## 二、打造圈层：内容类聚和用户群分\n\n完成对内容和用户的tag处理后，这两者仍是个体，但个体间会因为标签的类似产生联系，从而多个个体能够进入同一圈子，权重和相似性通常被用作划分圈子内个体关联程度的标准。\n\n### 1. 内容",
+      "hasDouyin": false,
+      "hasBilibili": true,
+      "hasAlgorithm": true,
+      "rawUsable": true,
+      "rawLen": 9612,
+      "contentLen": 2223,
+      "grade": "medium",
+      "reason": "覆盖平台之一和算法主题，正文可用，但竞品对比不完整"
+    },
+    {
+      "index": 11,
+      "normalizedUrl": "https://www.bilibili.com/opus/1042084491958419459",
+      "url": "https://www.bilibili.com/opus/1042084491958419459",
+      "title": "B站视频流量规则与避坑指南（2025年3月更新版） - 哔哩哔哩",
+      "score": 0.48630774,
+      "firstQuery": "抖音 B站 推荐机制 内容分发 差异",
+      "queryHits": [
+        "抖音 B站 推荐机制 内容分发 差异"
+      ],
+      "ranks": [
+        {
+          "query": "抖音 B站 推荐机制 内容分发 差异",
+          "rank": 4
+        }
+      ],
+      "contentPreview": "注：本文基于创作者社群运营经验与公开算法观察总结，部分结论存在个案差异，需结合实际情况判断\n\n# 一、B站推荐机制解析与发布时间策略\n\n## 1. 流量推送阶段（经验模型）\n\n初始测试期：内容发布后约3小时内，系统启动小范围曝光测试（粉丝占比偏高）；\n\n核心爆发期：若初始互动达标（如完播率>40%、点赞率>5%），7-13小时内进入大范围推荐池；\n\n长尾推荐期：约10%的优质内容可能获得1-30天内的二次推荐；约1%的冷门垂类视频存在数月/数年后被「考古」推送的可能性。\n\n2. 创作激励对推送的影响\n\n粉丝量60%",
+      "hasDouyin": false,
+      "hasBilibili": true,
+      "hasAlgorithm": true,
+      "rawUsable": true,
+      "rawLen": 1562,
+      "contentLen": 799,
+      "grade": "medium",
+      "reason": "覆盖平台之一和算法主题，正文可用，但竞品对比不完整"
+    },
+    {
+      "index": 12,
+      "normalizedUrl": "https://finance.sina.com.cn/tech/roll/2024-11-11/doc-incvsqmk0621814.shtml",
+      "url": "https://finance.sina.com.cn/tech/roll/2024-11-11/doc-incvsqmk0621814.shtml",
+      "title": "抖音更新推荐算法 这3大变化最重要！|流量|抖音|推荐算法_新浪科技_新浪网",
+      "score": 0.42548645,
+      "firstQuery": "抖音 B站 推荐机制 内容分发 差异",
+      "queryHits": [
+        "抖音 B站 推荐机制 内容分发 差异"
+      ],
+      "ranks": [
+        {
+          "query": "抖音 B站 推荐机制 内容分发 差异",
+          "rank": 5
+        }
+      ],
+      "contentPreview": "第三，有惊喜表达的内容，尤其是在选题、表达方式上进行创新。这类内容最典型的例子就是今年 6 月某网友在外露营遇到大雨，但是帐篷却丝毫没有漏水，吸引了吸引了万千网友关注——“第一次见这么防水的帐篷”。于是帐篷品牌@骆驼趁热打铁，创作了一些列角度清奇的“防水视频”，比如用自家帐篷做鱼缸，以此证明质量足够过关。@骆驼也很快登上了抖音种草榜第 8 名，品牌整体 GMV 增长 36%。\n\n在「预测模型」中，过去平台将创作者内容和不同用户相关的数据（用户 ID、性别、地域、历史行为）随机输入到模型中，输出“互动行为”发生的概率",
+      "hasDouyin": true,
+      "hasBilibili": false,
+      "hasAlgorithm": true,
+      "rawUsable": true,
+      "rawLen": 6653,
+      "contentLen": 2241,
+      "grade": "medium",
+      "reason": "覆盖平台之一和算法主题，正文可用，但竞品对比不完整"
+    },
+    {
+      "index": 13,
+      "normalizedUrl": "https://www.bilibili.com/video/BV1HZ421U77y",
+      "url": "https://www.bilibili.com/video/BV1HZ421U77y",
+      "title": "推荐系统公开课——8小时完整版，讲解工业界真实的推荐系统_哔哩哔哩_bilibili",
+      "score": 0.32546747,
+      "firstQuery": "抖音 bilibili 推荐系统 流量分发 算法 对比",
+      "queryHits": [
+        "抖音 bilibili 推荐系统 流量分发 算法 对比"
+      ],
+      "ranks": [
+        {
+          "query": "抖音 bilibili 推荐系统 流量分发 算法 对比",
+          "rank": 5
+        }
+      ],
+      "contentPreview": "# 推荐系统公开课——8小时完整版，讲解工业界真实的推荐系统\n\n召回06：双塔模型——模型结构、训练方法\n\n排序01：多目标模型\n\n召回08：双塔模型——线上服务、模型更新\n\n推荐系统中最经典的算法，基于用户的协同过滤，UserCF算法\n\n行为序列03：SIM模型（长序列建模）\n\n召回05：矩阵补充、最近邻查找\n\n召回07：双塔模型——正负样本\n\n推荐系统涨指标的方法01：概述\n\n召回09：双塔模型+自监督学习\n\n召回01：基于物品的协同过滤（ItemCF）\n\n行为序列02：DIN模型（注意力机制）\n\n特征交叉02",
+      "hasDouyin": false,
+      "hasBilibili": true,
+      "hasAlgorithm": true,
+      "rawUsable": true,
+      "rawLen": 1872,
+      "contentLen": 437,
+      "grade": "medium",
+      "reason": "覆盖平台之一和算法主题，正文可用，但竞品对比不完整"
+    },
+    {
+      "index": 14,
+      "normalizedUrl": "https://www.bilibili.com/video/BV1sUceewEZ7",
+      "url": "https://www.bilibili.com/video/BV1sUceewEZ7",
+      "title": "带你了解平台算法规则_哔哩哔哩_bilibili",
+      "score": 0.6680367,
+      "firstQuery": "抖音 哔哩哔哩 推荐算法 对比",
+      "queryHits": [
+        "抖音 哔哩哔哩 推荐算法 对比"
+      ],
+      "ranks": [
+        {
+          "query": "抖音 哔哩哔哩 推荐算法 对比",
+          "rank": 5
+        }
+      ],
+      "contentPreview": "# 带你了解平台算法规则\n\n抖音、小红书、b站、视频号4个平台区别，一条视频讲清楚，全部肺腑之言，看你适合做哪个\n\n难怪你的视频不火！原来没搞懂B站播放推荐机制！新人UP主必看，快来了解规则！\n\n“限流”规则深度解读！五分钟看懂实战案例\n\n很多人说被限流？b站推荐机制你有了解过吗\n\n掏耳朵视频被限流了？带你详细了解社区公序良俗规则\n\n抖音Tiktok背后的AI技术——10分钟看懂推荐算法原理！\n\n为什么Steam在国内不合法，我们却还能爽玩？蒸汽平台与Steam又是什么关系？\n\n锐评中国五大社交平台\n\nB站改算法，",
+      "hasDouyin": true,
+      "hasBilibili": true,
+      "hasAlgorithm": true,
+      "rawUsable": false,
+      "rawLen": 574,
+      "contentLen": 508,
+      "grade": "weak",
+      "reason": "命中部分关键词，但主题或正文完整度不足"
+    }
+  ]
+}

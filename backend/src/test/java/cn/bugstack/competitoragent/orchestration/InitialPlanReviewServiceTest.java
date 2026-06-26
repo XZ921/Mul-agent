@@ -67,7 +67,8 @@ class InitialPlanReviewServiceTest {
                         role("role-extractor-01", "EXTRACTOR", List.of("role-collector-01")),
                         role("role-analyzer-01", "ANALYZER", List.of("role-extractor-01")),
                         role("role-writer-01", "WRITER", List.of("role-analyzer-01")),
-                        role("role-reviewer-01", "REVIEWER", List.of("role-writer-01"))))
+                        role("role-citation-01", "CITATION", List.of("role-writer-01")),
+                        role("role-reviewer-01", "REVIEWER", List.of("role-citation-01"))))
                 .checkpoints(List.of("after_extract_schema", "quality_check_final"))
                 .sourceUrls(List.of())
                 .evidenceState(EvidenceState.MISSING_SOURCE)

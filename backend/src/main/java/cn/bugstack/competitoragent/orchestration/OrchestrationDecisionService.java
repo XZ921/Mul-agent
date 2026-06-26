@@ -34,8 +34,11 @@ public class OrchestrationDecisionService {
         if (isWriterTrigger(context.getTriggerNodeName())) {
             return decideWriterSuggestions(context);
         }
+        if (isCitationTrigger(context.getTriggerNodeName())) {
+            return decideCitationSuggestions(context);
+        }
         if (!"quality_check_final".equals(context.getTriggerNodeName())) {
-            return List.of(noAction(context, "P1/P2/P3-1 当前仅处理 extract_schema、analyze_competitors 和 quality_check_final 反馈。"));
+            return List.of(noAction(context, "P1/P2/P3 当前仅处理 extract_schema、analyze_competitors、write_report/rewrite_report、citation_check 和 quality_check_final 反馈。"));
         }
         if (context.isPassed()) {
             return List.of(noAction(context, "当前终审已通过，无需追加编排动作。"));
@@ -127,6 +130,10 @@ public class OrchestrationDecisionService {
         return "write_report".equals(triggerNodeName) || "rewrite_report".equals(triggerNodeName);
     }
 
+    private boolean isCitationTrigger(String triggerNodeName) {
+        return "citation_check".equals(triggerNodeName) || "citation_check_revision".equals(triggerNodeName);
+    }
+
     /**
      * Writer 只提交章节引用缺口事实，编排层根据来源状态决定阻断还是留痕。
      * 无来源缺口必须阻断，已有来源但引用不完整时先记录重写决策，继续交给 Reviewer 做质量收口。
@@ -148,6 +155,30 @@ public class OrchestrationDecisionService {
             }
         }
         return List.of(noAction(context, "Writer 建议未命中 P3-2 可执行策略。"));
+    }
+
+    /**
+     * Citation 只提交“引用核查缺口事实”，编排层根据来源状态决定人工阻断还是仅要求改写。
+     * 缺来源/未知证据编号必须阻断在 Reviewer 之前；有来源但弱支撑则记录为 claim 级重写动作。
+     */
+    private List<OrchestrationDecision> decideCitationSuggestions(OrchestrationContext context) {
+        List<AgentSuggestion> suggestions = context.getAgentSuggestions();
+        if (suggestions == null || suggestions.isEmpty()) {
+            return List.of(noAction(context, context.getTriggerNodeName() + " 未产生 AgentSuggestion，无需编排动作。"));
+        }
+        for (AgentSuggestion suggestion : suggestions) {
+            if ("CITATION_VERIFICATION_GAP".equalsIgnoreCase(suggestion.getSuggestionType())
+                    && ((suggestion.getSourceUrls() == null || suggestion.getSourceUrls().isEmpty())
+                    || suggestion.getEvidenceState() == EvidenceState.MISSING_SOURCE)) {
+                return List.of(waitForHuman(context, "Citation Agent 发现引用缺口但缺少 sourceUrls，禁止进入 Reviewer。"));
+            }
+        }
+        for (AgentSuggestion suggestion : suggestions) {
+            if ("CITATION_VERIFICATION_GAP".equalsIgnoreCase(suggestion.getSuggestionType())) {
+                return List.of(rewriteClaimFromSuggestion(context, suggestion));
+            }
+        }
+        return List.of(noAction(context, "Citation 建议未命中 P3-4 可执行策略。"));
     }
 
     private OrchestrationDecision supplementEvidenceFromSuggestion(OrchestrationContext context,
@@ -182,6 +213,30 @@ public class OrchestrationDecisionService {
                 .triggerNodeName(context.getTriggerNodeName())
                 .decisionType("REWRITE_ONLY")
                 .actionType("REWRITE_SECTION")
+                .targetNode("rewrite_report")
+                .affectedScope("CURRENT_NODE_ONLY")
+                .priority(suggestion.getSeverity())
+                .targetSection(suggestion.getTargetSection())
+                .reason(suggestion.getSummary())
+                .requiresHumanIntervention(false)
+                .requiresConfirmation(false)
+                .confidence(suggestion.getConfidence())
+                .suggestedQueries(suggestion.getSuggestedQueries())
+                .inputRefs(buildInputRefs(context))
+                .sourceUrls(suggestion.getSourceUrls())
+                .evidenceState(suggestion.getEvidenceState())
+                .build()
+                .normalized();
+    }
+
+    private OrchestrationDecision rewriteClaimFromSuggestion(OrchestrationContext context,
+                                                             AgentSuggestion suggestion) {
+        return OrchestrationDecision.builder()
+                .decisionId("od-" + context.getTaskId() + "-" + context.getTriggerNodeName() + "-citation-suggestion-1")
+                .taskId(context.getTaskId())
+                .triggerNodeName(context.getTriggerNodeName())
+                .decisionType("REWRITE_ONLY")
+                .actionType("REWRITE_CLAIM")
                 .targetNode("rewrite_report")
                 .affectedScope("CURRENT_NODE_ONLY")
                 .priority(suggestion.getSeverity())
