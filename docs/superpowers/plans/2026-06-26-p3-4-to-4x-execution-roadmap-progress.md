@@ -1,6 +1,6 @@
 # P3-4 To 4.x Execution Roadmap Progress - 2026-06-26
 
-当前阶段：ReportWriting 链路正式方案收口（当前停止点：plan 已完成，未开始实现）
+当前阶段：ReportWriting pre-4.x 实链验证收口（当前停止点：任务 56 live 验证已完成，仍不进入 4.x）
 - [x] 信息采集：已完成
 - [x] 数据分析：已完成
 - [x] 报告 / 回放主路径投影：已完成
@@ -8,6 +8,8 @@
 - [x] SSE replay 轻量投影：已完成
 - [x] 质检复核：已完成
 - [x] ReportWriting 正式方案收口：已完成
+- [x] ReportWriting pre-4.x 自动化实施：已完成
+- [x] ReportWriting pre-4.x 真实任务验证：已完成
 
 ## 执行计划
 
@@ -41,9 +43,11 @@
 | Delivery Audit 2 | `ReportExportRenderer` 合并协作决策 `sourceUrls` 并补结构化导出 | ✅ 已完成 |
 | Delivery Audit 3 | SSE replay 轻量协作决策摘要 | ✅ 已完成 |
 | ReportWriting 1 | 新增 4.x 前收口 plan，限定稳定契约、持久化字段、查询投影、导出解释层和测试基线 | ✅ 已完成 |
+| ReportWriting 2 | 稳定 DTO 契约、Report 持久化快照、ReportService 查询投影、Markdown / HTML / JSON 导出解释层和自动化测试基线 | ✅ 已完成 |
+| ReportWriting 3 | 使用真实任务 `56` 验证 Writer 快照持久化、报告主路径投影和公开 Markdown / HTML 下载端点 | ✅ 已完成 |
 
-📍 当前：ReportWriting 链路正式方案收口已完成，尚未开始代码实施
-▶️ 下一步：按 `docs/superpowers/report-writing/plan/2026-06-26-report-writing-pre-4x-closure-plan.md` 选择是否进入实现；当前仍不进入 4.x、不做 Tavily、不补 `pendingActions`
+📍 当前：ReportWriting pre-4.x 自动化实施与任务 `56` live 验证均已完成，公开下载端点已补齐写作证据摘要。
+▶️ 下一步：回到总路线图其他待验证链路；当前仍不进入 4.x、不做 Tavily、不补 `pendingActions`。
 
 ## 验证结果
 
@@ -57,6 +61,14 @@
 | `mvn "-Dtest=ReportServiceTest#shouldExposeLatestOrchestrationDecisionInReportMainPath,TaskReplayProjectionServiceTest#shouldProjectStructuredOrchestrationDecisionIntoReplayMainPath,ReportExportRendererOrchestrationDecisionTest" test` | PASS |
 | `mvn -Dtest=TaskEventReplayServiceTest#shouldExposeLatestOrchestrationDecisionForReplayFrame test` | PASS |
 | `mvn "-Dtest=ReportServiceTest#shouldExposeLatestOrchestrationDecisionInReportMainPath,TaskReplayProjectionServiceTest#shouldProjectStructuredOrchestrationDecisionIntoReplayMainPath,ReportExportRendererOrchestrationDecisionTest,TaskEventReplayServiceTest#shouldExposeLatestOrchestrationDecisionForReplayFrame" test` | PASS |
+| `mvn -pl backend "-Dtest=ReportServiceTest#shouldIncludeWriterEvidenceSummaryInLegacyMarkdownDownload,ReportServiceTest#shouldIncludeWriterEvidenceSummaryInLegacyHtmlDownload" test` | PASS（2 tests，先红后绿，覆盖旧公开下载端点） |
+| `mvn -pl backend "-Dtest=ReportWritingSnapshotContractTest,ReportWriterAgentTest,ReportServiceTest,ReportExportRendererWriterEvidenceTest,ReportExportRendererOrchestrationDecisionTest" test` | PASS（33 tests） |
+| `mvn -pl backend "-Dtest=WriterSuggestionAssemblerTest,OrchestrationDecisionServiceTest,CitationSuggestionAssemblerTest" test` | PASS |
+| `POST /api/task/56/nodes/write_report/rerun` | PASS：`write_report -> quality_check -> quality_check_final` 最终均为 `SUCCESS` |
+| `GET /api/report/56` | PASS：`writerEvidenceSummary.writerEvidenceState=PARTIAL_SOURCE`，`citationGapSeverity=HIGH`，`sourceUrls[0]=https://notion.so/product/ai` |
+| `GET /api/report/56/export` | PASS：HTTP 200，Markdown 含“写作证据摘要”和 `PARTIAL_SOURCE` |
+| `GET /api/report/56/export/html` | PASS：HTTP 200，HTML 含“写作证据摘要”和 `PARTIAL_SOURCE` |
+| `git diff --check -- backend/src/main/java/cn/bugstack/competitoragent/report/ReportService.java backend/src/test/java/cn/bugstack/competitoragent/report/ReportServiceTest.java docs/superpowers/report-writing/plan/2026-06-26-report-writing-pre-4x-closure-plan.md docs/specs/2026-06-11-business-landscape-and-optimization-roadmap-design.md docs/superpowers/plans/2026-06-26-p3-4-to-4x-execution-roadmap-progress.md` | PASS（仅有 LF→CRLF warning，无格式错误） |
 | `git diff --check -- docs/superpowers/analysis-reasoning/problem/AnalysisReasoning.md docs/superpowers/report-writing/problem/ReportWriting.md docs/superpowers/conversation-collaboration/problem/ConversationCollaboration.md docs/superpowers/delivery-audit/problem/DeliveryAudit.md docs/specs/2026-06-11-business-landscape-and-optimization-roadmap-design.md docs/specs/project-evolution-roadmap.md docs/superpowers/plan/2026-06-26-3.5-convergence-decision.md docs/superpowers/plans/2026-06-26-p3-4-to-4x-execution-roadmap-progress.md` | PASS（仅有 LF→CRLF warning，无格式错误） |
 
 ## 本次执行记录
@@ -75,3 +87,7 @@
 - 2026-06-26 14:50：跑通 `TaskEventReplayServiceTest#shouldExposeLatestOrchestrationDecisionForReplayFrame` 与四条聚焦回归，确认 report / replay / export / SSE 四条主路径的协作决策只读投影已闭环。
 - 2026-06-26 15:02：回到总路线图复核 `pendingActions` 是否仍属当前必补缺口。结论为：现有主路径已经能通过 `decisionType / actionType / evidenceState / sourceUrls` 与既有 `recommendedAction / recoveryAdvice` 解释当前停点和下一步动作，`pendingActions` 现阶段仍保留为 checkpoint 内部恢复语义，暂不继续扩大只读投影范围；若后续 live 场景再次暴露“等待补证结果”和“等待人工处理”不可区分，再单开补丁处理。
 - 2026-06-26：新增 `docs/superpowers/report-writing/plan/2026-06-26-report-writing-pre-4x-closure-plan.md`，正式收口 ReportWriting 的 4.x 前可复用资产边界：稳定契约、持久化字段、查询投影、导出解释层和测试基线；明确当前不进入 4.x、不做 Tavily、不补 `pendingActions`、不大改 Writer 或 Analyzer。
+- 2026-06-26 16:01：完成 ReportWriting pre-4.x 自动化实施：`ReportResponse.writerEvidenceSummary` 稳定契约、`Report` Writer 证据快照持久化字段、`ReportService` 持久化优先 / 节点兜底查询投影、Markdown / HTML / JSON 导出解释层和 Writer 来源聚合均已落地；聚焦回归 31 条、协作协议保护回归 17 条均通过。当前仍未做真实任务验证，不把实链验证标记为完成。
+- 2026-06-26 17:30：使用真实任务 `56` 从 `write_report` 节点 rerun，Writer 输出并持久化 `writerEvidenceState=PARTIAL_SOURCE`、`citationGapSeverity=HIGH`、`missingCitationSections=weaknesses,conclusion,report_conclusion`、`sourceUrls=https://notion.so/product/ai`；`GET /api/report/56` 顶层投影与数据库快照一致。
+- 2026-06-26 17:37：live 验证发现旧公开下载端点 `/api/report/56/export` 与 `/api/report/56/export/html` 未展示“写作证据摘要”，根因为旧 `ReportService.exportMarkdown/exportHtml` 未消费新 Writer 证据投影；按 TDD 新增两个失败用例后补齐旧端点渲染。
+- 2026-06-26 17:43：重启 dev live backend 后复验任务 `56`，`write_report / quality_check / quality_check_final` 均为 `SUCCESS`；`GET /api/report/56` 返回 `PARTIAL_SOURCE / HIGH / sourceUrls[0]=https://notion.so/product/ai`；Markdown 与 HTML 公开下载均返回 HTTP 200，并包含“写作证据摘要”和 `PARTIAL_SOURCE`。本次 live 补证只关闭 ReportWriting 证据沉淀与交付解释缺口，不改变 4.x、Tavily、`pendingActions` 边界。

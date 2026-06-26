@@ -16,6 +16,7 @@ import cn.bugstack.competitoragent.repository.ReportRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -29,6 +30,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -441,6 +443,44 @@ class ReportWriterAgentTest {
         assertEquals("report_conclusion", output.path("sectionCitationGaps").get(0).path("targetSection").asText());
         assertTrue(output.path("issueFlags").toString().contains("WRITER_CITATION_GAP"));
         assertTrue(output.path("issueFlags").toString().contains("WRITER_MISSING_SOURCE"));
+    }
+
+    @Test
+    void shouldPersistWriterEvidenceSnapshotWhenCitationGapDetected() throws Exception {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of());
+        when(reportRepository.findByTaskId(1L)).thenReturn(Optional.empty());
+        when(promptService.render(eq("writer"), any())).thenReturn("writer-prompt");
+        when(llmClient.chat(any(), any())).thenReturn("# report");
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(1L)
+                .taskName("task")
+                .subjectProduct("Our Product")
+                .reportLanguage("中文")
+                .currentNodeName("write_report")
+                .build();
+        context.putSharedOutput("analyze_competitors", """
+                {
+                  "overview": "分析完成",
+                  "recommendations": []
+                }
+                """);
+
+        AgentResult result = agent.execute(context);
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        ArgumentCaptor<Report> captor = ArgumentCaptor.forClass(Report.class);
+        verify(reportRepository, atLeastOnce()).save(captor.capture());
+        Report saved = captor.getValue();
+
+        assertEquals("ERROR", output.path("citationGapSeverity").asText());
+        assertEquals("MISSING_SOURCE", output.path("writerEvidenceState").asText());
+        assertEquals("MISSING_SOURCE", saved.getWriterEvidenceState());
+        assertEquals("ERROR", saved.getCitationGapSeverity());
+        assertTrue(saved.getSectionCitationGaps().contains("report_conclusion"));
+        assertTrue(saved.getWriterIssueFlags().contains("WRITER_CITATION_GAP"));
     }
 
     @Test

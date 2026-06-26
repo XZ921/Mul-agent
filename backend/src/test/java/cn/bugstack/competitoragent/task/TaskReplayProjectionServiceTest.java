@@ -136,14 +136,6 @@ class TaskReplayProjectionServiceTest {
         when(memorySnapshotRepository.findByTaskIdOrderByIdDesc(42L)).thenReturn(List.of());
         when(agentExecutionLogRepository.findByTaskIdOrderByCreatedAtAsc(42L)).thenReturn(List.of());
         when(recoveryCheckpointService.listTaskCheckpoints(42L)).thenReturn(List.of());
-        when(taskRecoveryService.buildRecoveryAdvice(42L)).thenReturn(TaskRecoveryAdvice.builder()
-                .recommendedAction("OBSERVE_ONLY")
-                .summary("none")
-                .blockingNodeNames(List.of())
-                .resumeSupported(false)
-                .sourceUrls(List.of())
-                .build());
-
         ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
         TaskReplayProjectionService service = new TaskReplayProjectionService(
                 taskPlanRepository,

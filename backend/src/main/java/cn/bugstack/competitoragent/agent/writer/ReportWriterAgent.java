@@ -145,6 +145,13 @@ public class ReportWriterAgent extends BaseAgent {
             report.setContent(reportContent);
             report.setEvidenceCount(evidences.size());
             report.setSummary(buildSummary(reportContent, revisionMode));
+            // 只持久化 Writer 已经识别出的写作证据事实，不在这里生成补证、重写或人工介入决策。
+            report.setWriterEvidenceState(citationInspection.evidenceState());
+            report.setCitationGapSeverity(citationInspection.severity());
+            report.setMissingCitationSections(toJsonArray(citationInspection.missingCitationSections()));
+            report.setSectionCitationGaps(toJsonArray(citationInspection.gaps()));
+            report.setWriterIssueFlags(toJsonArray(citationInspection.issueFlags()));
+            report.setWriterSourceUrls(toJsonArray(normalizedAnalysis.sourceUrls()));
             reportRepository.save(report);
             // 任务级报告写回只作为“可复用上下文增强”，不能反向阻塞报告主链路。
             // 因此这里采用独立 try-catch，把 traceable 结论沉淀为短期记忆，失败仅记日志。
@@ -774,6 +781,13 @@ public class ReportWriterAgent extends BaseAgent {
         payload.put("evidenceFragments", normalizedAnalysis.evidenceFragments());
         payload.put("sectionEvidenceBundles", normalizedAnalysis.sectionEvidenceBundles());
         return objectMapper.writeValueAsString(payload);
+    }
+
+    /**
+     * Writer 快照字段统一以 JSON 数组文本落库，便于历史报告查询时稳定反序列化投影。
+     */
+    private String toJsonArray(Object value) throws Exception {
+        return objectMapper.writeValueAsString(value == null ? List.of() : value);
     }
 
     private record NormalizedAnalysisPayload(String serializedAnalysis,

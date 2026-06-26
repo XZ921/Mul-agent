@@ -148,6 +148,8 @@ public class ReportService {
                 taskRagAudits
         );
         OrchestrationDecisionSummary orchestrationDecision = resolveLatestOrchestrationDecision(taskId);
+        ReportResponse.WriterEvidenceSummaryInfo writerEvidenceSummary =
+                resolveWriterEvidenceSummary(report, nodes);
 
         // 这里把闭环节点状态和证据摘要一起返回，前端无需再自己拼接多份接口结果。
         return ReportResponse.builder()
@@ -171,7 +173,9 @@ public class ReportService {
                         deliverySummary,
                         evidenceEntryPoint,
                         auditSummary,
-                        orchestrationDecision))
+                        orchestrationDecision,
+                        writerEvidenceSummary))
+                .writerEvidenceSummary(writerEvidenceSummary)
                 .orchestrationDecision(orchestrationDecision)
                 .searchAuditOverview(searchAuditOverview)
                 .taskRagAudits(taskRagAudits)
@@ -459,7 +463,8 @@ public class ReportService {
                                                  ReportResponse.DeliverySummaryInfo deliverySummary,
                                                  ReportResponse.EvidenceEntryPointInfo evidenceEntryPoint,
                                                  ReportResponse.AuditSummaryInfo auditSummary,
-                                                 OrchestrationDecisionSummary orchestrationDecision) {
+                                                 OrchestrationDecisionSummary orchestrationDecision,
+                                                 ReportResponse.WriterEvidenceSummaryInfo writerEvidenceSummary) {
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
         for (ReportResponse.EvidenceInfo evidenceInfo : evidenceInfos == null ? List.<ReportResponse.EvidenceInfo>of() : evidenceInfos) {
             if (evidenceInfo != null) {
@@ -482,7 +487,109 @@ public class ReportService {
         if (orchestrationDecision != null) {
             appendSourceUrls(sourceUrls, orchestrationDecision.getSourceUrls());
         }
+        if (writerEvidenceSummary != null) {
+            appendSourceUrls(sourceUrls, writerEvidenceSummary.getSourceUrls());
+            for (ReportResponse.WriterCitationGapInfo gap : writerEvidenceSummary.getSectionCitationGaps() == null
+                    ? List.<ReportResponse.WriterCitationGapInfo>of()
+                    : writerEvidenceSummary.getSectionCitationGaps()) {
+                if (gap != null) {
+                    appendSourceUrls(sourceUrls, gap.getSourceUrls());
+                }
+            }
+        }
         return new ArrayList<>(sourceUrls);
+    }
+
+    /**
+     * Writer 证据摘要投影规则：优先读取 Report 持久化快照；
+     * 历史报告没有快照时，再回退到 rewrite_report / write_report 节点输出。
+     * 旧 Writer 输出如果只有 content / summary / sourceUrls，则保持 null，避免伪造写作证据摘要。
+     */
+    private ReportResponse.WriterEvidenceSummaryInfo resolveWriterEvidenceSummary(Report report, List<TaskNode> nodes) {
+        ReportResponse.WriterEvidenceSummaryInfo persisted = readWriterEvidenceSummaryFromReport(report);
+        if (persisted != null) {
+            return persisted;
+        }
+        ReportResponse.WriterEvidenceSummaryInfo rewriteSummary =
+                readWriterEvidenceSummaryFromNode(findNode(nodes, "rewrite_report"));
+        if (rewriteSummary != null) {
+            return rewriteSummary;
+        }
+        return readWriterEvidenceSummaryFromNode(findNode(nodes, "write_report"));
+    }
+
+    private ReportResponse.WriterEvidenceSummaryInfo readWriterEvidenceSummaryFromReport(Report report) {
+        if (report == null) {
+            return null;
+        }
+        List<ReportResponse.WriterCitationGapInfo> gaps = parseWriterCitationGaps(report.getSectionCitationGaps());
+        if (!hasWriterEvidenceSnapshotSignal(report.getWriterEvidenceState(), report.getCitationGapSeverity(), gaps)) {
+            return null;
+        }
+        return ReportResponse.WriterEvidenceSummaryInfo.builder()
+                .writerEvidenceState(defaultText(report.getWriterEvidenceState(), null))
+                .citationGapSeverity(defaultText(report.getCitationGapSeverity(), null))
+                .missingCitationSections(parseJsonList(report.getMissingCitationSections()))
+                .sectionCitationGaps(gaps)
+                .issueFlags(parseJsonList(report.getWriterIssueFlags()))
+                .sourceUrls(parseJsonList(report.getWriterSourceUrls()))
+                .build();
+    }
+
+    private ReportResponse.WriterEvidenceSummaryInfo readWriterEvidenceSummaryFromNode(TaskNode node) {
+        if (node == null) {
+            return null;
+        }
+        JsonNode output = readJson(node.getOutputData());
+        if (output == null || !output.isObject()) {
+            return null;
+        }
+        List<ReportResponse.WriterCitationGapInfo> gaps =
+                parseWriterCitationGaps(output.path("sectionCitationGaps"));
+        String writerEvidenceState = output.path("writerEvidenceState").asText(null);
+        String citationGapSeverity = output.path("citationGapSeverity").asText(null);
+        if (!hasWriterEvidenceSnapshotSignal(writerEvidenceState, citationGapSeverity, gaps)) {
+            return null;
+        }
+        return ReportResponse.WriterEvidenceSummaryInfo.builder()
+                .writerEvidenceState(defaultText(writerEvidenceState, null))
+                .citationGapSeverity(defaultText(citationGapSeverity, null))
+                .missingCitationSections(readStringList(output.path("missingCitationSections")))
+                .sectionCitationGaps(gaps)
+                .issueFlags(readStringList(output.path("issueFlags")))
+                .sourceUrls(readStringList(output.path("sourceUrls")))
+                .build();
+    }
+
+    private boolean hasWriterEvidenceSnapshotSignal(String writerEvidenceState,
+                                                    String citationGapSeverity,
+                                                    List<ReportResponse.WriterCitationGapInfo> gaps) {
+        return (writerEvidenceState != null && !writerEvidenceState.isBlank())
+                || (citationGapSeverity != null && !citationGapSeverity.isBlank())
+                || (gaps != null && !gaps.isEmpty());
+    }
+
+    private List<ReportResponse.WriterCitationGapInfo> parseWriterCitationGaps(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<ReportResponse.WriterCitationGapInfo>>() {});
+        } catch (JsonProcessingException e) {
+            log.warn("parse writer citation gaps failed", e);
+            return List.of();
+        }
+    }
+
+    private List<ReportResponse.WriterCitationGapInfo> parseWriterCitationGaps(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        List<ReportResponse.WriterCitationGapInfo> gaps = new ArrayList<>();
+        for (JsonNode item : node) {
+            gaps.add(objectMapper.convertValue(item, ReportResponse.WriterCitationGapInfo.class));
+        }
+        return gaps;
     }
 
     /**
@@ -591,14 +698,20 @@ public class ReportService {
     }
 
     public byte[] exportMarkdown(Long taskId) {
-        Report report = reportRepository.findByTaskId(taskId)
-                .orElseThrow(() -> new BusinessException(ResultCode.REPORT_NOT_FOUND, "taskId=" + taskId));
+        ReportResponse report = getReport(taskId);
 
         String content = report.getContent();
         if (content == null || content.isBlank()) {
             throw new BusinessException(ResultCode.REPORT_EXPORT_FAILED, "报告内容为空，无法导出");
         }
-        return content.getBytes(StandardCharsets.UTF_8);
+        String markdown = """
+                %s
+
+                ## 写作证据摘要
+
+                %s
+                """.formatted(content, buildWriterEvidenceMarkdown(report.getWriterEvidenceSummary())).trim();
+        return markdown.getBytes(StandardCharsets.UTF_8);
     }
 
     /**
@@ -673,6 +786,11 @@ public class ReportService {
                     </section>
 
                     <section class="card">
+                      <h2>写作证据摘要</h2>
+                      %s
+                    </section>
+
+                    <section class="card">
                       <h2>竞品溯源</h2>
                       %s
                     </section>
@@ -701,12 +819,83 @@ public class ReportService {
                 formatReviewStatus(report.getFinalReview()),
                 report.isRewriteApplied() ? "已完成改写闭环" : "单轮直出",
                 escapeHtml(report.getContent()),
+                buildWriterEvidenceHtml(report.getWriterEvidenceSummary()),
                 buildKnowledgeHtml(report.getCompetitorKnowledges()),
                 buildEvidenceHtml(report.getEvidences()),
                 buildSearchAuditHtml(report.getSearchAuditOverview())
         );
 
         return html.getBytes(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 旧 Markdown 下载端点不创建正式导出记录，但仍必须消费主路径投影后的 Writer 证据快照。
+     * 这样公开下载文件与报告详情保持同一套“持久化优先、节点兜底、不伪造旧输出”的解释规则。
+     */
+    private String buildWriterEvidenceMarkdown(ReportResponse.WriterEvidenceSummaryInfo summary) {
+        if (summary == null) {
+            return "当前暂无写作证据摘要。";
+        }
+        return """
+                - 证据状态：%s
+                - 引用缺口等级：%s
+                - 缺口章节：%s
+                - 来源链接：%s
+                - 章节缺口：%s
+                """.formatted(
+                defaultText(summary.getWriterEvidenceState(), ""),
+                defaultText(summary.getCitationGapSeverity(), ""),
+                joinTexts(summary.getMissingCitationSections()),
+                joinTexts(summary.getSourceUrls()),
+                buildWriterGapMarkdown(summary.getSectionCitationGaps())
+        ).trim();
+    }
+
+    private String buildWriterGapMarkdown(List<ReportResponse.WriterCitationGapInfo> gaps) {
+        if (gaps == null || gaps.isEmpty()) {
+            return "暂无章节级引用缺口";
+        }
+        List<String> lines = new ArrayList<>();
+        for (ReportResponse.WriterCitationGapInfo gap : gaps) {
+            if (gap == null) {
+                continue;
+            }
+            lines.add("%s/%s：%s，来源：%s".formatted(
+                    defaultText(gap.getTargetSection(), ""),
+                    defaultText(gap.getSectionTitle(), ""),
+                    defaultText(gap.getSummary(), ""),
+                    joinTexts(gap.getSourceUrls())
+            ));
+        }
+        return lines.isEmpty() ? "暂无章节级引用缺口" : String.join("；", lines);
+    }
+
+    /**
+     * HTML 下载端点展示同一份 Writer 证据摘要，但只输出可读列表，避免把节点原始 JSON 暴露到交付文件。
+     */
+    private String buildWriterEvidenceHtml(ReportResponse.WriterEvidenceSummaryInfo summary) {
+        if (summary == null) {
+            return "<p class=\"muted\">当前暂无写作证据摘要。</p>";
+        }
+        List<String> lines = new ArrayList<>();
+        lines.add("证据状态：" + escapeHtml(defaultText(summary.getWriterEvidenceState(), "")));
+        lines.add("引用缺口等级：" + escapeHtml(defaultText(summary.getCitationGapSeverity(), "")));
+        lines.add("缺口章节：" + escapeHtml(joinTexts(summary.getMissingCitationSections())));
+        lines.add("来源链接：" + escapeHtml(joinTexts(summary.getSourceUrls())));
+        lines.add("章节缺口：" + escapeHtml(buildWriterGapMarkdown(summary.getSectionCitationGaps())));
+        return "<ul><li>%s</li></ul>".formatted(String.join("</li><li>", lines));
+    }
+
+    private String joinTexts(List<String> values) {
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        if (values != null) {
+            for (String value : values) {
+                if (value != null && !value.isBlank()) {
+                    normalized.add(value.trim());
+                }
+            }
+        }
+        return normalized.isEmpty() ? "暂无" : String.join("，", normalized);
     }
 
     /**

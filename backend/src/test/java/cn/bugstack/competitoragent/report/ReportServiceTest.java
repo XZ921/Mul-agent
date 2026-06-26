@@ -19,11 +19,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -147,6 +149,159 @@ class ReportServiceTest {
         ReportResponse response = reportService.getReport(710L);
 
         assertEquals(List.of("https://notion.so/product/ai"), response.getSourceUrls());
+    }
+
+    @Test
+    void shouldExposePersistedWriterEvidenceSummaryInReportMainPath() {
+        Report report = Report.builder()
+                .id(910L)
+                .taskId(910L)
+                .title("ReportWriting 证据快照")
+                .content("# report")
+                .summary("summary")
+                .evidenceCount(0)
+                .writerEvidenceState("MISSING_SOURCE")
+                .citationGapSeverity("ERROR")
+                .missingCitationSections("[\"report_conclusion\"]")
+                .sectionCitationGaps("""
+                        [
+                          {
+                            "targetSection":"report_conclusion",
+                            "sectionTitle":"报告结论",
+                            "summary":"当前章节暂无可用证据来源",
+                            "severity":"ERROR",
+                            "evidenceState":"MISSING_SOURCE",
+                            "sourceUrls":[],
+                            "missingFields":["recommendations"],
+                            "suggestedQueries":["report_conclusion recommendations official source"]
+                          }
+                        ]
+                        """)
+                .writerIssueFlags("[\"WRITER_CITATION_GAP\",\"WRITER_MISSING_SOURCE\"]")
+                .writerSourceUrls("[]")
+                .build();
+        when(reportRepository.findByTaskId(910L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(910L)).thenReturn(List.of());
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(910L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(910L)).thenReturn(List.of());
+
+        ReportResponse response = reportService.getReport(910L);
+
+        assertNotNull(response.getWriterEvidenceSummary());
+        assertEquals("MISSING_SOURCE", response.getWriterEvidenceSummary().getWriterEvidenceState());
+        assertEquals("ERROR", response.getWriterEvidenceSummary().getCitationGapSeverity());
+        assertEquals("report_conclusion",
+                response.getWriterEvidenceSummary().getSectionCitationGaps().get(0).getTargetSection());
+    }
+
+    @Test
+    void shouldFallbackToWriterNodeOutputWhenReportHasNoPersistedWriterSnapshot() {
+        Report report = Report.builder()
+                .id(911L)
+                .taskId(911L)
+                .title("历史 ReportWriting 报告")
+                .content("# report")
+                .summary("summary")
+                .evidenceCount(0)
+                .build();
+        TaskNode writerNode = TaskNode.builder()
+                .taskId(911L)
+                .nodeName("write_report")
+                .outputData("""
+                        {
+                          "writerEvidenceState":"PARTIAL_SOURCE",
+                          "citationGapSeverity":"HIGH",
+                          "missingCitationSections":["pricing"],
+                          "sectionCitationGaps":[
+                            {
+                              "targetSection":"pricing",
+                              "sectionTitle":"定价策略",
+                              "summary":"定价章节已有来源但缺逐句引用",
+                              "severity":"HIGH",
+                              "evidenceState":"PARTIAL_SOURCE",
+                              "sourceUrls":["https://www.notion.so/pricing"],
+                              "missingFields":["pricingComparison"]
+                            }
+                          ],
+                          "issueFlags":["WRITER_CITATION_GAP"],
+                          "sourceUrls":["https://www.notion.so/pricing"]
+                        }
+                        """)
+                .build();
+
+        when(reportRepository.findByTaskId(911L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(911L)).thenReturn(List.of());
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(911L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(911L)).thenReturn(List.of(writerNode));
+
+        ReportResponse response = reportService.getReport(911L);
+
+        assertEquals("PARTIAL_SOURCE", response.getWriterEvidenceSummary().getWriterEvidenceState());
+        assertTrue(response.getSourceUrls().contains("https://www.notion.so/pricing"));
+    }
+
+    @Test
+    void shouldKeepWriterEvidenceSummaryNullForLegacyWriterOutputWithoutSnapshotFields() {
+        Report report = Report.builder()
+                .id(912L)
+                .taskId(912L)
+                .title("旧 Writer 报告")
+                .content("# legacy report")
+                .summary("旧 Writer 输出")
+                .evidenceCount(0)
+                .build();
+        TaskNode writerNode = TaskNode.builder()
+                .taskId(912L)
+                .nodeName("write_report")
+                .outputData("""
+                        {
+                          "content":"# legacy report",
+                          "summary":"旧 Writer 输出",
+                          "sourceUrls":["https://www.notion.so/product/ai"]
+                        }
+                        """)
+                .build();
+
+        when(reportRepository.findByTaskId(912L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(912L)).thenReturn(List.of());
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(912L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(912L)).thenReturn(List.of(writerNode));
+
+        ReportResponse response = reportService.getReport(912L);
+
+        assertNull(response.getWriterEvidenceSummary());
+    }
+
+    @Test
+    void shouldIncludeWriterEvidenceSummaryInLegacyMarkdownDownload() {
+        Report report = reportWithPersistedWriterEvidenceSnapshot(913L);
+        when(reportRepository.findByTaskId(913L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(913L)).thenReturn(List.of());
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(913L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(913L)).thenReturn(List.of());
+
+        String markdown = new String(reportService.exportMarkdown(913L), StandardCharsets.UTF_8);
+
+        assertTrue(markdown.contains("## 写作证据摘要"));
+        assertTrue(markdown.contains("PARTIAL_SOURCE"));
+        assertTrue(markdown.contains("定价策略"));
+        assertTrue(markdown.contains("https://www.notion.so/pricing"));
+    }
+
+    @Test
+    void shouldIncludeWriterEvidenceSummaryInLegacyHtmlDownload() {
+        Report report = reportWithPersistedWriterEvidenceSnapshot(914L);
+        when(reportRepository.findByTaskId(914L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(914L)).thenReturn(List.of());
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(914L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(914L)).thenReturn(List.of());
+
+        String html = new String(reportService.exportHtml(914L), StandardCharsets.UTF_8);
+
+        assertTrue(html.contains("写作证据摘要"));
+        assertTrue(html.contains("PARTIAL_SOURCE"));
+        assertTrue(html.contains("定价策略"));
+        assertTrue(html.contains("https://www.notion.so/pricing"));
     }
 
     @Test
@@ -1150,5 +1305,35 @@ class ReportServiceTest {
         } catch (NoSuchFieldException ignored) {
             // Red 阶段允许字段尚未落地；断言会通过缺失投影继续失败。
         }
+    }
+
+    private Report reportWithPersistedWriterEvidenceSnapshot(Long taskId) {
+        return Report.builder()
+                .id(taskId)
+                .taskId(taskId)
+                .title("ReportWriting 证据下载")
+                .content("# report")
+                .summary("summary")
+                .evidenceCount(0)
+                .writerEvidenceState("PARTIAL_SOURCE")
+                .citationGapSeverity("HIGH")
+                .missingCitationSections("[\"pricing\"]")
+                .sectionCitationGaps("""
+                        [
+                          {
+                            "targetSection":"pricing",
+                            "sectionTitle":"定价策略",
+                            "summary":"定价章节已有来源但缺逐句引用",
+                            "severity":"HIGH",
+                            "evidenceState":"PARTIAL_SOURCE",
+                            "sourceUrls":["https://www.notion.so/pricing"],
+                            "missingFields":["pricingComparison"],
+                            "suggestedQueries":["Notion AI pricing official source"]
+                          }
+                        ]
+                        """)
+                .writerIssueFlags("[\"WRITER_CITATION_GAP\"]")
+                .writerSourceUrls("[\"https://www.notion.so/pricing\"]")
+                .build();
     }
 }

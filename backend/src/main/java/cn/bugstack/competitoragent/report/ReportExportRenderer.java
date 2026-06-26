@@ -86,6 +86,10 @@ final class MarkdownReportExportRenderer implements ReportExportRenderer {
 
                 %s
 
+                ## 写作证据摘要
+
+                %s
+
                 ## 证据入口
 
                 - 入口说明：%s
@@ -112,6 +116,7 @@ final class MarkdownReportExportRenderer implements ReportExportRenderer {
                 ReportExportRenderSupport.buildSearchAuditSummary(report),
                 ReportExportRenderSupport.taskRagAuditSummary(report),
                 buildMarkdownOrchestrationDecisionSummary(report),
+                buildMarkdownWriterEvidenceSummary(report),
                 ReportExportRenderSupport.evidenceEntrySummary(report),
                 ReportExportRenderSupport.evidenceEntryTitle(report),
                 ReportExportRenderSupport.evidenceEntryUrl(report),
@@ -171,6 +176,49 @@ final class MarkdownReportExportRenderer implements ReportExportRenderer {
                 ReportExportRenderSupport.decisionReason(report),
                 ReportExportRenderSupport.decisionSourceUrlsText(report)
         ).trim();
+    }
+
+    /**
+     * Markdown 离线包需要直接解释 Writer 写作证据状态，
+     * 让使用者无需回到节点输出就能理解当前正文的引用缺口。
+     */
+    private String buildMarkdownWriterEvidenceSummary(ReportResponse report) {
+        ReportResponse.WriterEvidenceSummaryInfo summary = report.getWriterEvidenceSummary();
+        if (summary == null) {
+            return "当前暂无写作证据摘要。";
+        }
+        return """
+                - 证据状态：%s
+                - 引用缺口等级：%s
+                - 缺口章节：%s
+                - 来源链接：%s
+                - 章节缺口：%s
+                """.formatted(
+                ReportExportRenderSupport.safeText(summary.getWriterEvidenceState()),
+                ReportExportRenderSupport.safeText(summary.getCitationGapSeverity()),
+                ReportExportRenderSupport.joinTexts(summary.getMissingCitationSections()),
+                ReportExportRenderSupport.joinTexts(summary.getSourceUrls()),
+                buildMarkdownWriterGapLines(summary.getSectionCitationGaps())
+        ).trim();
+    }
+
+    private String buildMarkdownWriterGapLines(List<ReportResponse.WriterCitationGapInfo> gaps) {
+        if (gaps == null || gaps.isEmpty()) {
+            return "暂无章节级引用缺口";
+        }
+        List<String> lines = new ArrayList<>();
+        for (ReportResponse.WriterCitationGapInfo gap : gaps) {
+            if (gap == null) {
+                continue;
+            }
+            lines.add("%s/%s：%s，来源：%s".formatted(
+                    ReportExportRenderSupport.safeText(gap.getTargetSection()),
+                    ReportExportRenderSupport.safeText(gap.getSectionTitle()),
+                    ReportExportRenderSupport.safeText(gap.getSummary()),
+                    ReportExportRenderSupport.joinTexts(gap.getSourceUrls())
+            ));
+        }
+        return lines.isEmpty() ? "暂无章节级引用缺口" : String.join("；", lines);
     }
 
 }
@@ -240,6 +288,10 @@ final class HtmlReportExportRenderer implements ReportExportRenderer {
                       %s
                     </section>
                     <section class="card">
+                      <h2>写作证据摘要</h2>
+                      %s
+                    </section>
+                    <section class="card">
                       <h2>证据入口</h2>
                       <ul>
                         <li>入口说明：%s</li>
@@ -272,6 +324,7 @@ final class HtmlReportExportRenderer implements ReportExportRenderer {
                 escapeHtml(ReportExportRenderSupport.buildSearchAuditSummary(report)),
                 escapeHtml(ReportExportRenderSupport.taskRagAuditSummary(report)),
                 buildHtmlOrchestrationDecisionSummary(report),
+                buildHtmlWriterEvidenceSummary(report),
                 escapeHtml(ReportExportRenderSupport.evidenceEntrySummary(report)),
                 escapeHtml(ReportExportRenderSupport.evidenceEntryTitle(report)),
                 escapeHtml(ReportExportRenderSupport.evidenceEntryUrl(report)),
@@ -323,6 +376,43 @@ final class HtmlReportExportRenderer implements ReportExportRenderer {
                 "来源链接：" + escapeHtml(ReportExportRenderSupport.decisionSourceUrlsText(report))
         );
         return "<ul><li>%s</li></ul>".formatted(String.join("</li><li>", lines));
+    }
+
+    /**
+     * HTML 导出用结构化列表承载 Writer 证据摘要，
+     * 保持与 Markdown/JSON 同源但避免在页面里暴露原始节点 JSON。
+     */
+    private String buildHtmlWriterEvidenceSummary(ReportResponse report) {
+        ReportResponse.WriterEvidenceSummaryInfo summary = report.getWriterEvidenceSummary();
+        if (summary == null) {
+            return "<p>当前暂无写作证据摘要。</p>";
+        }
+        List<String> lines = new ArrayList<>();
+        lines.add("证据状态：" + escapeHtml(ReportExportRenderSupport.safeText(summary.getWriterEvidenceState())));
+        lines.add("引用缺口等级：" + escapeHtml(ReportExportRenderSupport.safeText(summary.getCitationGapSeverity())));
+        lines.add("缺口章节：" + escapeHtml(ReportExportRenderSupport.joinTexts(summary.getMissingCitationSections())));
+        lines.add("来源链接：" + escapeHtml(ReportExportRenderSupport.joinTexts(summary.getSourceUrls())));
+        lines.add("章节缺口：" + escapeHtml(buildHtmlWriterGapText(summary.getSectionCitationGaps())));
+        return "<ul><li>%s</li></ul>".formatted(String.join("</li><li>", lines));
+    }
+
+    private String buildHtmlWriterGapText(List<ReportResponse.WriterCitationGapInfo> gaps) {
+        if (gaps == null || gaps.isEmpty()) {
+            return "暂无章节级引用缺口";
+        }
+        List<String> lines = new ArrayList<>();
+        for (ReportResponse.WriterCitationGapInfo gap : gaps) {
+            if (gap == null) {
+                continue;
+            }
+            lines.add("%s/%s：%s，来源：%s".formatted(
+                    ReportExportRenderSupport.safeText(gap.getTargetSection()),
+                    ReportExportRenderSupport.safeText(gap.getSectionTitle()),
+                    ReportExportRenderSupport.safeText(gap.getSummary()),
+                    ReportExportRenderSupport.joinTexts(gap.getSourceUrls())
+            ));
+        }
+        return lines.isEmpty() ? "暂无章节级引用缺口" : String.join("；", lines);
     }
 
     private String escapeHtml(String value) {
@@ -384,6 +474,7 @@ final class JsonEvidencePackageExportRenderer implements ReportExportRenderer {
                 "sourceType", ReportExportRenderSupport.evidenceEntrySourceType(report)
         ));
         payload.put("orchestrationDecision", ReportExportRenderSupport.buildOrchestrationDecisionPayload(report));
+        payload.put("writerEvidenceSummary", ReportExportRenderSupport.buildWriterEvidencePayload(report));
         payload.put("evidences", report.getEvidences() == null ? List.of() : report.getEvidences());
         payload.put("sourceUrls", record.getSourceUrls() == null ? List.of() : record.getSourceUrls());
 
@@ -433,7 +524,8 @@ final class ReportExportRenderSupport {
         appendSourceUrls(merged, report == null || report.getAuditSummary() == null ? null : report.getAuditSummary().getSourceUrls());
         appendSourceUrls(merged, report == null || report.getEvidenceEntryPoint() == null ? null : report.getEvidenceEntryPoint().getSourceUrls());
         appendSourceUrls(merged, decisionSourceUrls(report));
-        if (report.getEvidences() != null) {
+        appendWriterEvidenceSourceUrls(merged, report == null ? null : report.getWriterEvidenceSummary());
+        if (report != null && report.getEvidences() != null) {
             for (EvidenceInfo evidence : report.getEvidences()) {
                 if (evidence != null && evidence.getUrl() != null && !evidence.getUrl().isBlank()) {
                     merged.add(evidence.getUrl().trim());
@@ -685,6 +777,63 @@ final class ReportExportRenderSupport {
         return payload;
     }
 
+    /**
+     * JSON 导出保留 Writer 写作证据的结构化快照，
+     * 方便离线审计直接定位证据状态、章节缺口和可回指来源。
+     */
+    static Map<String, Object> buildWriterEvidencePayload(ReportResponse report) {
+        ReportResponse.WriterEvidenceSummaryInfo summary = report == null ? null : report.getWriterEvidenceSummary();
+        if (summary == null) {
+            return null;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("writerEvidenceState", safeText(summary.getWriterEvidenceState()));
+        payload.put("citationGapSeverity", safeText(summary.getCitationGapSeverity()));
+        payload.put("missingCitationSections", normalizeTexts(summary.getMissingCitationSections()));
+        payload.put("sectionCitationGaps", buildWriterCitationGapPayload(summary.getSectionCitationGaps()));
+        payload.put("issueFlags", normalizeTexts(summary.getIssueFlags()));
+        payload.put("sourceUrls", normalizeSourceUrls(summary.getSourceUrls()));
+        return payload;
+    }
+
+    private static List<Map<String, Object>> buildWriterCitationGapPayload(List<ReportResponse.WriterCitationGapInfo> gaps) {
+        if (gaps == null || gaps.isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> payload = new ArrayList<>();
+        for (ReportResponse.WriterCitationGapInfo gap : gaps) {
+            if (gap == null) {
+                continue;
+            }
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("targetSection", safeText(gap.getTargetSection()));
+            item.put("sectionTitle", safeText(gap.getSectionTitle()));
+            item.put("summary", safeText(gap.getSummary()));
+            item.put("severity", safeText(gap.getSeverity()));
+            item.put("evidenceState", safeText(gap.getEvidenceState()));
+            item.put("sourceUrls", normalizeSourceUrls(gap.getSourceUrls()));
+            item.put("missingFields", normalizeTexts(gap.getMissingFields()));
+            item.put("suggestedQueries", normalizeTexts(gap.getSuggestedQueries()));
+            payload.add(item);
+        }
+        return payload;
+    }
+
+    private static void appendWriterEvidenceSourceUrls(LinkedHashSet<String> target,
+                                                       ReportResponse.WriterEvidenceSummaryInfo summary) {
+        if (summary == null) {
+            return;
+        }
+        appendSourceUrls(target, summary.getSourceUrls());
+        for (ReportResponse.WriterCitationGapInfo gap : summary.getSectionCitationGaps() == null
+                ? List.<ReportResponse.WriterCitationGapInfo>of()
+                : summary.getSectionCitationGaps()) {
+            if (gap != null) {
+                appendSourceUrls(target, gap.getSourceUrls());
+            }
+        }
+    }
+
     private static EvidenceInfo firstEvidence(ReportResponse report) {
         if (report.getEvidences() == null || report.getEvidences().isEmpty()) {
             return null;
@@ -713,6 +862,23 @@ final class ReportExportRenderSupport {
             }
         }
         return new ArrayList<>(normalized);
+    }
+
+    private static List<String> normalizeTexts(List<String> values) {
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        if (values != null) {
+            for (String value : values) {
+                if (value != null && !value.isBlank()) {
+                    normalized.add(value.trim());
+                }
+            }
+        }
+        return new ArrayList<>(normalized);
+    }
+
+    static String joinTexts(List<String> values) {
+        List<String> normalized = normalizeTexts(values);
+        return normalized.isEmpty() ? "暂无" : String.join("，", normalized);
     }
 
     static String safeText(String value) {

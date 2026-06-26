@@ -69,6 +69,13 @@ public class ReportResponse {
     @Schema(description = "Report-level source URLs aggregated for delivery and traceability")
     private List<String> sourceUrls;
 
+    /**
+     * Writer 写作证据快照。
+     * 该字段只承载 Writer 链路已经识别出的事实状态，不在 DTO 层生成补证、重写或人工介入决策。
+     */
+    @Schema(description = "Writer evidence summary projected for report writing delivery")
+    private WriterEvidenceSummaryInfo writerEvidenceSummary;
+
     @Schema(description = "Latest orchestration decision summary projected for delivery and audit")
     private OrchestrationDecisionSummary orchestrationDecision;
 
@@ -133,6 +140,36 @@ public class ReportResponse {
 
     @Schema(description = "Updated time")
     private LocalDateTime updatedAt;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Schema(description = "Writer evidence summary projected for report writing delivery")
+    public static class WriterEvidenceSummaryInfo {
+        private String writerEvidenceState;
+        private String citationGapSeverity;
+        private List<String> missingCitationSections;
+        private List<WriterCitationGapInfo> sectionCitationGaps;
+        private List<String> issueFlags;
+        private List<String> sourceUrls;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Schema(description = "Writer citation gap projected for report writing delivery")
+    public static class WriterCitationGapInfo {
+        private String targetSection;
+        private String sectionTitle;
+        private String summary;
+        private String severity;
+        private String evidenceState;
+        private List<String> sourceUrls;
+        private List<String> missingFields;
+        private List<String> suggestedQueries;
+    }
 
     @Data
     @Builder

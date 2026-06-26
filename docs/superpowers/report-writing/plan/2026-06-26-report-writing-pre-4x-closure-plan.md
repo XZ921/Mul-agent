@@ -12,16 +12,17 @@
 
 ## 0. 当前阶段
 
-当前阶段：ReportWriting 正式方案收口 - 4.x 前低风险资产界定
+当前阶段：ReportWriting pre-4.x 证据沉淀与交付解释收口 - 自动化与任务 56 live 验证已完成
 
 - [x] 信息采集：已完成
 - [x] 数据分析：已完成
 - [x] 方案边界：已完成
-- [ ] 稳定契约：待执行
-- [ ] 持久化字段：待执行
-- [ ] 查询投影：待执行
-- [ ] 导出解释层：待执行
-- [ ] 测试基线：待执行
+- [x] 稳定契约：已完成
+- [x] 持久化字段：已完成
+- [x] 查询投影：已完成
+- [x] 导出解释层：已完成
+- [x] 测试基线：已完成
+- [x] 真实任务验证：已完成（任务 `56`）
 
 本 plan 的执行进度应在实施时持续更新，格式固定为：
 
@@ -100,7 +101,7 @@
 - Modify: `backend/src/main/java/cn/bugstack/competitoragent/model/dto/ReportResponse.java`
 - Create: `backend/src/test/java/cn/bugstack/competitoragent/report/ReportWritingSnapshotContractTest.java`
 
-- [ ] **Step 1: 写 `writerEvidenceSummary` 契约快照测试**
+- [x] **Step 1: 写 `writerEvidenceSummary` 契约快照测试**
 
 ```java
 package cn.bugstack.competitoragent.report;
@@ -156,7 +157,7 @@ class ReportWritingSnapshotContractTest {
 }
 ```
 
-- [ ] **Step 2: 跑契约测试确认先失败**
+- [x] **Step 2: 跑契约测试确认先失败**
 
 Run:
 
@@ -166,7 +167,7 @@ mvn -pl backend "-Dtest=ReportWritingSnapshotContractTest" test
 
 Expected: FAIL，提示 `ReportResponse` 尚无 `writerEvidenceSummary`、`WriterEvidenceSummaryInfo` 或 `WriterCitationGapInfo`。
 
-- [ ] **Step 3: 在 `ReportResponse` 增加稳定 DTO**
+- [x] **Step 3: 在 `ReportResponse` 增加稳定 DTO**
 
 ```java
 @Schema(description = "Writer evidence summary projected for report writing delivery")
@@ -203,7 +204,7 @@ public static class WriterCitationGapInfo {
 }
 ```
 
-- [ ] **Step 4: 跑契约测试确认通过**
+- [x] **Step 4: 跑契约测试确认通过**
 
 Run:
 
@@ -222,7 +223,7 @@ Expected: PASS。
 - Modify: `backend/src/main/java/cn/bugstack/competitoragent/agent/writer/ReportWriterAgent.java`
 - Modify: `backend/src/test/java/cn/bugstack/competitoragent/agent/writer/ReportWriterAgentTest.java`
 
-- [ ] **Step 1: 写 Writer 持久化字段的失败测试**
+- [x] **Step 1: 写 Writer 持久化字段的失败测试**
 
 ```java
 @Test
@@ -264,7 +265,7 @@ void shouldPersistWriterEvidenceSnapshotWhenCitationGapDetected() throws Excepti
 }
 ```
 
-- [ ] **Step 2: 跑 Writer 测试确认先失败**
+- [x] **Step 2: 跑 Writer 测试确认先失败**
 
 Run:
 
@@ -274,7 +275,7 @@ mvn -pl backend "-Dtest=ReportWriterAgentTest#shouldPersistWriterEvidenceSnapsho
 
 Expected: FAIL，提示 `Report` 尚无 Writer 证据快照字段。
 
-- [ ] **Step 3: 增加 Flyway 迁移**
+- [x] **Step 3: 增加 Flyway 迁移**
 
 ```sql
 ALTER TABLE report ADD COLUMN writer_evidence_state VARCHAR(40);
@@ -285,7 +286,7 @@ ALTER TABLE report ADD COLUMN writer_issue_flags TEXT;
 ALTER TABLE report ADD COLUMN writer_source_urls TEXT;
 ```
 
-- [ ] **Step 4: 在 `Report` 实体增加字段**
+- [x] **Step 4: 在 `Report` 实体增加字段**
 
 ```java
 @Column(length = 40)
@@ -313,7 +314,7 @@ private String writerIssueFlags;
 private String writerSourceUrls;
 ```
 
-- [ ] **Step 5: 在 Writer 已有保存路径中写入快照**
+- [x] **Step 5: 在 Writer 已有保存路径中写入快照**
 
 ```java
 // 只持久化 Writer 已经识别出的事实，不在这里生成补证、重写或人工介入决策。
@@ -325,7 +326,7 @@ report.setWriterIssueFlags(toJsonArray(citationInspection.issueFlags()));
 report.setWriterSourceUrls(toJsonArray(normalizedAnalysis.sourceUrls()));
 ```
 
-- [ ] **Step 6: 跑 Writer 测试确认通过**
+- [x] **Step 6: 跑 Writer 测试确认通过**
 
 Run:
 
@@ -342,7 +343,7 @@ Expected: PASS。
 - Modify: `backend/src/main/java/cn/bugstack/competitoragent/report/ReportService.java`
 - Modify: `backend/src/test/java/cn/bugstack/competitoragent/report/ReportServiceTest.java`
 
-- [ ] **Step 1: 写报告主路径投影失败测试**
+- [x] **Step 1: 写报告主路径投影失败测试**
 
 ```java
 @Test
@@ -386,7 +387,7 @@ void shouldExposePersistedWriterEvidenceSummaryInReportMainPath() {
 }
 ```
 
-- [ ] **Step 2: 写历史数据回退读取节点输出的失败测试**
+- [x] **Step 2: 写历史数据回退读取节点输出的失败测试**
 
 ```java
 @Test
@@ -424,7 +425,7 @@ void shouldFallbackToWriterNodeOutputWhenReportHasNoPersistedWriterSnapshot() {
 }
 ```
 
-- [ ] **Step 3: 跑报告服务测试确认先失败**
+- [x] **Step 3: 跑报告服务测试确认先失败**
 
 Run:
 
@@ -434,7 +435,7 @@ mvn -pl backend "-Dtest=ReportServiceTest#shouldExposePersistedWriterEvidenceSum
 
 Expected: FAIL，提示 `ReportService` 尚未构建 `writerEvidenceSummary`。
 
-- [ ] **Step 4: 写旧 Writer 输出保持 null 的兼容测试**
+- [x] **Step 4: 写旧 Writer 输出保持 null 的兼容测试**
 
 ```java
 @Test
@@ -458,7 +459,7 @@ void shouldKeepWriterEvidenceSummaryNullForLegacyWriterOutputWithoutSnapshotFiel
 }
 ```
 
-- [ ] **Step 5: 在 `ReportService` 中实现稳定投影**
+- [x] **Step 5: 在 `ReportService` 中实现稳定投影**
 
 ```java
 ReportResponse.WriterEvidenceSummaryInfo writerEvidenceSummary =
@@ -478,7 +479,7 @@ return ReportResponse.builder()
         .build();
 ```
 
-- [ ] **Step 6: 投影规则固定为“持久化优先，节点输出兜底，不伪造旧摘要”**
+- [x] **Step 6: 投影规则固定为“持久化优先，节点输出兜底，不伪造旧摘要”**
 
 ```java
 private ReportResponse.WriterEvidenceSummaryInfo resolveWriterEvidenceSummary(Report report, List<TaskNode> nodes) {
@@ -494,7 +495,7 @@ private ReportResponse.WriterEvidenceSummaryInfo resolveWriterEvidenceSummary(Re
 
 `readWriterEvidenceSummaryFromNode()` 只有在节点输出显式包含 `writerEvidenceState`、`citationGapSeverity` 或非空 `sectionCitationGaps` 时才返回摘要。旧 Writer 输出如果只有 `content / summary / sourceUrls`，继续返回 `null`，导出层展示“当前暂无写作证据摘要。”；其中普通 `sourceUrls` 仍只按既有 report/evidence/diagnosis 聚合规则处理，不被伪装成 Writer 证据摘要。
 
-- [ ] **Step 7: 跑报告服务测试确认通过**
+- [x] **Step 7: 跑报告服务测试确认通过**
 
 Run:
 
@@ -513,7 +514,7 @@ Expected: PASS。
 
 说明：`ExportPackageService` 本轮不直接修改。它已经通过 `ReportExportRenderSupport.collectSourceUrls(report)` 生成正式导出记录的 `sourceUrls`，因此只要 support 方法合并 Writer 写作证据来源，导出记录会自然复用新来源集合。
 
-- [ ] **Step 1: 写 Markdown / HTML / JSON 导出失败测试**
+- [x] **Step 1: 写 Markdown / HTML / JSON 导出失败测试**
 
 ```java
 @Test
@@ -562,7 +563,7 @@ void shouldRenderWriterEvidenceSummaryInMarkdownHtmlAndJsonPackages() throws Exc
 }
 ```
 
-- [ ] **Step 2: 跑导出测试确认先失败**
+- [x] **Step 2: 跑导出测试确认先失败**
 
 Run:
 
@@ -572,7 +573,7 @@ mvn -pl backend "-Dtest=ReportExportRendererWriterEvidenceTest" test
 
 Expected: FAIL，导出 payload 尚无 `writerEvidenceSummary`。
 
-- [ ] **Step 3: Markdown / HTML 增加“写作证据摘要”**
+- [x] **Step 3: Markdown / HTML 增加“写作证据摘要”**
 
 ```java
 private String buildMarkdownWriterEvidenceSummary(ReportResponse report) {
@@ -593,13 +594,13 @@ private String buildMarkdownWriterEvidenceSummary(ReportResponse report) {
 }
 ```
 
-- [ ] **Step 4: JSON 导出增加结构化对象**
+- [x] **Step 4: JSON 导出增加结构化对象**
 
 ```java
 payload.put("writerEvidenceSummary", ReportExportRenderSupport.buildWriterEvidencePayload(report));
 ```
 
-- [ ] **Step 5: 在 `ReportExportRenderSupport.collectSourceUrls()` 聚合写作证据来源**
+- [x] **Step 5: 在 `ReportExportRenderSupport.collectSourceUrls()` 聚合写作证据来源**
 
 ```java
 static List<String> collectSourceUrls(ReportResponse report) {
@@ -632,7 +633,7 @@ static List<String> collectSourceUrls(ReportResponse report) {
 
 该步骤只修改 `ReportExportRenderer.java` 内的 support 聚合方法，不修改 `ExportPackageService`。实现时必须保留已有 report / diagnosis / delivery / audit / evidence entry / orchestration / evidence 列表聚合，只追加 Writer 写作证据来源；正式导出记录仍通过既有 `createExportPackage()` 调用链复用该聚合结果。
 
-- [ ] **Step 6: 跑导出测试确认通过**
+- [x] **Step 6: 跑导出测试确认通过**
 
 Run:
 
@@ -649,7 +650,7 @@ Expected: PASS。
 - Modify: `docs/specs/2026-06-11-business-landscape-and-optimization-roadmap-design.md`
 - Modify: `docs/superpowers/plans/2026-06-26-p3-4-to-4x-execution-roadmap-progress.md`
 
-- [ ] **Step 1: 运行 ReportWriting 聚焦回归**
+- [x] **Step 1: 运行 ReportWriting 聚焦回归**
 
 Run:
 
@@ -659,7 +660,7 @@ mvn -pl backend "-Dtest=ReportWritingSnapshotContractTest,ReportWriterAgentTest,
 
 Expected: PASS。
 
-- [ ] **Step 2: 运行协作协议保护回归**
+- [x] **Step 2: 运行协作协议保护回归**
 
 Run:
 
@@ -669,7 +670,7 @@ mvn -pl backend "-Dtest=WriterSuggestionAssemblerTest,OrchestrationDecisionServi
 
 Expected: PASS，确认本轮没有改变 Writer -> 3.4 的协作决策语义。
 
-- [ ] **Step 3: 运行文档和补丁格式检查**
+- [x] **Step 3: 运行文档和补丁格式检查**
 
 Run:
 
@@ -679,7 +680,7 @@ git diff --check -- docs/superpowers/report-writing/plan/2026-06-26-report-writi
 
 Expected: PASS。
 
-- [ ] **Step 4: 更新总路线图和进度文档**
+- [x] **Step 4: 更新总路线图和进度文档**
 
 总路线图只更新 ReportWriting 索引和状态，不把本 plan 标记为已实施：
 
@@ -691,18 +692,27 @@ Expected: PASS。
 
 ```markdown
 - 2026-06-26：新增 ReportWriting pre-4.x 收口 plan，明确当前只做稳定契约、持久化字段、查询投影、导出解释层和测试基线；不进入 4.x、不做 Tavily、不补 pendingActions。
+- 2026-06-26：任务 `56` live rerun 验证 Writer 快照持久化、`GET /api/report/56` 查询投影、公开 Markdown / HTML 下载端点均能展示写作证据摘要。
 ```
 
 ## 8. 完成判定
 
 本 plan 只有在以下条件都满足时，ReportWriting 才能从“方案完成”推进到“实施可复核”：
 
-- [ ] `ReportResponse.writerEvidenceSummary` 契约稳定，序列化字段被 `ReportWritingSnapshotContractTest` 锁定。
-- [ ] `Report` 持久化 Writer 证据快照字段，历史报告可通过节点输出兜底投影。
-- [ ] `ReportService.getReport()` 顶层返回 `writerEvidenceSummary`，且 `sourceUrls` 聚合包含 Writer 证据来源。
-- [ ] Markdown / HTML / JSON 正式导出均能解释写作证据状态和章节引用缺口。
-- [ ] ReportWriting 聚焦回归与协作协议保护回归通过。
-- [ ] 总路线图只标记“方案完成”，不提前标记“实施完成”或“实链验证完成”。
+- [x] `ReportResponse.writerEvidenceSummary` 契约稳定，序列化字段被 `ReportWritingSnapshotContractTest` 锁定。
+- [x] `Report` 持久化 Writer 证据快照字段，历史报告可通过节点输出兜底投影。
+- [x] `ReportService.getReport()` 顶层返回 `writerEvidenceSummary`，且 `sourceUrls` 聚合包含 Writer 证据来源。
+- [x] Markdown / HTML / JSON 正式导出均能解释写作证据状态和章节引用缺口。
+- [x] ReportWriting 聚焦回归与协作协议保护回归通过。
+- [x] 总路线图只标记“自动化收口”，不提前标记“实链验证完成”。
+- [x] 任务 `56` dev live 已验证 `writerEvidenceSummary / sourceUrls / export` 主路径。
+
+## 8.1 实链补充记录
+
+- 2026-06-26 17:30：真实任务 `56` 从 `write_report` 节点 rerun 后，Writer 输出并持久化 `writerEvidenceState=PARTIAL_SOURCE`、`citationGapSeverity=HIGH`、`missingCitationSections=weaknesses,conclusion,report_conclusion`、`sourceUrls=https://notion.so/product/ai`。
+- 2026-06-26 17:37：live 验证发现旧公开下载端点 `/api/report/56/export` 与 `/api/report/56/export/html` 未展示写作证据摘要；按 TDD 补齐 `ReportService.exportMarkdown/exportHtml`，使旧下载端点消费与 `getReport()` 相同的 Writer 证据投影。
+- 2026-06-26 17:43：重启 dev live backend 后复验，`GET /api/report/56`、`GET /api/report/56/export`、`GET /api/report/56/export/html` 均能返回 Writer 证据状态与来源；`write_report / quality_check / quality_check_final` 均为 `SUCCESS`。
+- 该补证只关闭 ReportWriting 证据沉淀与交付解释缺口，不触发 4.x runtime、Tavily、`pendingActions` 或 Writer prompt / Analyzer 推理改造。
 
 ## 9. 本轮明确不关闭的事项
 

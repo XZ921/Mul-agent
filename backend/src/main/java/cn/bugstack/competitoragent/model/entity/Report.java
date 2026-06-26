@@ -70,6 +70,52 @@ public class Report {
     @Schema(description = "报告中引用的证据总数", example = "25")
     private Integer evidenceCount;
 
+    // ==================== Writer 写作证据快照字段 ====================
+
+    /**
+     * Writer 阶段识别出的整体证据状态。
+     * 该字段只持久化 Writer 已经产出的事实，不承载补采、重写或人工介入决策。
+     */
+    @Column(length = 40)
+    @Schema(description = "Writer evidence state: FULL_SOURCE / PARTIAL_SOURCE / MISSING_SOURCE")
+    private String writerEvidenceState;
+
+    /**
+     * Writer 阶段识别出的引用缺口等级。
+     * 该等级来自 WriterCitationGapInspector，用于报告查询和导出层解释当前可交付风险。
+     */
+    @Column(length = 40)
+    @Schema(description = "Writer citation gap severity: NONE / HIGH / ERROR")
+    private String citationGapSeverity;
+
+    /**
+     * Writer 判定缺少引用支撑的章节键，JSON 数组。
+     */
+    @Column(columnDefinition = "TEXT")
+    @Schema(description = "Writer missing citation sections JSON array")
+    private String missingCitationSections;
+
+    /**
+     * Writer 章节引用缺口明细，JSON 数组。
+     */
+    @Column(columnDefinition = "TEXT")
+    @Schema(description = "Writer section citation gaps JSON array")
+    private String sectionCitationGaps;
+
+    /**
+     * Writer 证据快照问题标记，JSON 数组。
+     */
+    @Column(columnDefinition = "TEXT")
+    @Schema(description = "Writer issue flags JSON array")
+    private String writerIssueFlags;
+
+    /**
+     * Writer 写作阶段可回指来源，JSON 数组。
+     */
+    @Column(columnDefinition = "TEXT")
+    @Schema(description = "Writer source URLs JSON array")
+    private String writerSourceUrls;
+
     @Column(updatable = false)
     @Schema(description = "报告生成时间")
     private LocalDateTime createdAt;
