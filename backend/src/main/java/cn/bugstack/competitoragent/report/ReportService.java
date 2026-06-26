@@ -4,6 +4,7 @@ import cn.bugstack.competitoragent.common.BusinessException;
 import cn.bugstack.competitoragent.common.ResultCode;
 import cn.bugstack.competitoragent.context.TaskRagContextSummaryFormatter;
 import cn.bugstack.competitoragent.knowledge.TaskKnowledgeSnapshotResolver;
+import cn.bugstack.competitoragent.model.dto.OrchestrationDecisionSummary;
 import cn.bugstack.competitoragent.model.dto.ReportResponse;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.CollectorSearchAudit;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.CompetitorKnowledgeInfo;
@@ -25,10 +26,12 @@ import cn.bugstack.competitoragent.model.entity.Report;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionSummaryProjector;
 import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
+import cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository;
 import cn.bugstack.competitoragent.workflow.contract.QualityDiagnosis;
 import cn.bugstack.competitoragent.workflow.contract.QualityDimension;
 import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
@@ -39,6 +42,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -64,6 +68,7 @@ public class ReportService {
     private final EvidenceQueryService evidenceQueryService;
     private final ReportDiagnosisAssembler reportDiagnosisAssembler;
     private final ObjectMapper objectMapper;
+    private TaskWorkflowEventRepository taskWorkflowEventRepository;
     private static final List<CoverageFieldDefinition> COVERAGE_FIELD_DEFINITIONS = List.of(
             new CoverageFieldDefinition("summary", "overview", "产品概览"),
             new CoverageFieldDefinition("positioning", "positioning", "市场定位"),
@@ -142,6 +147,7 @@ public class ReportService {
                 searchAuditOverview,
                 taskRagAudits
         );
+        OrchestrationDecisionSummary orchestrationDecision = resolveLatestOrchestrationDecision(taskId);
 
         // 这里把闭环节点状态和证据摘要一起返回，前端无需再自己拼接多份接口结果。
         return ReportResponse.builder()
@@ -164,7 +170,9 @@ public class ReportService {
                         reportDiagnosis,
                         deliverySummary,
                         evidenceEntryPoint,
-                        auditSummary))
+                        auditSummary,
+                        orchestrationDecision))
+                .orchestrationDecision(orchestrationDecision)
                 .searchAuditOverview(searchAuditOverview)
                 .taskRagAudits(taskRagAudits)
                 .evidenceCoverageOverview(evidenceCoverageOverview)
@@ -177,6 +185,11 @@ public class ReportService {
                 .createdAt(report.getCreatedAt())
                 .updatedAt(report.getUpdatedAt())
                 .build();
+    }
+
+    @Autowired(required = false)
+    void setTaskWorkflowEventRepository(TaskWorkflowEventRepository taskWorkflowEventRepository) {
+        this.taskWorkflowEventRepository = taskWorkflowEventRepository;
     }
 
     /**
@@ -445,7 +458,8 @@ public class ReportService {
                                                  ReportDiagnosisInfo reportDiagnosis,
                                                  ReportResponse.DeliverySummaryInfo deliverySummary,
                                                  ReportResponse.EvidenceEntryPointInfo evidenceEntryPoint,
-                                                 ReportResponse.AuditSummaryInfo auditSummary) {
+                                                 ReportResponse.AuditSummaryInfo auditSummary,
+                                                 OrchestrationDecisionSummary orchestrationDecision) {
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
         for (ReportResponse.EvidenceInfo evidenceInfo : evidenceInfos == null ? List.<ReportResponse.EvidenceInfo>of() : evidenceInfos) {
             if (evidenceInfo != null) {
@@ -465,7 +479,23 @@ public class ReportService {
         if (auditSummary != null) {
             appendSourceUrls(sourceUrls, auditSummary.getSourceUrls());
         }
+        if (orchestrationDecision != null) {
+            appendSourceUrls(sourceUrls, orchestrationDecision.getSourceUrls());
+        }
         return new ArrayList<>(sourceUrls);
+    }
+
+    /**
+     * delivery / export 主路径只需要“最近一次可解释的协作决策摘要”，
+     * 因此这里显式读取最近一次编排决策事件并投影成稳定 DTO，不重算任何编排规则。
+     */
+    private OrchestrationDecisionSummary resolveLatestOrchestrationDecision(Long taskId) {
+        if (taskId == null || taskWorkflowEventRepository == null) {
+            return null;
+        }
+        return taskWorkflowEventRepository.findLatestOrchestrationDecisionEvent(taskId)
+                .flatMap(event -> OrchestrationDecisionSummaryProjector.fromWorkflowEvent(event, objectMapper))
+                .orElse(null);
     }
 
     private void appendSourceUrls(LinkedHashSet<String> sourceUrls, List<String> values) {

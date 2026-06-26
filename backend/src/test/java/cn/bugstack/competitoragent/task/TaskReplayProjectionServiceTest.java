@@ -61,7 +61,30 @@ class TaskReplayProjectionServiceTest {
         MemorySnapshotRepository memorySnapshotRepository = mock(MemorySnapshotRepository.class);
         AgentExecutionLogRepository agentExecutionLogRepository = mock(AgentExecutionLogRepository.class);
         RecoveryCheckpointService recoveryCheckpointService = mock(RecoveryCheckpointService.class);
-        TaskRecoveryService taskRecoveryService = mock(TaskRecoveryService.class);
+        TaskRecoveryService taskRecoveryService = new TaskRecoveryService(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null) {
+            @Override
+            public TaskRecoveryAdvice buildRecoveryAdvice(Long taskId) {
+                return TaskRecoveryAdvice.builder()
+                        .recommendedAction("OBSERVE_ONLY")
+                        .summary("none")
+                        .blockingNodeNames(List.of())
+                        .resumeSupported(false)
+                        .sourceUrls(List.of())
+                        .build();
+            }
+        };
 
         LocalDateTime baseTime = LocalDateTime.of(2026, 6, 23, 15, 0, 0);
         TaskPlan activePlan = TaskPlan.builder()
@@ -280,6 +303,71 @@ class TaskReplayProjectionServiceTest {
                     assertThat(item.getNodeName()).isEqualTo("write_report");
                     assertThat(item.getEventType()).isEqualTo("ORCHESTRATION_DECISION_RECORDED");
                 });
+    }
+
+    @Test
+    void shouldProjectStructuredOrchestrationDecisionIntoReplayMainPath() {
+        TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
+        TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);
+        TaskNodeRepository taskNodeRepository = mock(TaskNodeRepository.class);
+        TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository = mock(TaskNodeExecutionAttemptRepository.class);
+        MemorySnapshotRepository memorySnapshotRepository = mock(MemorySnapshotRepository.class);
+        AgentExecutionLogRepository agentExecutionLogRepository = mock(AgentExecutionLogRepository.class);
+        RecoveryCheckpointService recoveryCheckpointService = mock(RecoveryCheckpointService.class);
+        TaskRecoveryService taskRecoveryService = mock(TaskRecoveryService.class);
+
+        TaskWorkflowEvent decisionEvent = TaskWorkflowEvent.builder()
+                .id(3301L)
+                .eventId("evt-review-3301")
+                .taskId(120L)
+                .nodeName("quality_check_final")
+                .eventType(WorkflowEventType.ORCHESTRATION_DECISION_RECORDED)
+                .payload("""
+                        {
+                          "decision": {
+                            "decisionId": "od-120-review",
+                            "triggerNodeName": "quality_check_final",
+                            "decisionType": "WAIT_FOR_HUMAN",
+                            "actionType": "MANUAL_REVIEW",
+                            "reason": "终审阻塞，等待人工补证",
+                            "evidenceState": "MISSING_SOURCE",
+                            "sourceUrls": ["https://docs.example.com/replay-gap"]
+                          }
+                        }
+                        """)
+                .sourceUrls("[\"https://docs.example.com/replay-gap\"]")
+                .createdAt(LocalDateTime.of(2026, 6, 26, 18, 0))
+                .build();
+
+        when(taskPlanRepository.findByTaskIdOrderByPlanVersionAsc(120L)).thenReturn(List.of());
+        when(taskPlanRepository.findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(120L)).thenReturn(Optional.empty());
+        when(taskWorkflowEventRepository.findAll()).thenReturn(List.of(decisionEvent));
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(120L)).thenReturn(List.of());
+        when(taskNodeExecutionAttemptRepository.findAll()).thenReturn(List.of());
+        when(memorySnapshotRepository.findByTaskIdOrderByIdDesc(120L)).thenReturn(List.of());
+        when(agentExecutionLogRepository.findByTaskIdOrderByCreatedAtAsc(120L)).thenReturn(List.of());
+        when(recoveryCheckpointService.listTaskCheckpoints(120L)).thenReturn(List.of());
+
+        ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        TaskReplayProjectionService projectionService = new TaskReplayProjectionService(
+                taskPlanRepository,
+                taskWorkflowEventRepository,
+                taskNodeRepository,
+                taskNodeExecutionAttemptRepository,
+                memorySnapshotRepository,
+                agentExecutionLogRepository,
+                recoveryCheckpointService,
+                taskRecoveryService,
+                objectMapper
+        );
+
+        TaskReplayResponse replay = projectionService.getTaskReplay(120L);
+        JsonNode payload = objectMapper.valueToTree(replay);
+
+        assertThat(payload.at("/latestOrchestrationDecision/decisionType").asText()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(payload.at("/latestOrchestrationDecision/evidenceState").asText()).isEqualTo("MISSING_SOURCE");
+        assertThat(payload.at("/timeline/0/orchestrationDecision/decisionId").asText()).isEqualTo("od-120-review");
+        assertThat(payload.at("/timeline/0/summary").asText()).contains("WAIT_FOR_HUMAN");
     }
 
     @Test

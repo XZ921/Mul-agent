@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.report;
 
+import cn.bugstack.competitoragent.model.dto.OrchestrationDecisionSummary;
 import cn.bugstack.competitoragent.model.dto.ReportExportResponse;
 import cn.bugstack.competitoragent.model.dto.ReportResponse;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.EvidenceInfo;
@@ -81,6 +82,10 @@ final class MarkdownReportExportRenderer implements ReportExportRenderer {
                 - 检索审计：%s
                 - Task RAG 摘要：%s
 
+                ## 协作决策摘要
+
+                %s
+
                 ## 证据入口
 
                 - 入口说明：%s
@@ -106,6 +111,7 @@ final class MarkdownReportExportRenderer implements ReportExportRenderer {
                 ReportExportRenderSupport.auditSummary(report),
                 ReportExportRenderSupport.buildSearchAuditSummary(report),
                 ReportExportRenderSupport.taskRagAuditSummary(report),
+                buildMarkdownOrchestrationDecisionSummary(report),
                 ReportExportRenderSupport.evidenceEntrySummary(report),
                 ReportExportRenderSupport.evidenceEntryTitle(report),
                 ReportExportRenderSupport.evidenceEntryUrl(report),
@@ -132,6 +138,39 @@ final class MarkdownReportExportRenderer implements ReportExportRenderer {
             ));
         }
         return String.join("\n", lines);
+    }
+
+    /**
+     * Markdown 导出需要把最近一次协作决策投影成稳定摘要，
+     * 这样离线阅读时可以直接看到“为什么当前报告被拦住、下一步应做什么”。
+     */
+    private String buildMarkdownOrchestrationDecisionSummary(ReportResponse report) {
+        if (!ReportExportRenderSupport.hasOrchestrationDecision(report)) {
+            return "当前暂无协作决策记录。";
+        }
+        return """
+                - 决策 ID：%s
+                - 决策类型：%s
+                - 动作类型：%s
+                - 触发节点：%s
+                - 目标节点：%s
+                - 证据状态：%s
+                - 需要人工介入：%s
+                - 需要确认：%s
+                - 决策原因：%s
+                - 来源链接：%s
+                """.formatted(
+                ReportExportRenderSupport.decisionId(report),
+                ReportExportRenderSupport.decisionType(report),
+                ReportExportRenderSupport.actionType(report),
+                ReportExportRenderSupport.triggerNodeName(report),
+                ReportExportRenderSupport.targetNode(report),
+                ReportExportRenderSupport.decisionEvidenceState(report),
+                ReportExportRenderSupport.requiresHumanInterventionText(report),
+                ReportExportRenderSupport.requiresConfirmationText(report),
+                ReportExportRenderSupport.decisionReason(report),
+                ReportExportRenderSupport.decisionSourceUrlsText(report)
+        ).trim();
     }
 
 }
@@ -197,6 +236,10 @@ final class HtmlReportExportRenderer implements ReportExportRenderer {
                       </ul>
                     </section>
                     <section class="card">
+                      <h2>协作决策摘要</h2>
+                      %s
+                    </section>
+                    <section class="card">
                       <h2>证据入口</h2>
                       <ul>
                         <li>入口说明：%s</li>
@@ -228,6 +271,7 @@ final class HtmlReportExportRenderer implements ReportExportRenderer {
                 escapeHtml(ReportExportRenderSupport.auditSummary(report)),
                 escapeHtml(ReportExportRenderSupport.buildSearchAuditSummary(report)),
                 escapeHtml(ReportExportRenderSupport.taskRagAuditSummary(report)),
+                buildHtmlOrchestrationDecisionSummary(report),
                 escapeHtml(ReportExportRenderSupport.evidenceEntrySummary(report)),
                 escapeHtml(ReportExportRenderSupport.evidenceEntryTitle(report)),
                 escapeHtml(ReportExportRenderSupport.evidenceEntryUrl(report)),
@@ -256,6 +300,29 @@ final class HtmlReportExportRenderer implements ReportExportRenderer {
             ));
         }
         return String.join("", lines);
+    }
+
+    /**
+     * HTML 正式导出会被交付与审计链路直接消费，
+     * 因此这里把协作决策整理成可读列表，避免用户还要回到原始事件流里找原因。
+     */
+    private String buildHtmlOrchestrationDecisionSummary(ReportResponse report) {
+        if (!ReportExportRenderSupport.hasOrchestrationDecision(report)) {
+            return "<p>当前暂无协作决策记录。</p>";
+        }
+        List<String> lines = List.of(
+                "决策 ID：" + escapeHtml(ReportExportRenderSupport.decisionId(report)),
+                "决策类型：" + escapeHtml(ReportExportRenderSupport.decisionType(report)),
+                "动作类型：" + escapeHtml(ReportExportRenderSupport.actionType(report)),
+                "触发节点：" + escapeHtml(ReportExportRenderSupport.triggerNodeName(report)),
+                "目标节点：" + escapeHtml(ReportExportRenderSupport.targetNode(report)),
+                "证据状态：" + escapeHtml(ReportExportRenderSupport.decisionEvidenceState(report)),
+                "需要人工介入：" + escapeHtml(ReportExportRenderSupport.requiresHumanInterventionText(report)),
+                "需要确认：" + escapeHtml(ReportExportRenderSupport.requiresConfirmationText(report)),
+                "决策原因：" + escapeHtml(ReportExportRenderSupport.decisionReason(report)),
+                "来源链接：" + escapeHtml(ReportExportRenderSupport.decisionSourceUrlsText(report))
+        );
+        return "<ul><li>%s</li></ul>".formatted(String.join("</li><li>", lines));
     }
 
     private String escapeHtml(String value) {
@@ -316,6 +383,7 @@ final class JsonEvidencePackageExportRenderer implements ReportExportRenderer {
                 "evidenceId", ReportExportRenderSupport.evidenceEntryId(report),
                 "sourceType", ReportExportRenderSupport.evidenceEntrySourceType(report)
         ));
+        payload.put("orchestrationDecision", ReportExportRenderSupport.buildOrchestrationDecisionPayload(report));
         payload.put("evidences", report.getEvidences() == null ? List.of() : report.getEvidences());
         payload.put("sourceUrls", record.getSourceUrls() == null ? List.of() : record.getSourceUrls());
 
@@ -355,13 +423,16 @@ final class ReportExportRenderSupport {
 
     /**
      * 正式导出记录必须保留 sourceUrls，方便离线包仍能回查来源。
-     * 这里同时合并报告诊断与证据列表中的 URL，避免只依赖单一路径字段。
+     * 这里同时合并报告主链路、协作决策与证据列表中的 URL，避免只依赖单一路径字段。
      */
     static List<String> collectSourceUrls(ReportResponse report) {
         LinkedHashSet<String> merged = new LinkedHashSet<>();
-        if (report.getReportDiagnosis() != null && report.getReportDiagnosis().getSourceUrls() != null) {
-            merged.addAll(report.getReportDiagnosis().getSourceUrls());
-        }
+        appendSourceUrls(merged, report == null ? null : report.getSourceUrls());
+        appendSourceUrls(merged, report == null || report.getReportDiagnosis() == null ? null : report.getReportDiagnosis().getSourceUrls());
+        appendSourceUrls(merged, report == null || report.getDeliverySummary() == null ? null : report.getDeliverySummary().getSourceUrls());
+        appendSourceUrls(merged, report == null || report.getAuditSummary() == null ? null : report.getAuditSummary().getSourceUrls());
+        appendSourceUrls(merged, report == null || report.getEvidenceEntryPoint() == null ? null : report.getEvidenceEntryPoint().getSourceUrls());
+        appendSourceUrls(merged, decisionSourceUrls(report));
         if (report.getEvidences() != null) {
             for (EvidenceInfo evidence : report.getEvidences()) {
                 if (evidence != null && evidence.getUrl() != null && !evidence.getUrl().isBlank()) {
@@ -516,11 +587,132 @@ final class ReportExportRenderSupport {
         return firstEvidence(report) == null ? "" : safeText(firstEvidence(report).getSourceType());
     }
 
+    /**
+     * 正式导出消费的是“最近一次稳定协作决策事实”，
+     * 因此这里统一做一次归一化，避免 Markdown / HTML / JSON 各自处理空值与默认值。
+     */
+    static boolean hasOrchestrationDecision(ReportResponse report) {
+        return normalizedDecision(report) != null;
+    }
+
+    static String decisionId(ReportResponse report) {
+        return hasOrchestrationDecision(report)
+                ? safeText(normalizedDecision(report).getDecisionId())
+                : "";
+    }
+
+    static String triggerNodeName(ReportResponse report) {
+        return hasOrchestrationDecision(report)
+                ? safeText(normalizedDecision(report).getTriggerNodeName())
+                : "";
+    }
+
+    static String decisionType(ReportResponse report) {
+        return hasOrchestrationDecision(report)
+                ? safeText(normalizedDecision(report).getDecisionType())
+                : "";
+    }
+
+    static String actionType(ReportResponse report) {
+        return hasOrchestrationDecision(report)
+                ? safeText(normalizedDecision(report).getActionType())
+                : "";
+    }
+
+    static String targetNode(ReportResponse report) {
+        return hasOrchestrationDecision(report)
+                ? safeText(normalizedDecision(report).getTargetNode())
+                : "";
+    }
+
+    static String decisionReason(ReportResponse report) {
+        return hasOrchestrationDecision(report)
+                ? safeText(normalizedDecision(report).getReason())
+                : "当前暂无协作决策记录。";
+    }
+
+    static String decisionEvidenceState(ReportResponse report) {
+        return hasOrchestrationDecision(report)
+                ? safeText(normalizedDecision(report).getEvidenceState())
+                : "";
+    }
+
+    static List<String> decisionSourceUrls(ReportResponse report) {
+        return hasOrchestrationDecision(report)
+                ? normalizeSourceUrls(normalizedDecision(report).getSourceUrls())
+                : List.of();
+    }
+
+    static String decisionSourceUrlsText(ReportResponse report) {
+        List<String> sourceUrls = decisionSourceUrls(report);
+        return sourceUrls.isEmpty() ? "暂无来源链接" : String.join("，", sourceUrls);
+    }
+
+    static String requiresHumanInterventionText(ReportResponse report) {
+        return hasOrchestrationDecision(report) && normalizedDecision(report).isRequiresHumanIntervention() ? "是" : "否";
+    }
+
+    static String requiresConfirmationText(ReportResponse report) {
+        if (!hasOrchestrationDecision(report)) {
+            return "否";
+        }
+        Boolean requiresConfirmation = normalizedDecision(report).getRequiresConfirmation();
+        return Boolean.TRUE.equals(requiresConfirmation) ? "是" : "否";
+    }
+
+    /**
+     * JSON 导出需要保留结构化协作决策对象，供后续 replay / audit / 离线解析复用，
+     * 但又不能让渲染器直接暴露可变实体，因此在这里统一投影成稳定 Map。
+     */
+    static Map<String, Object> buildOrchestrationDecisionPayload(ReportResponse report) {
+        if (!hasOrchestrationDecision(report)) {
+            return null;
+        }
+        OrchestrationDecisionSummary decision = normalizedDecision(report);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("decisionId", safeText(decision.getDecisionId()));
+        payload.put("taskId", decision.getTaskId());
+        payload.put("triggerNodeName", safeText(decision.getTriggerNodeName()));
+        payload.put("decisionType", safeText(decision.getDecisionType()));
+        payload.put("actionType", safeText(decision.getActionType()));
+        payload.put("targetNode", safeText(decision.getTargetNode()));
+        payload.put("affectedScope", safeText(decision.getAffectedScope()));
+        payload.put("reason", safeText(decision.getReason()));
+        payload.put("requiresHumanIntervention", decision.isRequiresHumanIntervention());
+        payload.put("requiresConfirmation", Boolean.TRUE.equals(decision.getRequiresConfirmation()));
+        payload.put("evidenceState", safeText(decision.getEvidenceState()));
+        payload.put("sourceUrls", decisionSourceUrls(report));
+        return payload;
+    }
+
     private static EvidenceInfo firstEvidence(ReportResponse report) {
         if (report.getEvidences() == null || report.getEvidences().isEmpty()) {
             return null;
         }
         return report.getEvidences().get(0);
+    }
+
+    private static OrchestrationDecisionSummary normalizedDecision(ReportResponse report) {
+        if (report == null || report.getOrchestrationDecision() == null) {
+            return null;
+        }
+        return report.getOrchestrationDecision().normalized();
+    }
+
+    private static void appendSourceUrls(LinkedHashSet<String> target, List<String> sourceUrls) {
+        target.addAll(normalizeSourceUrls(sourceUrls));
+    }
+
+    private static List<String> normalizeSourceUrls(List<String> sourceUrls) {
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        if (sourceUrls != null) {
+            for (String sourceUrl : sourceUrls) {
+                if (sourceUrl != null && !sourceUrl.isBlank()) {
+                    normalized.add(sourceUrl.trim());
+                }
+            }
+        }
+        return new ArrayList<>(normalized);
     }
 
     static String safeText(String value) {

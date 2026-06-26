@@ -69,6 +69,9 @@ public class ReportResponse {
     @Schema(description = "Report-level source URLs aggregated for delivery and traceability")
     private List<String> sourceUrls;
 
+    @Schema(description = "Latest orchestration decision summary projected for delivery and audit")
+    private OrchestrationDecisionSummary orchestrationDecision;
+
     @Schema(description = "Search audit overview aggregated from collector nodes")
     private SearchAuditOverview searchAuditOverview;
 

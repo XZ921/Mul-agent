@@ -5,15 +5,20 @@ import cn.bugstack.competitoragent.model.entity.CompetitorKnowledge;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.model.entity.Report;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
+import cn.bugstack.competitoragent.model.entity.TaskWorkflowEvent;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
+import cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository;
+import cn.bugstack.competitoragent.workflow.event.WorkflowEventType;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,6 +38,7 @@ class ReportServiceTest {
     private final EvidenceSourceRepository evidenceRepository = mock(EvidenceSourceRepository.class);
     private final CompetitorKnowledgeRepository knowledgeRepository = mock(CompetitorKnowledgeRepository.class);
     private final TaskNodeRepository taskNodeRepository = mock(TaskNodeRepository.class);
+    private final TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);
     private final EvidenceQueryService evidenceQueryService = mock(EvidenceQueryService.class);
     private final EvidenceQueryService projectionEvidenceQueryService =
             new EvidenceQueryService(mock(EvidenceSourceRepository.class), new ObjectMapper());
@@ -141,6 +147,57 @@ class ReportServiceTest {
         ReportResponse response = reportService.getReport(710L);
 
         assertEquals(List.of("https://notion.so/product/ai"), response.getSourceUrls());
+    }
+
+    @Test
+    void shouldExposeLatestOrchestrationDecisionInReportMainPath() throws Exception {
+        Report report = Report.builder()
+                .id(9L)
+                .taskId(720L)
+                .title("缂栨帓鍐崇瓥鎶曞奖")
+                .content("# Report")
+                .summary("summary")
+                .qualityPassed(false)
+                .evidenceCount(0)
+                .build();
+        TaskWorkflowEvent decisionEvent = TaskWorkflowEvent.builder()
+                .taskId(720L)
+                .nodeName("quality_check_final")
+                .eventType(WorkflowEventType.ORCHESTRATION_DECISION_RECORDED)
+                .payload("""
+                        {
+                          "decision": {
+                            "decisionId": "od-720-review",
+                            "triggerNodeName": "quality_check_final",
+                            "decisionType": "WAIT_FOR_HUMAN",
+                            "actionType": "MANUAL_REVIEW",
+                            "targetNode": "quality_check_final",
+                            "reason": "终审发现关键信息缺少来源，需要人工确认",
+                            "requiresHumanIntervention": true,
+                            "requiresConfirmation": false,
+                            "evidenceState": "MISSING_SOURCE",
+                            "sourceUrls": ["https://docs.example.com/review-gap"]
+                          }
+                        }
+                        """)
+                .sourceUrls("[\"https://docs.example.com/review-gap\"]")
+                .build();
+
+        when(reportRepository.findByTaskId(720L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(720L)).thenReturn(List.of());
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(720L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(720L)).thenReturn(List.of());
+        when(taskWorkflowEventRepository.findLatestOrchestrationDecisionEvent(720L))
+                .thenReturn(Optional.of(decisionEvent));
+        injectTaskWorkflowEventRepositoryIfPresent(reportService);
+
+        ReportResponse response = reportService.getReport(720L);
+        JsonNode payload = new ObjectMapper().valueToTree(response);
+
+        assertEquals("WAIT_FOR_HUMAN", payload.at("/orchestrationDecision/decisionType").asText());
+        assertEquals("MISSING_SOURCE", payload.at("/orchestrationDecision/evidenceState").asText());
+        assertEquals("quality_check_final", payload.at("/orchestrationDecision/triggerNodeName").asText());
+        assertTrue(payload.at("/sourceUrls").toString().contains("https://docs.example.com/review-gap"));
     }
 
     @Test
@@ -1079,5 +1136,19 @@ class ReportServiceTest {
         assertTrue(response.getDeliverySummary().getPrimaryIssue().contains("结构化证据"));
         assertTrue(response.getReportDiagnosis().getSections().get(0).getRepairSuggestions().stream()
                 .anyMatch(item -> item.contains("structuredBlocks")));
+    }
+
+    /**
+     * 协作决策只读投影当前仍处于渐进式接入阶段，
+     * 测试先按“字段存在就注入，不存在就保持红灯”的方式运行，避免为 Red 阶段额外引入构造器耦合。
+     */
+    private void injectTaskWorkflowEventRepositoryIfPresent(ReportService target) throws Exception {
+        try {
+            Field field = ReportService.class.getDeclaredField("taskWorkflowEventRepository");
+            field.setAccessible(true);
+            field.set(target, taskWorkflowEventRepository);
+        } catch (NoSuchFieldException ignored) {
+            // Red 阶段允许字段尚未落地；断言会通过缺失投影继续失败。
+        }
     }
 }

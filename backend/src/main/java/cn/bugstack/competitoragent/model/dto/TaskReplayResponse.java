@@ -11,7 +11,7 @@ import java.util.List;
 /**
  * 任务回放平台正式响应 DTO。
  * <p>
- * 收口时间线、节点摘要、恢复建议和 Collector 搜索现场回放视图。
+ * 收口时间线、节点摘要、恢复建议和 Collector 现场回放视图。
  */
 @Data
 @Builder
@@ -49,6 +49,9 @@ public class TaskReplayResponse {
 
     @Schema(description = "回放集成入口")
     private List<ReplayIntegrationEntryPoint> integrationEntryPoints;
+
+    @Schema(description = "最近一次协作决策摘要")
+    private OrchestrationDecisionSummary latestOrchestrationDecision;
 
     @Schema(description = "回放整体证据 / 追溯来源地址")
     private List<String> sourceUrls;

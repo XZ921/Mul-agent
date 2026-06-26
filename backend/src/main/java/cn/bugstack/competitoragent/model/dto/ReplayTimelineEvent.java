@@ -14,7 +14,7 @@ import java.util.List;
  * <p>
  * 该对象专门承载“用户可理解的回放时间线项”，
  * 先明确计划版本、节点、摘要与 sourceUrls 等正式字段，
- * 后续 5.6.b 再由统一投影服务负责填充。
+ * 后续再由统一投影服务继续补充。
  */
 @Data
 @Builder
@@ -46,6 +46,9 @@ public class ReplayTimelineEvent {
 
     @Schema(description = "用户可读摘要")
     private String summary;
+
+    @Schema(description = "协作决策摘要，仅在编排决策事件上存在")
+    private OrchestrationDecisionSummary orchestrationDecision;
 
     @Schema(description = "发生时间")
     private LocalDateTime occurredAt;

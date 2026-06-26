@@ -154,7 +154,7 @@ commit: a669f37 (6/24)  P2 前置协作规划
 commit: cc24e45 (6/24)  P3-1 Analyzer 缺口决策
 commit: 13413ad (6/24)  P3-2 Writer 引用缺口
 commit: f3645f5 (6/25)  P3-3 Conversation 动作预览
-待执行:                 P3-4 Citation Agent
+已实现并待冻结:         P3-4 Citation Agent（6/25 实现，6/26 指定回归已验证）
 ```
 
 **这是项目当前的最高层级**——不是第十条业务链路，而是横跨三条执行引擎的协作决策层。
@@ -176,13 +176,15 @@ P2: 前置协作规划 + 证据缺口  ✅  CollaborationPlan → InitialPlanRev
 P3-1: Analyzer 缺口决策    ✅  分析缺口接入 AgentSuggestion → OrchestrationDecision
 P3-2: Writer 引用缺口      ✅  章节引用缺口接入同一协作链路
 P3-3: Conversation 预览    ✅  对话入口展示 OrchestrationDecision
-P3-4: Citation Agent      ←  当前待执行
+P3-4: Citation Agent      ✅  固定 DAG + CitationCheckResult + CitationSuggestionAssembler 已接入
 ```
 
 **关键认知升级：** 协作编排不是一条新链路，而是一个横切层。它的边界由三件事定义：
 1. Reviewer 只输出质量事实，Orchestrator 输出编排决策（职责拆分）
 2. 所有新协议必须保留 `sourceUrls` 或显式缺口状态（跨链路红线）
 3. 固定 DAG 模板，不自由生成节点（安全围栏）
+
+**3.3 / 3.4 红线冻结（2026-06-26）：** `AgentSuggestion`、`OrchestrationDecision`、`DecisionPolicyResult`、`DynamicPlanMutation`、`QualityDiagnosis`、`CitationCheckResult`、`EvidenceState`、`sourceUrls` 作为统一协作协议词汇冻结。冻结含义是：字段名不再随意漂移；缺证据必须统一回收到 `evidenceState`；人工介入、动态补图、重写动作必须经正式协作对象表达；后续 3.5 诊断只能沿这套协议指出接缝问题，不能再并行发明另一套 `missingEvidence / citationGap / unsupportedClaim` 口径。
 
 ---
 

@@ -93,6 +93,27 @@ class TaskEventReplayServiceTest {
     }
 
     @Test
+    void shouldExposeLatestOrchestrationDecisionForReplayFrame() {
+        TaskEventPublisher publisher = new TaskEventPublisher(taskSseHub);
+        publisher.publishDiagnosisEvent(24L, "quality_check_final", Map.of(
+                "decisionId", "od-24-review",
+                "decisionType", "WAIT_FOR_HUMAN",
+                "actionType", "MANUAL_REVIEW",
+                "reason", "终审发现缺少来源，需要人工确认",
+                "evidenceState", "MISSING_SOURCE",
+                "sourceUrls", List.of("https://docs.example.com/replay-gap")));
+
+        when(taskRecoveryService.getTaskSnapshotOrRebuild(24L)).thenReturn(Optional.empty());
+
+        TaskEventReplayService.TaskReplayFrame frame = replayService.planReplay(24L, null);
+
+        assertNotNull(frame.getLatestOrchestrationDecision());
+        assertEquals("WAIT_FOR_HUMAN", frame.getLatestOrchestrationDecision().getDecisionType());
+        assertEquals("MISSING_SOURCE", frame.getLatestOrchestrationDecision().getEvidenceState());
+        assertEquals("quality_check_final", frame.getLatestOrchestrationDecision().getTriggerNodeName());
+    }
+
+    @Test
     void shouldParseComparableTaskEventCursor() {
         TaskEventCursor earlier = TaskEventCursor.parse("24-7").orElseThrow();
         TaskEventCursor later = TaskEventCursor.parse("24-12").orElseThrow();
