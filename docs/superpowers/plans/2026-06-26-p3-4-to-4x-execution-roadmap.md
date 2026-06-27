@@ -4,7 +4,7 @@
 
 **Goal:** 固化当前从 P3-4 Citation 验证确认到 4.x 架构修改的执行路线，明确下一步先做什么、每一步产出什么、何时可以执行 Tavily Fast Lane MVP。
 
-**Architecture:** 本路线采用“验证确认 -> 侦察 -> 收敛决策 -> 分档架构修改 -> 回补实现”的节奏。P3-4 已实现，当前只做三条测试命令的验证确认；3.5 只写限幅诊断不实现；4.x 拆为 4.0 最小 runtime contract 和 4.1 动态运行时迁移；Tavily 可在 3.5 诊断触发后先作为 fail-open 搜索增强接入，后续再注册为正式 capability。
+**Architecture:** 本路线采用“验证确认 -> 侦察 -> 收敛决策 -> 分档架构修改 -> 回补实现”的节奏。P3-4 已实现，当前只做三条测试命令的验证确认；3.5 只写限幅诊断不实现；4.x 拆为 4.0 最小 runtime contract 和 4.1 动态运行时迁移。4.x 首轮只稳定主业务链路，不把 ConversationCollaboration 作为前置阻塞项；对话协同后置为 runtime contract 的消费端、安全确认网关和受控动作入口。Tavily 可在 3.5 诊断触发后先作为 fail-open 搜索增强接入，后续再注册为正式 capability。
 
 **Tech Stack:** Java 17, Spring Boot 3.3.5, JUnit 5, ArchUnit, Markdown planning docs, existing `workflow / orchestration / agent / search / collection` modules.
 
@@ -24,15 +24,19 @@
   -> 回补链路实现
       -> 搜索证据补强
       -> Writer / Reviewer / Citation 补证闭环
+      -> Conversation 只在主链路 runtime 稳定后作为消费端接入
 ```
 
 Tavily Fast Lane 不在 P3-4 或红线冻结前执行。若 3.5 诊断确认“证据来源不足 / 搜索采集质量低 / Playwright 兜底过重”已经影响 Writer / Citation / Reviewer，可以先按 fail-open 搜索增强路径执行轻量 Tavily MVP；4.x 完成后再把 Tavily 注册为正式 capability。
+
+4.x 首轮不把对话协同作为必须完成的链路。ConversationCollaboration 诊断只用于确认 runtime 需要暴露哪些可解释状态和安全动作边界；首轮实现仍以 `采集 -> 提取 -> 分析 -> 写作 -> Citation -> 质检 -> 修订/重写 -> 交付/审计` 为主链路。
 
 ## 1. 当前不做
 
 - 不在 P3-4 验证确认和 3.3/3.4 红线冻结前执行 `docs/Travily/tavily-fast-lane-mvp-execution-plan.md`。
 - 不在 P3-4 验证确认和 3.3/3.4 红线冻结前修改 `SourceCandidate / SearchSourceProvider / SearchExecutionCoordinator / CollectionTaskPackage`。
 - 不把 4.x 当成固定排期；4.x 是诊断收敛后的架构决策。
+- 不把 ConversationCollaboration 作为 4.x 首轮前置阻塞项；对话协同只在主链路 runtime contract 稳定后接入为消费端和安全确认入口。
 - 不在 3.5 诊断阶段实现链路修复。
 - 不把 Tavily 当作替代千帆 / SerpApi / Playwright 的方案。
 
@@ -430,6 +434,7 @@ NO_ACTION
 
 ```text
 不迁移 Writer / Citation / Reviewer
+不迁移 ConversationCollaboration
 不替换 DagExecutor
 不把 DynamicPlanMutation runtime 化
 不接 Tavily 为正式 capability
@@ -506,6 +511,8 @@ Reviewer unsupported_claim -> REWRITE_CLAIM / MANUAL_REVIEW
 不删除 DagExecutor
 不引入自由 Agent 任意生成节点
 不让 Orchestrator 绕过 DecisionPolicy
+不把 Conversation 变成新的 Orchestrator
+不把对话协同作为首批 runtime 迁移对象
 不让 Tavily 替代已有搜索采集链路
 ```
 
@@ -520,6 +527,7 @@ Reviewer unsupported_claim -> REWRITE_CLAIM / MANUAL_REVIEW
 4. 迁移 Citation 的补引用和补证动作
 5. 迁移 Reviewer 的 unsupported_claim 修复动作
 6. 接入 Tavily 为正式 capability，前提是轻量路径未提前执行或需要升级
+7. 主链路稳定后，再把 Conversation 接为 runtime contract 消费端和安全确认入口
 ```
 
 完成标准：4.1 能解释 3.5 诊断里的 runtime 根因，并让 Writer / Citation / Reviewer 的补证或重写动作从局部 if-else 迁移到受控 runtime。

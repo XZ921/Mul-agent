@@ -13,6 +13,7 @@ import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.workflow.contract.AnalysisResult;
 import cn.bugstack.competitoragent.workflow.contract.CompetitorKnowledgeDraft;
+import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceBlock;
 import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceView;
 import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
 import cn.bugstack.competitoragent.workflow.contract.SectionEvidenceBundle;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -944,10 +946,16 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                     }
                 }
 
-                List<DownstreamEvidenceView> matchedViews = viewsByCompetitor.getOrDefault(competitorName, List.of());
+                List<DownstreamEvidenceView> matchedViews = filterEvidenceViewsForSection(
+                        mapping,
+                        viewsByCompetitor.getOrDefault(competitorName, List.of()));
                 if (!matchedViews.isEmpty()) {
                     sectionFragments.addAll(buildEvidenceViewSectionFragments(mapping, competitorName, matchedViews));
-                    sourceUrls.addAll(collectEvidenceViewSourceUrls(matchedViews));
+                    List<String> matchedSourceUrls = collectEvidenceViewSourceUrls(matchedViews);
+                    sourceUrls.addAll(matchedSourceUrls);
+                    if (!matchedSourceUrls.isEmpty()) {
+                        traceable = true;
+                    }
                 }
 
                 if (!traceable) {
@@ -1039,6 +1047,140 @@ public class CompetitorAnalysisAgent extends BaseAgent {
                     .normalized());
         }
         return normalized;
+    }
+
+    /**
+     * 只把与当前分析章节匹配的运行态证据视图挂入章节证据束。
+     * Analyzer 顶层仍保留完整 downstreamEvidenceViews；这里的过滤只影响 Writer 可直接引用的章节证据。
+     */
+    private List<DownstreamEvidenceView> filterEvidenceViewsForSection(SectionMapping mapping,
+                                                                       List<DownstreamEvidenceView> views) {
+        List<DownstreamEvidenceView> matched = new ArrayList<>();
+        for (DownstreamEvidenceView view : views == null ? List.<DownstreamEvidenceView>of() : views) {
+            DownstreamEvidenceView normalized = view == null ? null : view.normalized();
+            if (normalized != null && matchesSection(mapping, normalized)) {
+                matched.add(normalized);
+            }
+        }
+        return matched;
+    }
+
+    /**
+     * 匹配逻辑保持保守：优先看结构块和质量信号，再用标题/正文关键词兜底。
+     * 这样可以减少 pricing 证据污染 feature 章节，同时避免完全丢失 views-only 场景的可追溯性。
+     */
+    private boolean matchesSection(SectionMapping mapping, DownstreamEvidenceView view) {
+        String sectionKey = mapping == null ? "" : firstNonBlank(mapping.sectionKey(), "");
+        return switch (sectionKey) {
+            case "overview" -> hasEvidenceSource(view) && !matchesAnySpecificSection(view);
+            case "features" -> matchesSpecificSection(view,
+                    List.of("FEATURE"),
+                    List.of("feature", "capability", "功能", "能力"));
+            case "pricing" -> matchesSpecificSection(view,
+                    List.of("PRICING"),
+                    List.of("pricing", "price", "plan", "定价", "价格", "套餐"));
+            case "targetUsers" -> matchesSpecificSection(view,
+                    List.of("TARGET_USER", "USER_SEGMENT", "USER"),
+                    List.of("user", "customer", "audience", "用户", "客户", "受众"));
+            case "positioning" -> matchesSpecificSection(view,
+                    List.of("POSITIONING", "MARKET", "SEGMENT"),
+                    List.of("positioning", "market", "segment", "定位", "市场"));
+            case "strengths" -> matchesSpecificSection(view,
+                    List.of("STRENGTH", "ADVANTAGE", "PRO"),
+                    List.of("strength", "advantage", "pros", "优势", "亮点"));
+            case "weaknesses" -> matchesSpecificSection(view,
+                    List.of("WEAKNESS", "RISK", "LIMITATION", "CON"),
+                    List.of("weakness", "risk", "limitation", "cons", "短板", "风险", "限制"));
+            default -> false;
+        };
+    }
+
+    private boolean matchesAnySpecificSection(DownstreamEvidenceView view) {
+        return matchesSpecificSection(view, List.of("FEATURE"), List.of("feature", "capability", "功能", "能力"))
+                || matchesSpecificSection(view, List.of("PRICING"), List.of("pricing", "price", "plan", "定价", "价格", "套餐"))
+                || matchesSpecificSection(view, List.of("TARGET_USER", "USER_SEGMENT", "USER"), List.of("user", "customer", "audience", "用户", "客户", "受众"))
+                || matchesSpecificSection(view, List.of("POSITIONING", "MARKET", "SEGMENT"), List.of("positioning", "market", "segment", "定位", "市场"))
+                || matchesSpecificSection(view, List.of("STRENGTH", "ADVANTAGE", "PRO"), List.of("strength", "advantage", "pros", "优势", "亮点"))
+                || matchesSpecificSection(view, List.of("WEAKNESS", "RISK", "LIMITATION", "CON"), List.of("weakness", "risk", "limitation", "cons", "短板", "风险", "限制"));
+    }
+
+    private boolean matchesSpecificSection(DownstreamEvidenceView view,
+                                           List<String> signalPrefixes,
+                                           List<String> fallbackKeywords) {
+        return containsSignal(view, signalPrefixes) || containsAny(evidenceViewTextHaystack(view), fallbackKeywords);
+    }
+
+    private boolean containsSignal(DownstreamEvidenceView view, List<String> expectedPrefixes) {
+        List<String> signals = evidenceViewSignals(view);
+        for (String signal : signals) {
+            for (String expectedPrefix : expectedPrefixes == null ? List.<String>of() : expectedPrefixes) {
+                if (signal.equals(expectedPrefix) || signal.startsWith(expectedPrefix + "_")) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private List<String> evidenceViewSignals(DownstreamEvidenceView view) {
+        List<String> signals = new ArrayList<>();
+        if (view == null) {
+            return signals;
+        }
+        for (String signal : view.getQualitySignals() == null ? List.<String>of() : view.getQualitySignals()) {
+            addNormalizedSignal(signals, signal);
+        }
+        for (DownstreamEvidenceBlock block : view.getStructuredBlocks() == null ? List.<DownstreamEvidenceBlock>of() : view.getStructuredBlocks()) {
+            if (block != null) {
+                addNormalizedSignal(signals, block.getBlockType());
+            }
+        }
+        return signals;
+    }
+
+    private void addNormalizedSignal(List<String> signals, String value) {
+        if (value != null && !value.isBlank()) {
+            signals.add(value.trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_'));
+        }
+    }
+
+    private String evidenceViewTextHaystack(DownstreamEvidenceView view) {
+        StringBuilder builder = new StringBuilder();
+        if (view == null) {
+            return "";
+        }
+        appendLower(builder, view.getTitle());
+        appendLower(builder, view.getContent());
+        for (DownstreamEvidenceBlock block : view.getStructuredBlocks() == null ? List.<DownstreamEvidenceBlock>of() : view.getStructuredBlocks()) {
+            if (block == null) {
+                continue;
+            }
+            appendLower(builder, block.getSummary());
+        }
+        return builder.toString();
+    }
+
+    private boolean hasEvidenceSource(DownstreamEvidenceView view) {
+        return view != null && view.getSourceUrls() != null && !view.getSourceUrls().isEmpty();
+    }
+
+    private void appendLower(StringBuilder builder, String value) {
+        if (value != null && !value.isBlank()) {
+            builder.append(' ').append(value.toLowerCase(Locale.ROOT));
+        }
+    }
+
+    private boolean containsAny(String haystack, List<String> needles) {
+        if (haystack == null || haystack.isBlank()) {
+            return false;
+        }
+        for (String needle : needles == null ? List.<String>of() : needles) {
+            if (needle != null && !needle.isBlank()
+                    && haystack.contains(needle.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private List<EvidenceFragment> buildEvidenceViewSectionFragments(SectionMapping mapping,

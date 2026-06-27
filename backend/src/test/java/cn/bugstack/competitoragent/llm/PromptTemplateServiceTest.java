@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,6 +48,25 @@ class PromptTemplateServiceTest {
         ));
 
         assertTrue(rendered.contains("检索查询：Notion AI pricing"));
+    }
+
+    @Test
+    void analyzerTemplateShouldRequireTraceableDimensionAnalysis() {
+        String prompt = promptTemplateService.render("analyzer", Map.of(
+                "subjectProduct", "Our Product",
+                "analysisDimensions", "功能,定价",
+                "competitorData", "[]",
+                "taskRagContext", ""));
+
+        assertThat(prompt)
+                .contains("只能返回 JSON 对象")
+                .contains("featureComparison")
+                .contains("pricingComparison")
+                .contains("sourceUrls")
+                .contains("缺少证据")
+                .contains("不要编造")
+                .contains("只能使用竞品数据中已经出现的来源链接")
+                .contains("禁止生成新 URL");
     }
 
     @Test

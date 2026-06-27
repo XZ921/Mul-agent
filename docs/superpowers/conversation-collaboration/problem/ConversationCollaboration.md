@@ -5,6 +5,7 @@
 1. 对话入口当前真实停点不是“看不到编排决策”，而是“它已经能读取和翻译最近一次编排决策，但仍只是受控动作网关，不是协作 runtime 本身”。`ConversationService` 现在能做解释、预览、确认和少量正式执行，但它依赖最近事件与现有 `TaskRuntimeFacade`，还不能独立解释多轮协作推进状态。
 2. Conversation 不应只做静态展示，它已经需要触发受控动作，但动作边界必须继续收敛在既有 `RERUN_NODE / SUPPLEMENT_EVIDENCE / RESUME_TASK` 这类正式入口里。也就是说，它更像“决策展示 + 安全确认网关”，而不是新一层 Orchestrator。
 3. 不改架构时，最多只能继续优化意图去歧义、预览文案、确认门槛和最近决策摘要展示；仅改 `ConversationService / ModeRouter` 不能补出 `pendingActions / checkpoint / 多轮分支恢复` 这类 runtime 语义，也无法让对话入口替代编排层重新生成决策。
+4. 进入 4.x 时，ConversationCollaboration 不作为首轮前置阻塞项。首轮 4.x 应先稳定主业务链路 `采集 -> 提取 -> 分析 -> 写作 -> Citation -> 质检 -> 修订/重写 -> 交付/审计` 的 runtime contract 和动态协作闭环；对话协同后置为 runtime contract 的消费端、安全确认网关和受控动作入口，读取运行态、解释 Orchestrator 决策、展示待处理动作并触发经过策略校验的动作。
 
 ## 代码级证据
 

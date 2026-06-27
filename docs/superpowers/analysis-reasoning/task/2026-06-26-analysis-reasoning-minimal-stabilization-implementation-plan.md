@@ -2,6 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+## Execution Status Index
+
+当前阶段：本实施计划对应代码与自动化验证已完成，待后续实链验证
+- [x] Task 1：Analyzer Prompt Contract
+- [x] Task 2：Section Evidence View Matching
+- [x] Task 3：Regression and Roadmap Closure
+- [ ] Git 提交：按当前协作约定由用户自行处理
+
+执行说明：
+1. 本文件保留原始 `- [ ]` 执行步骤，用作“计划基线”，不反向重写成执行日志，避免把计划文档和进度文档混成一个对象。
+2. 实际执行进度、红绿灯测试记录和后续待办，请以 `docs/superpowers/analysis-reasoning/progress/2026-06-26-analysis-reasoning-minimal-stabilization-execution-progress.md` 为准。
+3. 自动化验证结果与路线图回写，请以 `docs/superpowers/analysis-reasoning/plan/2026-06-26-analysis-reasoning-minimal-stabilization-plan.md` 的“## 9. 验证结果”和总路线图 `docs/specs/2026-06-11-business-landscape-and-optimization-roadmap-design.md` 的 AnalysisReasoning 行为准。
+
 **Goal:** 在不进入 4.x、不修改编排协议的前提下，收紧 Analyzer Prompt 与章节证据束聚合，减少无证据或错配证据进入 Writer。
 
 **Architecture:** 本轮只改 Analyzer 链路内行为：用资源文件覆盖 `analyzer` 默认 Prompt，并在 `CompetitorAnalysisAgent` 内增加私有的 evidence view 章节匹配规则。`AnalysisResult`、`AgentSuggestion`、`OrchestrationDecision`、report/export DTO 和数据库 schema 均不扩展。
@@ -37,6 +50,12 @@
 
 Add this test to `PromptTemplateServiceTest`:
 
+Add import:
+
+```java
+import static org.assertj.core.api.Assertions.assertThat;
+```
+
 ```java
 @Test
 void analyzerTemplateShouldRequireTraceableDimensionAnalysis() {
@@ -53,7 +72,8 @@ void analyzerTemplateShouldRequireTraceableDimensionAnalysis() {
             .contains("sourceUrls")
             .contains("缺少证据")
             .contains("不要编造")
-            .contains("只能使用竞品数据中已经出现的来源链接");
+            .contains("只能使用竞品数据中已经出现的来源链接")
+            .contains("禁止生成新 URL");
 }
 ```
 
@@ -183,12 +203,14 @@ void shouldOnlyAttachMatchedEvidenceViewsToAnalyzerSectionBundles() throws Excep
     JsonNode output = objectMapper.readTree(result.getOutputData());
     JsonNode pricingBundle = findBundle(output.path("sectionEvidenceBundles"), "pricing");
     JsonNode featureBundle = findBundle(output.path("sectionEvidenceBundles"), "features");
+    JsonNode overviewBundle = findBundle(output.path("sectionEvidenceBundles"), "overview");
 
     assertEquals("SUCCESS", result.getStatus().name());
     assertThat(pricingBundle.path("sourceUrls").toString()).contains("https://acme.example.com/pricing");
     assertThat(pricingBundle.path("missingFields").toString()).doesNotContain("pricingComparison");
     assertThat(featureBundle.path("sourceUrls").toString()).doesNotContain("https://acme.example.com/pricing");
     assertThat(featureBundle.path("issueFlags").toString()).contains("SECTION_EVIDENCE_GAP");
+    assertThat(overviewBundle.path("sourceUrls").toString()).doesNotContain("https://acme.example.com/pricing");
 }
 ```
 
@@ -200,9 +222,81 @@ Run:
 mvn -pl backend "-Dtest=CompetitorAnalysisAgentTest#shouldOnlyAttachMatchedEvidenceViewsToAnalyzerSectionBundles" test
 ```
 
-Expected: FAIL because the current implementation attaches every `DownstreamEvidenceView` for a competitor to every analyzer section.
+Expected: FAIL because the current implementation attaches every `DownstreamEvidenceView` for a competitor to every analyzer section, including `features` and `overview`.
 
-- [ ] **Step 3: Implement matched view filtering**
+- [ ] **Step 3: Write the failing blockType-only matching test**
+
+Add this test to `CompetitorAnalysisAgentTest`:
+
+```java
+@Test
+void shouldMatchAnalyzerSectionByStructuredBlockTypeWithoutTextKeywords() throws Exception {
+    when(agentContextAssembler.assemble(any(AgentContext.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(knowledgeRepository.findByTaskIdOrderByIdAsc(78L)).thenReturn(List.of());
+    when(promptService.render(eq("analyzer"), any())).thenReturn("prompt");
+    when(llmClient.chatForJson(any(), any(), eq("Analysis"))).thenReturn("""
+            {
+              "overview": "分析完成",
+              "featureComparison": "功能信息不足",
+              "positioningComparison": "定位信息不足",
+              "pricingComparison": "Enterprise tier starts at 199 monthly",
+              "targetUserComparison": "团队用户",
+              "strengthsSummary": "文档清晰",
+              "weaknessesSummary": "仍需更多来源",
+              "recommendations": ["继续观察"]
+            }
+            """);
+    when(llmClient.getModelName()).thenReturn("mock-model");
+    when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+    AgentContext context = AgentContext.builder()
+            .taskId(78L)
+            .taskName("analysis-block-type-match")
+            .subjectProduct("Our Product")
+            .analysisDimensions("功能,定价")
+            .currentNodeName("analyze_competitors")
+            .build();
+    context.putSharedOutput("extract_schema", """
+            {
+              "downstreamEvidenceViews": [
+                {
+                  "evidenceId": "P002",
+                  "competitorName": "Acme",
+                  "title": "Commercial details",
+                  "content": "Enterprise tier starts at 199 monthly.",
+                  "sourceUrls": ["https://acme.example.com/commercial"],
+                  "qualitySignals": [],
+                  "structuredBlocks": [
+                    {"blockType": "PRICING_BLOCK", "summary": "Enterprise tier starts at 199 monthly"}
+                  ]
+                }
+              ]
+            }
+            """);
+
+    AgentResult result = agent.execute(context);
+    JsonNode output = objectMapper.readTree(result.getOutputData());
+    JsonNode pricingBundle = findBundle(output.path("sectionEvidenceBundles"), "pricing");
+    JsonNode featureBundle = findBundle(output.path("sectionEvidenceBundles"), "features");
+
+    assertEquals("SUCCESS", result.getStatus().name());
+    assertThat(pricingBundle.path("sourceUrls").toString()).contains("https://acme.example.com/commercial");
+    assertThat(pricingBundle.path("missingFields").toString()).doesNotContain("pricingComparison");
+    assertThat(featureBundle.path("sourceUrls").toString()).doesNotContain("https://acme.example.com/commercial");
+}
+```
+
+- [ ] **Step 4: Run the blockType-only test to verify it fails**
+
+Run:
+
+```powershell
+mvn -pl backend "-Dtest=CompetitorAnalysisAgentTest#shouldMatchAnalyzerSectionByStructuredBlockTypeWithoutTextKeywords" test
+```
+
+Expected: FAIL before implementation because the source is still attached broadly rather than through explicit section matching. After implementation, this test protects the structure-block-first rule: if `PRICING_BLOCK` is removed from signal matching, `pricingBundle` will lose the source.
+
+- [ ] **Step 5: Implement matched view filtering**
 
 In `CompetitorAnalysisAgent.buildSectionEvidenceBundles(...)`, replace:
 
@@ -254,34 +348,90 @@ private List<DownstreamEvidenceView> filterEvidenceViewsForSection(SectionMappin
  */
 private boolean matchesSection(SectionMapping mapping, DownstreamEvidenceView view) {
     String sectionKey = mapping == null ? "" : firstNonBlank(mapping.sectionKey(), "");
-    String haystack = evidenceViewHaystack(view);
     return switch (sectionKey) {
-        case "overview" -> hasEvidenceSource(view);
-        case "features" -> containsAny(haystack, "feature", "capability", "功能", "能力");
-        case "pricing" -> containsAny(haystack, "pricing", "price", "plan", "定价", "价格", "套餐");
-        case "targetUsers" -> containsAny(haystack, "user", "customer", "audience", "用户", "客户", "受众");
-        case "positioning" -> containsAny(haystack, "positioning", "market", "segment", "定位", "市场");
-        case "strengths" -> containsAny(haystack, "strength", "advantage", "pros", "优势", "亮点");
-        case "weaknesses" -> containsAny(haystack, "weakness", "risk", "limitation", "cons", "短板", "风险", "限制");
+        case "overview" -> hasEvidenceSource(view) && !matchesAnySpecificSection(view);
+        case "features" -> matchesSpecificSection(view,
+                List.of("FEATURE"),
+                List.of("feature", "capability", "功能", "能力"));
+        case "pricing" -> matchesSpecificSection(view,
+                List.of("PRICING"),
+                List.of("pricing", "price", "plan", "定价", "价格", "套餐"));
+        case "targetUsers" -> matchesSpecificSection(view,
+                List.of("TARGET_USER", "USER_SEGMENT", "USER"),
+                List.of("user", "customer", "audience", "用户", "客户", "受众"));
+        case "positioning" -> matchesSpecificSection(view,
+                List.of("POSITIONING", "MARKET", "SEGMENT"),
+                List.of("positioning", "market", "segment", "定位", "市场"));
+        case "strengths" -> matchesSpecificSection(view,
+                List.of("STRENGTH", "ADVANTAGE", "PRO"),
+                List.of("strength", "advantage", "pros", "优势", "亮点"));
+        case "weaknesses" -> matchesSpecificSection(view,
+                List.of("WEAKNESS", "RISK", "LIMITATION", "CON"),
+                List.of("weakness", "risk", "limitation", "cons", "短板", "风险", "限制"));
         default -> false;
     };
 }
 
-private String evidenceViewHaystack(DownstreamEvidenceView view) {
+private boolean matchesAnySpecificSection(DownstreamEvidenceView view) {
+    return matchesSpecificSection(view, List.of("FEATURE"), List.of("feature", "capability", "功能", "能力"))
+            || matchesSpecificSection(view, List.of("PRICING"), List.of("pricing", "price", "plan", "定价", "价格", "套餐"))
+            || matchesSpecificSection(view, List.of("TARGET_USER", "USER_SEGMENT", "USER"), List.of("user", "customer", "audience", "用户", "客户", "受众"))
+            || matchesSpecificSection(view, List.of("POSITIONING", "MARKET", "SEGMENT"), List.of("positioning", "market", "segment", "定位", "市场"))
+            || matchesSpecificSection(view, List.of("STRENGTH", "ADVANTAGE", "PRO"), List.of("strength", "advantage", "pros", "优势", "亮点"))
+            || matchesSpecificSection(view, List.of("WEAKNESS", "RISK", "LIMITATION", "CON"), List.of("weakness", "risk", "limitation", "cons", "短板", "风险", "限制"));
+}
+
+private boolean matchesSpecificSection(DownstreamEvidenceView view,
+                                       List<String> signalPrefixes,
+                                       List<String> fallbackKeywords) {
+    return containsSignal(view, signalPrefixes) || containsAny(evidenceViewTextHaystack(view), fallbackKeywords);
+}
+
+private boolean containsSignal(DownstreamEvidenceView view, List<String> expectedPrefixes) {
+    List<String> signals = evidenceViewSignals(view);
+    for (String signal : signals) {
+        for (String expectedPrefix : expectedPrefixes == null ? List.<String>of() : expectedPrefixes) {
+            if (signal.equals(expectedPrefix) || signal.startsWith(expectedPrefix + "_")) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+private List<String> evidenceViewSignals(DownstreamEvidenceView view) {
+    List<String> signals = new ArrayList<>();
+    if (view == null) {
+        return signals;
+    }
+    for (String signal : view.getQualitySignals() == null ? List.<String>of() : view.getQualitySignals()) {
+        addNormalizedSignal(signals, signal);
+    }
+    for (DownstreamEvidenceBlock block : view.getStructuredBlocks() == null ? List.<DownstreamEvidenceBlock>of() : view.getStructuredBlocks()) {
+        if (block != null) {
+            addNormalizedSignal(signals, block.getBlockType());
+        }
+    }
+    return signals;
+}
+
+private void addNormalizedSignal(List<String> signals, String value) {
+    if (value != null && !value.isBlank()) {
+        signals.add(value.trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_'));
+    }
+}
+
+private String evidenceViewTextHaystack(DownstreamEvidenceView view) {
     StringBuilder builder = new StringBuilder();
     if (view == null) {
         return "";
     }
     appendLower(builder, view.getTitle());
     appendLower(builder, view.getContent());
-    for (String signal : view.getQualitySignals() == null ? List.<String>of() : view.getQualitySignals()) {
-        appendLower(builder, signal);
-    }
-    for (var block : view.getStructuredBlocks() == null ? List.<DownstreamEvidenceBlock>of() : view.getStructuredBlocks()) {
+    for (DownstreamEvidenceBlock block : view.getStructuredBlocks() == null ? List.<DownstreamEvidenceBlock>of() : view.getStructuredBlocks()) {
         if (block == null) {
             continue;
         }
-        appendLower(builder, block.getBlockType());
         appendLower(builder, block.getSummary());
     }
     return builder.toString();
@@ -297,11 +447,11 @@ private void appendLower(StringBuilder builder, String value) {
     }
 }
 
-private boolean containsAny(String haystack, String... needles) {
+private boolean containsAny(String haystack, List<String> needles) {
     if (haystack == null || haystack.isBlank()) {
         return false;
     }
-    for (String needle : needles) {
+    for (String needle : needles == null ? List.<String>of() : needles) {
         if (needle != null && !needle.isBlank()
                 && haystack.contains(needle.toLowerCase(java.util.Locale.ROOT))) {
             return true;
@@ -315,19 +465,20 @@ Add import:
 
 ```java
 import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceBlock;
+import java.util.Locale;
 ```
 
-- [ ] **Step 4: Run the section matching test to verify it passes**
+- [ ] **Step 6: Run the section matching tests to verify they pass**
 
 Run:
 
 ```powershell
-mvn -pl backend "-Dtest=CompetitorAnalysisAgentTest#shouldOnlyAttachMatchedEvidenceViewsToAnalyzerSectionBundles" test
+mvn -pl backend "-Dtest=CompetitorAnalysisAgentTest#shouldOnlyAttachMatchedEvidenceViewsToAnalyzerSectionBundles,CompetitorAnalysisAgentTest#shouldMatchAnalyzerSectionByStructuredBlockTypeWithoutTextKeywords" test
 ```
 
 Expected: PASS.
 
-- [ ] **Step 5: Run the full analyzer test class**
+- [ ] **Step 7: Run the full analyzer test class**
 
 Run:
 
@@ -337,7 +488,7 @@ mvn -pl backend "-Dtest=CompetitorAnalysisAgentTest" test
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 2**
+- [ ] **Step 8: Commit Task 2**
 
 ```powershell
 git add -- backend/src/main/java/cn/bugstack/competitoragent/agent/analyzer/CompetitorAnalysisAgent.java backend/src/test/java/cn/bugstack/competitoragent/agent/analyzer/CompetitorAnalysisAgentTest.java
@@ -360,7 +511,24 @@ mvn -pl backend "-Dtest=PromptTemplateServiceTest,CompetitorAnalysisAgentTest,An
 
 Expected: PASS. This proves prompt loading, Analyzer output normalization, Analyzer suggestion protocol, and Writer consumption remain compatible.
 
-- [ ] **Step 2: Run collaboration protocol guard regression**
+- [ ] **Step 2: Confirm collaboration guard test class names**
+
+Run:
+
+```powershell
+Get-ChildItem -Recurse -File backend/src/test/java -Filter *.java |
+  Where-Object { $_.Name -in @('OrchestrationDecisionServiceTest.java','DagExecutorTest.java') } |
+  Select-Object -ExpandProperty FullName
+```
+
+Expected: output includes both:
+
+```text
+backend/src/test/java/cn/bugstack/competitoragent/orchestration/OrchestrationDecisionServiceTest.java
+backend/src/test/java/cn/bugstack/competitoragent/workflow/DagExecutorTest.java
+```
+
+- [ ] **Step 3: Run collaboration protocol guard regression**
 
 Run:
 
@@ -370,7 +538,7 @@ mvn -pl backend "-Dtest=AnalyzerSuggestionAssemblerTest,OrchestrationDecisionSer
 
 Expected: PASS. This proves the minimal Analyzer quality patch did not regress P3-1 orchestration behavior.
 
-- [ ] **Step 3: Run diff check**
+- [ ] **Step 4: Run diff check**
 
 Run:
 
@@ -380,7 +548,7 @@ git diff --check -- backend/src/main/resources/prompts/analyzer.txt backend/src/
 
 Expected: PASS. LF-to-CRLF warnings are acceptable in this Windows workspace; whitespace errors are not.
 
-- [ ] **Step 4: Update roadmap and plan verification notes**
+- [ ] **Step 5: Update roadmap and plan verification notes**
 
 In `docs/superpowers/analysis-reasoning/plan/2026-06-26-analysis-reasoning-minimal-stabilization-plan.md`, update the progress block:
 
@@ -403,13 +571,14 @@ Add a verification table:
 | 命令 | 结果 |
 | --- | --- |
 | `mvn -pl backend "-Dtest=PromptTemplateServiceTest,CompetitorAnalysisAgentTest,AnalyzerSuggestionAssemblerTest,ReportWriterAgentTest" test` | PASS |
+| `Get-ChildItem -Recurse -File backend/src/test/java -Filter *.java | Where-Object { $_.Name -in @('OrchestrationDecisionServiceTest.java','DagExecutorTest.java') } | Select-Object -ExpandProperty FullName` | PASS |
 | `mvn -pl backend "-Dtest=AnalyzerSuggestionAssemblerTest,OrchestrationDecisionServiceTest,DagExecutorTest" test` | PASS |
 | `git diff --check -- backend/src/main/resources/prompts/analyzer.txt backend/src/test/java/cn/bugstack/competitoragent/llm/PromptTemplateServiceTest.java backend/src/test/java/cn/bugstack/competitoragent/agent/analyzer/CompetitorAnalysisAgentTest.java backend/src/main/java/cn/bugstack/competitoragent/agent/analyzer/CompetitorAnalysisAgent.java docs/specs/2026-06-11-business-landscape-and-optimization-roadmap-design.md docs/superpowers/analysis-reasoning/plan/2026-06-26-analysis-reasoning-minimal-stabilization-plan.md` | PASS |
 ```
 
 In `docs/specs/2026-06-11-business-landscape-and-optimization-roadmap-design.md`, update only the AnalysisReasoning implementation cell to `🟡` with automatic verification evidence. Keep live verification as `⬜`.
 
-- [ ] **Step 5: Commit Task 3**
+- [ ] **Step 6: Commit Task 3**
 
 ```powershell
 git add -- docs/specs/2026-06-11-business-landscape-and-optimization-roadmap-design.md docs/superpowers/analysis-reasoning/plan/2026-06-26-analysis-reasoning-minimal-stabilization-plan.md

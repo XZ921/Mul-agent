@@ -284,6 +284,121 @@ class CompetitorAnalysisAgentTest {
     }
 
     @Test
+    void shouldOnlyAttachMatchedEvidenceViewsToAnalyzerSectionBundles() throws Exception {
+        when(agentContextAssembler.assemble(any(AgentContext.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(77L)).thenReturn(List.of());
+        when(promptService.render(eq("analyzer"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("Analysis"))).thenReturn("""
+                {
+                  "overview": "分析完成",
+                  "featureComparison": "功能信息不足",
+                  "positioningComparison": "定位信息不足",
+                  "pricingComparison": "Pro plan is public at 199 per month",
+                  "targetUserComparison": "团队用户",
+                  "strengthsSummary": "文档清晰",
+                  "weaknessesSummary": "价格证据仍需更多来源",
+                  "recommendations": ["继续观察"]
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(77L)
+                .taskName("analysis-evidence-match")
+                .subjectProduct("Our Product")
+                .analysisDimensions("功能,定价")
+                .currentNodeName("analyze_competitors")
+                .build();
+        context.putSharedOutput("extract_schema", """
+                {
+                  "downstreamEvidenceViews": [
+                    {
+                      "evidenceId": "P001",
+                      "competitorName": "Acme",
+                      "title": "Acme Pricing",
+                      "content": "Pricing page lists Pro plan at 199 per month.",
+                      "sourceUrls": ["https://acme.example.com/pricing"],
+                      "qualitySignals": ["PRICING_BLOCK_HIT"],
+                      "structuredBlocks": [
+                        {"blockType": "PRICING_BLOCK", "summary": "Pro 199 / month"}
+                      ]
+                    }
+                  ]
+                }
+                """);
+
+        AgentResult result = agent.execute(context);
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        JsonNode pricingBundle = findBundle(output.path("sectionEvidenceBundles"), "pricing");
+        JsonNode featureBundle = findBundle(output.path("sectionEvidenceBundles"), "features");
+        JsonNode overviewBundle = findBundle(output.path("sectionEvidenceBundles"), "overview");
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertThat(pricingBundle.path("sourceUrls").toString()).contains("https://acme.example.com/pricing");
+        assertThat(pricingBundle.path("missingFields").toString()).doesNotContain("pricingComparison");
+        assertThat(featureBundle.path("sourceUrls").toString()).doesNotContain("https://acme.example.com/pricing");
+        assertThat(featureBundle.path("issueFlags").toString()).contains("SECTION_EVIDENCE_GAP");
+        assertThat(overviewBundle.path("sourceUrls").toString()).doesNotContain("https://acme.example.com/pricing");
+    }
+
+    @Test
+    void shouldMatchAnalyzerSectionByStructuredBlockTypeWithoutTextKeywords() throws Exception {
+        when(agentContextAssembler.assemble(any(AgentContext.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(78L)).thenReturn(List.of());
+        when(promptService.render(eq("analyzer"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("Analysis"))).thenReturn("""
+                {
+                  "overview": "分析完成",
+                  "featureComparison": "功能信息不足",
+                  "positioningComparison": "定位信息不足",
+                  "pricingComparison": "Enterprise tier starts at 199 monthly",
+                  "targetUserComparison": "团队用户",
+                  "strengthsSummary": "文档清晰",
+                  "weaknessesSummary": "仍需更多来源",
+                  "recommendations": ["继续观察"]
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(78L)
+                .taskName("analysis-block-type-match")
+                .subjectProduct("Our Product")
+                .analysisDimensions("功能,定价")
+                .currentNodeName("analyze_competitors")
+                .build();
+        context.putSharedOutput("extract_schema", """
+                {
+                  "downstreamEvidenceViews": [
+                    {
+                      "evidenceId": "P002",
+                      "competitorName": "Acme",
+                      "title": "Commercial details",
+                      "content": "Enterprise tier starts at 199 monthly.",
+                      "sourceUrls": ["https://acme.example.com/commercial"],
+                      "qualitySignals": [],
+                      "structuredBlocks": [
+                        {"blockType": "PRICING_BLOCK", "summary": "Enterprise tier starts at 199 monthly"}
+                      ]
+                    }
+                  ]
+                }
+                """);
+
+        AgentResult result = agent.execute(context);
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        JsonNode pricingBundle = findBundle(output.path("sectionEvidenceBundles"), "pricing");
+        JsonNode featureBundle = findBundle(output.path("sectionEvidenceBundles"), "features");
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertThat(pricingBundle.path("sourceUrls").toString()).contains("https://acme.example.com/commercial");
+        assertThat(pricingBundle.path("missingFields").toString()).doesNotContain("pricingComparison");
+        assertThat(featureBundle.path("sourceUrls").toString()).doesNotContain("https://acme.example.com/commercial");
+    }
+
+    @Test
     void shouldPreferExtractorDraftsOverTaskSnapshotAndOnlyBackfillMissingFields() throws Exception {
         when(agentContextAssembler.assemble(any(AgentContext.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(knowledgeRepository.findByTaskIdOrderByIdAsc(1L)).thenReturn(List.of(

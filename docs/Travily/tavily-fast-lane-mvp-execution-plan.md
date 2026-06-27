@@ -43,7 +43,7 @@
   Tavily API 配置，prefix 为 `tavily-search`，包含 endpoint、apiKey、searchDepth、includeRawContent、maxResults、timeoutSeconds、maxRetries、minRawContentChars。
 
 - `backend/src/main/java/cn/bugstack/competitoragent/search/tavily/TavilyQueryMode.java`  
-  枚举：`OPEN_WEB`、`OFFICIAL_DOCS`、`EVIDENCE_REPAIR`。
+  枚举：`OPEN_WEB`、`OFFICIAL_DOCS`、`TRUSTED_WEB_EXPANSION`、`EVIDENCE_REPAIR`。
 
 - `backend/src/main/java/cn/bugstack/competitoragent/search/tavily/DomainHint.java`  
   单个域名提示，字段包括 domain、sourceFamily、confidence、source、reason、sourceUrls。
@@ -52,7 +52,7 @@
   竞品维度域名提示集合，MVP 只做运行期对象，不建表。
 
 - `backend/src/main/java/cn/bugstack/competitoragent/search/tavily/TavilySearchProfile.java`  
-  单次 Tavily 请求 profile，包含 family、queryMode、query、includeDomains、maxResults。
+  单次 Tavily 请求 profile，包含 family、queryMode、query、includeDomains、maxResults、expansionReason。
 
 - `backend/src/main/java/cn/bugstack/competitoragent/search/tavily/TavilySearchProfileResolver.java`  
   按 family / scope 生成 Tavily query 和 `include_domains` 策略。
@@ -152,7 +152,7 @@
 
 ```java
 @Test
-void shouldUseIncludeDomainsOnlyForOfficialDocsProfile() {
+void shouldUseOfficialDocsAsAnchorAndKeepOpenWebUnrestricted() {
     DomainHintSet hints = DomainHintSet.builder()
             .competitorName("抖音")
             .domains(List.of(DomainHint.builder()
@@ -173,6 +173,33 @@ void shouldUseIncludeDomainsOnlyForOfficialDocsProfile() {
     assertThat(docsProfile.getIncludeDomains()).containsExactly("open.douyin.com");
     assertThat(newsProfile.getQueryMode()).isEqualTo(TavilyQueryMode.OPEN_WEB);
     assertThat(newsProfile.getIncludeDomains()).isEmpty();
+}
+
+@Test
+void shouldAllowTrustedWebExpansionWhenOfficialAnchorIsInsufficient() {
+    DomainHintSet hints = DomainHintSet.builder()
+            .competitorName("抖音")
+            .domains(List.of(DomainHint.builder()
+                    .domain("open.douyin.com")
+                    .sourceFamily("docs")
+                    .confidence(0.88D)
+                    .source("INFERRED")
+                    .sourceUrls(List.of("https://open.douyin.com"))
+                    .build()))
+            .build();
+
+    TavilySearchProfileResolver resolver = new TavilySearchProfileResolver(new TavilySearchProperties());
+    TavilySearchProfile expansionProfile = resolver.resolveTrustedExpansion(
+            "抖音",
+            "DOCS",
+            hints,
+            "officialDocHitCount=0; usableContentRatio below threshold"
+    );
+
+    assertThat(expansionProfile.getQueryMode()).isEqualTo(TavilyQueryMode.TRUSTED_WEB_EXPANSION);
+    assertThat(expansionProfile.getIncludeDomains()).isEmpty();
+    assertThat(expansionProfile.getExpansionReason()).contains("officialDocHitCount=0");
+    assertThat(expansionProfile.getQuery()).contains("抖音");
 }
 
 @Test
@@ -227,15 +254,26 @@ public class TavilySearchProperties {
 
 - [ ] **Step 3: 实现 `TavilySearchProfileResolver` 规则**
 
-规则必须固定为：
+规则改为“官方锚点优先，证据不足时受控扩展”：
 
 ```text
-OFFICIAL / DOCS / PRICING -> OFFICIAL_DOCS + includeDomains
+OFFICIAL / DOCS:
+  anchor profile -> OFFICIAL_DOCS + includeDomains
+  expansion profile -> TRUSTED_WEB_EXPANSION + no includeDomains
+  expansion 仅在 officialDocHitCount / usableContentRatio / mediumOrAboveEvidenceCount 不达标时触发
+
+PRICING:
+  anchor profile -> OFFICIAL_DOCS + includeDomains
+  expansion profile -> TRUSTED_WEB_EXPANSION + no includeDomains
+  定价、套餐、收费结论仍必须保留官方锚点；第三方材料只能辅助说明
+
 NEWS / REVIEW / RESEARCH -> OPEN_WEB + no includeDomains
 EVIDENCE_REPAIR -> 使用 external suggestedQueries，不从模板生成
 ```
 
 `includeDomains` 只接受 confidence >= 0.60 且 domain 非空的 DomainHint。
+
+`TRUSTED_WEB_EXPANSION` 不接收 includeDomains，但必须把 `expansionReason` 写入 profile，后续 audit 用它解释为什么从官方锚点放宽到可信开放网。Resolver 只负责生成 expansion profile，不直接判断内容质量；是否可用由 `TavilyPrefetchedContentGate` 根据 `trustTier / pageType / qualityTier / contentCompleteness / sourceUrls` 判定。
 
 - [ ] **Step 4: 跑 profile 相关测试**
 
@@ -524,7 +562,17 @@ discoveryMethod=TAVILY_FAST_LANE
 hasPrefetchedContent=true
 prefetchedContentRef 非空
 sourceUrls 包含 Tavily url
-tavilyQueryMode=OFFICIAL_DOCS 或 OPEN_WEB
+tavilyQueryMode in [OFFICIAL_DOCS, OPEN_WEB, TRUSTED_WEB_EXPANSION]
+```
+
+如果命中受控扩展，则断言：
+
+```text
+tavilyQueryMode=TRUSTED_WEB_EXPANSION
+includeDomains 为空
+expansionReason 非空
+sourceUrls 包含 Tavily url
+qualityTier 至少为 MEDIUM 才能 fastLaneUsable=true
 ```
 
 - [ ] **Step 4: 实现 `TavilyFastLaneProvider`**
@@ -559,6 +607,16 @@ MVP 默认关闭，通过配置显式打开。这样不会影响当前主线。
 当 `OFFICIAL_DOCS` profile 没有 includeDomains 时，Provider 先执行一次 `OPEN_WEB` bootstrap，不加 `include_domains`；提取候选官方域名后，再执行 `OFFICIAL_DOCS`。bootstrap 结果只用于构建 DomainHintSet，不直接标记 HIGH trust。
 
 bootstrap 失败、超时或返回空结果时，`OFFICIAL_DOCS` profile 降级为不加 `include_domains` 的 Tavily 调用；不能因为 bootstrap 失败而跳过整个 `OFFICIAL_DOCS` 搜索。
+
+当 `OFFICIAL_DOCS` 首轮结果经过 Gate 后仍不满足证据阈值时，Provider 可以追加一次 `TRUSTED_WEB_EXPANSION` profile。该扩展不使用 `include_domains`，但必须：
+
+```text
+1. 记录 expansionReason
+2. 对同一 domain 设置可用结果数量上限
+3. 只允许 Gate 后 qualityTier in [STRONG, MEDIUM] 的结果进入 fast lane
+4. 对 PRICING / OFFICIAL / DOCS 强事实结论保留官方锚点要求
+5. Tavily 扩展失败时 fail-open，不阻塞原采集链路
+```
 
 - [ ] **Step 6: 实现 registry**
 
@@ -723,6 +781,8 @@ tavily-search:
   max-retries: 2
   min-raw-content-chars: 500
   min-tavily-score: 0.45
+  trusted-expansion-enabled: true
+  max-usable-results-per-domain: 2
 
 source-discovery:
   search:
@@ -1070,8 +1130,8 @@ Fixture 只保留测试所需字段：`title / url / content / raw_content / sco
 ```text
 Baseline A: 不启用 Tavily
 Experiment B: Tavily OPEN_WEB，不加 include_domains
-Experiment C: Tavily family-aware，官方类加 include_domains
-Experiment D: Tavily family-aware + fallback 保留
+Experiment C: Tavily family-aware，官方类首轮加 include_domains
+Experiment D: Tavily family-aware + TRUSTED_WEB_EXPANSION + fallback 保留
 ```
 
 最低断言：
@@ -1081,6 +1141,8 @@ traceableEvidenceRatio = 100%
 mediumOrAboveEvidenceCount 高于 baseline fixture
 officialDocHitCount 在 OFFICIAL/DOCS 场景高于 baseline fixture
 openWebDiversityCount 高于 include_domains-only fixture
+trustedExpansionUsableCount 高于 include_domains-only fixture
+OFFICIAL/DOCS/PRICING 强事实结论保留官方锚点来源
 thinContentRatio 不高于 baseline fixture
 collectionFailureRatio 不高于 baseline fixture
 playwrightInvocationCount 低于 baseline fixture
@@ -1189,11 +1251,13 @@ source-discovery:
 2. mediumOrAboveEvidenceCount 高于 baseline。
 3. OFFICIAL/DOCS 场景 officialDocHitCount 高于 baseline。
 4. OPEN_WEB 场景 openWebDiversityCount 高于 include_domains-only 策略。
-5. thinContentRatio 不高于 baseline。
-6. collectionFailureRatio 不高于 baseline。
-7. playwrightInvocationCount 低于 baseline。
-8. 所有 REJECT 都有 fastLaneRejectReason。
-9. 至少一个下游环节能消费 Tavily 产生的 EvidenceSource。
+5. 受控扩展场景 trustedExpansionUsableCount 高于 include_domains-only 策略。
+6. OFFICIAL/DOCS/PRICING 强事实结论保留官方锚点来源，第三方材料不能作为唯一依据。
+7. thinContentRatio 不高于 baseline。
+8. collectionFailureRatio 不高于 baseline。
+9. playwrightInvocationCount 低于 baseline。
+10. 所有 REJECT 都有 fastLaneRejectReason。
+11. 至少一个下游环节能消费 Tavily 产生的 EvidenceSource。
 ```
 
 ---

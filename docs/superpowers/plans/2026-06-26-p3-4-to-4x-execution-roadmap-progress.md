@@ -1,6 +1,6 @@
 # P3-4 To 4.x Execution Roadmap Progress - 2026-06-26
 
-当前阶段：ReportWriting pre-4.x 实链验证收口（当前停止点：任务 56 live 验证已完成，仍不进入 4.x）
+当前阶段：ReportWriting pre-4.x 实链验证收口（当前停止点：任务 56 live 验证已完成，仍不进入 4.x；后续即使进入 4.x，首轮也先稳定主业务链路，不把 ConversationCollaboration 作为前置阻塞项）
 - [x] 信息采集：已完成
 - [x] 数据分析：已完成
 - [x] 报告 / 回放主路径投影：已完成
@@ -19,8 +19,8 @@
 | Task 2 | 冻结 3.3 / 3.4 红线文档与协作协议清单，并完成协议回归验证 | 30 分钟 | Task 1 全部通过 | 已完成 |
 | Task 3 | 产出 3.5 四份诊断文档，并回链到总路线图 | 90 分钟 | Task 2 完成 | 已完成 |
 | Task 4 | 基于四份诊断形成收敛决策，判断 4.x / Tavily 路径 | 30 分钟 | Task 3 完成 | 已完成 |
-| Task 5 | 若收敛结论要求进入 4.0，则补 runtime contract 设计与实施计划 | 60 分钟 | Task 4 结论为进入 4.0 | 条件未满足，暂不执行 |
-| Task 6 | 若 4.0 完成且仍需推进，则补 4.1 动态 runtime 迁移计划 | 60 分钟 | Task 5 完成并确认继续 | 条件未满足，暂不执行 |
+| Task 5 | 若收敛结论要求进入 4.0，则补 runtime contract 设计与实施计划；4.x 首轮不以对话协同为前置 | 60 分钟 | Task 4 结论为进入 4.0 | 条件未满足，暂不执行 |
+| Task 6 | 若 4.0 完成且仍需推进，则补 4.1 动态 runtime 迁移计划，优先迁移 Writer / Citation / Reviewer 主链路动作 | 60 分钟 | Task 5 完成并确认继续 | 条件未满足，暂不执行 |
 | Task 7 | 按收敛结论决定是否执行 Tavily Fast Lane 接入路径 | 45 分钟 | Task 4 或 Task 6 产出接入条件 | 条件未满足，暂不执行 |
 
 ## 执行进度
@@ -47,7 +47,7 @@
 | ReportWriting 3 | 使用真实任务 `56` 验证 Writer 快照持久化、报告主路径投影和公开 Markdown / HTML 下载端点 | ✅ 已完成 |
 
 📍 当前：ReportWriting pre-4.x 自动化实施与任务 `56` live 验证均已完成，公开下载端点已补齐写作证据摘要。
-▶️ 下一步：回到总路线图其他待验证链路；当前仍不进入 4.x、不做 Tavily、不补 `pendingActions`。
+▶️ 下一步：回到总路线图其他待验证链路；当前仍不进入 4.x、不做 Tavily、不补 `pendingActions`。若后续进入 4.x，首轮仍先跑通和升级主链路，ConversationCollaboration 后置为 runtime contract 消费端、安全确认网关和受控动作入口。
 
 ## 验证结果
 

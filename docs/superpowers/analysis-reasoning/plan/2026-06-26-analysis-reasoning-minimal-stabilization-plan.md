@@ -1,12 +1,12 @@
 # AnalysisReasoning 最小稳固方案 - 2026-06-26
 
-当前阶段：分析推理最小稳固切片方案
+当前阶段：分析推理最小稳固切片自动化收口
 - [x] 信息采集：已完成
 - [x] 数据分析：已完成
 - [x] 方案边界确认：已完成
-- [ ] 实施计划：待执行
-- [ ] 代码实施：待执行
-- [ ] 自动化验证：待执行
+- [x] 实施计划：已完成
+- [x] 代码实施：已完成
+- [x] 自动化验证：已完成
 - [ ] 实链验证：待执行
 
 ## 1. 背景结论
@@ -50,17 +50,23 @@
 
 ### 4.2 章节证据束匹配规则
 
-`CompetitorAnalysisAgent.buildSectionEvidenceBundles(...)` 当前会把同一竞品的 `DownstreamEvidenceView` 同时加入所有章节，造成 Writer 看到过粗的章节证据。本轮增加轻量匹配规则：
+`CompetitorAnalysisAgent.buildSectionEvidenceBundles(...)` 当前会把同一竞品的 `DownstreamEvidenceView` 同时加入所有章节，造成 Writer 看到过粗的章节证据。本轮增加轻量匹配规则。匹配优先级固定为：
 
-| 分析章节 | 匹配信号 |
-| --- | --- |
-| `features` | `FEATURE_LIST / FEATURE_BLOCK / FEATURE_*` 结构块、`FEATURE` 质量信号、正文或标题包含 feature / 功能 / capability |
-| `pricing` | `PRICING_BLOCK / PRICING_*` 结构块、`PRICING` 质量信号、正文或标题包含 pricing / price / plan / 定价 / 价格 |
-| `targetUsers` | `TARGET_USER / USER_SEGMENT` 结构块、正文或标题包含 user / customer / audience / 用户 / 客户 |
-| `positioning` | `POSITIONING / MARKET` 结构块、正文或标题包含 positioning / market / segment / 定位 / 市场 |
-| `strengths` | `STRENGTH / PRO / ADVANTAGE` 结构块或质量信号 |
-| `weaknesses` | `WEAKNESS / CON / RISK / LIMITATION` 结构块或质量信号 |
-| `overview` | 可接受任意有来源的概览型证据，但不能替代其他章节证据 |
+1. `structuredBlocks[*].blockType` 结构块类型。
+2. `qualitySignals[*]` 质量信号。
+3. `title / content / structuredBlocks[*].summary` 文本关键词兜底。
+
+结构块类型和质量信号需要先归一化为大写 token，再做精确或前缀匹配；正文关键词只作为兜底，不能替代明确结构信号。
+
+| 分析章节 | 结构块类型优先匹配 | 质量信号匹配 | 文本关键词兜底 |
+| --- | --- | --- | --- |
+| `features` | `FEATURE_LIST / FEATURE_BLOCK / FEATURE_*` | `FEATURE / FEATURE_*` | feature / capability / 功能 / 能力 |
+| `pricing` | `PRICING_BLOCK / PRICING_*` | `PRICING / PRICING_*` | pricing / price / plan / 定价 / 价格 / 套餐 |
+| `targetUsers` | `TARGET_USER / USER_SEGMENT / USER_*` | `TARGET_USER / USER_SEGMENT / USER_*` | user / customer / audience / 用户 / 客户 / 受众 |
+| `positioning` | `POSITIONING / MARKET / SEGMENT` | `POSITIONING / MARKET / SEGMENT` | positioning / market / segment / 定位 / 市场 |
+| `strengths` | `STRENGTH / ADVANTAGE / PRO` | `STRENGTH / ADVANTAGE / PRO` | strength / advantage / pros / 优势 / 亮点 |
+| `weaknesses` | `WEAKNESS / RISK / LIMITATION / CON` | `WEAKNESS / RISK / LIMITATION / CON` | weakness / risk / limitation / cons / 短板 / 风险 / 限制 |
+| `overview` | 不直接消费明确章节结构块 | 不直接消费明确章节质量信号 | 仅接受有来源且无法匹配任一具体章节的通用证据 |
 
 匹配规则只用于减少错误聚合，不用于生成新事实。匹配失败时，该 evidence view 仍保留在 `downstreamEvidenceViews` 顶层审计字段里，但不会进入不相关章节的 `evidenceFragments`。
 
@@ -68,9 +74,11 @@
 
 当 `extract_schema` 只提供 `downstreamEvidenceViews`，没有 draft bundle 或 repository coverage 时，Analyzer 当前可能同时出现“有来源片段但章节仍标缺口”的灰区。本轮调整为：
 
-1. 如果 view 与章节匹配，且 view 或片段存在 `sourceUrls`，该章节对当前竞品视为 traceable。
-2. 如果 view 不匹配章节，即使有来源，也不能让该章节通过。
-3. 如果 view 缺少来源，则保留 `MISSING_SOURCE_URL / SECTION_EVIDENCE_GAP`。
+1. “view 与章节匹配”必须按 4.2 的优先级判定：先看结构块类型，再看质量信号，最后才看标题、正文和结构块摘要关键词。
+2. 如果 view 与章节匹配，且 view 或片段存在 `sourceUrls`，该章节对当前竞品视为 traceable。
+3. 如果 view 只匹配其他具体章节，即使有来源，也不能让当前章节通过。
+4. `overview` 只接收无法匹配任一具体章节的通用证据；pricing / features / positioning 等明确证据不能进入 `overview` 作为噪声来源。
+5. 如果 view 缺少来源，则保留 `MISSING_SOURCE_URL / SECTION_EVIDENCE_GAP`。
 
 这能减少“pricing 明明有结构化证据，但 pricing bundle 仍被标缺口”的误判，同时避免“pricing 证据污染 feature 章节”。
 
@@ -78,12 +86,22 @@
 
 | 步骤 | 核心目标 | 预期耗时 | 前置依赖 | 状态 |
 | --- | --- | --- | --- | --- |
-| Step 1 | 为 Analyzer prompt 契约补测试，确认模板包含逐维度、sourceUrls 和缺证据留空规则 | 10 分钟 | 本方案确认 | 待执行 |
-| Step 2 | 新增 `prompts/analyzer.txt`，让默认模板具备稳定输出约束 | 10 分钟 | Step 1 红灯 | 待执行 |
-| Step 3 | 为章节证据束匹配补 Analyzer 测试，覆盖 pricing view 不污染 feature bundle | 20 分钟 | 现有 `CompetitorAnalysisAgentTest` 可运行 | 待执行 |
-| Step 4 | 在 `CompetitorAnalysisAgent` 内实现私有匹配方法和 views-only traceable 判定 | 30 分钟 | Step 3 红灯 | 待执行 |
-| Step 5 | 跑 Analyzer、Writer、Orchestrator 相关聚焦回归，确认协议不回归 | 20 分钟 | Step 4 完成 | 待执行 |
-| Step 6 | 更新总路线图进度，不把实施和实链验证提前标绿 | 10 分钟 | 自动化通过 | 待执行 |
+| Step 1 | 为 Analyzer prompt 契约补测试，确认模板包含逐维度、sourceUrls 和缺证据留空规则 | 10 分钟 | 本方案确认 | 已完成 |
+| Step 2 | 新增 `prompts/analyzer.txt`，让默认模板具备稳定输出约束 | 10 分钟 | Step 1 红灯 | 已完成 |
+| Step 3 | 为章节证据束匹配补 Analyzer 测试，覆盖 pricing view 不污染 feature bundle | 20 分钟 | 现有 `CompetitorAnalysisAgentTest` 可运行 | 已完成 |
+| Step 4 | 在 `CompetitorAnalysisAgent` 内实现私有匹配方法和 views-only traceable 判定 | 30 分钟 | Step 3 红灯 | 已完成 |
+| Step 5 | 跑 Analyzer、Writer、Orchestrator 相关聚焦回归，确认协议不回归 | 20 分钟 | Step 4 完成 | 已完成 |
+| Step 6 | 更新总路线图进度，不把实施和实链验证提前标绿 | 10 分钟 | 自动化通过 | 已完成 |
+
+### 5.1 方案步骤与实施任务对照
+
+为避免方案 `Step` 和实施计划 `Task` 后续追踪混淆，统一按下表对照：
+
+| 方案步骤 | 对应实施计划任务 | 说明 |
+| --- | --- | --- |
+| Step 1-2 | Task 1: Analyzer Prompt Contract | 先补 Prompt 契约红灯测试，再新增 `prompts/analyzer.txt` |
+| Step 3-4 | Task 2: Section Evidence View Matching | 先补章节证据束匹配红灯测试，再实现私有匹配规则 |
+| Step 5-6 | Task 3: Regression and Roadmap Closure | 跑聚焦回归、协议保护回归、格式检查，并回链路线图 |
 
 ## 6. 验收口径
 
@@ -109,6 +127,8 @@ mvn -pl backend "-Dtest=CompetitorAnalysisAgentTest,AnalyzerSuggestionAssemblerT
 1. Prompt 变严格后，Analyzer 可能更频繁输出缺口。该结果可接受，因为本轮目标是减少无证据分析继续流向 Writer，而不是强行提高通过率。
 2. 章节匹配规则可能漏掉少量弱相关证据。规则应保持保守，宁可标缺口，也不把不相关来源塞入章节证据束。
 3. 如果真实任务显示匹配规则过窄，后续只能补充匹配词或结构块类型，不应回退到“所有 evidence view 进入所有章节”的粗粒度聚合。
+4. `filterEvidenceViewsForSection` 会按竞品和章节重复匹配 evidence view，复杂度约为 `O(competitorCount * sectionCount * viewCount)`；当前任务规模下可接受，后续只有在 evidence view 数量显著增长时才考虑预索引。
+5. `evidenceViewHaystack` 或等价匹配辅助方法会在匹配时构造小字符串并做大小写归一化，存在轻微 GC 压力；本轮优先保持实现简单，避免为了微优化扩大改动面。
 
 ## 8. 路线图状态
 
@@ -116,5 +136,14 @@ mvn -pl backend "-Dtest=CompetitorAnalysisAgentTest,AnalyzerSuggestionAssemblerT
 
 - 诊断：已完成。
 - 方案：已完成，但仅代表最小稳固切片，不代表分析推理全量重构。
-- 实施：待执行。
+- 实施：已完成自动化收口，但未完成真实链路验证。
 - 实链验证：待执行。
+
+## 9. 验证结果
+
+| 命令 | 结果 |
+| --- | --- |
+| `mvn -pl backend "-Dtest=PromptTemplateServiceTest,CompetitorAnalysisAgentTest,AnalyzerSuggestionAssemblerTest,ReportWriterAgentTest" test` | PASS |
+| `Get-ChildItem -Recurse -File backend/src/test/java -Filter *.java \| Where-Object { $_.Name -in @('OrchestrationDecisionServiceTest.java','DagExecutorTest.java') } \| Select-Object -ExpandProperty FullName` | PASS |
+| `mvn -pl backend "-Dtest=AnalyzerSuggestionAssemblerTest,OrchestrationDecisionServiceTest,DagExecutorTest" test` | PASS |
+| `git diff --check -- backend/src/main/resources/prompts/analyzer.txt backend/src/test/java/cn/bugstack/competitoragent/llm/PromptTemplateServiceTest.java backend/src/test/java/cn/bugstack/competitoragent/agent/analyzer/CompetitorAnalysisAgentTest.java backend/src/main/java/cn/bugstack/competitoragent/agent/analyzer/CompetitorAnalysisAgent.java docs/specs/2026-06-11-business-landscape-and-optimization-roadmap-design.md docs/superpowers/analysis-reasoning/plan/2026-06-26-analysis-reasoning-minimal-stabilization-plan.md` | PASS（仅有 Windows 工作区 LF/CRLF 提示，无空白错误） |
