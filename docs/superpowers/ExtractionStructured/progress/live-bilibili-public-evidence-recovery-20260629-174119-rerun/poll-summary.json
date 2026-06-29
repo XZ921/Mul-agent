@@ -1,0 +1,202 @@
+﻿[
+    {
+        "poll":  "01",
+        "status":  "PENDING",
+        "completedNodes":  0,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "哔哩哔哩 - OFFICIAL采集"
+    },
+    {
+        "poll":  "02",
+        "status":  "RUNNING",
+        "completedNodes":  0,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "哔哩哔哩 - OFFICIAL采集"
+    },
+    {
+        "poll":  "03",
+        "status":  "RUNNING",
+        "completedNodes":  0,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "哔哩哔哩 - OFFICIAL采集"
+    },
+    {
+        "poll":  "04",
+        "status":  "RUNNING",
+        "completedNodes":  0,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "哔哩哔哩 - OFFICIAL采集"
+    },
+    {
+        "poll":  "05",
+        "status":  "RUNNING",
+        "completedNodes":  0,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "哔哩哔哩 - OFFICIAL采集"
+    },
+    {
+        "poll":  "06",
+        "status":  "RUNNING",
+        "completedNodes":  1,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "竞品结构化提取"
+    },
+    {
+        "poll":  "07",
+        "status":  "RUNNING",
+        "completedNodes":  1,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "竞品结构化提取"
+    },
+    {
+        "poll":  "08",
+        "status":  "RUNNING",
+        "completedNodes":  1,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "竞品结构化提取"
+    },
+    {
+        "poll":  "09",
+        "status":  "RUNNING",
+        "completedNodes":  1,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "竞品结构化提取"
+    },
+    {
+        "poll":  "10",
+        "status":  "RUNNING",
+        "completedNodes":  2,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "竞品综合分析"
+    },
+    {
+        "poll":  "11",
+        "status":  "RUNNING",
+        "completedNodes":  2,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "竞品综合分析"
+    },
+    {
+        "poll":  "12",
+        "status":  "RUNNING",
+        "completedNodes":  2,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "竞品综合分析"
+    },
+    {
+        "poll":  "13",
+        "status":  "RUNNING",
+        "completedNodes":  2,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "竞品综合分析"
+    },
+    {
+        "poll":  "14",
+        "status":  "RUNNING",
+        "completedNodes":  3,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "生成分析报告"
+    },
+    {
+        "poll":  "15",
+        "status":  "RUNNING",
+        "completedNodes":  3,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "生成分析报告"
+    },
+    {
+        "poll":  "16",
+        "status":  "RUNNING",
+        "completedNodes":  3,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "生成分析报告"
+    },
+    {
+        "poll":  "17",
+        "status":  "RUNNING",
+        "completedNodes":  3,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "生成分析报告"
+    },
+    {
+        "poll":  "18",
+        "status":  "RUNNING",
+        "completedNodes":  3,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "生成分析报告"
+    },
+    {
+        "poll":  "19",
+        "status":  "RUNNING",
+        "completedNodes":  4,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "报告引用核查"
+    },
+    {
+        "poll":  "20",
+        "status":  "RUNNING",
+        "completedNodes":  5,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "报告质量初审"
+    },
+    {
+        "poll":  "21",
+        "status":  "RUNNING",
+        "completedNodes":  5,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "报告质量初审"
+    },
+    {
+        "poll":  "22",
+        "status":  "RUNNING",
+        "completedNodes":  5,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "报告质量初审"
+    },
+    {
+        "poll":  "23",
+        "status":  "RUNNING",
+        "completedNodes":  5,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "报告质量初审"
+    },
+    {
+        "poll":  "24",
+        "status":  "RUNNING",
+        "completedNodes":  5,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "报告质量初审"
+    },
+    {
+        "poll":  "25",
+        "status":  "STOPPED",
+        "completedNodes":  9,
+        "totalNodes":  9,
+        "waitingInterventionNodeCount":  0,
+        "currentStage":  "等待人工处理"
+    }
+]

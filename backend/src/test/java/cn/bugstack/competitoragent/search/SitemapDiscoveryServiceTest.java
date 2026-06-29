@@ -98,6 +98,34 @@ class SitemapDiscoveryServiceTest {
     }
 
     @Test
+    void shouldDiscoverOfficialPublicEntriesFromAboutDownloadAndAppPaths() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        String rootUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+        registerText("/sitemap.xml", 200, "application/xml", """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>%s/about</loc></url>
+                  <url><loc>%s/download</loc></url>
+                  <url><loc>%s/app</loc></url>
+                  <url><loc>%s/blog/release</loc></url>
+                </urlset>
+                """.formatted(rootUrl, rootUrl, rootUrl, rootUrl));
+        server.start();
+
+        SitemapDiscoveryService service = new SitemapDiscoveryService(enabledProperties());
+
+        List<SourceCandidate> candidates = service.discover("Acme AI", "OFFICIAL", List.of(rootUrl));
+
+        assertThat(candidates)
+                .extracting(SourceCandidate::getUrl)
+                .contains(rootUrl + "/about", rootUrl + "/download", rootUrl + "/app")
+                .doesNotContain(rootUrl + "/blog/release");
+        assertThat(candidates)
+                .extracting(SourceCandidate::getSourceType)
+                .containsOnly("OFFICIAL");
+    }
+
+    @Test
     void shouldCapUrlsPerSitemapAndExposeTruncationSignal() throws Exception {
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         String rootUrl = "http://127.0.0.1:" + server.getAddress().getPort();

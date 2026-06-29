@@ -47,6 +47,14 @@
 - 所有 `sourceUrls` 必须保留，登录/验证码恢复产生的证据也必须回指原始 URL。
 - 修改外部抓取、浏览器或搜索调用时必须保留 try-catch 和有限重试边界。
 
+## 0.1 计划调整说明（基于 03 完成状态与当前 04 进度）
+
+- `Task 1 / Task 2` 已完成，后续执行必须从 `Task 3` 开始，不再回头重做已完成步骤。
+- `03` 已把 `TavilyFastLaneAudit`、`structuredPayload.prefetchedContentRef / prefetchedRawContentLength / primaryTool / structuredBlockCount / failureStage` 落到搜索/采集链路里，因此 `04` 后续实现必须把公开补采字段作为 **追加审计信息** 写入，而不是覆盖现有 Tavily trace / audit 字段。
+- `Task 1 / Task 2` 收紧了最终 `selectedTargets` 门槛，旧的 `SearchExecutionCoordinatorTest` 中有一批“未验证候选仍可直接入选”的断言已经过时；`Task 3` 不应再把整份旧测试文件当作首轮 gate，而应先补聚焦 `04` 新语义的 recovery 测试，再选择性刷新旧断言。
+- `EvidenceSource.discoveryReason` 的迁移版本号不能再使用 `V28`：当前工程已经存在 `V28__add_report_writer_evidence_snapshot_columns.sql` 与 `V29__refine_preset_analysis_templates.sql`，因此本计划必须改用 `V30__expand_evidence_source_discovery_reason.sql`。
+- 结合当前 live 风险与已完成进度，后续推荐顺序调整为：`Task 3` 公开正文补采底座 -> `Task 5` 落库安全化与 Flyway 扩容 -> `Task 4` 公开壳兜底 -> `Task 6 / Task 7` 失败诊断与回归复验。
+
 ---
 
 ## 1. 文件结构
@@ -71,8 +79,10 @@
   - 在候选验证不足且出现受限/低信号页面时调用有效公开信息补采，再复用 `CandidateVerifier` 验证补采候选。
 - 修改： `backend/src/main/java/cn/bugstack/competitoragent/search/SearchExecutionTrace.java`
   - 记录有效公开信息补采是否触发、尝试 URL、有效候选数量和降级决策。
+- 新建： `backend/src/test/java/cn/bugstack/competitoragent/search/SearchExecutionCoordinatorPublicRecoveryTest.java`
+  - 聚焦 `04` 新增的“主入口受限 -> 先补公开正文 -> 再决定是否降级”的协调器行为，不与旧的未验证候选直选断言混用。
 - 修改： `backend/src/test/java/cn/bugstack/competitoragent/search/SearchExecutionCoordinatorTest.java`
-  - 覆盖主入口受限时会先补采同域公开页面，只有补采失败才进入公开壳降级。
+  - 只选择性刷新与 `Task 1 / Task 2 / 03` 直接冲突的旧断言，例如 Tavily fast-lane 审计、checkpoint 复用、显式 RSS feed 与 canonical 去重语义。
 - 新建： `backend/src/main/java/cn/bugstack/competitoragent/source/PublicShellRecoveryExtractor.java`
   - 从登录/验证码/反爬页面中恢复公开可见壳信息，仅作为有效公开信息补采失败后的最后兜底。
 - 新建： `backend/src/test/java/cn/bugstack/competitoragent/source/PublicShellRecoveryExtractorTest.java`
@@ -91,13 +101,13 @@
   - 覆盖长 discoveryReason、保存失败诊断、sourceUrls 留存。
 - 修改： `backend/src/main/java/cn/bugstack/competitoragent/model/entity/EvidenceSource.java`
   - 将 `discoveryReason` 从 `length = 500` 迁移为 `TEXT` 映射。
-- 新建： `backend/src/main/resources/db/migration/V28__expand_evidence_source_discovery_reason.sql`
+- 新建： `backend/src/main/resources/db/migration/V30__expand_evidence_source_discovery_reason.sql`
   - 将数据库字段 `evidence_source.discovery_reason` 改为 `TEXT`。
 - 新建： `backend/src/test/java/cn/bugstack/competitoragent/db/EvidenceSourceMigrationArtifactsTest.java`
   - 确认 V28 迁移文件存在并包含字段扩容语句。
 - 修改： `docs/superpowers/ExtractionStructured/problem/ExtractionStructured.md`
   - 实施完成后回写搜索采集加固状态。
-- 新建： `docs/Tavily/progress/2026-06-28-search-collection-public-evidence-recovery-progress.md`
+- 新建： `docs/Tavily/progress/2026-06-29-task66-04-public-evidence-recovery-progress.md`
   - 记录每个任务的执行结果、测试命令和 live 复验结论。
 
 ---
@@ -106,13 +116,15 @@
 
 | Task | 目标 | 状态 |
 | --- | --- | --- |
-| Task 1 | 收紧 selectedTargets 入选门槛 | 待执行 |
-| Task 2 | 泛化中介页、登录页、验证码页识别 | 待执行 |
+| Task 1 | 收紧 selectedTargets 入选门槛 | 已完成 |
+| Task 2 | 泛化中介页、登录页、验证码页识别 | 已完成 |
 | Task 3 | 受限页后的有效公开信息补采 | 待执行 |
-| Task 4 | 登录/验证码公开壳信息兜底 | 待执行 |
 | Task 5 | EvidenceSource 落库安全化与 Flyway 扩容 | 待执行 |
+| Task 4 | 登录/验证码公开壳信息兜底 | 待执行 |
 | Task 6 | 采集失败诊断留存 | 待执行 |
 | Task 7 | 回归测试与 live 复验记录 | 待执行 |
+
+后续执行顺序调整为：`Task 3 -> Task 5 -> Task 4 -> Task 6 -> Task 7`。
 
 ---
 
@@ -616,7 +628,8 @@ BUILD SUCCESS
 - 修改： `backend/src/test/java/cn/bugstack/competitoragent/search/SitemapDiscoveryServiceTest.java`
 - 修改： `backend/src/main/java/cn/bugstack/competitoragent/search/SearchExecutionCoordinator.java`
 - 修改： `backend/src/main/java/cn/bugstack/competitoragent/search/SearchExecutionTrace.java`
-- 修改： `backend/src/test/java/cn/bugstack/competitoragent/search/SearchExecutionCoordinatorTest.java`
+- 新建： `backend/src/test/java/cn/bugstack/competitoragent/search/SearchExecutionCoordinatorPublicRecoveryTest.java`
+- 选择性修改： `backend/src/test/java/cn/bugstack/competitoragent/search/SearchExecutionCoordinatorTest.java`
 
 **规则：**
 
@@ -640,6 +653,8 @@ BUILD SUCCESS
 - 已有验证通过候选达到 `minVerifiedCandidates` 时跳过补采。
 - 超时或网络异常时保留审计并降级，不阻断主链路。
 - 如果旧签名被调用，必须在 trace 或候选质量信号中记录 `FIELD_CONTEXT_MISSING_LEGACY_RECOVERY`，防止误判为字段路径补采已经执行。
+- `03` 已落地的 `TavilyFastLaneAudit`、checkpoint trace、canonical URL 归一化语义不能被公开补采逻辑覆盖或抹平；相关字段只能追加，不能重置。
+- `verifyCandidates=false` 不再等价于“允许未验证候选直接进入 selectedTargets”；`Task 3` 必须通过 recovery 候选验证、已复用的可用 collectedPage、checkpoint 复用或 Tavily safe-path 等明确安全条件来恢复可选目标。
 
 - [ ] **步骤 1：写受限首页生成同域公开候选的失败测试**
 
@@ -1434,7 +1449,7 @@ private List<String> recoveryQueryIntents = List.of();
 
 - [ ] **步骤 8：写协调器补采集成测试**
 
-追加到 `SearchExecutionCoordinatorTest`：
+创建 `SearchExecutionCoordinatorPublicRecoveryTest.java`：
 
 ```java
 import static org.mockito.ArgumentMatchers.any;
@@ -1525,12 +1540,21 @@ void shouldRecoverPublicEvidenceBeforeSelectingWhenPlannedOfficialPageIsBlocked(
 }
 ```
 
-- [ ] **步骤 9：运行 Task 3 测试**
+- [ ] **步骤 9：选择性刷新旧协调器断言**
+
+只刷新与 `Task 1 / Task 2 / 03` 直接冲突的旧断言，避免把整份历史 `SearchExecutionCoordinatorTest` 继续当作 `Task 3` 首轮 gate。至少覆盖以下类别：
+
+- Tavily fast-lane 审计仍可保留在 trace / audit snapshot 中，公开补采字段不能覆盖 `TavilyFastLaneAudit`。
+- checkpoint 恢复如果已经带有上轮 `selectedTargets` 或可复用页面，不能因为新的 selected gate 被误清空。
+- 显式 RSS / feed 场景如果仍属于 `04` 范围，必须按“显式安全来源”单独建断言；不要通过放宽未验证网页候选门槛来恢复旧行为。
+- canonical 去重、mediator 丢弃等既有约束需要与 `Task 1 / Task 2` 新规则一致。
+
+- [ ] **步骤 10：运行 Task 3 测试**
 
 运行：
 
 ```powershell
-mvn -pl backend -Dtest=PublicEvidenceRecoveryServiceTest,SitemapDiscoveryServiceTest,SearchExecutionCoordinatorTest test
+mvn -pl backend -Dtest=PublicEvidenceRecoveryServiceTest,SitemapDiscoveryServiceTest,SearchExecutionCoordinatorPublicRecoveryTest test
 ```
 
 预期：
@@ -1542,6 +1566,8 @@ BUILD SUCCESS
 ---
 
 ### Task 4: 登录/验证码公开壳信息兜底
+
+**执行前置：** `Task 3` 与 `Task 5` 完成。先补公开正文与落库安全，再引入公开壳兜底，避免 live 复验被壳页信号和持久化失败噪声干扰。
 
 **文件：**
 
@@ -1957,12 +1983,14 @@ BUILD SUCCESS
 
 ### Task 5: EvidenceSource 落库安全化与 Flyway 扩容
 
+**执行优先级：** 在 `Task 3` 完成后、`Task 4` 开始前优先执行。
+
 **文件：**
 
 - 新建： `backend/src/main/java/cn/bugstack/competitoragent/agent/collector/EvidenceSourceSanitizer.java`
 - 新建： `backend/src/test/java/cn/bugstack/competitoragent/agent/collector/EvidenceSourceSanitizerTest.java`
 - 修改： `backend/src/main/java/cn/bugstack/competitoragent/model/entity/EvidenceSource.java`
-- 新建： `backend/src/main/resources/db/migration/V28__expand_evidence_source_discovery_reason.sql`
+- 新建： `backend/src/main/resources/db/migration/V30__expand_evidence_source_discovery_reason.sql`
 - 新建： `backend/src/test/java/cn/bugstack/competitoragent/db/EvidenceSourceMigrationArtifactsTest.java`
 
 - [ ] **步骤 1：写 sanitizer 测试**
@@ -2067,7 +2095,7 @@ private String discoveryReason;
 
 - [ ] **步骤 4：新增 Flyway 迁移**
 
-创建 `backend/src/main/resources/db/migration/V28__expand_evidence_source_discovery_reason.sql`：
+创建 `backend/src/main/resources/db/migration/V30__expand_evidence_source_discovery_reason.sql`：
 
 ```sql
 ALTER TABLE evidence_source
@@ -2092,7 +2120,7 @@ class EvidenceSourceMigrationArtifactsTest {
 
     @Test
     void shouldContainDiscoveryReasonExpansionMigration() throws Exception {
-        Path migration = Path.of("src/main/resources/db/migration/V28__expand_evidence_source_discovery_reason.sql");
+        Path migration = Path.of("src/main/resources/db/migration/V30__expand_evidence_source_discovery_reason.sql");
 
         assertTrue(Files.exists(migration));
         String sql = Files.readString(migration);
@@ -2291,7 +2319,7 @@ BUILD SUCCESS
 运行：
 
 ```powershell
-mvn -pl backend -Dtest=CollectionTargetSelectorTest,CandidateOwnershipPolicyTest,PublicEvidenceRecoveryServiceTest,PublicShellRecoveryExtractorTest,PlaywrightPageCollectorTest,EvidenceSourceSanitizerTest,EvidenceSourceMigrationArtifactsTest,SearchExecutionCoordinatorTest test
+mvn -pl backend -Dtest=CollectionTargetSelectorTest,CandidateOwnershipPolicyTest,PublicEvidenceRecoveryServiceTest,SitemapDiscoveryServiceTest,SearchExecutionCoordinatorPublicRecoveryTest,PublicShellRecoveryExtractorTest,PlaywrightPageCollectorTest,EvidenceSourceSanitizerTest,EvidenceSourceMigrationArtifactsTest test
 ```
 
 预期：
@@ -2337,7 +2365,7 @@ BUILD SUCCESS
 
 ## 验证命令
 
-- `mvn -pl backend -Dtest=CollectionTargetSelectorTest,CandidateOwnershipPolicyTest,PublicEvidenceRecoveryServiceTest,PublicShellRecoveryExtractorTest,PlaywrightPageCollectorTest,EvidenceSourceSanitizerTest,EvidenceSourceMigrationArtifactsTest,SearchExecutionCoordinatorTest test`
+- `mvn -pl backend -Dtest=CollectionTargetSelectorTest,CandidateOwnershipPolicyTest,PublicEvidenceRecoveryServiceTest,SitemapDiscoveryServiceTest,SearchExecutionCoordinatorPublicRecoveryTest,PublicShellRecoveryExtractorTest,PlaywrightPageCollectorTest,EvidenceSourceSanitizerTest,EvidenceSourceMigrationArtifactsTest test`
 - `mvn -pl backend -Dtest=SearchAndCollectionGoldenMasterTest,SearchExecutionTruthContractTest,CollectionExecutionCoordinatorTest,CollectionAuditContractTest test`
 
 ## live 复验计划

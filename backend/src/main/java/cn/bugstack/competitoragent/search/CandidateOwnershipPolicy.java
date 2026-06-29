@@ -10,12 +10,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 
 /**
  * 候选来源归属策略。
- * 该策略专门处理“搜索命中的页面是否真的属于竞品”这一层判断，避免把搜索引擎认证页、
- * 企业信息页、广告中介页误当成竞品官网或文档入口。
+ * 这里专门负责判断搜索命中的页面到底是不是“官方公开证据”，
+ * 避免把搜索认证页、企业信息页、百科页或登录工具页误当成正式来源。
  */
 @Component
 public class CandidateOwnershipPolicy {
@@ -26,17 +25,22 @@ public class CandidateOwnershipPolicy {
             "baike.sogou.com",
             "qcc.com",
             "tianyancha.com",
-            "企查查",
-            "天眼查"
+            "qixin.com"
     );
+
     private static final List<String> MEDIATOR_PATH_KEYWORDS = List.of(
             "/feedback/official",
             "/official",
             "/certification",
             "/verified",
             "/brandprotect",
-            "/siteverify"
+            "/siteverify",
+            "/firm",
+            "/company",
+            "/detail",
+            "/item"
     );
+
     private static final List<String> MEDIATOR_TEXT_KEYWORDS = List.of(
             "官网认证",
             "官方标识",
@@ -44,25 +48,71 @@ public class CandidateOwnershipPolicy {
             "网站认证",
             "企业认证",
             "爱企查",
-            "百度认证"
+            "百度认证",
+            "企业信息",
+            "工商信息",
+            "股东信息",
+            "风险信息",
+            "企查查",
+            "天眼查"
     );
 
+    private static final List<String> UTILITY_GATE_PATH_KEYWORDS = List.of(
+            "/login",
+            "/signin",
+            "/sign-in",
+            "/passport",
+            "/account",
+            "/captcha",
+            "/challenge",
+            "/verify"
+    );
+
+    private static final List<String> UTILITY_GATE_TEXT_KEYWORDS = List.of(
+            "login",
+            "signin",
+            "sign in",
+            "verify you are human",
+            "captcha",
+            "security check",
+            "登录",
+            "验证码",
+            "安全验证",
+            "请先登录"
+    );
+
+    /**
+     * 搜索认证页、企业信息页和百科页只能作为诊断线索保留，
+     * 不能直接进入正式采集或正式证据。
+     */
     public boolean isRejectedMediator(SourceCandidate candidate, SourceCollector.CollectedPage page) {
         String url = firstText(candidate == null ? null : candidate.getUrl(), page == null ? null : page.getUrl());
         String domain = normalizeDomain(firstText(candidate == null ? null : candidate.getDomain(), extractDomain(url)));
         String path = normalizePath(url);
-        String text = compact(candidateText(candidate) + "\n" + pageText(page));
+        String text = candidateAndPageText(candidate, page);
         boolean mediatorDomain = containsAnyDomain(domain, MEDIATOR_DOMAINS);
         boolean mediatorPath = containsAny(path, MEDIATOR_PATH_KEYWORDS);
         boolean mediatorText = containsAny(text, MEDIATOR_TEXT_KEYWORDS);
         return mediatorDomain && (mediatorPath || mediatorText);
     }
 
+    /**
+     * 登录页、验证码页和人机校验页只允许作为公开壳恢复输入，
+     * 不能直接被提升成正式证据页面。
+     */
+    public boolean isUtilityGatePage(SourceCandidate candidate, SourceCollector.CollectedPage page) {
+        String url = firstText(candidate == null ? null : candidate.getUrl(), page == null ? null : page.getUrl());
+        String path = normalizePath(url);
+        String text = candidateAndPageText(candidate, page);
+        return containsAny(path, UTILITY_GATE_PATH_KEYWORDS)
+                || containsAny(text, UTILITY_GATE_TEXT_KEYWORDS);
+    }
+
     public boolean isTrustedSearchRoot(String competitorName, SourceCandidate candidate) {
         if (candidate == null || !StringUtils.hasText(candidate.getUrl())) {
             return false;
         }
-        if (isRejectedMediator(candidate, null)) {
+        if (isRejectedMediator(candidate, null) || isUtilityGatePage(candidate, null)) {
             return false;
         }
         if (Boolean.TRUE.equals(candidate.getVerified())) {
@@ -75,9 +125,8 @@ public class CandidateOwnershipPolicy {
     }
 
     /**
-     * 竞品归属校验当前只用于搜索发现的官网候选。
-     * 对显式规划的 URL 或 DOCS/PRICING 等内容型来源先不强制要求，
-     * 避免把“域名没带品牌词但内容有效”的正常页面误杀。
+     * 归属校验只对“搜索发现的官网候选”强制开启，
+     * 规划期直达候选与文档/定价等页面仍允许继续走后续验证流程。
      */
     public boolean shouldRequireOwnershipValidation(SourceCandidate candidate, String sourceType) {
         return "OFFICIAL".equalsIgnoreCase(sourceType) && isSearchDiscovered(candidate);
@@ -92,7 +141,7 @@ public class CandidateOwnershipPolicy {
         }
         String domain = normalizeDomain(firstText(candidate == null ? null : candidate.getDomain(),
                 extractDomain(firstText(candidate == null ? null : candidate.getUrl(), page == null ? null : page.getUrl()))));
-        String text = compact(candidateText(candidate) + "\n" + pageText(page));
+        String text = candidateAndPageText(candidate, page);
         for (String alias : aliases) {
             String normalizedAlias = compact(alias);
             if (!StringUtils.hasText(normalizedAlias)) {
@@ -135,7 +184,7 @@ public class CandidateOwnershipPolicy {
         if (StringUtils.hasText(compactName)) {
             aliases.add(compactName);
         }
-        // 中文品牌常有英文主域，先覆盖本次冒烟暴露的高频别名，后续可迁移到配置化词典。
+        // 中文品牌经常使用英文主域名，这里先覆盖当前 live 样本里已经出现的高频别名。
         if ("哔哩哔哩".equals(compactName)) {
             aliases.add("bilibili");
             aliases.add("b站");
@@ -144,6 +193,10 @@ public class CandidateOwnershipPolicy {
             aliases.add("douyin");
         }
         return new ArrayList<>(aliases);
+    }
+
+    private String candidateAndPageText(SourceCandidate candidate, SourceCollector.CollectedPage page) {
+        return compact(candidateText(candidate) + "\n" + pageText(page));
     }
 
     private String candidateText(SourceCandidate candidate) {
@@ -184,8 +237,9 @@ public class CandidateOwnershipPolicy {
         if (!StringUtils.hasText(text)) {
             return false;
         }
+        String normalizedText = compact(text);
         for (String keyword : keywords) {
-            if (StringUtils.hasText(keyword) && text.contains(compact(keyword))) {
+            if (StringUtils.hasText(keyword) && normalizedText.contains(compact(keyword))) {
                 return true;
             }
         }

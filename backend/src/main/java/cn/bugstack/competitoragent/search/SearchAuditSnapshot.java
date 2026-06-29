@@ -10,6 +10,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 搜索审计快照。
@@ -38,6 +39,10 @@ public class SearchAuditSnapshot {
      * 顶层单独保留一份，方便 replay / checkpoint / report 不必深入 trace 再解析。
      */
     private TavilyFastLaneAudit tavilyFastLaneAudit;
+    /**
+     * 顶层保留 repair 审计投影，方便回放和节点洞察不必深入 trace 再解析。
+     */
+    private Map<String, Object> evidenceRepairPlan;
     /**
      * 面向回放接口的稳定时间线投影。
      * 该字段不替代 progressHistory，只把关键步骤、候选数量和来源回指整理成更易消费的结构。

@@ -21,6 +21,8 @@ import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
+import cn.bugstack.competitoragent.workflow.coverage.CoverageContract;
+import cn.bugstack.competitoragent.workflow.coverage.CoverageContractProvider;
 import cn.bugstack.competitoragent.workflow.contract.CompetitorKnowledgeDraft;
 import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceBlock;
 import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceView;
@@ -96,6 +98,7 @@ public class SchemaExtractorAgent extends BaseAgent {
     private final ObjectMapper objectMapper;
     private final DownstreamEvidenceViewAssembler downstreamEvidenceViewAssembler;
     private final ExtractorInputProvider extractorInputProvider;
+    private final CoverageContractProvider coverageContractProvider;
 
     public SchemaExtractorAgent(AgentExecutionLogRepository logRepository,
                                 EvidenceSourceRepository evidenceRepository,
@@ -112,6 +115,7 @@ public class SchemaExtractorAgent extends BaseAgent {
                 agentContextAssembler,
                 objectMapper,
                 new DownstreamEvidenceViewAssembler(objectMapper),
+                null,
                 null);
     }
 
@@ -124,7 +128,8 @@ public class SchemaExtractorAgent extends BaseAgent {
                                 AgentContextAssembler agentContextAssembler,
                                 ObjectMapper objectMapper,
                                 DownstreamEvidenceViewAssembler downstreamEvidenceViewAssembler,
-                                ExtractorInputProvider extractorInputProvider) {
+                                ExtractorInputProvider extractorInputProvider,
+                                CoverageContractProvider coverageContractProvider) {
         super(logRepository, agentContextAssembler);
         this.knowledgeRepository = knowledgeRepository;
         this.llmClient = llmClient;
@@ -140,6 +145,33 @@ public class SchemaExtractorAgent extends BaseAgent {
                         new ExtractorEvidenceInputAssembler(objectMapper)),
                 objectMapper)
                 : extractorInputProvider;
+        this.coverageContractProvider = coverageContractProvider;
+    }
+
+    /**
+     * 兼容旧测试和旧装配方式：
+     * 在未显式接入 coverageContractProvider 的场景下，仍然允许只传入下游证据视图装配器与输入 Provider。
+     * 这样可以把 coverage contract 能力作为向后兼容的增强，而不是强制所有历史调用点同步改造。
+     */
+    public SchemaExtractorAgent(AgentExecutionLogRepository logRepository,
+                                EvidenceSourceRepository evidenceRepository,
+                                CompetitorKnowledgeRepository knowledgeRepository,
+                                LlmClient llmClient,
+                                PromptTemplateService promptService,
+                                AgentContextAssembler agentContextAssembler,
+                                ObjectMapper objectMapper,
+                                DownstreamEvidenceViewAssembler downstreamEvidenceViewAssembler,
+                                ExtractorInputProvider extractorInputProvider) {
+        this(logRepository,
+                evidenceRepository,
+                knowledgeRepository,
+                llmClient,
+                promptService,
+                agentContextAssembler,
+                objectMapper,
+                downstreamEvidenceViewAssembler,
+                extractorInputProvider,
+                null);
     }
 
     public SchemaExtractorAgent(AgentExecutionLogRepository logRepository,
@@ -157,7 +189,28 @@ public class SchemaExtractorAgent extends BaseAgent {
                 agentContextAssembler,
                 objectMapper,
                 new DownstreamEvidenceViewAssembler(objectMapper),
-                extractorInputProvider);
+                extractorInputProvider,
+                null);
+    }
+
+    public SchemaExtractorAgent(AgentExecutionLogRepository logRepository,
+                                CompetitorKnowledgeRepository knowledgeRepository,
+                                LlmClient llmClient,
+                                PromptTemplateService promptService,
+                                AgentContextAssembler agentContextAssembler,
+                                ObjectMapper objectMapper,
+                                ExtractorInputProvider extractorInputProvider,
+                                CoverageContractProvider coverageContractProvider) {
+        this(logRepository,
+                null,
+                knowledgeRepository,
+                llmClient,
+                promptService,
+                agentContextAssembler,
+                objectMapper,
+                new DownstreamEvidenceViewAssembler(objectMapper),
+                extractorInputProvider,
+                coverageContractProvider);
     }
 
     @Override
@@ -298,9 +351,10 @@ public class SchemaExtractorAgent extends BaseAgent {
         List<ExtractorEvidenceInput> readableEvidenceInputs = normalizeEvidenceInputs(
                 competitorInput == null ? List.of() : competitorInput.getReadableEvidence());
         Map<String, String> promptVariables = new LinkedHashMap<>();
+        CoverageContract coverageContract = coverageContractProvider == null ? null : coverageContractProvider.resolve(context);
         promptVariables.put("competitorName", competitorName);
         promptVariables.put("schemaGuidance", buildSchemaGuidance(inputPackage, context == null ? null : context.getCurrentNodeConfig()));
-        promptVariables.put("fieldExtractionGuidance", buildFieldExtractionGuidance());
+        promptVariables.put("fieldExtractionGuidance", buildFieldExtractionGuidance(coverageContract));
         promptVariables.put("evidenceCatalog", buildEvidenceCatalog(evidenceCatalog));
         promptVariables.put("structuredEvidence", buildStructuredEvidence(structuredEvidenceInputs));
         promptVariables.put("qualitySignalGuidance", buildQualitySignalGuidance(evidenceCatalog));
@@ -1109,6 +1163,30 @@ public class SchemaExtractorAgent extends BaseAgent {
                 strengths: 只提取证据明确支持的优势判断，不能把营销语直接当事实。
                 weaknesses: 只提取证据明确支持的短板、限制或风险，证据不足时返回空数组。
                 """;
+    }
+
+    /**
+     * 在保留原有字段提示词的基础上追加覆盖契约 guidance。
+     * 这样既不破坏既有抽取提示结构，也能显式告诉模型哪些字段当前是 OUT_OF_SCOPE 或非阻断字段。
+     */
+    private String buildFieldExtractionGuidance(CoverageContract coverageContract) {
+        return buildFieldExtractionGuidance() + "\n" + renderCoverageContractGuidance(coverageContract);
+    }
+
+    /**
+     * 把覆盖契约渲染成简洁的字段约束文本。
+     * 这里直接输出字段状态、阻断级别和原因，降低模型因为“模板完整性”而自行脑补字段的概率。
+     */
+    public static String renderCoverageContractGuidance(CoverageContract contract) {
+        if (contract == null || contract.getFields() == null || contract.getFields().isEmpty()) {
+            return "coverageContract: unavailable; fallback to legacy fields.";
+        }
+        return contract.getFields().stream()
+                .map(field -> "coverageContract: " + field.getField()
+                        + "=" + field.getStatus()
+                        + ", blockingLevel=" + field.getBlockingLevel()
+                        + ", reason=" + field.getOverrideReason())
+                .collect(java.util.stream.Collectors.joining("\n"));
     }
 
     private String buildEvidenceCatalog(List<ExtractorEvidenceInput> evidences) throws JsonProcessingException {

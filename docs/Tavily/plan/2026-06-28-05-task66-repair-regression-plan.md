@@ -34,7 +34,7 @@
 - 新建： `backend/src/main/java/cn/bugstack/competitoragent/search/EvidenceRepairPlan.java`
 - 测试： `backend/src/test/java/cn/bugstack/competitoragent/search/EvidenceRepairStateTest.java`
 
-- [ ] **步骤 1：编写修复状态测试**
+- [x] **步骤 1：编写修复状态测试**
 
 创建 `EvidenceRepairStateTest.java`：
 
@@ -69,7 +69,7 @@ class EvidenceRepairStateTest {
 }
 ```
 
-- [ ] **步骤 2：新增枚举**
+- [x] **步骤 2：新增枚举**
 
 创建 `EvidenceRepairState.java`：
 
@@ -85,7 +85,7 @@ public enum EvidenceRepairState {
 }
 ```
 
-- [ ] **步骤 3：新增修复计划值对象**
+- [x] **步骤 3：新增修复计划值对象**
 
 创建 `EvidenceRepairPlan.java`：
 
@@ -140,7 +140,7 @@ public class EvidenceRepairPlan {
 }
 ```
 
-- [ ] **步骤 4：运行模型测试**
+- [x] **步骤 4：运行模型测试**
 
 运行：
 
@@ -160,7 +160,7 @@ mvn -pl backend -Dtest=EvidenceRepairStateTest test
 
 本阶段不得重新创建一个只接收 `sourceType` 或弱正文字符串的 `PublicEvidenceRecoveryService`。它必须复用第 4 阶段的 `RecoveryContext` 新签名，并把 `EvidenceQualityVerdict / FieldEvidenceCoverage` 中的字段上下文转换为 `fieldName / evidencePathKey / queryIntents`。
 
-- [ ] **步骤 1：编写基于字段上下文的 repair 候选测试**
+- [x] **步骤 1：编写基于字段上下文的 repair 候选测试**
 
 追加到 `PublicEvidenceRecoveryServiceTest.java`：
 
@@ -196,7 +196,7 @@ void shouldGenerateRepairCandidatesWithFieldEvidenceContext() {
 }
 ```
 
-- [ ] **步骤 2：增加 verdict 到 RecoveryContext 的适配器**
+- [x] **步骤 2：增加 verdict 到 RecoveryContext 的适配器**
 
 在 `PublicEvidenceRecoveryService` 中新增 helper，供 repair 链路把证据质量 verdict 转成字段补采上下文：
 
@@ -218,7 +218,7 @@ public RecoveryContext toRecoveryContext(String competitorName,
 }
 ```
 
-- [ ] **步骤 3：运行服务测试**
+- [x] **步骤 3：运行服务测试**
 
 运行：
 
@@ -236,27 +236,50 @@ mvn -pl backend -Dtest=PublicEvidenceRecoveryServiceTest,EvidenceRepairStateTest
 - 测试： `backend/src/test/java/cn/bugstack/competitoragent/search/PublicEvidenceRecoveryServiceTest.java`
 - 测试： `backend/src/test/java/cn/bugstack/competitoragent/search/SearchExecutionCoordinatorRepairAuditTest.java`
 
-- [ ] **步骤 1：给弱证据路径增加 repair plan metadata**
+- [x] **步骤 1：给弱证据路径增加 repair plan metadata**
 
-在 `CollectorAgent` 中，写入 `EvidenceQualityVerdict` 之后调用：
+在 `CollectorAgent` 中，写入 `EvidenceQualityVerdict` 之后，必须先构造带字段上下文的 `RecoveryContext`，再调用第 4 阶段的新签名。不得新增或调用只接收 `competitorName/sourceType/content` 的 sourceType-only repair 方法。
 
 ```java
-EvidenceRepairPlan repairPlan = publicEvidenceRecoveryService.planRecovery(
+PublicEvidenceRecoveryService.RecoveryContext recoveryContext = publicEvidenceRecoveryService.toRecoveryContext(
         config.getCompetitorName(),
-        collectionResult.getResourceLocator(),
-        collectionResult.getContent(),
-        collectionResult.getEvidenceQualityVerdict(),
-        readDimensions(context.getAnalysisDimensions())
+        matchedCandidate == null ? null : matchedCandidate.getSourceType(),
+        resolveRecoveryFieldName(context, matchedCandidate),
+        resolveRecoveryEvidencePathKey(context, matchedCandidate),
+        resolveRecoveryQueryIntents(context, matchedCandidate),
+        collectionResult.getEvidenceQualityVerdict()
 );
+PublicEvidenceRecoveryService.RecoveryPlan recoveryPlan = publicEvidenceRecoveryService.planRecovery(
+        recoveryContext,
+        matchedCandidate == null ? List.of() : List.of(matchedCandidate),
+        List.of()
+);
+EvidenceRepairPlan repairPlan = EvidenceRepairPlan.builder()
+        .state(recoveryPlan.triggered()
+                ? EvidenceRepairState.REPAIR_QUERY_PROPOSED
+                : EvidenceRepairState.REPAIR_NOT_REQUIRED)
+        .reason(recoveryPlan.reason())
+        .sourceUrl(collectionResult.getResourceLocator())
+        .repairQueries(recoveryPlan.candidates().stream()
+                .map(SourceCandidate::getUrl)
+                .toList())
+        .candidateUrls(recoveryPlan.candidates().stream()
+                .map(SourceCandidate::getUrl)
+                .toList())
+        .promotedUrls(List.of())
+        .build();
 ```
 
 将 repair plan 写入采集结果 metadata：
 
 ```java
 metadata.put("evidenceRepairPlan", repairPlan);
+metadata.put("publicEvidenceRecoveryFieldName", recoveryContext.fieldName());
+metadata.put("publicEvidenceRecoveryEvidencePathKey", recoveryContext.evidencePathKey());
+metadata.put("publicEvidenceRecoveryQueryIntents", recoveryContext.queryIntents());
 ```
 
-- [ ] **步骤 2：增加公开补采服务依赖**
+- [x] **步骤 2：增加公开补采服务依赖**
 
 注入：
 
@@ -272,7 +295,7 @@ this.publicEvidenceRecoveryService = publicEvidenceRecoveryService == null
         : publicEvidenceRecoveryService;
 ```
 
-- [ ] **步骤 3：输出 repair 状态信号**
+- [x] **步骤 3：输出 repair 状态信号**
 
 当 repair plan 状态为 `REPAIR_QUERY_PROPOSED` 时，合并质量信号：
 
@@ -286,7 +309,7 @@ qualitySignals.add("REPAIR_QUERY_PROPOSED");
 qualitySignals.add("REPAIR_EVIDENCE_PROMOTED");
 ```
 
-- [ ] **步骤 4：在 SearchExecutionCoordinator 中增加 repair 审计投影**
+- [x] **步骤 4：在 SearchExecutionCoordinator 中增加 repair 审计投影**
 
 给 `SearchExecutionCoordinator` 增加一个小 helper，让搜索阶段 repair 暴露与采集 metadata 一致的状态词汇。该 helper 必须保持纯函数和确定性，不在其中调用 Tavily。
 
@@ -321,7 +344,7 @@ import java.util.Map;
 
 在 `SearchExecutionCoordinator` 追加 repair 尝试审计 metadata 的地方使用该 helper。最低可接受接入是把投影放入 search audit payload 的 `evidenceRepairPlan` 字段，确保回放时能区分 `REPAIR_QUERY_PROPOSED`、`REPAIR_CANDIDATE_VERIFIED` 和 `REPAIR_EVIDENCE_PROMOTED`。
 
-- [ ] **步骤 5：增加 repair 审计投影测试**
+- [x] **步骤 5：增加 repair 审计投影测试**
 
 创建 `SearchExecutionCoordinatorRepairAuditTest.java`：
 
@@ -357,7 +380,7 @@ class SearchExecutionCoordinatorRepairAuditTest {
 }
 ```
 
-- [ ] **步骤 6：增加确定性证据提升 helper**
+- [x] **步骤 6：增加确定性证据提升 helper**
 
 在 `PublicEvidenceRecoveryService` 中增加 helper，让 repair 生命周期不依赖 live 网络也能测试：
 
@@ -380,7 +403,7 @@ public EvidenceRepairPlan promoteVerifiedUrls(EvidenceRepairPlan plan, List<Stri
 }
 ```
 
-- [ ] **步骤 7：增加证据提升测试**
+- [x] **步骤 7：增加证据提升测试**
 
 追加到 `PublicEvidenceRecoveryServiceTest.java`：
 
@@ -403,7 +426,7 @@ void shouldPromoteVerifiedRepairUrls() {
 }
 ```
 
-- [ ] **步骤 8：运行 recovery 测试**
+- [x] **步骤 8：运行 recovery 测试**
 
 运行：
 
@@ -412,6 +435,12 @@ mvn -pl backend -Dtest=PublicEvidenceRecoveryServiceTest,SearchExecutionCoordina
 ```
 
 预期：测试通过。
+
+验收补充：
+
+- 本阶段新增调用点不得调用 `PublicEvidenceRecoveryService.planRecovery(String competitorName, String sourceType, ...)` 或任何只携带 sourceType 的 repair 方法。
+- repair metadata 必须包含 `publicEvidenceRecoveryFieldName / publicEvidenceRecoveryEvidencePathKey / publicEvidenceRecoveryQueryIntents`。
+- 如果字段上下文缺失，只能输出 `FIELD_CONTEXT_MISSING_LEGACY_RECOVERY` 并作为低优先级 legacy fallback，不能算字段证据路径 repair 已执行。
 
 ### Task 4: 可审计字段答案合成
 
@@ -424,7 +453,9 @@ mvn -pl backend -Dtest=PublicEvidenceRecoveryServiceTest,SearchExecutionCoordina
 
 `FieldEvidenceCoverage` 解决“找到了哪些证据路径”的问题；`FieldAnswerSynthesizer` 负责把这些路径合成为可审计结论。LLM 可以参与自然语言表达，但字段状态、支撑 URL、冲突和下一步动作必须结构化输出，不能只藏在最终报告段落里。
 
-- [ ] **步骤 1：编写定价免费结论合成测试**
+本阶段只做字段内答案合成，不建立跨字段推理图。同一条证据可以出现在多个字段的 `sourceUrls` 中，但 `FieldAnswerSynthesizer` 不能自动把 `coreFeatures` 的 API 证据推导为 `pricing` 已覆盖，也不能因为某个 structured block 同时包含能力描述和隐含配额信息，就跨字段补齐另一个字段的覆盖状态。跨字段引用关系保留为后续 `CrossFieldEvidenceLinker / EvidenceGraphBuilder` 迭代。
+
+- [x] **步骤 1：编写定价免费结论合成测试**
 
 创建 `FieldAnswerSynthesizerTest.java`：
 
@@ -460,10 +491,26 @@ class FieldAnswerSynthesizerTest {
         assertThat(conclusion.getReasoningSteps()).hasSize(3);
         assertThat(conclusion.getRecommendedNextAction()).isEqualTo("ACCEPT_CONCLUSION");
     }
+
+    @Test
+    void shouldNotBorrowCoverageFromOtherFieldsWhenSameSourceIsReused() {
+        FieldAnswerConclusion conclusion = synthesizer.synthesize(
+                "pricing",
+                "EVIDENCE_PATH_COVERAGE_NOT_MET",
+                List.of("https://open.example.com/docs/api"),
+                List.of(
+                        "同一文档已支撑 coreFeatures 的 API 能力说明",
+                        "pricing 字段的 DOCS_BILLING_OR_LIMITS 路径未完成"),
+                List.of());
+
+        assertThat(conclusion.getField()).isEqualTo("pricing");
+        assertThat(conclusion.getAnswerValue()).doesNotContain("免费");
+        assertThat(conclusion.getRecommendedNextAction()).isEqualTo("REPAIR_WITH_TAVILY");
+    }
 }
 ```
 
-- [ ] **步骤 2：新增结论模型**
+- [x] **步骤 2：新增结论模型**
 
 创建 `FieldAnswerConclusion.java`：
 
@@ -490,7 +537,7 @@ public class FieldAnswerConclusion {
 }
 ```
 
-- [ ] **步骤 3：新增答案合成器**
+- [x] **步骤 3：新增答案合成器**
 
 创建 `FieldAnswerSynthesizer.java`：
 
@@ -555,7 +602,7 @@ public class FieldAnswerSynthesizer {
 }
 ```
 
-- [ ] **步骤 4：运行答案合成测试**
+- [x] **步骤 4：运行答案合成测试**
 
 运行：
 
@@ -563,14 +610,14 @@ public class FieldAnswerSynthesizer {
 mvn -pl backend -Dtest=FieldAnswerSynthesizerTest test
 ```
 
-预期：测试通过，并且结论包含 `sourceUrls / reasoningSteps / recommendedNextAction`。
+预期：测试通过，并且结论包含 `sourceUrls / reasoningSteps / recommendedNextAction`；同一来源被多个字段复用时，不会自动借用其他字段的覆盖状态。
 
 ### Task 5: Task66 分阶段回归
 
 **文件：**
 - 新建： `backend/src/test/java/cn/bugstack/competitoragent/integration/Task66CoverageContractRegressionTest.java`
 
-- [ ] **步骤 1：编写能力介绍模式回归**
+- [x] **步骤 1：编写能力介绍模式回归**
 
 创建 `Task66CoverageContractRegressionTest.java`：
 
@@ -622,7 +669,7 @@ class Task66CoverageContractRegressionTest {
 }
 ```
 
-- [ ] **步骤 2：运行回归测试**
+- [x] **步骤 2：运行回归测试**
 
 运行：
 
@@ -637,7 +684,7 @@ mvn -pl backend -Dtest=Task66CoverageContractRegressionTest test
 **文件：**
 - 不新增文件。
 
-- [ ] **步骤 1：运行第 5 阶段测试**
+- [x] **步骤 1：运行第 5 阶段测试**
 
 运行：
 
@@ -647,7 +694,7 @@ mvn -pl backend -Dtest=PublicEvidenceRecoveryServiceTest,EvidenceRepairStateTest
 
 预期：所有测试通过。
 
-- [ ] **步骤 2：运行 Tavily 分阶段回归集合**
+- [x] **步骤 2：运行 Tavily 分阶段回归集合**
 
 运行：
 

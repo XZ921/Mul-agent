@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.task.definition;
 
+import cn.bugstack.competitoragent.workflow.coverage.CoverageContract;
 import lombok.Builder;
 import lombok.Value;
 
@@ -17,6 +18,7 @@ public class ExecutionPlanDefinition {
     Integer competitorCount;
     Integer collectorCount;
     Integer pipelineCount;
+    CoverageContract coverageContract;
     List<StageDefinition> stages;
     List<NodeDefinition> nodes;
     List<String> sourceUrls;

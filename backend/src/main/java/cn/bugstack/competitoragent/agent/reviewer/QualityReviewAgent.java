@@ -17,6 +17,10 @@ import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
+import cn.bugstack.competitoragent.workflow.coverage.CoverageBlockingLevel;
+import cn.bugstack.competitoragent.workflow.coverage.CoverageContract;
+import cn.bugstack.competitoragent.workflow.coverage.CoverageContractProvider;
+import cn.bugstack.competitoragent.workflow.coverage.CoverageFieldContract;
 import cn.bugstack.competitoragent.workflow.contract.QualityDiagnosis;
 import cn.bugstack.competitoragent.workflow.contract.QualityDimension;
 import cn.bugstack.competitoragent.workflow.contract.QualityIssue;
@@ -25,6 +29,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -77,6 +82,7 @@ public class QualityReviewAgent extends BaseAgent {
     private final PromptTemplateService promptService;
     private final MemoryWritebackService memoryWritebackService;
     private final ObjectMapper objectMapper;
+    private final CoverageContractProvider coverageContractProvider;
 
     public QualityReviewAgent(AgentExecutionLogRepository logRepository,
                               ReportRepository reportRepository,
@@ -87,6 +93,34 @@ public class QualityReviewAgent extends BaseAgent {
                               AgentContextAssembler agentContextAssembler,
                               MemoryWritebackService memoryWritebackService,
                               ObjectMapper objectMapper) {
+        this(logRepository,
+                reportRepository,
+                evidenceRepository,
+                knowledgeRepository,
+                llmClient,
+                promptService,
+                agentContextAssembler,
+                memoryWritebackService,
+                objectMapper,
+                null);
+    }
+
+    /**
+     * Spring 运行时必须显式走这个正式构造器注入所有依赖，
+     * 否则在同时存在兼容测试构造器时，容器可能退回默认实例化路径，
+     * 最终在应用启动阶段报出 “No default constructor found”。
+     */
+    @Autowired
+    public QualityReviewAgent(AgentExecutionLogRepository logRepository,
+                              ReportRepository reportRepository,
+                              EvidenceSourceRepository evidenceRepository,
+                              CompetitorKnowledgeRepository knowledgeRepository,
+                              LlmClient llmClient,
+                              PromptTemplateService promptService,
+                              AgentContextAssembler agentContextAssembler,
+                              MemoryWritebackService memoryWritebackService,
+                              ObjectMapper objectMapper,
+                              CoverageContractProvider coverageContractProvider) {
         super(logRepository, agentContextAssembler);
         this.reportRepository = reportRepository;
         this.evidenceRepository = evidenceRepository;
@@ -95,6 +129,7 @@ public class QualityReviewAgent extends BaseAgent {
         this.promptService = promptService;
         this.memoryWritebackService = memoryWritebackService;
         this.objectMapper = objectMapper;
+        this.coverageContractProvider = coverageContractProvider;
     }
 
     @Override
@@ -120,9 +155,10 @@ public class QualityReviewAgent extends BaseAgent {
         List<CompetitorKnowledge> knowledges = TaskKnowledgeSnapshotResolver.resolveCurrentTaskSnapshots(
                 knowledgeRepository.findByTaskIdOrderByIdAsc(context.getTaskId())
         );
+        CoverageContract coverageContract = coverageContractProvider == null ? null : coverageContractProvider.resolve(context);
         String evidenceList = buildEvidenceList(evidences);
         String evidenceCoverageSummary = buildEvidenceCoverageSummary(knowledges);
-        Set<String> requiredCoverageSections = resolveRequiredCoverageSections(context.getAnalysisDimensions());
+        Set<String> requiredCoverageSections = resolveRequiredCoverageSections(coverageContract, context.getAnalysisDimensions());
         CoverageSnapshot coverageSnapshot = buildCoverageSnapshot(knowledges, requiredCoverageSections);
         String claimAuditChecklist = buildClaimAuditChecklist(report.getContent(), evidenceCoverageSummary);
         boolean finalPass = isFinalReview(context.getCurrentNodeConfig());
@@ -1020,6 +1056,42 @@ public class QualityReviewAgent extends BaseAgent {
      * analysisDimensions 是本次任务的显式分析边界。
      * 未提供维度时保持历史 7 字段全量严格门禁；提供维度后，只把命中维度的字段视为阻断候选。
      */
+    /**
+     * 如果当前任务已经有 coverage contract，就优先以契约里的 blocker 字段作为 Reviewer 的必检边界；
+     * 只有在契约缺失或未标出 blocker 时，才回退到历史的 analysisDimensions 推断逻辑。
+     */
+    private Set<String> resolveRequiredCoverageSections(CoverageContract coverageContract, String analysisDimensions) {
+        LinkedHashSet<String> requiredSections = new LinkedHashSet<>();
+        if (coverageContract != null) {
+            List<String> blockerFields = resolveCoverageBlockerFields(coverageContract);
+            for (CoverageFieldRule rule : COVERAGE_FIELD_RULES) {
+                if (blockerFields.stream().anyMatch(field -> rule.fieldName().equalsIgnoreCase(field))) {
+                    requiredSections.add(rule.sectionTitle());
+                }
+            }
+            if (!requiredSections.isEmpty()) {
+                return requiredSections;
+            }
+        }
+        return resolveRequiredCoverageSections(analysisDimensions);
+    }
+
+    /**
+     * 对外暴露 blocker 字段解析，便于把“谁会阻断交付”做成稳定契约测试，
+     * 避免 future change 又把 pricing/weaknesses 重新写死到 Reviewer 里。
+     */
+    public static List<String> resolveCoverageBlockerFields(CoverageContract contract) {
+        if (contract == null || contract.getFields() == null) {
+            return List.of();
+        }
+        return contract.getFields().stream()
+                .filter(field -> field != null && field.getBlockingLevel() == CoverageBlockingLevel.BLOCKER)
+                .map(CoverageFieldContract::getField)
+                .filter(field -> field != null && !field.isBlank())
+                .distinct()
+                .toList();
+    }
+
     private Set<String> resolveRequiredCoverageSections(String analysisDimensions) {
         LinkedHashSet<String> requiredSections = new LinkedHashSet<>();
         if (analysisDimensions == null || analysisDimensions.isBlank()) {

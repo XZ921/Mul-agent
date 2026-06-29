@@ -14,6 +14,7 @@
 
 - 新建： `backend/src/main/java/cn/bugstack/competitoragent/workflow/coverage/CoverageContract.java`
 - 新建： `backend/src/main/java/cn/bugstack/competitoragent/workflow/coverage/CoverageFieldContract.java`
+- 新建： `backend/src/main/java/cn/bugstack/competitoragent/workflow/coverage/CoverageEvidencePath.java`
 - 新建： `backend/src/main/java/cn/bugstack/competitoragent/workflow/coverage/CoverageFieldStatus.java`
 - 新建： `backend/src/main/java/cn/bugstack/competitoragent/workflow/coverage/CoverageBlockingLevel.java`
 - 新建： `backend/src/main/java/cn/bugstack/competitoragent/workflow/coverage/AnalysisDimensionMapping.java`
@@ -43,6 +44,7 @@
 **文件：**
 - 新建： `backend/src/main/java/cn/bugstack/competitoragent/workflow/coverage/CoverageContract.java`
 - 新建： `backend/src/main/java/cn/bugstack/competitoragent/workflow/coverage/CoverageFieldContract.java`
+- 新建： `backend/src/main/java/cn/bugstack/competitoragent/workflow/coverage/CoverageEvidencePath.java`
 - 新建： `backend/src/main/java/cn/bugstack/competitoragent/workflow/coverage/CoverageFieldStatus.java`
 - 新建： `backend/src/main/java/cn/bugstack/competitoragent/workflow/coverage/CoverageBlockingLevel.java`
 - 测试： `backend/src/test/java/cn/bugstack/competitoragent/workflow/coverage/CoverageContractResolverTest.java`
@@ -140,6 +142,46 @@ public enum CoverageBlockingLevel {
 
 - [ ] **步骤 4：新增字段契约模型**
 
+创建 `CoverageEvidencePath.java`：
+
+```java
+package cn.bugstack.competitoragent.workflow.coverage;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Data
+@Builder(toBuilder = true)
+@NoArgsConstructor
+@AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class CoverageEvidencePath {
+
+    private String pathKey;
+
+    @Builder.Default
+    private List<String> sourceTypes = new ArrayList<>();
+
+    @Builder.Default
+    private List<String> queryIntents = new ArrayList<>();
+
+    @Builder.Default
+    private List<String> expectedSignals = new ArrayList<>();
+
+    @Builder.Default
+    private boolean required = false;
+
+    private String successCriteria;
+    private String failureStatus;
+}
+```
+
 创建 `CoverageFieldContract.java`：
 
 ```java
@@ -170,6 +212,12 @@ public class CoverageFieldContract {
 
     @Builder.Default
     private List<String> queryIntents = new ArrayList<>();
+
+    @Builder.Default
+    private List<CoverageEvidencePath> evidencePaths = new ArrayList<>();
+
+    @Builder.Default
+    private int minimumAttemptedPaths = 0;
 
     @Builder.Default
     private int minDistinctEvidenceCount = 0;
@@ -337,6 +385,7 @@ package cn.bugstack.competitoragent.workflow.coverage;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
@@ -460,6 +509,9 @@ void explicitPricingDimensionShouldOverrideOfficialOnlyScope() {
     assertThat(pricing.getStatus()).isEqualTo(CoverageFieldStatus.REQUIRED);
     assertThat(pricing.getBlockingLevel()).isEqualTo(CoverageBlockingLevel.BLOCKER);
     assertThat(pricing.getQueryIntents()).contains("OFFICIAL_PRICING");
+    assertThat(pricing.getMinimumAttemptedPaths()).isGreaterThanOrEqualTo(2);
+    assertThat(pricing.getEvidencePaths()).extracting(CoverageEvidencePath::getPathKey)
+            .contains("OFFICIAL_PRICING_PAGE", "DOCS_BILLING_OR_LIMITS");
     assertThat(pricing.getOverrideReason()).contains("显式维度");
 }
 
@@ -663,10 +715,112 @@ public class CoverageContractResolver {
                 .blockingLevel(level)
                 .targetEvidenceTypes(evidenceTypes)
                 .queryIntents(queryIntents)
+                .evidencePaths(evidencePathsFor(field, status, queryIntents))
+                .minimumAttemptedPaths(minimumAttemptedPathsFor(field, status))
                 .minDistinctEvidenceCount(minDistinctEvidenceCount)
                 .allowOfficialOnly(allowOfficialOnly)
                 .overrideReason(reason)
                 .build();
+    }
+
+    private List<CoverageEvidencePath> evidencePathsFor(String field,
+                                                        CoverageFieldStatus status,
+                                                        List<String> queryIntents) {
+        if (status != CoverageFieldStatus.REQUIRED) {
+            return List.of();
+        }
+        if ("pricing".equalsIgnoreCase(field)) {
+            return List.of(
+                    CoverageEvidencePath.builder()
+                            .pathKey("OFFICIAL_PRICING_PAGE")
+                            .sourceTypes(List.of("PRICING", "OFFICIAL"))
+                            .queryIntents(filterIntents(queryIntents, "OFFICIAL_PRICING"))
+                            .expectedSignals(List.of("PRICING_BLOCK"))
+                            .required(true)
+                            .successCriteria("命中官方定价、套餐、计费或商务开通说明")
+                            .failureStatus("NO_OFFICIAL_PRICING_PAGE")
+                            .build(),
+                    CoverageEvidencePath.builder()
+                            .pathKey("DOCS_BILLING_OR_LIMITS")
+                            .sourceTypes(List.of("DOCS", "OFFICIAL"))
+                            .queryIntents(filterIntents(queryIntents, "DOCS_BILLING", "API_LIMITS"))
+                            .expectedSignals(List.of("PRICING_BLOCK", "LIMITATION_OR_POLICY_BLOCK"))
+                            .required(true)
+                            .successCriteria("命中文档中的计费、免费配额、调用限制或开通条件")
+                            .failureStatus("DOCS_BILLING_PATH_NOT_COVERED")
+                            .build(),
+                    CoverageEvidencePath.builder()
+                            .pathKey("TERMS_OR_SERVICE_AGREEMENT")
+                            .sourceTypes(List.of("OFFICIAL", "DOCS"))
+                            .queryIntents(filterIntents(queryIntents, "TERMS_BILLING", "SERVICE_AGREEMENT"))
+                            .expectedSignals(List.of("LIMITATION_OR_POLICY_BLOCK"))
+                            .required(false)
+                            .successCriteria("命中协议或服务条款中的收费、限制或商务说明")
+                            .failureStatus("TERMS_PATH_NOT_COVERED")
+                            .build());
+        }
+        if ("coreFeatures".equalsIgnoreCase(field)) {
+            return List.of(CoverageEvidencePath.builder()
+                    .pathKey("DOCS_API_GUIDE")
+                    .sourceTypes(List.of("DOCS", "OFFICIAL"))
+                    .queryIntents(filterIntents(queryIntents, "API_DOCS", "SDK_GUIDE", "OFFICIAL_DOCS"))
+                    .expectedSignals(List.of("DEVELOPER_DOCS_BLOCK", "FEATURE_BLOCK"))
+                    .required(true)
+                    .successCriteria("命中 API、SDK、开发者能力或产品功能正文")
+                    .failureStatus("DOCS_API_GUIDE_NOT_COVERED")
+                    .build());
+        }
+        if ("weaknesses".equalsIgnoreCase(field)) {
+            return List.of(
+                    CoverageEvidencePath.builder()
+                            .pathKey("TERMS_OR_SERVICE_AGREEMENT")
+                            .sourceTypes(List.of("TERMS", "POLICY", "OFFICIAL"))
+                            .queryIntents(filterIntents(queryIntents, "POLICY", "RISK"))
+                            .expectedSignals(List.of("LIMITATION_OR_POLICY_BLOCK"))
+                            .required(true)
+                            .successCriteria("命中协议、规则、审核、限制或合规风险说明")
+                            .failureStatus("POLICY_LIMITATION_NOT_COVERED")
+                            .build(),
+                    CoverageEvidencePath.builder()
+                            .pathKey("PUBLIC_REVIEW_OR_NEWS")
+                            .sourceTypes(List.of("REVIEW", "NEWS"))
+                            .queryIntents(filterIntents(queryIntents, "THIRD_PARTY_REVIEW", "RISK"))
+                            .expectedSignals(List.of("THIRD_PARTY_REVIEW", "NEWS_BLOCK"))
+                            .required(false)
+                            .successCriteria("命中第三方公开评价、新闻或用户反馈")
+                            .failureStatus("PUBLIC_REVIEW_NOT_COVERED")
+                            .build());
+        }
+        return List.of();
+    }
+
+    private int minimumAttemptedPathsFor(String field, CoverageFieldStatus status) {
+        if (status != CoverageFieldStatus.REQUIRED) {
+            return 0;
+        }
+        if ("pricing".equalsIgnoreCase(field)) {
+            return 2;
+        }
+        if ("weaknesses".equalsIgnoreCase(field)) {
+            return 1;
+        }
+        if ("coreFeatures".equalsIgnoreCase(field)) {
+            return 1;
+        }
+        return 0;
+    }
+
+    private List<String> filterIntents(List<String> queryIntents, String... fallback) {
+        if (queryIntents == null || queryIntents.isEmpty()) {
+            return Arrays.asList(fallback);
+        }
+        List<String> expectedIntents = Arrays.asList(fallback);
+        List<String> matched = queryIntents.stream()
+                .filter(intent -> intent != null && expectedIntents.stream()
+                        .anyMatch(expected -> intent.equalsIgnoreCase(expected)))
+                .distinct()
+                .toList();
+        return matched.isEmpty() ? expectedIntents : matched;
     }
 
     private boolean containsIgnoreCase(String value, String needle) {

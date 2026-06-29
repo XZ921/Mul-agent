@@ -41,6 +41,7 @@ public class SearchExecutionCoordinator {
     private final SitemapDiscoveryService sitemapDiscoveryService;
     private final CandidateOwnershipPolicy candidateOwnershipPolicy;
     private final TavilyBootstrapPlanner tavilyBootstrapPlanner;
+    private final PublicEvidenceRecoveryService publicEvidenceRecoveryService;
 
     public SearchExecutionCoordinator(CandidateVerifier candidateVerifier,
                                       BrowserSearchRuntimeService browserSearchRuntimeService,
@@ -57,7 +58,8 @@ public class SearchExecutionCoordinator {
                 new CanonicalUrlResolver(),
                 new SitemapDiscoveryService(new SitemapDiscoveryProperties()),
                 new CandidateOwnershipPolicy(),
-                new TavilyBootstrapPlanner());
+                new TavilyBootstrapPlanner(),
+                new PublicEvidenceRecoveryService());
     }
 
     @Autowired
@@ -78,7 +80,8 @@ public class SearchExecutionCoordinator {
                 canonicalUrlResolver,
                 sitemapDiscoveryService,
                 new CandidateOwnershipPolicy(),
-                new TavilyBootstrapPlanner());
+                new TavilyBootstrapPlanner(),
+                new PublicEvidenceRecoveryService());
     }
 
     public SearchExecutionCoordinator(CandidateVerifier candidateVerifier,
@@ -99,7 +102,8 @@ public class SearchExecutionCoordinator {
                 canonicalUrlResolver,
                 sitemapDiscoveryService,
                 candidateOwnershipPolicy,
-                new TavilyBootstrapPlanner());
+                new TavilyBootstrapPlanner(),
+                new PublicEvidenceRecoveryService());
     }
 
     public SearchExecutionCoordinator(CandidateVerifier candidateVerifier,
@@ -112,6 +116,30 @@ public class SearchExecutionCoordinator {
                                       SitemapDiscoveryService sitemapDiscoveryService,
                                       CandidateOwnershipPolicy candidateOwnershipPolicy,
                                       TavilyBootstrapPlanner tavilyBootstrapPlanner) {
+        this(candidateVerifier,
+                browserSearchRuntimeService,
+                searchSourceProvider,
+                sourceCandidateRanker,
+                collectionTargetSelector,
+                searchPolicyResolver,
+                canonicalUrlResolver,
+                sitemapDiscoveryService,
+                candidateOwnershipPolicy,
+                tavilyBootstrapPlanner,
+                new PublicEvidenceRecoveryService());
+    }
+
+    public SearchExecutionCoordinator(CandidateVerifier candidateVerifier,
+                                      BrowserSearchRuntimeService browserSearchRuntimeService,
+                                      SearchSourceProvider searchSourceProvider,
+                                      SourceCandidateRanker sourceCandidateRanker,
+                                      CollectionTargetSelector collectionTargetSelector,
+                                      SearchPolicyResolver searchPolicyResolver,
+                                      CanonicalUrlResolver canonicalUrlResolver,
+                                      SitemapDiscoveryService sitemapDiscoveryService,
+                                      CandidateOwnershipPolicy candidateOwnershipPolicy,
+                                      TavilyBootstrapPlanner tavilyBootstrapPlanner,
+                                      PublicEvidenceRecoveryService publicEvidenceRecoveryService) {
         this.candidateVerifier = candidateVerifier;
         this.browserSearchRuntimeService = browserSearchRuntimeService;
         this.searchSourceProvider = searchSourceProvider;
@@ -129,10 +157,38 @@ public class SearchExecutionCoordinator {
         this.tavilyBootstrapPlanner = tavilyBootstrapPlanner == null
                 ? new TavilyBootstrapPlanner()
                 : tavilyBootstrapPlanner;
+        this.publicEvidenceRecoveryService = publicEvidenceRecoveryService == null
+                ? new PublicEvidenceRecoveryService()
+                : publicEvidenceRecoveryService;
     }
 
     public SearchExecutionResult execute(CollectorNodeConfig config) {
         return execute(config, null);
+    }
+
+    /**
+     * 将 repair 生命周期投影为稳定审计字段。
+     * 这里保持纯函数，不触发 Tavily/浏览器/验证器，确保 replay 和单元测试可以确定性复用同一套状态词汇。
+     */
+    static Map<String, Object> buildRepairAuditProjection(EvidenceRepairPlan repairPlan) {
+        if (repairPlan == null) {
+            return Map.of(
+                    "repairState", EvidenceRepairState.REPAIR_NOT_REQUIRED.name(),
+                    "repairQueries", List.of(),
+                    "candidateUrls", List.of(),
+                    "promotedUrls", List.of()
+            );
+        }
+        return Map.of(
+                "repairState", repairPlan.getState() == null
+                        ? EvidenceRepairState.REPAIR_NOT_REQUIRED.name()
+                        : repairPlan.getState().name(),
+                "repairReason", repairPlan.getReason() == null ? "" : repairPlan.getReason(),
+                "sourceUrl", repairPlan.getSourceUrl() == null ? "" : repairPlan.getSourceUrl(),
+                "repairQueries", repairPlan.getRepairQueries() == null ? List.of() : repairPlan.getRepairQueries(),
+                "candidateUrls", repairPlan.getCandidateUrls() == null ? List.of() : repairPlan.getCandidateUrls(),
+                "promotedUrls", repairPlan.getPromotedUrls() == null ? List.of() : repairPlan.getPromotedUrls()
+        );
     }
 
     public SearchExecutionResult execute(CollectorNodeConfig config,
@@ -228,6 +284,14 @@ public class SearchExecutionCoordinator {
 
         int verifiedCount = 0;
         int supplementedCount = 0;
+        boolean publicEvidenceRecoveryTriggered = false;
+        String publicEvidenceRecoveryStatus = "RECOVERY_NOT_TRIGGERED";
+        List<String> publicEvidenceAttemptedUrls = List.of();
+        List<String> publicEvidenceAttemptedEvidencePaths = List.of();
+        List<String> publicEvidenceRecoveryQueryIntents = List.of();
+        int publicEvidenceRecoveryCandidateCount = 0;
+        int publicEvidenceRecoveryVerifiedCount = 0;
+        Map<String, Object> evidenceRepairPlanProjection = buildRepairAuditProjection(null);
         VerificationStatsAggregate verificationStats = new VerificationStatsAggregate();
         boolean resultPageVerificationEnabled = isResultPageVerificationEnabled(config);
         String supplementMethod = "NONE";
@@ -382,11 +446,6 @@ public class SearchExecutionCoordinator {
                     : "SKIP_SUPPLEMENT_ENOUGH_VERIFIED";
         }
 
-        // 职责边界 3：目标选择永远发生在验证/补源之后，只从已经收束完的候选集合中挑选最终采集目标。
-        markStepRunning(executionPlan, "SELECT_TARGETS", "正在汇总候选并选择最终采集目标");
-        appendSnapshotAndPublish(progressSnapshots, executionPlan, "SELECT_TARGETS",
-                "正在汇总候选并选择最终采集目标", circuitBroken, degradationReason,
-                progressListener, allCandidates, List.of(), null);
         List<SourceCandidate> sitemapCandidates = normalizeCandidates(
                 discoverCandidatesFromSitemaps(config, allCandidates),
                 "SUPPLEMENTED",
@@ -395,6 +454,126 @@ public class SearchExecutionCoordinator {
         if (!sitemapCandidates.isEmpty()) {
             allCandidates = sourceCandidateRanker.rankAndDeduplicate(concat(allCandidates, sitemapCandidates));
         }
+
+        if (shouldTriggerPublicEvidenceRecovery(config, allCandidates, attemptedTargets)) {
+            publicEvidenceRecoveryTriggered = true;
+            markStepRunning(executionPlan, "PUBLIC_EVIDENCE_RECOVERY", "正在为受限主入口补采公开证据候选");
+            appendSnapshotAndPublish(progressSnapshots, executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
+                    "正在为受限主入口补采公开证据候选", circuitBroken, degradationReason,
+                    progressListener, allCandidates, List.of(), null);
+
+            PublicEvidenceRecoveryService.RecoveryResult recoveryResult = publicEvidenceRecoveryService.recover(
+                    PublicEvidenceRecoveryService.RecoveryContext.builder()
+                            .competitorName(config.getCompetitorName())
+                            .sourceType(config.getSourceType())
+                            .fieldName(config.getRecoveryFieldName())
+                            .evidencePathKey(config.getRecoveryEvidencePathKey())
+                            .queryIntents(defaultList(config.getRecoveryQueryIntents()))
+                            .seedCandidates(allCandidates)
+                            .attemptedTargets(new LinkedHashMap<>(attemptedTargets))
+                            .build()
+            );
+            publicEvidenceAttemptedUrls = recoveryResult.getAttemptedAlternativeUrls() == null
+                    ? List.of()
+                    : recoveryResult.getAttemptedAlternativeUrls();
+            publicEvidenceAttemptedEvidencePaths = recoveryResult.getAttemptedEvidencePaths() == null
+                    ? List.of()
+                    : recoveryResult.getAttemptedEvidencePaths();
+            publicEvidenceRecoveryQueryIntents = recoveryResult.getQueryIntents() == null
+                    ? List.of()
+                    : recoveryResult.getQueryIntents();
+
+            List<SourceCandidate> recoveryCandidates = normalizeCandidates(
+                    removeExistingCandidates(
+                            recoveryResult.getCandidates() == null ? List.of() : recoveryResult.getCandidates(),
+                            allCandidates
+                    ),
+                    "SUPPLEMENTED",
+                    config
+            );
+            publicEvidenceRecoveryCandidateCount = recoveryCandidates.size();
+            EvidenceRepairPlan recoveryRepairPlan = EvidenceRepairPlan.builder()
+                    .state(recoveryCandidates.isEmpty()
+                            ? EvidenceRepairState.REPAIR_FAILED
+                            : EvidenceRepairState.REPAIR_QUERY_PROPOSED)
+                    .reason(recoveryResult.getStatus())
+                    .sourceUrl(resolveFirstRecoverySourceUrl(allCandidates))
+                    .repairQueries(recoveryCandidates.stream()
+                            .map(SourceCandidate::getUrl)
+                            .filter(StringUtils::hasText)
+                            .toList())
+                    .candidateUrls(recoveryCandidates.stream()
+                            .map(SourceCandidate::getUrl)
+                            .filter(StringUtils::hasText)
+                            .toList())
+                    .promotedUrls(List.of())
+                    .build();
+            evidenceRepairPlanProjection = buildRepairAuditProjection(recoveryRepairPlan);
+            if (recoveryCandidates.isEmpty()) {
+                publicEvidenceRecoveryStatus = "RECOVERY_CANDIDATES_EMPTY";
+                markStepSkipped(executionPlan, "PUBLIC_EVIDENCE_RECOVERY", "公开证据补采未生成新的同域候选");
+                appendSnapshotAndPublish(progressSnapshots, executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
+                        "公开证据补采未生成新的同域候选", circuitBroken, degradationReason,
+                        progressListener, allCandidates, List.of(), null);
+            } else if (Boolean.TRUE.equals(config.getVerifyCandidates()) && resultPageVerificationEnabled) {
+                CandidateVerificationResult recoveryVerification = candidateVerifier.verify(
+                        config.getCompetitorName(),
+                        config.getSourceType(),
+                        recoveryCandidates
+                );
+                allCandidates = mergeCandidateUpdates(allCandidates, recoveryVerification.getUpdatedCandidates());
+                appendAttemptedTargets(attemptedTargets, recoveryVerification.getAttemptedTargets());
+                verificationStats.add(recoveryVerification);
+                publicEvidenceRecoveryVerifiedCount = recoveryVerification.getVerifiedTargets() == null
+                        ? 0
+                        : recoveryVerification.getVerifiedTargets().size();
+                verifiedCount += publicEvidenceRecoveryVerifiedCount;
+                publicEvidenceRecoveryStatus = publicEvidenceRecoveryVerifiedCount > 0
+                        ? "RECOVERED_PUBLIC_PAGE"
+                        : "RECOVERY_CANDIDATES_GENERATED";
+                evidenceRepairPlanProjection = buildRepairAuditProjection(
+                        publicEvidenceRecoveryService.promoteVerifiedUrls(
+                                recoveryRepairPlan,
+                                recoveryVerification.getVerifiedTargets() == null
+                                        ? List.of()
+                                        : recoveryVerification.getVerifiedTargets().stream()
+                                        .filter(target -> target != null && target.getCandidate() != null)
+                                        .map(target -> target.getCandidate().getUrl())
+                                        .filter(StringUtils::hasText)
+                                        .toList()));
+                markStepSuccess(executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
+                        publicEvidenceRecoveryVerifiedCount > 0
+                                ? "公开证据补采新增 " + recoveryCandidates.size() + " 条候选，并验证通过 "
+                                + publicEvidenceRecoveryVerifiedCount + " 条"
+                                : "公开证据补采新增 " + recoveryCandidates.size() + " 条候选，但暂未验证通过");
+                appendSnapshotAndPublish(progressSnapshots, executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
+                        publicEvidenceRecoveryVerifiedCount > 0
+                                ? "公开证据补采新增 " + recoveryCandidates.size() + " 条候选，并验证通过 "
+                                + publicEvidenceRecoveryVerifiedCount + " 条"
+                                : "公开证据补采新增 " + recoveryCandidates.size() + " 条候选，但暂未验证通过",
+                        circuitBroken, degradationReason, progressListener, allCandidates, List.of(), null);
+            } else {
+                allCandidates = sourceCandidateRanker.rankAndDeduplicate(concat(allCandidates, recoveryCandidates));
+                publicEvidenceRecoveryStatus = "RECOVERY_CANDIDATES_GENERATED";
+                evidenceRepairPlanProjection = buildRepairAuditProjection(recoveryRepairPlan);
+                markStepSuccess(executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
+                        "公开证据补采新增 " + recoveryCandidates.size() + " 条待后续选源的同域候选");
+                appendSnapshotAndPublish(progressSnapshots, executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
+                        "公开证据补采新增 " + recoveryCandidates.size() + " 条待后续选源的同域候选",
+                        circuitBroken, degradationReason, progressListener, allCandidates, List.of(), null);
+            }
+        } else {
+            markStepSkipped(executionPlan, "PUBLIC_EVIDENCE_RECOVERY", "当前候选已足够或未发现受限公开补采信号");
+            appendSnapshotAndPublish(progressSnapshots, executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
+                    "当前候选已足够或未发现受限公开补采信号", circuitBroken, degradationReason,
+                    progressListener, allCandidates, List.of(), null);
+        }
+
+        // 职责边界 3：目标选择永远发生在验证/补源之后，只从已经收束完的候选集合中挑选最终采集目标。
+        markStepRunning(executionPlan, "SELECT_TARGETS", "正在汇总候选并选择最终采集目标");
+        appendSnapshotAndPublish(progressSnapshots, executionPlan, "SELECT_TARGETS",
+                "正在汇总候选并选择最终采集目标", circuitBroken, degradationReason,
+                progressListener, allCandidates, List.of(), null);
 
         SearchSelectionDecision selectionDecision = collectionTargetSelector.selectTargets(
                 allCandidates,
@@ -462,6 +641,16 @@ public class SearchExecutionCoordinator {
                 .fallbackDecision(fallbackDecision)
                 .recoveryCheckpoint(resolveRecoveryCheckpoint(executionPlan))
                 .recoveryAdvice(buildRecoveryAdvice(circuitBroken, degradationReason, browserSearchResult, selectedTargets, config))
+                .publicEvidenceRecoveryTriggered(publicEvidenceRecoveryTriggered)
+                .publicEvidenceAttemptedUrls(publicEvidenceAttemptedUrls)
+                .publicEvidenceAttemptedEvidencePaths(publicEvidenceAttemptedEvidencePaths)
+                .publicEvidenceRecoveryFieldName(config.getRecoveryFieldName())
+                .publicEvidenceRecoveryEvidencePathKey(config.getRecoveryEvidencePathKey())
+                .publicEvidenceRecoveryQueryIntents(publicEvidenceRecoveryQueryIntents)
+                .publicEvidenceRecoveryCandidateCount(publicEvidenceRecoveryCandidateCount)
+                .publicEvidenceRecoveryVerifiedCount(publicEvidenceRecoveryVerifiedCount)
+                .publicEvidenceRecoveryStatus(publicEvidenceRecoveryStatus)
+                .evidenceRepairPlan(evidenceRepairPlanProjection)
                 .tavilyFastLaneAudit(tavilyFastLaneAudit)
                 .resumedFromCheckpoint(resumedFromCheckpoint)
                 .checkpointSource(checkpointSource)
@@ -519,6 +708,7 @@ public class SearchExecutionCoordinator {
                         .latestProgress(latestProgress)
                         .progressHistory(progressSnapshots)
                         .tavilyFastLaneAudit(tavilyFastLaneAudit)
+                        .evidenceRepairPlan(evidenceRepairPlanProjection)
                         .replayTimeline(replayTimeline)
                         .sourceCandidates(allCandidates)
                         .attemptedTargets(attemptedTargetList)
@@ -656,6 +846,13 @@ public class SearchExecutionCoordinator {
                         .goal("候选不足时执行运行期补源")
                         .expectedDurationMs(8000L)
                         .dependency("searchProvider")
+                        .status(SearchExecutionStep.StepStatus.PENDING)
+                        .build(),
+                SearchExecutionStep.builder()
+                        .stepCode("PUBLIC_EVIDENCE_RECOVERY")
+                        .goal("主入口受限时补采同域公开正文候选")
+                        .expectedDurationMs(3000L)
+                        .dependency("candidateVerifier")
                         .status(SearchExecutionStep.StepStatus.PENDING)
                         .build(),
                 SearchExecutionStep.builder()
@@ -1215,6 +1412,33 @@ public class SearchExecutionCoordinator {
                 candidate != null && safeSourceType(config.getSourceType()).equals(candidate.getSourceType()));
     }
 
+    /**
+     * recovery 只在“当前没有验证通过的正式候选”且出现字段级补采语境或受限页信号时触发。
+     * 这样可以避免每轮搜索都重复扩 about/help/app，同时又能保证登录壳页不会直接结束在空选源。
+     */
+    private boolean shouldTriggerPublicEvidenceRecovery(CollectorNodeConfig config,
+                                                        List<SourceCandidate> candidates,
+                                                        Map<String, SearchCollectionTarget> attemptedTargets) {
+        boolean hasVerifiedCandidate = (candidates == null ? List.<SourceCandidate>of() : candidates).stream()
+                .anyMatch(candidate -> candidate != null && Boolean.TRUE.equals(candidate.getVerified()));
+        if (hasVerifiedCandidate) {
+            return false;
+        }
+        if (StringUtils.hasText(config.getRecoveryFieldName())
+                || StringUtils.hasText(config.getRecoveryEvidencePathKey())
+                || (config.getRecoveryQueryIntents() != null && !config.getRecoveryQueryIntents().isEmpty())) {
+            return true;
+        }
+        if (attemptedTargets == null || attemptedTargets.isEmpty()) {
+            return false;
+        }
+        return attemptedTargets.values().stream().anyMatch(target ->
+                target != null && candidateOwnershipPolicy.isUtilityGatePage(
+                        target.getCandidate(),
+                        target.getCollectedPage()
+                ));
+    }
+
     private boolean isResultPageVerificationEnabled(CollectorNodeConfig config) {
         if (config.getVerifyResultPage() != null) {
             return Boolean.TRUE.equals(config.getVerifyResultPage());
@@ -1603,6 +1827,33 @@ public class SearchExecutionCoordinator {
 
     private boolean isTavilyCandidate(SourceCandidate candidate) {
         return candidate != null && "tavily".equalsIgnoreCase(candidate.getProviderKey());
+    }
+
+    /**
+     * repair 审计里的 sourceUrl 只表达“从哪个弱入口触发了补采”。
+     * 这里从现有候选池中稳定取第一条可追溯 URL，不重新做网络探测或排序推断。
+     */
+    private String resolveFirstRecoverySourceUrl(List<SourceCandidate> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return "";
+        }
+        for (SourceCandidate candidate : candidates) {
+            if (candidate == null) {
+                continue;
+            }
+            if (StringUtils.hasText(candidate.getUrl())) {
+                return candidate.getUrl();
+            }
+            if (candidate.getSourceUrls() == null) {
+                continue;
+            }
+            for (String sourceUrl : candidate.getSourceUrls()) {
+                if (StringUtils.hasText(sourceUrl)) {
+                    return sourceUrl;
+                }
+            }
+        }
+        return "";
     }
 
     private String resolveTavilyAuditKey(SourceCandidate candidate, int index) {

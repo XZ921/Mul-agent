@@ -253,6 +253,50 @@ class PlaywrightPageCollectorTest {
     }
 
     @Test
+    void shouldRecoverPublicShellWhenPageIsLoginGateButMetaIsUseful() {
+        Page page = mock(Page.class);
+        when(page.url()).thenReturn("https://docs.example.com/login");
+        when(page.title()).thenReturn("Example Docs Login");
+        when(page.content()).thenReturn("""
+                <html>
+                  <head>
+                    <meta name="description" content="Example Docs provides API guides and product documentation.">
+                    <link rel="canonical" href="https://docs.example.com/">
+                  </head>
+                  <body>Please sign in to continue</body>
+                </html>
+                """);
+        when(page.evaluate(anyString())).thenReturn(List.of(
+                Map.of(
+                        "selector", "body",
+                        "tagName", "BODY",
+                        "className", "",
+                        "idName", "",
+                        "text", "Please sign in to continue",
+                        "linkTextLength", 0
+                )
+        ));
+
+        SourceCollector.CollectedPage collectedPage = collector.extractRenderedPageForTest(
+                "https://docs.example.com/login",
+                "Example",
+                "DOCS",
+                "FULL_RENDER_REQUIRED",
+                SourceCollectRequest.builder()
+                        .url("https://docs.example.com/login")
+                        .competitorName("Example")
+                        .sourceType("DOCS")
+                        .sourceUrls(List.of("https://docs.example.com/login"))
+                        .build(),
+                page
+        );
+
+        assertTrue(collectedPage.isSuccess());
+        assertTrue(collectedPage.getMetadata().contains("PUBLIC_SHELL_ONLY"));
+        assertTrue(collectedPage.getMetadata().contains("LOGIN_GATE_PARTIAL"));
+    }
+
+    @Test
     void shouldExposeStructuredExtractionMetadataForFullRenderCollection() throws Exception {
         Browser browser = mock(Browser.class);
         Page page = mock(Page.class);

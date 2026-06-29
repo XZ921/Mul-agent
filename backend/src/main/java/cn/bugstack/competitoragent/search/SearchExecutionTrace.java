@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 搜索执行轨迹。
@@ -64,6 +65,20 @@ public class SearchExecutionTrace {
     private String fallbackDecision;
     private String recoveryCheckpoint;
     private String recoveryAdvice;
+    private Boolean publicEvidenceRecoveryTriggered;
+    private List<String> publicEvidenceAttemptedUrls;
+    private List<String> publicEvidenceAttemptedEvidencePaths;
+    private String publicEvidenceRecoveryFieldName;
+    private String publicEvidenceRecoveryEvidencePathKey;
+    private List<String> publicEvidenceRecoveryQueryIntents;
+    private Integer publicEvidenceRecoveryCandidateCount;
+    private Integer publicEvidenceRecoveryVerifiedCount;
+    private String publicEvidenceRecoveryStatus;
+    /**
+     * repair 生命周期的稳定审计投影。
+     * 使用 Map 是为了让 replay/前端在不绑定内部值对象的情况下，也能识别统一状态词汇和 URL 列表。
+     */
+    private Map<String, Object> evidenceRepairPlan;
     /**
      * 把 Tavily 快速通道结果跟随搜索 trace 一起落盘，
      * 便于后续报告聚合和节点级别审计直接从 trace 读取。

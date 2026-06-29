@@ -105,6 +105,8 @@
 - 不允许 Agent 各自解析临时 JSON。必须使用共享的 `CoverageContractProvider` 和 `CoverageContractResolver`。
 - 只生成 query 不能算 repair 完成。完整 repair 必须提升更强证据，或持久化明确失败状态。
 - Tavily 结构化块不能覆盖 `EvidenceQualityGate` 的负信号。
+- Tavily 结构化块优先防误判。隐含配额、免费额度、调用次数等非标准表达未生成 `PRICING_BLOCK` 时，可以由字段证据路径和 repair 继续处理，不能为提高召回放宽防噪门槛。
+- 第 5 阶段 `FieldAnswerSynthesizer` 只做字段内合成。同一证据可被多个字段复用 `sourceUrls`，但不能自动建立跨字段推理，也不能把一个字段的覆盖状态借给另一个字段。
 - 第 4 阶段公开补采不负责决定字段最终覆盖结论。它只提供候选和审计信号；字段结论由 `DimensionEvidencePlan / FieldEvidenceCoverage` 收口。
 - 不放松来源追溯。任何非空抽取字段仍然需要 `sourceUrls` 或 `evidenceIds`。
 
@@ -163,7 +165,7 @@ mvn -pl backend -Dtest=TavilyPrefetchedContentBlockClassifierTest,TavilyPrefetch
 运行：
 
 ```powershell
-mvn -pl backend -Dtest=CollectionTargetSelectorTest,CandidateOwnershipPolicyTest,PublicEvidenceRecoveryServiceTest,PublicShellRecoveryExtractorTest,PlaywrightPageCollectorTest,EvidenceSourceSanitizerTest,EvidenceSourceMigrationArtifactsTest,SearchExecutionCoordinatorTest test
+mvn -pl backend -Dtest=CollectionTargetSelectorTest,CandidateOwnershipPolicyTest,PublicEvidenceRecoveryServiceTest,SitemapDiscoveryServiceTest,SearchExecutionCoordinatorPublicRecoveryTest,PublicShellRecoveryExtractorTest,PlaywrightPageCollectorTest,EvidenceSourceSanitizerTest,EvidenceSourceMigrationArtifactsTest test
 ```
 
 预期：所有指定测试通过。

@@ -22,6 +22,8 @@ import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
 import cn.bugstack.competitoragent.source.SourceDiscoveryService;
 import cn.bugstack.competitoragent.source.SourcePlan;
+import cn.bugstack.competitoragent.workflow.coverage.AnalysisDimensionMappingCatalog;
+import cn.bugstack.competitoragent.workflow.coverage.CoverageContractResolver;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -393,7 +395,8 @@ class WorkflowFactoryTest {
                 sourceDiscoveryService,
                 new SourceCandidateRanker(),
                 objectMapper,
-                collectorPlanTemplateFactory
+                collectorPlanTemplateFactory,
+                new CoverageContractResolver(new AnalysisDimensionMappingCatalog())
         );
         CollaborationGoalAssembler collaborationGoalAssembler = new CollaborationGoalAssembler(objectMapper);
         CollaborationPlanService collaborationPlanService = new CollaborationPlanService();

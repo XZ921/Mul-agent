@@ -62,6 +62,8 @@ import cn.bugstack.competitoragent.workflow.WorkflowFactory;
 import cn.bugstack.competitoragent.workflow.WorkflowPlan;
 import cn.bugstack.competitoragent.workflow.WorkflowPlanAssembler;
 import cn.bugstack.competitoragent.workflow.WorkflowPlanValidator;
+import cn.bugstack.competitoragent.workflow.coverage.AnalysisDimensionMappingCatalog;
+import cn.bugstack.competitoragent.workflow.coverage.CoverageContractResolver;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventType;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
 import cn.bugstack.competitoragent.workflow.runtime.DynamicPlanAppender;
@@ -442,7 +444,8 @@ class CollaborationPlanningSmokeTest {
                 sourceDiscoveryService,
                 new SourceCandidateRanker(),
                 objectMapper,
-                collectorPlanTemplateFactory
+                collectorPlanTemplateFactory,
+                new CoverageContractResolver(new AnalysisDimensionMappingCatalog())
         );
     }
 

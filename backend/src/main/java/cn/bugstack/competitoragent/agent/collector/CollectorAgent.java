@@ -7,6 +7,10 @@ import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
 import cn.bugstack.competitoragent.collection.CollectionExecutionCoordinator;
 import cn.bugstack.competitoragent.collection.CollectionExecutionReport;
 import cn.bugstack.competitoragent.collection.CollectionExecutionResult;
+import cn.bugstack.competitoragent.collection.quality.EvidenceQualityContext;
+import cn.bugstack.competitoragent.collection.quality.EvidenceQualityGate;
+import cn.bugstack.competitoragent.collection.quality.EvidenceQualityGateProperties;
+import cn.bugstack.competitoragent.collection.quality.EvidenceQualityVerdict;
 import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.model.entity.KnowledgeDocument;
@@ -21,6 +25,9 @@ import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.search.SearchCollectionTarget;
 import cn.bugstack.competitoragent.search.CanonicalUrlResolver;
+import cn.bugstack.competitoragent.search.EvidenceRepairPlan;
+import cn.bugstack.competitoragent.search.EvidenceRepairState;
+import cn.bugstack.competitoragent.search.PublicEvidenceRecoveryService;
 import cn.bugstack.competitoragent.search.SearchExecutionCoordinator;
 import cn.bugstack.competitoragent.search.SearchExecutionPlan;
 import cn.bugstack.competitoragent.search.SearchExecutionTrace;
@@ -69,6 +76,9 @@ public class CollectorAgent extends BaseAgent {
     private final ObjectMapper objectMapper;
     private final CanonicalUrlResolver canonicalUrlResolver;
     private final DownstreamEvidenceViewAssembler downstreamEvidenceViewAssembler;
+    private final EvidenceQualityGate evidenceQualityGate;
+    private final EvidenceSourceSanitizer evidenceSourceSanitizer;
+    private final PublicEvidenceRecoveryService publicEvidenceRecoveryService;
 
     public CollectorAgent(AgentExecutionLogRepository logRepository,
                           SourceCollector sourceCollector,
@@ -88,7 +98,10 @@ public class CollectorAgent extends BaseAgent {
                 collectionExecutionCoordinator,
                 taskRetrievalIndexService,
                 objectMapper,
-                new DownstreamEvidenceViewAssembler(objectMapper));
+                new DownstreamEvidenceViewAssembler(objectMapper),
+                new EvidenceQualityGate(new EvidenceQualityGateProperties()),
+                new EvidenceSourceSanitizer(),
+                new PublicEvidenceRecoveryService());
     }
 
     @Autowired
@@ -101,7 +114,37 @@ public class CollectorAgent extends BaseAgent {
                           CollectionExecutionCoordinator collectionExecutionCoordinator,
                           TaskRetrievalIndexService taskRetrievalIndexService,
                           ObjectMapper objectMapper,
-                          DownstreamEvidenceViewAssembler downstreamEvidenceViewAssembler) {
+                          DownstreamEvidenceViewAssembler downstreamEvidenceViewAssembler,
+                          EvidenceQualityGate evidenceQualityGate,
+                          EvidenceSourceSanitizer evidenceSourceSanitizer) {
+        this(logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchExecutionCoordinator,
+                collectionExecutionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper,
+                downstreamEvidenceViewAssembler,
+                evidenceQualityGate,
+                evidenceSourceSanitizer,
+                new PublicEvidenceRecoveryService());
+    }
+
+    public CollectorAgent(AgentExecutionLogRepository logRepository,
+                          SourceCollector sourceCollector,
+                          EvidenceSourceRepository evidenceRepository,
+                          TaskNodeRepository nodeRepository,
+                          AgentContextAssembler agentContextAssembler,
+                          SearchExecutionCoordinator searchExecutionCoordinator,
+                          CollectionExecutionCoordinator collectionExecutionCoordinator,
+                          TaskRetrievalIndexService taskRetrievalIndexService,
+                          ObjectMapper objectMapper,
+                          DownstreamEvidenceViewAssembler downstreamEvidenceViewAssembler,
+                          EvidenceQualityGate evidenceQualityGate,
+                          EvidenceSourceSanitizer evidenceSourceSanitizer,
+                          PublicEvidenceRecoveryService publicEvidenceRecoveryService) {
         // Spring 需要明确知道运行期应优先使用带统一证据视图装配器的正式构造器，
         // 否则存在多个 public 构造器时会退回默认实例化路径，导致上下文加载失败。
         super(logRepository, agentContextAssembler);
@@ -116,6 +159,15 @@ public class CollectorAgent extends BaseAgent {
         this.downstreamEvidenceViewAssembler = downstreamEvidenceViewAssembler == null
                 ? new DownstreamEvidenceViewAssembler(objectMapper)
                 : downstreamEvidenceViewAssembler;
+        this.evidenceQualityGate = evidenceQualityGate == null
+                ? new EvidenceQualityGate(new EvidenceQualityGateProperties())
+                : evidenceQualityGate;
+        this.evidenceSourceSanitizer = evidenceSourceSanitizer == null
+                ? new EvidenceSourceSanitizer()
+                : evidenceSourceSanitizer;
+        this.publicEvidenceRecoveryService = publicEvidenceRecoveryService == null
+                ? new PublicEvidenceRecoveryService()
+                : publicEvidenceRecoveryService;
     }
 
     @Override
@@ -263,6 +315,7 @@ public class CollectorAgent extends BaseAgent {
                         ? collectionResults.get(collectionResultIndex++)
                         : null;
                 if (collectionResult != null) {
+                    collectionResult = gateCollectionResult(config, matchedCandidate, collectionResult);
                     auditResults.add(collectionResult);
                 }
                 page = mapCollectionResultToCollectedPage(collectionResult, config.getCompetitorName(), sourceType);
@@ -278,8 +331,10 @@ public class CollectorAgent extends BaseAgent {
 
             TaskRetrievalIndexingResult retrievalIndexingResult = null;
             String knowledgeFailureReason = null;
+            String persistenceFailureReason = null;
+            boolean persisted = false;
             if (isUsableCollectedPage(page)) {
-                EvidenceSource evidence = EvidenceSource.builder()
+                EvidenceSource evidence = evidenceSourceSanitizer.sanitize(EvidenceSource.builder()
                         .taskId(context.getTaskId())
                         .competitorName(config.getCompetitorName())
                         .evidenceId(evidenceId)
@@ -296,16 +351,22 @@ public class CollectorAgent extends BaseAgent {
                         .publishedAt(matchedCandidate == null ? null : matchedCandidate.getPublishedAt())
                         .sourceScore(matchedCandidate == null ? null : matchedCandidate.getTotalScore())
                         .collectedAt(LocalDateTime.now())
-                        .build();
-                evidenceRepository.save(evidence);
-                successCounterRef[0]++;
-
-                // 采集成功后立即沉淀任务级知识文档与切片，保证后续 Task RAG 不必回头重读原始日志或报告正文。
+                        .build());
                 try {
-                    retrievalIndexingResult = taskRetrievalIndexService.indexEvidence(evidence);
+                    evidenceRepository.save(evidence);
+                    persisted = true;
+                    successCounterRef[0]++;
+
+                    try {
+                        retrievalIndexingResult = taskRetrievalIndexService.indexEvidence(evidence);
+                    } catch (Exception e) {
+                        knowledgeFailureReason = e.getMessage();
+                        log.warn("index collected evidence failed, taskId={}, evidenceId={}",
+                                context.getTaskId(), evidenceId, e);
+                    }
                 } catch (Exception e) {
-                    knowledgeFailureReason = e.getMessage();
-                    log.warn("index collected evidence failed, taskId={}, evidenceId={}",
+                    persistenceFailureReason = e.getMessage();
+                    log.warn("persist collected evidence failed, taskId={}, evidenceId={}",
                             context.getTaskId(), evidenceId, e);
                 }
             }
@@ -318,6 +379,9 @@ public class CollectorAgent extends BaseAgent {
             if (knowledgeFailureReason != null && !knowledgeFailureReason.isBlank()) {
                 collectionIssueFlags = mergeIssueFlags(collectionIssueFlags, List.of("KNOWLEDGE_INDEX_FAILED"));
             }
+            if (persistenceFailureReason != null && !persistenceFailureReason.isBlank()) {
+                collectionIssueFlags = mergeIssueFlags(collectionIssueFlags, List.of("EVIDENCE_PERSIST_FAILED"));
+            }
             resultEntry.put("competitor", config.getCompetitorName());
             resultEntry.put("sourceType", sourceType);
             resultEntry.put("sourceCategory", resolveSourceCategory(matchedCandidate));
@@ -327,7 +391,7 @@ public class CollectorAgent extends BaseAgent {
             resultEntry.put("title", page.getTitle());
             resultEntry.put("contentLength", page.getContent() != null ? page.getContent().length() : 0);
             resultEntry.put("errorMessage", page.getErrorMessage());
-            resultEntry.put("persisted", isUsableCollectedPage(page));
+            resultEntry.put("persisted", persisted);
             resultEntry.put("publishedAt", matchedCandidate == null ? null : matchedCandidate.getPublishedAt());
             resultEntry.put("discoveryMethod", matchedCandidate == null ? null : matchedCandidate.getDiscoveryMethod());
             resultEntry.put("reason", matchedCandidate == null ? config.getDiscoveryNotes() : matchedCandidate.getReason());
@@ -357,6 +421,9 @@ public class CollectorAgent extends BaseAgent {
             } else if (knowledgeFailureReason != null && !knowledgeFailureReason.isBlank()) {
                 resultEntry.put("knowledgeFailureReason", knowledgeFailureReason);
             }
+            if (persistenceFailureReason != null && !persistenceFailureReason.isBlank()) {
+                resultEntry.put("persistenceFailureReason", persistenceFailureReason);
+            }
             results.add(resultEntry);
 
             progressSnapshots.add(buildProgressSnapshot(executionPlan,
@@ -380,10 +447,14 @@ public class CollectorAgent extends BaseAgent {
                         "未采集到可用页面内容",
                         Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
                         readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
+                if (hasIssueFlag(results, "EVIDENCE_PERSIST_FAILED")) {
+                    collectionReport = forceFailedCollectionReport(collectionReport);
+                }
                 String outputJson = buildCollectorOutput(
                         config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, collectionReport, progressSnapshots, results, successCounterRef[0], targets);
-                String actionableError = buildNoContentFailureMessage(
-                        config, sourceType, searchExecutionResult.getExecutionTrace(), results);
+                String actionableError = hasIssueFlag(results, "EVIDENCE_PERSIST_FAILED")
+                        ? "证据落库失败，已保留 collection audit 诊断，请检查字段长度或数据库迁移"
+                        : buildNoContentFailureMessage(config, sourceType, searchExecutionResult.getExecutionTrace(), results);
                 return AgentResult.builder()
                         .status(TaskNodeStatus.FAILED)
                         .outputData(outputJson)
@@ -499,8 +570,9 @@ public class CollectorAgent extends BaseAgent {
             String outputJson = buildCollectorOutput(
                     config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, collectionReport,
                     progressSnapshots, results, successCounterRef[0], List.of());
-            String actionableError = buildNoContentFailureMessage(
-                    config, sourceType, searchExecutionResult.getExecutionTrace(), results);
+            String actionableError = hasIssueFlag(results, "EVIDENCE_PERSIST_FAILED")
+                    ? "证据落库失败，已保留 collection audit 诊断，请检查字段长度或数据库迁移"
+                    : buildNoContentFailureMessage(config, sourceType, searchExecutionResult.getExecutionTrace(), results);
             return AgentResult.builder()
                     .status(TaskNodeStatus.FAILED)
                     .outputData(outputJson)
@@ -656,6 +728,7 @@ public class CollectorAgent extends BaseAgent {
             if (entryResult == null) {
                 entryResult = buildMissingCollectionExecutionResult(context, index + 1, matchedCandidate);
             }
+            entryResult = gateCollectionResult(config, matchedCandidate, entryResult);
             auditResults.add(entryResult);
             processedPageCounterRef[0]++;
             appendCollectedResultEntry(context, config, sourceType, searchExecutionResult, executionPlan,
@@ -668,12 +741,14 @@ public class CollectorAgent extends BaseAgent {
             if (unmatchedEntryResult == null) {
                 continue;
             }
+            SourceCandidate syntheticCandidate = buildSyntheticCandidateFromCollectionResult(unmatchedEntryResult, sourceType);
+            unmatchedEntryResult = gateCollectionResult(config, syntheticCandidate, unmatchedEntryResult);
             auditResults.add(unmatchedEntryResult);
             processedPageCounterRef[0]++;
             appendCollectedResultEntry(context, config, sourceType, searchExecutionResult, executionPlan,
                     progressSnapshots, targets, results, successCounterRef, evidenceCounterRef,
                     processedPageCounterRef[0], totalCollectedPages, unmatchedEntryResult,
-                    null, buildSyntheticCandidateFromCollectionResult(unmatchedEntryResult, sourceType),
+                    null, syntheticCandidate,
                     resolveCollectionResultPageUrl(unmatchedEntryResult));
         }
 
@@ -681,12 +756,14 @@ public class CollectorAgent extends BaseAgent {
             if (discoveredChildResult == null) {
                 continue;
             }
+            SourceCandidate syntheticCandidate = buildSyntheticCandidateFromCollectionResult(discoveredChildResult, sourceType);
+            discoveredChildResult = gateCollectionResult(config, syntheticCandidate, discoveredChildResult);
             auditResults.add(discoveredChildResult);
             processedPageCounterRef[0]++;
             appendCollectedResultEntry(context, config, sourceType, searchExecutionResult, executionPlan,
                     progressSnapshots, targets, results, successCounterRef, evidenceCounterRef,
                     processedPageCounterRef[0], totalCollectedPages, discoveredChildResult,
-                    null, buildSyntheticCandidateFromCollectionResult(discoveredChildResult, sourceType),
+                    null, syntheticCandidate,
                     resolveCollectionResultPageUrl(discoveredChildResult));
         }
 
@@ -700,11 +777,15 @@ public class CollectorAgent extends BaseAgent {
                         "未采集到可用页面内容",
                         Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
                         readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
+                if (hasIssueFlag(results, "EVIDENCE_PERSIST_FAILED")) {
+                    collectionReport = forceFailedCollectionReport(collectionReport);
+                }
                 String outputJson = buildCollectorOutput(
                         config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, collectionReport,
                         progressSnapshots, results, successCounterRef[0], targets);
-                String actionableError = buildNoContentFailureMessage(
-                        config, sourceType, searchExecutionResult.getExecutionTrace(), results);
+                String actionableError = hasIssueFlag(results, "EVIDENCE_PERSIST_FAILED")
+                        ? "证据落库失败，已保留 collection audit 诊断，请检查字段长度或数据库迁移"
+                        : buildNoContentFailureMessage(config, sourceType, searchExecutionResult.getExecutionTrace(), results);
                 return AgentResult.builder()
                         .status(TaskNodeStatus.FAILED)
                         .outputData(outputJson)
@@ -886,6 +967,7 @@ public class CollectorAgent extends BaseAgent {
                     .contentLength(parseInt(result.get("contentLength")))
                     .sourceCategory(toText(result.get("sourceCategory")))
                     .errorMessage(toText(result.get("errorMessage")))
+                    .persistenceFailureReason(toText(result.get("persistenceFailureReason")))
                     .sourceUrls(documentSourceUrls)
                     .issueFlags(documentIssueFlags)
                     .evidenceFragments(documentFragments)
@@ -1128,6 +1210,42 @@ public class CollectorAgent extends BaseAgent {
         return new ArrayList<>(merged);
     }
 
+    private boolean hasIssueFlag(List<Map<String, Object>> results, String issueFlag) {
+        if (results == null || results.isEmpty() || !StringUtils.hasText(issueFlag)) {
+            return false;
+        }
+        for (Map<String, Object> result : results) {
+            if (result == null) {
+                continue;
+            }
+            List<String> flags = readStringList(result.get("issueFlags"));
+            if (flags.stream().anyMatch(issueFlag::equalsIgnoreCase)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private CollectionExecutionReport forceFailedCollectionReport(CollectionExecutionReport collectionReport) {
+        if (collectionReport == null) {
+            return null;
+        }
+        CollectionExecutionReport failedReport = collectionReport.toBuilder()
+                .status("FAILED")
+                .build();
+        if (collectionReport.getAuditSnapshot() != null) {
+            failedReport.setAuditSnapshot(collectionReport.getAuditSnapshot().toBuilder()
+                    .status("FAILED")
+                    .summary(collectionReport.getAuditSnapshot().getSummary() == null
+                            ? null
+                            : collectionReport.getAuditSnapshot().getSummary().toBuilder()
+                            .status("FAILED")
+                            .build())
+                    .build());
+        }
+        return failedReport;
+    }
+
     /**
      * 来源分类要在采集阶段就固定下来，否则后续任务级 RAG 很难区分“用户指定的证据”与“系统补源发现的证据”。
      */
@@ -1356,8 +1474,10 @@ public class CollectorAgent extends BaseAgent {
 
         TaskRetrievalIndexingResult retrievalIndexingResult = null;
         String knowledgeFailureReason = null;
+        String persistenceFailureReason = null;
+        boolean persisted = false;
         if (isUsableCollectedPage(page)) {
-            EvidenceSource evidence = EvidenceSource.builder()
+            EvidenceSource evidence = evidenceSourceSanitizer.sanitize(EvidenceSource.builder()
                     .taskId(context.getTaskId())
                     .competitorName(config.getCompetitorName())
                     .evidenceId(evidenceId)
@@ -1374,14 +1494,21 @@ public class CollectorAgent extends BaseAgent {
                     .publishedAt(effectiveCandidate == null ? null : effectiveCandidate.getPublishedAt())
                     .sourceScore(effectiveCandidate == null ? null : effectiveCandidate.getTotalScore())
                     .collectedAt(LocalDateTime.now())
-                    .build();
-            evidenceRepository.save(evidence);
-            successCounterRef[0]++;
+                    .build());
             try {
-                retrievalIndexingResult = taskRetrievalIndexService.indexEvidence(evidence);
+                evidenceRepository.save(evidence);
+                persisted = true;
+                successCounterRef[0]++;
+                try {
+                    retrievalIndexingResult = taskRetrievalIndexService.indexEvidence(evidence);
+                } catch (Exception e) {
+                    knowledgeFailureReason = e.getMessage();
+                    log.warn("index collected evidence failed, taskId={}, evidenceId={}",
+                            context.getTaskId(), evidenceId, e);
+                }
             } catch (Exception e) {
-                knowledgeFailureReason = e.getMessage();
-                log.warn("index collected evidence failed, taskId={}, evidenceId={}",
+                persistenceFailureReason = e.getMessage();
+                log.warn("persist collected evidence failed, taskId={}, evidenceId={}",
                         context.getTaskId(), evidenceId, e);
             }
         }
@@ -1394,6 +1521,9 @@ public class CollectorAgent extends BaseAgent {
         if (knowledgeFailureReason != null && !knowledgeFailureReason.isBlank()) {
             collectionIssueFlags = mergeIssueFlags(collectionIssueFlags, List.of("KNOWLEDGE_INDEX_FAILED"));
         }
+        if (persistenceFailureReason != null && !persistenceFailureReason.isBlank()) {
+            collectionIssueFlags = mergeIssueFlags(collectionIssueFlags, List.of("EVIDENCE_PERSIST_FAILED"));
+        }
         resultEntry.put("competitor", config.getCompetitorName());
         resultEntry.put("sourceType", effectiveSourceType);
         resultEntry.put("sourceCategory", resolveSourceCategory(effectiveCandidate));
@@ -1403,7 +1533,7 @@ public class CollectorAgent extends BaseAgent {
         resultEntry.put("title", page.getTitle());
         resultEntry.put("contentLength", page.getContent() != null ? page.getContent().length() : 0);
         resultEntry.put("errorMessage", page.getErrorMessage());
-        resultEntry.put("persisted", isUsableCollectedPage(page));
+        resultEntry.put("persisted", persisted);
         resultEntry.put("publishedAt", effectiveCandidate == null ? null : effectiveCandidate.getPublishedAt());
         resultEntry.put("discoveryMethod", effectiveCandidate == null ? null : effectiveCandidate.getDiscoveryMethod());
         resultEntry.put("reason", effectiveCandidate == null ? config.getDiscoveryNotes() : effectiveCandidate.getReason());
@@ -1432,6 +1562,9 @@ public class CollectorAgent extends BaseAgent {
             resultEntry.put("knowledgeFailureReason", retrievalIndexingResult.failureReason());
         } else if (knowledgeFailureReason != null && !knowledgeFailureReason.isBlank()) {
             resultEntry.put("knowledgeFailureReason", knowledgeFailureReason);
+        }
+        if (persistenceFailureReason != null && !persistenceFailureReason.isBlank()) {
+            resultEntry.put("persistenceFailureReason", persistenceFailureReason);
         }
         results.add(resultEntry);
 
@@ -1592,7 +1725,7 @@ public class CollectorAgent extends BaseAgent {
                 && page != null
                 && page.isSuccess()
                 && isUsableCollectedPage(page);
-        return CollectionExecutionResult.builder()
+        CollectionExecutionResult prefetchedResult = CollectionExecutionResult.builder()
                 .taskPackageKey(taskPackageKey)
                 .targetIndex(targetIndex)
                 .executorType("PREFETCHED_PAGE")
@@ -1613,6 +1746,7 @@ public class CollectorAgent extends BaseAgent {
                 .reusedFromCheckpoint(reusedFromCheckpoint)
                 .build()
                 .normalize();
+        return gateCollectionResult(config, candidate, prefetchedResult);
     }
 
     /**
@@ -1699,6 +1833,13 @@ public class CollectorAgent extends BaseAgent {
         metadata.put("discoveryDepth", result.getDiscoveryDepth() == null ? 0 : result.getDiscoveryDepth());
         metadata.put("qualitySignals", result.getQualitySignals() == null ? List.of() : result.getQualitySignals());
         metadata.put("qualityScore", result.getQualityScore());
+        metadata.put("evidenceQualityVerdict", result.getEvidenceQualityVerdict());
+        metadata.put("evidenceRepairPlan", result.getEvidenceRepairPlan());
+        metadata.put("publicEvidenceRecoveryFieldName", result.getPublicEvidenceRecoveryFieldName());
+        metadata.put("publicEvidenceRecoveryEvidencePathKey", result.getPublicEvidenceRecoveryEvidencePathKey());
+        metadata.put("publicEvidenceRecoveryQueryIntents", result.getPublicEvidenceRecoveryQueryIntents() == null
+                ? List.of()
+                : result.getPublicEvidenceRecoveryQueryIntents());
         metadata.put("failureKind", result.getFailureKind());
         metadata.put("structuredBlocks", result.getStructuredBlocks() == null ? List.of() : result.getStructuredBlocks());
         metadata.put("durationMillis", result.getDurationMillis());
@@ -1712,6 +1853,221 @@ public class CollectorAgent extends BaseAgent {
             log.warn("serialize collection execution result metadata failed", exception);
             return null;
         }
+    }
+
+    /**
+     * 测试辅助入口。
+     * 这里显式暴露统一 helper，保证门禁逻辑测试和生产收口路径消费的是同一份实现。
+     */
+    public static CollectionExecutionResult applyEvidenceQualityGateForTest(EvidenceQualityGate gate,
+                                                                            CollectorNodeConfig config,
+                                                                            SourceCandidate candidate,
+                                                                            CollectionExecutionResult result) {
+        return applyEvidenceQualityGate(
+                gate,
+                buildEvidenceQualityContext(config, candidate, result),
+                result,
+                resolveCandidateScore(candidate),
+                new PublicEvidenceRecoveryService());
+    }
+
+    /**
+     * 统一门禁收口。
+     * 普通采集、prefetched audit、递归子页都必须经过这里，避免不同路径对证据质量采用不同标准。
+     */
+    private CollectionExecutionResult gateCollectionResult(CollectorNodeConfig config,
+                                                           SourceCandidate candidate,
+                                                           CollectionExecutionResult result) {
+        return applyEvidenceQualityGate(
+                evidenceQualityGate,
+                buildEvidenceQualityContext(config, candidate, result),
+                result,
+                resolveCandidateScore(candidate),
+                publicEvidenceRecoveryService);
+    }
+
+    /**
+     * 真正执行门禁评估并回写结果。
+     * 这里统一把 verdict、质量信号和封顶后的可用性得分写回 CollectionExecutionResult，供后续 audit 与落库复用。
+     */
+    private static CollectionExecutionResult applyEvidenceQualityGate(EvidenceQualityGate gate,
+                                                                      EvidenceQualityContext qualityContext,
+                                                                      CollectionExecutionResult result,
+                                                                      Double candidateScore,
+                                                                      PublicEvidenceRecoveryService publicEvidenceRecoveryService) {
+        if (gate == null || result == null) {
+            return result;
+        }
+        EvidenceQualityVerdict verdict = gate.evaluate(
+                qualityContext == null
+                        ? EvidenceQualityContext.builder().url(result.getResourceLocator()).build()
+                        : qualityContext.toBuilder().url(result.getResourceLocator()).build(),
+                result.getContent(),
+                result.getQualitySignals(),
+                candidateScore);
+        List<String> mergedSignals = new ArrayList<>();
+        if (result.getQualitySignals() != null) {
+            mergedSignals.addAll(result.getQualitySignals());
+        }
+        if (verdict.getQualitySignals() != null) {
+            mergedSignals.addAll(verdict.getQualitySignals());
+        }
+        EvidenceRepairPlan repairPlan = buildEvidenceRepairPlan(
+                publicEvidenceRecoveryService,
+                qualityContext,
+                result,
+                verdict);
+        if (repairPlan != null && repairPlan.getState() == EvidenceRepairState.REPAIR_QUERY_PROPOSED) {
+            mergedSignals.add("REPAIR_QUERY_PROPOSED");
+        }
+        return result.toBuilder()
+                .evidenceQualityVerdict(verdict)
+                .qualitySignals(mergedSignals.stream().distinct().toList())
+                .qualityScore(verdict.getEvidenceUsabilityScore())
+                .evidenceRepairPlan(repairPlan)
+                .publicEvidenceRecoveryFieldName(qualityContext == null ? null : qualityContext.getFieldName())
+                .publicEvidenceRecoveryEvidencePathKey(qualityContext == null ? null : qualityContext.getEvidencePathKey())
+                .publicEvidenceRecoveryQueryIntents(qualityContext == null || qualityContext.getCoverageQueryIntents() == null
+                        ? List.of()
+                        : qualityContext.getCoverageQueryIntents())
+                .build();
+    }
+
+    /**
+     * 将质量门禁的弱证据结论转成 repair 生命周期审计。
+     * 这里只生成公开补采候选计划，不直接访问外部网络，也不宣称替代证据已经可用。
+     */
+    private static EvidenceRepairPlan buildEvidenceRepairPlan(PublicEvidenceRecoveryService publicEvidenceRecoveryService,
+                                                              EvidenceQualityContext qualityContext,
+                                                              CollectionExecutionResult result,
+                                                              EvidenceQualityVerdict verdict) {
+        PublicEvidenceRecoveryService recoveryService = publicEvidenceRecoveryService == null
+                ? new PublicEvidenceRecoveryService()
+                : publicEvidenceRecoveryService;
+        PublicEvidenceRecoveryService.RecoveryContext recoveryContext = recoveryService.toRecoveryContext(
+                null,
+                qualityContext == null ? null : qualityContext.getSourceType(),
+                qualityContext == null ? null : qualityContext.getFieldName(),
+                qualityContext == null ? null : qualityContext.getEvidencePathKey(),
+                qualityContext == null ? List.of() : qualityContext.getCoverageQueryIntents(),
+                verdict);
+        SourceCandidate seedCandidate = SourceCandidate.builder()
+                .url(result == null ? null : result.getResourceLocator())
+                .sourceType(qualityContext == null ? null : qualityContext.getSourceType())
+                .sourceUrls(result == null || result.getSourceUrls() == null ? List.of() : result.getSourceUrls())
+                .qualitySignals(result == null || result.getQualitySignals() == null ? List.of() : result.getQualitySignals())
+                .build();
+        PublicEvidenceRecoveryService.RecoveryPlan recoveryPlan = recoveryService.planRecovery(
+                recoveryContext,
+                StringUtils.hasText(seedCandidate.getUrl()) ? List.of(seedCandidate) : List.of(),
+                List.of());
+        return EvidenceRepairPlan.builder()
+                .state(recoveryPlan.triggered()
+                        ? EvidenceRepairState.REPAIR_QUERY_PROPOSED
+                        : EvidenceRepairState.REPAIR_NOT_REQUIRED)
+                .reason(recoveryPlan.reason())
+                .sourceUrl(result == null ? null : result.getResourceLocator())
+                .repairQueries(recoveryPlan.candidates() == null
+                        ? List.of()
+                        : recoveryPlan.candidates().stream()
+                        .map(SourceCandidate::getUrl)
+                        .filter(StringUtils::hasText)
+                        .toList())
+                .candidateUrls(recoveryPlan.candidates() == null
+                        ? List.of()
+                        : recoveryPlan.candidates().stream()
+                        .map(SourceCandidate::getUrl)
+                        .filter(StringUtils::hasText)
+                        .toList())
+                .promotedUrls(List.of())
+                .build();
+    }
+
+    /**
+     * 构建质量上下文时优先使用 01 阶段已经落到节点配置中的 coverage 轻量视图。
+     * 这样 02 能先落地，不依赖后续字段级 evidence path 规划全部完成。
+     */
+    private static EvidenceQualityContext buildEvidenceQualityContext(CollectorNodeConfig config,
+                                                                      SourceCandidate candidate,
+                                                                      CollectionExecutionResult result) {
+        String effectiveSourceType = candidate != null && StringUtils.hasText(candidate.getSourceType())
+                ? candidate.getSourceType()
+                : (result == null ? null : result.getExecutorType());
+        return EvidenceQualityContext.builder()
+                .url(result == null ? null : result.getResourceLocator())
+                .sourceType(effectiveSourceType)
+                .fieldName(resolveRecoveryFieldName(config))
+                .evidencePathKey(resolveRecoveryEvidencePathKey(config))
+                .requiredCoverageFields(config == null || config.getRequiredCoverageFields() == null
+                        ? List.of()
+                        : config.getRequiredCoverageFields())
+                .blockingCoverageFields(config == null || config.getBlockingCoverageFields() == null
+                        ? List.of()
+                        : config.getBlockingCoverageFields())
+                .coverageQueryIntents(config == null || config.getCoverageQueryIntents() == null
+                        ? resolveRecoveryQueryIntents(config)
+                        : config.getCoverageQueryIntents())
+                .expectedSignals(resolveExpectedSignals(config, effectiveSourceType))
+                .build();
+    }
+
+    private static String resolveRecoveryFieldName(CollectorNodeConfig config) {
+        if (config == null) {
+            return null;
+        }
+        if (StringUtils.hasText(config.getRecoveryFieldName())) {
+            return config.getRecoveryFieldName();
+        }
+        return resolvePrimaryCoverageField(config);
+    }
+
+    private static String resolveRecoveryEvidencePathKey(CollectorNodeConfig config) {
+        return config == null ? null : config.getRecoveryEvidencePathKey();
+    }
+
+    private static List<String> resolveRecoveryQueryIntents(CollectorNodeConfig config) {
+        if (config == null) {
+            return List.of();
+        }
+        if (config.getRecoveryQueryIntents() != null && !config.getRecoveryQueryIntents().isEmpty()) {
+            return config.getRecoveryQueryIntents();
+        }
+        return config.getCoverageQueryIntents() == null ? List.of() : config.getCoverageQueryIntents();
+    }
+
+    private static String resolvePrimaryCoverageField(CollectorNodeConfig config) {
+        if (config == null || config.getRequiredCoverageFields() == null || config.getRequiredCoverageFields().isEmpty()) {
+            return null;
+        }
+        return config.getRequiredCoverageFields().size() == 1 ? config.getRequiredCoverageFields().get(0) : null;
+    }
+
+    /**
+     * 过渡期 expectedSignals 的解析策略。
+     * 如果当前节点已经带上 query intents，就让 EvidenceQualityGate 根据 intents 自己推导；否则再回退到 sourceType 级启发式。
+     */
+    private static List<String> resolveExpectedSignals(CollectorNodeConfig config, String sourceType) {
+        if (config != null && config.getCoverageQueryIntents() != null && !config.getCoverageQueryIntents().isEmpty()) {
+            return List.of();
+        }
+        if ("PRICING".equalsIgnoreCase(sourceType)) {
+            return List.of("计费", "定价", "免费配额", "billing", "pricing");
+        }
+        if ("DOCS".equalsIgnoreCase(sourceType) || "OFFICIAL".equalsIgnoreCase(sourceType)) {
+            return List.of("API", "SDK", "文档", "开发者", "developer");
+        }
+        return List.of();
+    }
+
+    /**
+     * 分数矛盾必须使用候选排名分，而不是已经被门禁改写后的 collection result 分数。
+     * 因此这里对 candidate.totalScore 做一次安全读取，没有有效候选分时返回 null。
+     */
+    private static Double resolveCandidateScore(SourceCandidate candidate) {
+        if (candidate == null || candidate.getTotalScore() <= 0D) {
+            return null;
+        }
+        return candidate.getTotalScore();
     }
 
     /**

@@ -42,6 +42,8 @@ public class CollectedDocument {
     /** 失败原因，仅 success=false 时有值 */
     private String errorMessage;
 
+    private String persistenceFailureReason;
+
     /** 当前文档可回指的来源链接集合 */
     private List<String> sourceUrls;
 

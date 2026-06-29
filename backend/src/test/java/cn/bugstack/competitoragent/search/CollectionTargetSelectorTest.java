@@ -164,4 +164,125 @@ class CollectionTargetSelectorTest {
                 .filter(candidate -> "SELECTED".equals(candidate.getSelectionStage()))
                 .count());
     }
+
+    @Test
+    void shouldNotSelectUnverifiedSearchMediatorWhenSupplementVerificationSkipped() {
+        SourceCandidate plannedCandidate = SourceCandidate.builder()
+                .url("https://app.bilibili.com")
+                .title("哔哩哔哩下载中心")
+                .sourceType("OFFICIAL")
+                .discoveryMethod("DIRECT_LOCATOR")
+                .verified(Boolean.FALSE)
+                .selectionStage("DISCARDED")
+                .verificationReason("页面已打开，但未命中 OFFICIAL 所需特征")
+                .totalScore(0.87)
+                .build();
+        SourceCandidate baiduMediator = SourceCandidate.builder()
+                .url("https://aiqicha.baidu.com/feedback/official?from=baidu&type=gw")
+                .title("官网认证")
+                .sourceType("OFFICIAL")
+                .discoveryMethod("BROWSER")
+                .providerKey("browser")
+                .domain("aiqicha.baidu.com")
+                .reason("浏览器搜索命中百度官网认证页，正文摘要包含官网认证增值服务说明")
+                .verified(null)
+                .selectionStage("SUPPLEMENTED")
+                .totalScore(0.84)
+                .build();
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                List.of(plannedCandidate, baiduMediator),
+                Map.of(),
+                1
+        );
+
+        assertTrue(decision.getSelectedTargets().isEmpty());
+        assertEquals(List.of("https://aiqicha.baidu.com/feedback/official?from=baidu&type=gw"),
+                decision.getDiscardedCandidates().stream().map(SourceCandidate::getUrl).toList());
+        assertTrue(decision.getDiscardedCandidates().get(0).getSelectionReason().contains("未验证"));
+    }
+
+    @Test
+    void shouldAllowExplicitCandidateWithRecoveredPublicShellWhenNoVerifiedTargetExists() {
+        SourceCandidate loginGateCandidate = SourceCandidate.builder()
+                .url("https://docs.example.com/login")
+                .title("Example Docs Login")
+                .sourceType("DOCS")
+                .discoveryMethod("DIRECT_LOCATOR")
+                .providerKey("planned")
+                .sourceUrls(List.of("https://docs.example.com/login"))
+                .qualitySignals(List.of("LOGIN_GATE_PARTIAL", "PUBLIC_SHELL_ONLY"))
+                .selectionStage("PARTIAL_PUBLIC_SHELL")
+                .verified(Boolean.FALSE)
+                .totalScore(0.42)
+                .build();
+
+        Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
+        attemptedTargets.put(loginGateCandidate.getUrl(), SearchCollectionTarget.builder()
+                .candidate(loginGateCandidate)
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url(loginGateCandidate.getUrl())
+                        .title("Example Docs Login")
+                        .content("Example Docs public shell. Product documentation login page.")
+                        .snippet("Example Docs public shell")
+                        .metadata("{\"qualitySignals\":[\"LOGIN_GATE_PARTIAL\",\"PUBLIC_SHELL_ONLY\"]}")
+                        .success(true)
+                        .build())
+                .build());
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                List.of(loginGateCandidate),
+                attemptedTargets,
+                1
+        );
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        assertEquals("https://docs.example.com/login",
+                decision.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertTrue(decision.getSelectedTargets().get(0).getCandidate().getSelectionSummary()
+                .contains("公开壳信息"));
+    }
+
+    @Test
+    void shouldAllowExplicitCandidateWithUsablePublicPageEvenWhenVerificationMarkedDiscarded() {
+        SourceCandidate explicitCandidate = SourceCandidate.builder()
+                .url("https://app.bilibili.com")
+                .title("哔哩哔哩下载中心")
+                .sourceType("OFFICIAL")
+                .discoveryMethod("DIRECT_LOCATOR")
+                .providerKey("planned")
+                .sourceUrls(List.of("https://app.bilibili.com"))
+                .verified(Boolean.FALSE)
+                .selectionStage("DISCARDED")
+                .verificationReason("页面已打开，但未命中 OFFICIAL 所需特征")
+                .totalScore(0.87)
+                .build();
+
+        Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
+        attemptedTargets.put(explicitCandidate.getUrl(), SearchCollectionTarget.builder()
+                .candidate(explicitCandidate)
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url(explicitCandidate.getUrl())
+                        .title("哔哩哔哩下载中心")
+                        .content("哔哩哔哩下载中心，提供安卓版、iPhone 版、PC 客户端和 TV 版下载。")
+                        .snippet("哔哩哔哩下载中心")
+                        .metadata("{\"collector\":\"http\"}")
+                        .success(true)
+                        .build())
+                .build());
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                List.of(explicitCandidate),
+                attemptedTargets,
+                1
+        );
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        assertEquals("https://app.bilibili.com",
+                decision.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertEquals("SELECTED",
+                decision.getSelectedTargets().get(0).getCandidate().getSelectionStage());
+        assertTrue(decision.getSelectedTargets().get(0).getCandidate().getSelectionSummary()
+                .contains("公开正文"));
+    }
 }

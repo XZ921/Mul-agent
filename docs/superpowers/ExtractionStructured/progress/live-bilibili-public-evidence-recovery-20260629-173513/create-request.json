@@ -1,0 +1,21 @@
+{
+    "reportTemplate":  "标准版",
+    "competitorNames":  [
+                            "哔哩哔哩"
+                        ],
+    "competitorUrls":  [
+                           "https://app.bilibili.com"
+                       ],
+    "reportLanguage":  "中文",
+    "subjectProduct":  "视频社区与内容平台",
+    "sourceScope":  [
+                        "官网"
+                    ],
+    "analysisDimensions":  [
+                               "产品功能",
+                               "目标用户",
+                               "市场定位",
+                               "证据完整性"
+                           ],
+    "taskName":  "有效公开信息补采 live 验收 - 哔哩哔哩下载中心"
+}

@@ -76,6 +76,7 @@ public class PlaywrightPageCollector implements SourceCollector {
     private final AntiBotSignalDetector antiBotSignalDetector;
     private final BrowserRuntimeDiagnosticLogger diagnosticLogger;
     private final CanonicalUrlResolver canonicalUrlResolver;
+    private final PublicShellRecoveryExtractor publicShellRecoveryExtractor;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .followRedirects(HttpClient.Redirect.NORMAL)
@@ -94,7 +95,8 @@ public class PlaywrightPageCollector implements SourceCollector {
                 browserFailureClassifier,
                 antiBotSignalDetector,
                 diagnosticLogger,
-                new CanonicalUrlResolver());
+                new CanonicalUrlResolver(),
+                new PublicShellRecoveryExtractor());
     }
 
     public PlaywrightPageCollector(PlaywrightBrowserManager browserManager,
@@ -104,6 +106,24 @@ public class PlaywrightPageCollector implements SourceCollector {
                                    AntiBotSignalDetector antiBotSignalDetector,
                                    BrowserRuntimeDiagnosticLogger diagnosticLogger,
                                    CanonicalUrlResolver canonicalUrlResolver) {
+        this(browserManager,
+                collectorProperties,
+                fallbackPolicy,
+                browserFailureClassifier,
+                antiBotSignalDetector,
+                diagnosticLogger,
+                canonicalUrlResolver,
+                new PublicShellRecoveryExtractor());
+    }
+
+    public PlaywrightPageCollector(PlaywrightBrowserManager browserManager,
+                                   CollectorProperties collectorProperties,
+                                   SearchRuntimeFallbackPolicy fallbackPolicy,
+                                   BrowserFailureClassifier browserFailureClassifier,
+                                   AntiBotSignalDetector antiBotSignalDetector,
+                                   BrowserRuntimeDiagnosticLogger diagnosticLogger,
+                                   CanonicalUrlResolver canonicalUrlResolver,
+                                   PublicShellRecoveryExtractor publicShellRecoveryExtractor) {
         this.browserManager = browserManager;
         this.collectorProperties = collectorProperties;
         this.fallbackPolicy = fallbackPolicy;
@@ -111,6 +131,9 @@ public class PlaywrightPageCollector implements SourceCollector {
         this.antiBotSignalDetector = antiBotSignalDetector;
         this.diagnosticLogger = diagnosticLogger;
         this.canonicalUrlResolver = canonicalUrlResolver;
+        this.publicShellRecoveryExtractor = publicShellRecoveryExtractor == null
+                ? new PublicShellRecoveryExtractor()
+                : publicShellRecoveryExtractor;
     }
 
     public PlaywrightPageCollector(PlaywrightBrowserManager browserManager,
@@ -461,6 +484,18 @@ public class PlaywrightPageCollector implements SourceCollector {
         PageContentExtractionResult extractionResult = PageContentExtractionSupport.extract(page, sourceType);
         String content = extractionResult == null ? null : extractionResult.getMainContent();
         if (content == null || content.isBlank()) {
+            CollectedPage recoveredShell = tryRecoverPublicShell(
+                    url,
+                    competitorName,
+                    sourceType,
+                    page,
+                    title,
+                    content,
+                    null
+            );
+            if (recoveredShell != null) {
+                return recoveredShell;
+            }
             return failed(url, competitorName, sourceType, "Playwright content empty");
         }
         AntiBotDetectionResult detection = antiBotSignalDetector.detect(BrowserSignalSnapshot.builder()
@@ -472,6 +507,18 @@ public class PlaywrightPageCollector implements SourceCollector {
                 .missingPrimaryResults(false)
                 .bodyTooShort(false)
                 .build());
+        CollectedPage recoveredShell = tryRecoverPublicShell(
+                url,
+                competitorName,
+                sourceType,
+                page,
+                title,
+                content,
+                detection
+        );
+        if (recoveredShell != null) {
+            return recoveredShell;
+        }
         if (detection.isBlocked()) {
             BrowserFailureDecision decision = browserFailureClassifier.classify(null, detection);
             String failureCode = resolveFailureCode(decision, null);
@@ -496,6 +543,42 @@ public class PlaywrightPageCollector implements SourceCollector {
                 fallbackReason == null ? "playwright" : "playwright; fallbackReason=" + fallbackReason,
                 request,
                 extractionResult);
+    }
+
+    /**
+     * 公开壳恢复只在 utility gate / blocked 页面触发，
+     * 成功时返回降级证据，失败时对真正 blocked 页面继续沿用原失败契约。
+     */
+    private CollectedPage tryRecoverPublicShell(String url,
+                                                String competitorName,
+                                                String sourceType,
+                                                Page page,
+                                                String title,
+                                                String content,
+                                                AntiBotDetectionResult detection) {
+        String finalUrl = page == null ? url : page.url();
+        if (!publicShellRecoveryExtractor.shouldAttemptRecovery(finalUrl, title, content, detection)) {
+            return null;
+        }
+        CollectedPage recoveredShell = publicShellRecoveryExtractor.recover(
+                page,
+                url,
+                competitorName,
+                sourceType,
+                detection
+        );
+        if (recoveredShell != null && recoveredShell.isSuccess()) {
+            log.warn("页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url={}, title={}",
+                    UrlSecurityUtils.maskForLog(url), recoveredShell.getTitle());
+            return recoveredShell;
+        }
+        if (detection != null && detection.isBlocked()) {
+            return null;
+        }
+        return failed(url,
+                competitorName,
+                sourceType,
+                recoveredShell == null ? "公开壳信息不足，不能作为降级证据" : recoveredShell.getErrorMessage());
     }
 
     /**
@@ -545,6 +628,15 @@ public class PlaywrightPageCollector implements SourceCollector {
                     UrlSecurityUtils.maskForLog(url), recoveryException.getMessage());
             return null;
         }
+    }
+
+    CollectedPage extractRenderedPageForTest(String url,
+                                             String competitorName,
+                                             String sourceType,
+                                             String fallbackReason,
+                                             SourceCollectRequest request,
+                                             Page page) {
+        return extractRenderedPage(url, competitorName, sourceType, fallbackReason, request, page);
     }
 
     private void closePageQuietly(Page page, String scene) {

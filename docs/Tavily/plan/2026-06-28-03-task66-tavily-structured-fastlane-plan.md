@@ -1,177 +1,47 @@
-﻿# 03 Task 66 Tavily 结构化与查询翻译实施计划
+# 03 Task 66 Tavily 结构化块与 Fast-Lane 审计实施计划
 
 > **给 agentic workers：** 必须使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 按任务逐步执行本计划。步骤使用 checkbox（`- [ ]`）语法跟踪。
 
-**目标：** 让 Tavily 预抓正文产出可用结构化块，补齐 fast-lane 消费审计，并新增字段证据路径到 Tavily query 的显式翻译层，避免底层来源家族查询把系统拉回 sourceType-first。
+**目标：** 让 `TavilyPrefetchedExecutor` 产出可解释的结构化块，并补齐 `prefetchedContentRef -> TAVILY_PREFETCHED -> collection result -> evidence_source metadata` 的可追踪消费审计。
 
-**架构：** 新增 `FieldEvidenceQueryPlanner` 把 `fieldName / evidencePathKey / queryIntent / sourceTypes` 翻译成具体 Tavily 查询；`TavilySearchProfileResolver` 只作为来源家族和 query intent 的底层表达式工具。新增 `TavilyPrefetchedContentBlockClassifier`，由 `TavilyPrefetchedExecutor` 调用；分类器只有在段落级证据通过防噪门槛时才输出结构化块。fast-lane 审计元数据通过质量信号和结构化 payload 写入 `CollectionExecutionResult`。
+**架构：** 本阶段只做两件事：一是新增轻量 `TavilyPrefetchedContentBlockClassifier`，在正文段落通过防噪门槛时生成 `StructuredContentBlock`；二是让 `TavilyPrefetchedExecutor` 把结构化块数量、预抓正文引用和消费阶段写入 `structuredPayload / qualitySignals`。`02` 已经落地 `EvidenceQualityGate` 和 `evidenceQualityVerdict`，因此 `03` 不再重复实现“导航壳 / 鉴权墙 / 根入口弱正文”的最终门禁，也不允许用结构化块数量直接抬高最终报告级可用性分。
 
-**技术栈：** Java 17、现有 Tavily registry/executor 类、采集结构化块、JUnit 5、AssertJ。
+**技术栈：** Java 17、现有 Tavily registry/executor、StructuredContentBlock、JUnit 5、AssertJ、Maven。
+
+---
+
+## 与 02 阶段对齐说明
+
+- `02` 已经把 `EvidenceQualityGate` 挂到 `CollectorAgent` 的统一收口路径，并新增了 `CollectionExecutionResult.evidenceQualityVerdict`。
+- 因此 `03` 的 `TavilyPrefetchedExecutor` 只负责输出：
+  - `structuredBlocks`
+  - `TAVILY_STRUCTURED_BLOCK_COUNT`
+  - `structuredPayload.prefetchedContentRef / primaryTool / failureStage`
+- `03` 不能自己重新定义最终 `qualityScore` 语义。Tavily executor 仍可保留 Tavily 原始候选分或默认分，但最终“是否可用于报告”的封顶与负信号解释，仍由 `02` 的 `EvidenceQualityGate` 收口。
+- `02` 运行结果已经证明：当前 Collector/Tavily fast-lane 路径还没有稳定拿到字段级 `fieldName / evidencePathKey / expectedSignals` 上下文，只拿到了节点级 `requiredCoverageFields / blockingCoverageFields / coverageQueryIntents` 轻量视图。
+- 因此原计划中“`FieldEvidenceQueryPlanner` 把字段证据路径翻译成 Tavily query”的部分，当前阶段会变成脱离主链路的前置设计，不能作为 `03` 的交付物。该能力应后移到 `04` 或后续 field-first recovery 阶段，再与 `RecoveryContext`、`PublicEvidenceRecoveryService` 一起实现。
 
 ---
 
 ## 文件结构
 
-- 新建： `backend/src/main/java/cn/bugstack/competitoragent/search/FieldEvidenceQueryPlan.java`
-- 新建： `backend/src/main/java/cn/bugstack/competitoragent/search/FieldEvidenceQueryPlanner.java`
 - 新建： `backend/src/main/java/cn/bugstack/competitoragent/collection/TavilyPrefetchedContentBlockClassifier.java`
 - 修改： `backend/src/main/java/cn/bugstack/competitoragent/collection/TavilyPrefetchedExecutor.java`
-- 修改： `backend/src/main/java/cn/bugstack/competitoragent/collection/CollectionExecutionResult.java`
-- 测试： `backend/src/test/java/cn/bugstack/competitoragent/search/FieldEvidenceQueryPlannerTest.java`
 - 测试： `backend/src/test/java/cn/bugstack/competitoragent/collection/TavilyPrefetchedContentBlockClassifierTest.java`
 - 测试： `backend/src/test/java/cn/bugstack/competitoragent/collection/TavilyPrefetchedExecutorTest.java`
 - 测试： `backend/src/test/java/cn/bugstack/competitoragent/collection/TavilyFastLaneAuditContractTest.java`
 
 ---
 
-### Task 1: 字段证据路径到 Tavily Query 的翻译层
-
-**文件：**
-- 新建： `backend/src/main/java/cn/bugstack/competitoragent/search/FieldEvidenceQueryPlan.java`
-- 新建： `backend/src/main/java/cn/bugstack/competitoragent/search/FieldEvidenceQueryPlanner.java`
-- 测试： `backend/src/test/java/cn/bugstack/competitoragent/search/FieldEvidenceQueryPlannerTest.java`
-
-**规则：**
-
-Tavily 底层仍然按 `OFFICIAL / DOCS / PRICING / NEWS / REVIEW` 等来源家族工作，但上层必须由字段证据路径驱动。任何新链路不得直接把 `sourceType` 传给 Tavily 查询构造器后结束，必须先生成 `FieldEvidenceQueryPlan`。
-
-- [ ] **步骤 1：编写 pricing 字段路径翻译测试**
-
-创建 `FieldEvidenceQueryPlannerTest.java`：
-
-```java
-package cn.bugstack.competitoragent.search;
-
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
-class FieldEvidenceQueryPlannerTest {
-
-    private final FieldEvidenceQueryPlanner planner = new FieldEvidenceQueryPlanner();
-
-    @Test
-    void shouldTranslatePricingDocsPathIntoFieldAwareTavilyQueries() {
-        List<FieldEvidenceQueryPlan> plans = planner.planQueries(
-                "抖音开放平台",
-                "pricing",
-                "DOCS_BILLING_OR_LIMITS",
-                List.of("DOCS_BILLING", "API_LIMITS"),
-                List.of("DOCS", "OFFICIAL"),
-                "zh-CN");
-
-        assertThat(plans).anySatisfy(plan -> {
-            assertThat(plan.getFieldName()).isEqualTo("pricing");
-            assertThat(plan.getEvidencePathKey()).isEqualTo("DOCS_BILLING_OR_LIMITS");
-            assertThat(plan.getQueryIntent()).isEqualTo("DOCS_BILLING");
-            assertThat(plan.getSourceType()).isEqualTo("DOCS");
-            assertThat(plan.getQuery()).contains("抖音开放平台", "计费");
-            assertThat(plan.getReason()).contains("字段证据路径");
-        });
-    }
-}
-```
-
-- [ ] **步骤 2：新增查询计划模型**
-
-创建 `FieldEvidenceQueryPlan.java`：
-
-```java
-package cn.bugstack.competitoragent.search;
-
-import lombok.Builder;
-import lombok.Value;
-
-@Value
-@Builder(toBuilder = true)
-public class FieldEvidenceQueryPlan {
-
-    String fieldName;
-    String evidencePathKey;
-    String queryIntent;
-    String sourceType;
-    String query;
-    String locale;
-    String reason;
-}
-```
-
-- [ ] **步骤 3：新增查询翻译器**
-
-创建 `FieldEvidenceQueryPlanner.java`：
-
-```java
-package cn.bugstack.competitoragent.search;
-
-import org.springframework.stereotype.Component;
-
-import java.util.ArrayList;
-import java.util.List;
-
-@Component
-public class FieldEvidenceQueryPlanner {
-
-    public List<FieldEvidenceQueryPlan> planQueries(String competitorName,
-                                                    String fieldName,
-                                                    String evidencePathKey,
-                                                    List<String> queryIntents,
-                                                    List<String> sourceTypes,
-                                                    String locale) {
-        List<FieldEvidenceQueryPlan> plans = new ArrayList<>();
-        for (String queryIntent : queryIntents == null ? List.<String>of() : queryIntents) {
-            for (String sourceType : sourceTypes == null ? List.<String>of() : sourceTypes) {
-                plans.add(FieldEvidenceQueryPlan.builder()
-                        .fieldName(fieldName)
-                        .evidencePathKey(evidencePathKey)
-                        .queryIntent(queryIntent)
-                        .sourceType(sourceType)
-                        .locale(locale)
-                        .query(buildQuery(competitorName, fieldName, evidencePathKey, queryIntent, sourceType))
-                        .reason("由字段证据路径翻译为 Tavily 查询，避免直接按 sourceType 搜索")
-                        .build());
-            }
-        }
-        return plans;
-    }
-
-    private String buildQuery(String competitorName,
-                              String fieldName,
-                              String evidencePathKey,
-                              String queryIntent,
-                              String sourceType) {
-        String base = competitorName == null ? "" : competitorName;
-        if ("pricing".equalsIgnoreCase(fieldName) || contains(queryIntent, "BILLING")) {
-            return base + " 计费 收费 定价 套餐 " + sourceType;
-        }
-        if (contains(queryIntent, "API") || contains(evidencePathKey, "DOCS")) {
-            return base + " API SDK 开发文档 " + sourceType;
-        }
-        return base + " " + fieldName + " " + queryIntent + " " + sourceType;
-    }
-
-    private boolean contains(String value, String expected) {
-        return value != null && expected != null && value.toUpperCase().contains(expected.toUpperCase());
-    }
-}
-```
-
-- [ ] **步骤 4：运行翻译层测试**
-
-运行：
-
-```powershell
-mvn -pl backend -Dtest=FieldEvidenceQueryPlannerTest test
-```
-
-预期：测试通过，且查询计划中包含 `fieldName / evidencePathKey / queryIntent / sourceType / query / reason`。
-
-### Task 2: Tavily 结构化块分类器
+### Task 1: Tavily 结构化块分类器
 
 **文件：**
 - 新建： `backend/src/main/java/cn/bugstack/competitoragent/collection/TavilyPrefetchedContentBlockClassifier.java`
 - 测试： `backend/src/test/java/cn/bugstack/competitoragent/collection/TavilyPrefetchedContentBlockClassifierTest.java`
+
+**规则：**
+
+`TavilyPrefetchedContentBlockClassifier` 是轻量规则分类器，不承担完整页面理解。它必须优先防误判：当定价、配额或调用次数使用隐含表达时，可以漏判为 `NO_STRUCTURED_BLOCKS`，后续由 `04/05` 的字段证据路径和 repair 承接；不能为了提高召回，把导航壳、登录注册入口或泛化配额文字误标为 `PRICING_BLOCK`。
 
 - [ ] **步骤 1：编写正向和防噪测试**
 
@@ -209,11 +79,23 @@ class TavilyPrefetchedContentBlockClassifierTest {
     @Test
     void shouldNotCreateDeveloperBlockFromNavigationShell() {
         List<StructuredContentBlock> blocks = classifier.classify("""
-                主站 开放平台 开平文档中心 开平管理中心 账号管理 应用管理 授权管理
+                主站 开放平台 文档中心 管理中心 账号管理 应用管理 授权管理
                 登录 注册 立即加入 帮助中心 联系我们 友情链接
                 """);
 
         assertThat(blocks).isEmpty();
+    }
+
+    @Test
+    void shouldPreferRepairOverPricingBlockForImplicitQuotaWording() {
+        List<StructuredContentBlock> blocks = classifier.classify("""
+                开发者权益说明
+                开放平台为开发者提供接口调用能力。开发者每天享有 10000 次免费配额，
+                超出后的使用安排以平台后续通知和控制台展示为准。
+                """);
+
+        assertThat(blocks).extracting(StructuredContentBlock::getBlockType)
+                .doesNotContain("PRICING_BLOCK");
     }
 }
 ```
@@ -223,7 +105,7 @@ class TavilyPrefetchedContentBlockClassifierTest {
 运行：
 
 ```powershell
-mvn -pl backend -Dtest=TavilyPrefetchedContentBlockClassifierTest test
+mvn -pl backend "-Dtest=TavilyPrefetchedContentBlockClassifierTest" test
 ```
 
 预期：编译失败，因为分类器尚不存在。
@@ -314,25 +196,31 @@ public class TavilyPrefetchedContentBlockClassifier {
 }
 ```
 
+注意：不要把“免费配额、调用次数、额度”等词直接加入 `PRICING_BLOCK` 第一版关键词列表。它们可能表达定价、限流、开发者权益或普通功能说明，误判风险高；该缺口留给后续 repair 处理。
+
 - [ ] **步骤 4：运行分类器测试**
 
 运行：
 
 ```powershell
-mvn -pl backend -Dtest=TavilyPrefetchedContentBlockClassifierTest test
+mvn -pl backend "-Dtest=TavilyPrefetchedContentBlockClassifierTest" test
 ```
 
-预期：测试通过。
+预期：测试通过，并且隐含配额表达不会被误标为 `PRICING_BLOCK`。
 
-### Task 3: 在 TavilyPrefetchedExecutor 中使用分类器
+### Task 2: 在 TavilyPrefetchedExecutor 中产出结构化块
 
 **文件：**
 - 修改： `backend/src/main/java/cn/bugstack/competitoragent/collection/TavilyPrefetchedExecutor.java`
 - 测试： `backend/src/test/java/cn/bugstack/competitoragent/collection/TavilyPrefetchedExecutorTest.java`
 
+**规则：**
+
+`TavilyPrefetchedExecutor` 的职责是消费 registry 中的已缓存正文，并把正文、结构化块和消费审计元数据落到统一 `CollectionExecutionResult`。它不负责最终报告级质量封顶；`02` 的 `EvidenceQualityGate` 会在 Collector 收口时继续处理。
+
 - [ ] **步骤 1：增加 executor 结构化块测试**
 
-追加以下测试到 `backend/src/test/java/cn/bugstack/competitoragent/collection/TavilyPrefetchedExecutorTest.java`：
+追加以下测试到 `TavilyPrefetchedExecutorTest.java`：
 
 ```java
 @Test
@@ -367,6 +255,7 @@ void shouldEmitStructuredBlocksForDeveloperDocsRawContent() {
     assertThat(result.isSuccess()).isTrue();
     assertThat(result.getExecutorType()).isEqualTo("TAVILY_PREFETCHED");
     assertThat(result.getQualitySignals()).contains("TAVILY_RAW_CONTENT_READY", "TAVILY_PREFETCHED_CONTENT_CONSUMED");
+    assertThat(result.getQualitySignals()).contains("TAVILY_STRUCTURED_BLOCK_COUNT=1");
     assertThat(result.getStructuredBlocks()).extracting(StructuredContentBlock::getBlockType)
             .contains("DEVELOPER_DOCS_BLOCK");
 }
@@ -390,7 +279,7 @@ public TavilyPrefetchedExecutor(TavilyPrefetchedContentRegistry registry,
 }
 ```
 
-- [ ] **步骤 3：在成功结果中使用分类器**
+- [ ] **步骤 3：在成功结果中使用分类器与审计信号**
 
 在构造成功结果前新增：
 
@@ -407,25 +296,35 @@ qualitySignals.add("TAVILY_STRUCTURED_BLOCK_COUNT=" + structuredBlocks.size());
 
 ```java
 .qualitySignals(qualitySignals)
+.qualityScore(resolveQualityScore(content))
 .structuredBlocks(structuredBlocks)
 ```
+
+要求：
+
+- 不要在这里根据 `structuredBlocks.size()` 直接提高 `qualityScore`
+- 不要在这里重复写 `AUTH_GATE_DETECTED / ROOT_ENTRY_WEAK_CONTENT` 这类最终门禁信号
+- 这些最终解释应继续由 `CollectorAgent -> EvidenceQualityGate` 负责
 
 - [ ] **步骤 4：运行 executor 测试**
 
 运行：
 
 ```powershell
-mvn -pl backend -Dtest=TavilyPrefetchedExecutorTest,TavilyPrefetchedContentBlockClassifierTest test
+mvn -pl backend "-Dtest=TavilyPrefetchedExecutorTest,TavilyPrefetchedContentBlockClassifierTest" test
 ```
 
 预期：测试通过。
 
-### Task 4: Fast-Lane 审计契约
+### Task 3: Fast-Lane 消费审计契约
 
 **文件：**
-- 修改：`backend/src/main/java/cn/bugstack/competitoragent/collection/TavilyPrefetchedExecutor.java`
-- 修改：`backend/src/main/java/cn/bugstack/competitoragent/collection/CollectionExecutionResult.java`
-- 测试：`backend/src/test/java/cn/bugstack/competitoragent/collection/TavilyFastLaneAuditContractTest.java`
+- 修改： `backend/src/main/java/cn/bugstack/competitoragent/collection/TavilyPrefetchedExecutor.java`
+- 测试： `backend/src/test/java/cn/bugstack/competitoragent/collection/TavilyFastLaneAuditContractTest.java`
+
+**规则：**
+
+本阶段的 fast-lane 审计关注“预抓正文是否被消费，以及消费后是否能沿 `structuredPayload / metadata` 继续追溯”，不是重新实现搜索阶段的 `TavilyFastLaneAudit` 汇总对象。
 
 - [ ] **步骤 1：编写审计契约测试**
 
@@ -473,10 +372,29 @@ class TavilyFastLaneAuditContractTest {
         assertThat(result.getStructuredPayload()).containsEntry("primaryTool", "TAVILY_PREFETCHED");
         assertThat(result.getStructuredPayload()).containsKey("structuredBlockCount");
     }
+
+    @Test
+    void shouldExposeFailureStageWhenPrefetchedContentMissing() {
+        CollectionExecutionResult result = new TavilyPrefetchedExecutor(
+                new TavilyPrefetchedContentRegistry(),
+                new TavilyPrefetchedContentBlockClassifier())
+                .execute(CollectionTaskPackage.builder()
+                        .packageKey("collect#002")
+                        .targetIndex(2)
+                        .primaryTool("TAVILY_PREFETCHED")
+                        .resourceLocator("https://open.example.com/docs/api")
+                        .prefetchedContentRef("missing-ref")
+                        .sourceUrls(List.of("https://open.example.com/docs/api"))
+                        .build());
+
+        assertThat(result.isSuccess()).isFalse();
+        assertThat(result.getStructuredPayload()).containsEntry("failureStage", "TAVILY_PREFETCHED_CONSUME");
+        assertThat(result.getStructuredPayload()).containsEntry("primaryTool", "TAVILY_PREFETCHED");
+    }
 }
 ```
 
-- [ ] **步骤 2：在 executor 中增加结构化 payload**
+- [ ] **步骤 2：在成功结果中增加结构化 payload**
 
 在成功结果 builder 中增加：
 
@@ -491,9 +409,9 @@ class TavilyFastLaneAuditContractTest {
 
 引入 `java.util.Map`。
 
-- [ ] **步骤 3：增加失败审计 metadata**
+- [ ] **步骤 3：在失败结果中增加失败审计 payload**
 
-在 `buildFailureResult` 中设置 `structuredPayload`：
+在 `buildFailureResult` 中设置：
 
 ```java
 .structuredPayload(taskPackage == null ? Map.of() : Map.of(
@@ -508,7 +426,33 @@ class TavilyFastLaneAuditContractTest {
 运行：
 
 ```powershell
-mvn -pl backend -Dtest=TavilyPrefetchedContentBlockClassifierTest,TavilyPrefetchedExecutorTest,TavilyFastLaneAuditContractTest test
+mvn -pl backend "-Dtest=TavilyPrefetchedContentBlockClassifierTest,TavilyPrefetchedExecutorTest,TavilyFastLaneAuditContractTest" test
 ```
 
 预期：测试通过。
+
+---
+
+## 本阶段暂不做
+
+- 暂不在 `03` 引入 `FieldEvidenceQueryPlanner / FieldEvidenceQueryPlan`
+- 暂不把 `fieldName / evidencePathKey / expectedSignals` 直接下发到 Tavily fast-lane
+- 暂不让 `TavilyPrefetchedExecutor` 自己做最终证据质量封顶
+- 暂不把 Tavily 结构化块扩展成复杂页面理解器；第一版只做轻量规则分类
+
+---
+
+## 03 完成标准（修订后）
+
+- `TavilyPrefetchedExecutor` 不再固定输出 `structuredBlocks=[]`
+- 结构化块分类具备防噪规则，导航壳与隐含配额表达不会被轻易误标
+- 成功消费的预抓正文会输出：
+  - `TAVILY_RAW_CONTENT_READY`
+  - `TAVILY_PREFETCHED_CONTENT_CONSUMED`
+  - `TAVILY_STRUCTURED_BLOCK_COUNT=N`
+- `structuredPayload` 能追踪：
+  - `prefetchedContentRef`
+  - `prefetchedRawContentLength`
+  - `primaryTool`
+  - `structuredBlockCount` 或 `failureStage`
+- `03` 不覆盖 `02` 的质量门禁职责；最终 evidence usability 仍由 `EvidenceQualityGate` 决定

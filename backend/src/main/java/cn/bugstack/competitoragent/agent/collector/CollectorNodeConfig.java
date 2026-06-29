@@ -34,6 +34,13 @@ import java.util.List;
         "queryTemplates",
         "sourceScope",
         "schemaName",
+        "coverageContractRef",
+        "requiredCoverageFields",
+        "blockingCoverageFields",
+        "coverageQueryIntents",
+        "recoveryFieldName",
+        "recoveryEvidencePathKey",
+        "recoveryQueryIntents",
         "discoveryNotes",
         "sourceCandidates",
         "searchMode",
@@ -107,6 +114,48 @@ public class CollectorNodeConfig {
      * 对应的结构化 Schema 架构名称，用于后续指引抽取数据对齐
      */
     private String schemaName;
+
+    /**
+     * 顶层 coverageContract 的版本引用。
+     * Collector 节点只携带轻量引用，不重复内嵌完整契约，避免多个节点拷贝后出现漂移。
+     */
+    private String coverageContractRef;
+
+    /**
+     * 当前 Collector 节点需要支持的必填覆盖字段。
+     * 这个裁剪视图用于告诉采集层哪些字段是本轮必须服务的，不要求它自己做最终字段结论。
+     */
+    private List<String> requiredCoverageFields;
+
+    /**
+     * 当前任务在 Reviewer 视角下的阻断字段列表。
+     * 这里写入轻量视图，方便采集和审计链路知道哪些字段缺口会影响最终交付。
+     */
+    private List<String> blockingCoverageFields;
+
+    /**
+     * 从 coverageContract 裁剪出的查询意图列表。
+     * 后续阶段 Collector 会进一步用它驱动 field-first 采集，而不是只按 sourceType 补源。
+     */
+    private List<String> coverageQueryIntents;
+
+    /**
+     * 当前补采链路要优先服务的字段名。
+     * 公开证据补采只负责利用它规划同域公开入口，不在这里直接决定字段最终覆盖结论。
+     */
+    private String recoveryFieldName;
+
+    /**
+     * 当前字段对应的证据路径 key。
+     * recovery 会优先按这个路径选择 about/pricing/docs/download 等公开入口，避免退化成泛官网补源。
+     */
+    private String recoveryEvidencePathKey;
+
+    /**
+     * recovery 阶段可复用的字段级 query intents。
+     * 它与 coverageQueryIntents 并存，前者用于本轮公开补采语境，后者仍保留节点级轻量 coverage 视图。
+     */
+    private List<String> recoveryQueryIntents;
 
     /**
      * 探索发现备注，由人工或规划层写入的寻源线索或特殊指引说明

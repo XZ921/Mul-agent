@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.workflow;
 
+import cn.bugstack.competitoragent.workflow.coverage.CoverageContract;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -46,6 +47,9 @@ public class WorkflowPlan {
 
     @Builder.Default
     private List<WorkflowPlanNode> nodes = new ArrayList<>();
+
+    @Builder.Default
+    private CoverageContract coverageContract = null;
 
     /**
      * 正式阶段合同采用“合同类型 + 非空阶段列表”的显式判断，

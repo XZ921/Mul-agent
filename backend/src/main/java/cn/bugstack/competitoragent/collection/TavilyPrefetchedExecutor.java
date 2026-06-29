@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.collection;
 
 import cn.bugstack.competitoragent.search.tavily.TavilyPrefetchedContent;
 import cn.bugstack.competitoragent.search.tavily.TavilyPrefetchedContentRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -9,7 +10,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
+import java.util.Map;
 
 /**
  * Tavily 预取正文采集执行器。
@@ -22,9 +23,22 @@ public class TavilyPrefetchedExecutor implements CollectionExecutor {
     private static final List<String> NOISE_MARKERS = List.of("相关推荐", "猜你喜欢", "热门推荐");
 
     private final TavilyPrefetchedContentRegistry registry;
+    private final TavilyPrefetchedContentBlockClassifier blockClassifier;
 
+    /**
+     * Spring 容器场景必须明确使用这个构造器注入依赖，
+     * 否则在同时存在多个自定义构造器时，容器会退化为寻找无参构造，
+     * 最终导致应用在启动阶段直接因为 Bean 无法实例化而失败。
+     */
+    @Autowired
     public TavilyPrefetchedExecutor(TavilyPrefetchedContentRegistry registry) {
+        this(registry, new TavilyPrefetchedContentBlockClassifier());
+    }
+
+    public TavilyPrefetchedExecutor(TavilyPrefetchedContentRegistry registry,
+                                    TavilyPrefetchedContentBlockClassifier blockClassifier) {
         this.registry = registry == null ? new TavilyPrefetchedContentRegistry() : registry;
+        this.blockClassifier = blockClassifier == null ? new TavilyPrefetchedContentBlockClassifier() : blockClassifier;
     }
 
     @Override
@@ -73,6 +87,12 @@ public class TavilyPrefetchedExecutor implements CollectionExecutor {
         }
 
         List<String> sourceUrls = resolveSourceUrls(taskPackage, content);
+        List<StructuredContentBlock> structuredBlocks = blockClassifier.classify(cleanedContent);
+        List<String> qualitySignals = new ArrayList<>(List.of(
+                "TAVILY_RAW_CONTENT_READY",
+                "TAVILY_PREFETCHED_CONTENT_CONSUMED"
+        ));
+        qualitySignals.add("TAVILY_STRUCTURED_BLOCK_COUNT=" + structuredBlocks.size());
         return CollectionExecutionResult.builder()
                 .taskPackageKey(taskPackage.getPackageKey())
                 .targetIndex(taskPackage.getTargetIndex())
@@ -83,9 +103,10 @@ public class TavilyPrefetchedExecutor implements CollectionExecutor {
                 .title(StringUtils.hasText(content.getTitle()) ? content.getTitle() : content.getUrl())
                 .content(cleanedContent)
                 .sourceUrls(sourceUrls)
-                .qualitySignals(List.of("TAVILY_RAW_CONTENT_READY", "TAVILY_PREFETCHED_CONTENT_CONSUMED"))
+                .qualitySignals(qualitySignals)
                 .qualityScore(resolveQualityScore(content))
-                .structuredBlocks(List.of())
+                .structuredPayload(buildSuccessStructuredPayload(taskPackage, structuredBlocks))
+                .structuredBlocks(structuredBlocks)
                 .collectedAt(Instant.now())
                 .durationMillis(0L)
                 .build()
@@ -157,6 +178,23 @@ public class TavilyPrefetchedExecutor implements CollectionExecutor {
         return null;
     }
 
+    /**
+     * Fast-lane 成功消费后，必须把预抓引用、原始正文长度和结构化块数量一起写入结构化 payload。
+     * 这样后续 Collector metadata、Extractor evidence input 和审计接口都能沿同一条链路追溯
+     * “这份证据是不是来自 Tavily 预抓正文、是否真的被消费过、消费时产出了多少结构化块”。
+     */
+    private Map<String, Object> buildSuccessStructuredPayload(CollectionTaskPackage taskPackage,
+                                                              List<StructuredContentBlock> structuredBlocks) {
+        java.util.LinkedHashMap<String, Object> payload = new java.util.LinkedHashMap<>();
+        if (taskPackage != null) {
+            payload.put("prefetchedContentRef", taskPackage.getPrefetchedContentRef());
+            payload.put("prefetchedRawContentLength", taskPackage.getPrefetchedRawContentLength());
+            payload.put("primaryTool", taskPackage.getPrimaryTool());
+        }
+        payload.put("structuredBlockCount", structuredBlocks == null ? 0 : structuredBlocks.size());
+        return payload;
+    }
+
     private CollectionExecutionResult buildFailureResult(CollectionTaskPackage taskPackage,
                                                          String failureKind,
                                                          String errorMessage,
@@ -173,11 +211,28 @@ public class TavilyPrefetchedExecutor implements CollectionExecutor {
                 .failureKind(failureKind == null ? CollectionFailureKind.RUNTIME_FAILURE.name() : failureKind)
                 .qualitySignals(qualitySignals == null ? List.of() : qualitySignals)
                 .qualityScore(0.0D)
+                .structuredPayload(buildFailureStructuredPayload(taskPackage))
                 .structuredBlocks(List.of())
                 .collectedAt(Instant.now())
                 .durationMillis(0L)
                 .build()
                 .normalize();
+    }
+
+    /**
+     * 失败结果也必须显式写出 fast-lane 审计元数据。
+     * 否则下游只能看到“内容缺失”，却无法判断是不是 Tavily 预抓正文丢失、重复消费，
+     * 还是根本没有进入 `TAVILY_PREFETCHED` 执行阶段。
+     */
+    private Map<String, Object> buildFailureStructuredPayload(CollectionTaskPackage taskPackage) {
+        if (taskPackage == null) {
+            return Map.of();
+        }
+        java.util.LinkedHashMap<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("prefetchedContentRef", taskPackage.getPrefetchedContentRef());
+        payload.put("primaryTool", taskPackage.getPrimaryTool());
+        payload.put("failureStage", "TAVILY_PREFETCHED_CONSUME");
+        return payload;
     }
 
     private List<String> resolveFailureSourceUrls(CollectionTaskPackage taskPackage) {

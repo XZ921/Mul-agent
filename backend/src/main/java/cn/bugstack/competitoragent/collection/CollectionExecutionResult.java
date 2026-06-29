@@ -1,5 +1,7 @@
 package cn.bugstack.competitoragent.collection;
 
+import cn.bugstack.competitoragent.collection.quality.EvidenceQualityVerdict;
+import cn.bugstack.competitoragent.search.EvidenceRepairPlan;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -38,6 +40,11 @@ public class CollectionExecutionResult {
     String failureKind;
     List<String> qualitySignals;
     Double qualityScore;
+    EvidenceQualityVerdict evidenceQualityVerdict;
+    EvidenceRepairPlan evidenceRepairPlan;
+    String publicEvidenceRecoveryFieldName;
+    String publicEvidenceRecoveryEvidencePathKey;
+    List<String> publicEvidenceRecoveryQueryIntents;
     List<StructuredContentBlock> structuredBlocks;
     Instant collectedAt;
     Long durationMillis;

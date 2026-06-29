@@ -15,6 +15,7 @@ import cn.bugstack.competitoragent.collection.CollectionTaskPackage;
 import cn.bugstack.competitoragent.collection.CollectionTaskPackageBuilder;
 import cn.bugstack.competitoragent.collection.WebPageCollectionExecutor;
 import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
+import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.model.entity.KnowledgeDocument;
 import cn.bugstack.competitoragent.model.entity.RetrievalChunk;
 import cn.bugstack.competitoragent.model.entity.RetrievalIndex;
@@ -46,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -131,7 +133,7 @@ class CollectorAgentTest {
                 .success(true)
                 .build());
 
-        AgentResult result = collectorAgent.execute(buildContext("[\"https://example.com/docs\"]"));
+        AgentResult result = collectorAgent.execute(buildContextWithVerification("[\"https://example.com/docs\"]"));
         JsonNode output = objectMapper.readTree(result.getOutputData());
 
         assertEquals("SUCCESS", result.getStatus().name());
@@ -156,7 +158,7 @@ class CollectorAgentTest {
                 .errorMessage("timeout")
                 .build());
 
-        AgentResult result = collectorAgent.execute(buildContext("[\"https://example.com/pricing\"]"));
+        AgentResult result = collectorAgent.execute(buildContextWithVerification("[\"https://example.com/pricing\"]"));
 
         assertEquals("FAILED", result.getStatus().name());
         assertTrue(result.getErrorMessage().contains("未采集到可用页面内容"),
@@ -191,7 +193,7 @@ class CollectorAgentTest {
                 .errorMessage("timeout")
                 .build());
 
-        AgentResult result = collectorAgent.execute(buildContext("[\"https://example.com/docs\",\"https://example.com/help\"]"));
+        AgentResult result = collectorAgent.execute(buildContextWithVerification("[\"https://example.com/docs\",\"https://example.com/help\"]"));
 
         assertEquals("SUCCESS", result.getStatus().name(),
                 result.getErrorMessage() + " / " + result.getOutputSummary());
@@ -200,6 +202,76 @@ class CollectorAgentTest {
         verify(evidenceRepository, times(1)).save(evidenceCaptor.capture());
         assertTrue(evidenceCaptor.getValue().getPageMetadata().contains("browserTraceId"));
         assertTrue(result.getOutputData().contains("browserTraceId"));
+    }
+
+    @Test
+    void shouldSanitizeEvidenceBeforePersistenceWhenDiscoveryReasonIsLong() {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of())
+                .summary("mock browser search disabled")
+                .fallbackSuggested(true)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        mockCollectedPage("https://example.com/docs", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/docs")
+                .title("T".repeat(600))
+                .content("Example documentation content with enough useful public text.")
+                .snippet("Example documentation content")
+                .metadata("{\"sourceUrls\":[\"https://example.com/docs\"]}")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(true)
+                .build());
+
+        AgentResult result = collectorAgent.execute(buildLongReasonContext());
+
+        assertEquals("SUCCESS", result.getStatus().name(),
+                result.getErrorMessage() + " / " + result.getOutputSummary());
+        ArgumentCaptor<EvidenceSource> evidenceCaptor = ArgumentCaptor.forClass(EvidenceSource.class);
+        verify(evidenceRepository).save(evidenceCaptor.capture());
+        EvidenceSource saved = evidenceCaptor.getValue();
+        assertEquals(500, saved.getTitle().length());
+        assertEquals(900, saved.getDiscoveryReason().length());
+    }
+
+    @Test
+    void shouldRetainPersistenceFailureReasonInCollectionAuditWhenEvidenceSaveFails() throws Exception {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of())
+                .summary("mock browser search disabled")
+                .fallbackSuggested(true)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        mockCollectedPage("https://example.com/docs", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/docs")
+                .title("Docs")
+                .content("useful docs content with api reference")
+                .snippet("api reference")
+                .metadata("{\"sourceUrls\":[\"https://example.com/docs\"]}")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(true)
+                .build());
+        doThrow(new IllegalStateException("value too long for column discovery_reason"))
+                .when(evidenceRepository)
+                .save(any());
+
+        AgentResult result = collectorAgent.execute(buildSingleCandidateContext(
+                "https://example.com/docs",
+                "Docs",
+                "DOCS"
+        ));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("FAILED", result.getStatus().name());
+        assertTrue(result.getErrorMessage().contains("证据落库失败"));
+        assertTrue(output.path("documents").get(0).path("issueFlags").toString().contains("EVIDENCE_PERSIST_FAILED"));
+        assertTrue(output.path("documents").get(0).path("persistenceFailureReason").asText()
+                .contains("value too long for column discovery_reason"));
+        assertTrue(output.path("issueFlags").toString().contains("EVIDENCE_PERSIST_FAILED"));
+        assertEquals("FAILED", output.path("collectionAudit").path("summary").path("status").asText());
     }
 
     @Test
@@ -228,7 +300,7 @@ class CollectorAgentTest {
                 .errorMessage("timeout")
                 .build());
 
-        AgentResult result = collectorAgent.execute(buildContext("[\"https://example.com/docs\",\"https://example.com/help\"]"));
+        AgentResult result = collectorAgent.execute(buildContextWithVerification("[\"https://example.com/docs\",\"https://example.com/help\"]"));
         JsonNode output = objectMapper.readTree(result.getOutputData());
 
         assertEquals("SUCCESS", result.getStatus().name());
@@ -360,7 +432,7 @@ class CollectorAgentTest {
                 List.of()
         ));
 
-        AgentResult result = collectorAgent.execute(buildContext("[\"https://example.com/docs\"]"));
+        AgentResult result = collectorAgent.execute(buildContextWithVerification("[\"https://example.com/docs\"]"));
         JsonNode output = objectMapper.readTree(result.getOutputData());
 
         assertEquals("SUCCESS", result.getStatus().name());
@@ -390,11 +462,11 @@ class CollectorAgentTest {
                 .success(true)
                 .build());
 
-        AgentResult result = collectorAgent.execute(buildContext("[\"https://example.com/docs\"]"));
+        AgentResult result = collectorAgent.execute(buildContextWithVerification("[\"https://example.com/docs\"]"));
         JsonNode output = objectMapper.readTree(result.getOutputData());
 
         assertTrue(output.path("documents").get(0).path("evidenceId").asText()
-                .startsWith("T0001-COLLECT_SOURCES_01_01-"));
+                .startsWith("T0002-COLLECT_SOURCES_01_01-"));
     }
 
     @Test
@@ -416,7 +488,7 @@ class CollectorAgentTest {
                 .success(true)
                 .build());
 
-        AgentResult result = collectorAgent.execute(buildContext("[\"https://example.com/docs\"]"));
+        AgentResult result = collectorAgent.execute(buildContextWithVerification("[\"https://example.com/docs\"]"));
         JsonNode output = objectMapper.readTree(result.getOutputData());
 
         JsonNode sourceCandidate = output.path("sourceCandidates").get(0);
@@ -655,9 +727,11 @@ class CollectorAgentTest {
                               "url": "https://example.com/docs",
                               "title": "Docs",
                               "sourceType": "DOCS",
-                              "discoveryMethod": "CONFIG",
+                              "discoveryMethod": "DIRECT_LOCATOR",
+                              "providerKey": "planned",
                               "reason": "test",
                               "domain": "example.com",
+                              "sourceUrls": ["https://example.com/docs"],
                               "browserTraceId": "trace-collector-001",
                               "selectionStage": "PLANNED",
                               "selectionReason": "配置提供"
@@ -666,9 +740,11 @@ class CollectorAgentTest {
                               "url": "https://example.com/help",
                               "title": "Help",
                               "sourceType": "DOCS",
-                              "discoveryMethod": "CONFIG",
+                              "discoveryMethod": "DIRECT_LOCATOR",
+                              "providerKey": "planned",
                               "reason": "test",
                               "domain": "example.com",
+                              "sourceUrls": ["https://example.com/help"],
                               "browserTraceId": "trace-collector-001",
                               "selectionStage": "PLANNED",
                               "selectionReason": "配置提供"
@@ -701,9 +777,11 @@ class CollectorAgentTest {
                               "url": "https://example.com/docs",
                               "title": "Docs",
                               "sourceType": "DOCS",
-                              "discoveryMethod": "CONFIG",
+                              "discoveryMethod": "DIRECT_LOCATOR",
+                              "providerKey": "planned",
                               "reason": "test",
                               "domain": "example.com",
+                              "sourceUrls": ["https://example.com/docs"],
                               "selectionStage": "PLANNED",
                               "selectionReason": "配置提供"
                             }
@@ -729,7 +807,7 @@ class CollectorAgentTest {
                           "browserSearchEnabled": false,
                           "searchMode": "HTTP_ONLY",
                           "minVerifiedCandidates": 1,
-                          "maxSearchResults": 1,
+                          "maxSearchResults": 4,
                           "sourceCandidates": [
                             {
                               "url": "https://docs.example.com/prefetched",
@@ -737,11 +815,36 @@ class CollectorAgentTest {
                               "sourceType": "DOCS",
                               "sourceFamilyKey": "official",
                               "sourceUrls": ["https://docs.example.com/prefetched"],
-                              "discoveryMethod": "CONFIG",
+                              "discoveryMethod": "DIRECT_LOCATOR",
+                              "providerKey": "planned",
                               "reason": "test",
                               "domain": "docs.example.com",
                               "selectionStage": "PLANNED",
                               "selectionReason": "配置提供"
+                            },
+                            {
+                              "url": "https://example.com/help",
+                              "title": "Help",
+                              "sourceType": "DOCS",
+                              "discoveryMethod": "DIRECT_LOCATOR",
+                              "providerKey": "planned",
+                              "reason": "test",
+                              "domain": "example.com",
+                              "sourceUrls": ["https://example.com/help"],
+                              "selectionStage": "PLANNED",
+                              "selectionReason": "閰嶇疆鎻愪緵"
+                            },
+                            {
+                              "url": "https://example.com/pricing",
+                              "title": "Pricing",
+                              "sourceType": "DOCS",
+                              "discoveryMethod": "DIRECT_LOCATOR",
+                              "providerKey": "planned",
+                              "reason": "test",
+                              "domain": "example.com",
+                              "sourceUrls": ["https://example.com/pricing"],
+                              "selectionStage": "PLANNED",
+                              "selectionReason": "閰嶇疆鎻愪緵"
                             }
                           ]
                         }
@@ -761,6 +864,12 @@ class CollectorAgentTest {
                           "competitorUrls": ["https://github.com/acme/rocket"],
                           "sourceType": "GITHUB",
                           "discoveryNotes": "test",
+                          "verifyCandidates": true,
+                          "verifyResultPage": true,
+                          "browserSearchEnabled": false,
+                          "searchMode": "HTTP_ONLY",
+                          "minVerifiedCandidates": 1,
+                          "maxSearchResults": 1,
                           "sourceCandidates": [
                             {
                               "url": "https://github.com/acme/rocket",
@@ -769,7 +878,7 @@ class CollectorAgentTest {
                               "sourceFamilyKey": "github",
                               "providerKey": "github",
                               "sourceUrls": ["https://github.com/acme/rocket"],
-                              "discoveryMethod": "CONFIG",
+                              "discoveryMethod": "DIRECT_LOCATOR",
                               "reason": "test",
                               "domain": "github.com",
                               "selectionStage": "PLANNED",
@@ -794,6 +903,12 @@ class CollectorAgentTest {
                           "sourceType": "NEWS",
                           "sourceFamilyKey": "news",
                           "discoveryNotes": "test",
+                          "verifyCandidates": true,
+                          "verifyResultPage": true,
+                          "browserSearchEnabled": false,
+                          "searchMode": "HTTP_ONLY",
+                          "minVerifiedCandidates": 1,
+                          "maxSearchResults": 1,
                           "sourceCandidates": [
                             {
                               "url": "https://blog.example.com/feed.xml",
@@ -804,7 +919,7 @@ class CollectorAgentTest {
                               "sourceUrls": [
                                 "https://blog.example.com/feed.xml"
                               ],
-                              "discoveryMethod": "CONFIG",
+                              "discoveryMethod": "DIRECT_LOCATOR",
                               "reason": "test",
                               "domain": "blog.example.com",
                               "selectionStage": "PLANNED",
@@ -846,9 +961,11 @@ class CollectorAgentTest {
                               "url": "https://example.com/help",
                               "title": "Help",
                               "sourceType": "DOCS",
-                              "discoveryMethod": "CONFIG",
+                              "discoveryMethod": "DIRECT_LOCATOR",
+                              "providerKey": "planned",
                               "reason": "test",
                               "domain": "example.com",
+                              "sourceUrls": ["https://example.com/help"],
                               "selectionStage": "PLANNED",
                               "selectionReason": "配置提供"
                             },
@@ -856,9 +973,11 @@ class CollectorAgentTest {
                               "url": "https://example.com/docs",
                               "title": "Docs",
                               "sourceType": "DOCS",
-                              "discoveryMethod": "CONFIG",
+                              "discoveryMethod": "DIRECT_LOCATOR",
+                              "providerKey": "planned",
                               "reason": "test",
                               "domain": "example.com",
+                              "sourceUrls": ["https://example.com/docs"],
                               "selectionStage": "PLANNED",
                               "selectionReason": "配置提供"
                             },
@@ -866,9 +985,11 @@ class CollectorAgentTest {
                               "url": "https://example.com/documentation",
                               "title": "Documentation",
                               "sourceType": "DOCS",
-                              "discoveryMethod": "CONFIG",
+                              "discoveryMethod": "DIRECT_LOCATOR",
+                              "providerKey": "planned",
                               "reason": "test",
                               "domain": "example.com",
+                              "sourceUrls": ["https://example.com/documentation"],
                               "selectionStage": "PLANNED",
                               "selectionReason": "配置提供"
                             },
@@ -876,9 +997,11 @@ class CollectorAgentTest {
                               "url": "https://example.com/guide",
                               "title": "Guide",
                               "sourceType": "DOCS",
-                              "discoveryMethod": "CONFIG",
+                              "discoveryMethod": "DIRECT_LOCATOR",
+                              "providerKey": "planned",
                               "reason": "test",
                               "domain": "example.com",
+                              "sourceUrls": ["https://example.com/guide"],
                               "selectionStage": "PLANNED",
                               "selectionReason": "配置提供"
                             }
@@ -975,21 +1098,65 @@ class CollectorAgentTest {
                           "competitorUrls": ["%s"],
                           "sourceType": "%s",
                           "discoveryNotes": "test",
+                          "verifyCandidates": true,
+                          "verifyResultPage": true,
+                          "browserSearchEnabled": false,
+                          "searchMode": "HTTP_ONLY",
+                          "minVerifiedCandidates": 1,
+                          "maxSearchResults": 1,
                           "sourceCandidates": [
                             {
                               "url": "%s",
                               "title": "%s",
                               "sourceType": "%s",
-                              "discoveryMethod": "CONFIG",
+                              "discoveryMethod": "DIRECT_LOCATOR",
+                              "providerKey": "planned",
                               "reason": "test",
                               "domain": "example.com",
+                              "sourceUrls": ["%s"],
                               "browserTraceId": "trace-collector-002",
                               "selectionStage": "PLANNED",
                               "selectionReason": "配置提供"
                             }
                           ]
                         }
-                        """.formatted(url, sourceType, url, title, sourceType))
+                        """.formatted(url, sourceType, url, title, sourceType, url))
+                .build();
+    }
+
+    private AgentContext buildLongReasonContext() {
+        return AgentContext.builder()
+                .taskId(8L)
+                .taskName("task")
+                .currentNodeName("collect_sources_01_04")
+                .currentNodeConfig("""
+                        {
+                          "competitorName": "Feishu",
+                          "competitorUrls": ["https://example.com/docs"],
+                          "sourceType": "DOCS",
+                          "discoveryNotes": "test",
+                          "verifyCandidates": true,
+                          "verifyResultPage": true,
+                          "browserSearchEnabled": false,
+                          "searchMode": "HTTP_ONLY",
+                          "minVerifiedCandidates": 1,
+                          "maxSearchResults": 1,
+                          "sourceCandidates": [
+                            {
+                              "url": "https://example.com/docs",
+                              "title": "Docs",
+                              "sourceType": "DOCS",
+                              "discoveryMethod": "DIRECT_LOCATOR",
+                              "providerKey": "planned",
+                              "reason": "%s",
+                              "domain": "example.com",
+                              "sourceUrls": ["https://example.com/docs"],
+                              "selectionStage": "PLANNED",
+                              "selectionReason": "配置提供"
+                            }
+                          ]
+                        }
+                        """.formatted("R".repeat(900)))
                 .build();
     }
 

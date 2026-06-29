@@ -15,7 +15,7 @@ import java.util.List;
  * 统一承接采集阶段的聚合结果、回放时间线、恢复锚点与可追溯来源。
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)

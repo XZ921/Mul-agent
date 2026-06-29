@@ -93,7 +93,7 @@ public class EvidenceSource {
     @Schema(description = "来源域名", example = "docs.notion.so")
     private String sourceDomain;
 
-    @Column(length = 500)
+    @Column(columnDefinition = "TEXT")
     @Schema(description = "来源筛选说明")
     private String discoveryReason;
 

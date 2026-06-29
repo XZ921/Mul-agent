@@ -172,6 +172,25 @@ collection:
     concurrency: 3
     prioritize-prefetched-packages: true
     timing-enabled: true
+  evidence-quality:
+    enabled: true
+    min-useful-paragraph-length: 80
+    navigation-shell-link-ratio-threshold: 0.55
+    auth-gate-score-cap: 0.20
+    navigation-shell-score-cap: 0.30
+    root-entry-score-cap: 0.45
+    auth-signals:
+      - 验证码
+      - 智能验证
+      - 检测中
+      - 登录
+      - 注册
+      - 请点击此处重试
+      - 网络超时
+      - 由极验提供技术支持
+      - 完成身份信息填写
+      - 去填写
+      - 去接受邀请
   web-page:
     playwright-link-supplement-enabled: true
     playwright-link-supplement-max-depth: 0

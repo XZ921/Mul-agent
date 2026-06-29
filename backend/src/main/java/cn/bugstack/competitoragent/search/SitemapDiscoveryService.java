@@ -45,7 +45,15 @@ public class SitemapDiscoveryService {
             "/api",
             "/sdk",
             "/pricing",
-            "/help"
+            "/help",
+            "/about",
+            "/download",
+            "/product",
+            "/features",
+            "/support",
+            "/openplatform",
+            "/creator",
+            "/app"
     );
 
     private final SitemapDiscoveryProperties properties;

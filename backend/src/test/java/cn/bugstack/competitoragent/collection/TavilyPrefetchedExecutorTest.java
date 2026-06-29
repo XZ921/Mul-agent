@@ -76,4 +76,41 @@ class TavilyPrefetchedExecutorTest {
         assertThat(secondResult.getQualitySignals()).contains("TAVILY_PREFETCHED_CONTENT_MISSING");
         assertThat(secondResult.getSourceUrls()).containsExactly("https://open.example.com/docs/api");
     }
+
+    @Test
+    void shouldEmitStructuredBlocksForDeveloperDocsRawContent() {
+        TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
+        String ref = registry.register(TavilyPrefetchedContent.builder()
+                .url("https://open.bilibili.com/doc/4/feb66f99")
+                .title("用户管理 API")
+                .rawContent("""
+                        用户管理 API
+                        开放平台提供用户授权、身份识别和用户资料读取能力。开发者可以通过 SDK 调用接口完成授权登录，
+                        并根据接口返回的 open_id 进行用户管理。
+                        """)
+                .tavilyScore(0.91D)
+                .sourceUrls(List.of("https://open.bilibili.com/doc/4/feb66f99"))
+                .requestId("prefetch-doc")
+                .resultRank(1)
+                .build());
+        TavilyPrefetchedExecutor executor = new TavilyPrefetchedExecutor(
+                registry,
+                new TavilyPrefetchedContentBlockClassifier());
+
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .packageKey("collect#001")
+                .targetIndex(1)
+                .primaryTool("TAVILY_PREFETCHED")
+                .resourceLocator("https://open.bilibili.com/doc/4/feb66f99")
+                .prefetchedContentRef(ref)
+                .sourceUrls(List.of("https://open.bilibili.com/doc/4/feb66f99"))
+                .build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getExecutorType()).isEqualTo("TAVILY_PREFETCHED");
+        assertThat(result.getQualitySignals()).contains("TAVILY_RAW_CONTENT_READY", "TAVILY_PREFETCHED_CONTENT_CONSUMED");
+        assertThat(result.getQualitySignals()).contains("TAVILY_STRUCTURED_BLOCK_COUNT=1");
+        assertThat(result.getStructuredBlocks()).extracting(StructuredContentBlock::getBlockType)
+                .contains("DEVELOPER_DOCS_BLOCK");
+    }
 }

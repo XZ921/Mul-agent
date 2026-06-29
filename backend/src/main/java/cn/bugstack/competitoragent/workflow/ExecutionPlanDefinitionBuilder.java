@@ -11,6 +11,11 @@ import cn.bugstack.competitoragent.source.SourceCandidateRanker;
 import cn.bugstack.competitoragent.source.SourceDiscoveryService;
 import cn.bugstack.competitoragent.source.SourcePlan;
 import cn.bugstack.competitoragent.task.definition.ExecutionPlanDefinition;
+import cn.bugstack.competitoragent.workflow.coverage.CoverageBlockingLevel;
+import cn.bugstack.competitoragent.workflow.coverage.CoverageContract;
+import cn.bugstack.competitoragent.workflow.coverage.CoverageContractResolver;
+import cn.bugstack.competitoragent.workflow.coverage.CoverageFieldContract;
+import cn.bugstack.competitoragent.workflow.coverage.CoverageFieldStatus;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,6 +50,7 @@ public class ExecutionPlanDefinitionBuilder {
     private final SourceCandidateRanker sourceCandidateRanker;
     private final ObjectMapper objectMapper;
     private final CollectorPlanTemplateFactory collectorPlanTemplateFactory;
+    private final CoverageContractResolver coverageContractResolver;
 
     public ExecutionPlanDefinition build(AnalysisTask task, boolean previewOnly) {
         return build(task, previewOnly, null, null);
@@ -58,6 +64,12 @@ public class ExecutionPlanDefinitionBuilder {
         List<String> competitorUrls = parseStringList(task.getCompetitorUrls());
         List<String> dimensions = resolveDimensions(task);
         List<String> requestedScopes = parseStringList(task.getSourceScope());
+        CoverageContract coverageContract = coverageContractResolver.resolve(
+                task.getReportTemplate(),
+                dimensions,
+                requestedScopes,
+                null
+        );
         Optional<AnalysisSchema> schema = resolveSchema(task.getSchemaId());
         CollaborationProjection collaborationProjection = resolveCollaborationProjection(collaborationPlan, initialPlanReview);
 
@@ -89,6 +101,10 @@ public class ExecutionPlanDefinitionBuilder {
                         schema.map(AnalysisSchema::getName).orElse(null),
                         sourcePlan
                 );
+                collectorNodeConfig.setCoverageContractRef(coverageContract.getContractVersion());
+                collectorNodeConfig.setRequiredCoverageFields(requiredFields(coverageContract));
+                collectorNodeConfig.setBlockingCoverageFields(blockingFields(coverageContract));
+                collectorNodeConfig.setCoverageQueryIntents(queryIntentsForSourcePlan(coverageContract, sourcePlan));
 
                 collectNodeNames.add(nodeName);
                 collectorSourceUrls.addAll(nodeSourceUrls);
@@ -315,10 +331,58 @@ public class ExecutionPlanDefinitionBuilder {
                 .competitorCount(competitorNames.size())
                 .collectorCount(collectorCount)
                 .pipelineCount(nodes.size() - collectorCount)
+                .coverageContract(coverageContract)
                 .stages(stages)
                 .nodes(nodes)
                 .sourceUrls(distinctNonBlank(planSourceUrls))
                 .build();
+    }
+
+    /**
+     * 裁剪出当前任务中被契约标记为 REQUIRED 的字段。
+     * 这是 Collector 节点的轻量视图，帮助后续采集链路明确哪些字段必须得到证据支撑。
+     */
+    private List<String> requiredFields(CoverageContract contract) {
+        if (contract == null || contract.getFields() == null) {
+            return List.of();
+        }
+        return contract.getFields().stream()
+                .filter(field -> field != null && field.getStatus() == CoverageFieldStatus.REQUIRED)
+                .map(CoverageFieldContract::getField)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * 裁剪出当前任务中会触发 Reviewer 阻断的字段。
+     * 这里只依赖 coverageContract 的阻断级别，不再把 pricing/weaknesses 硬编码为所有任务的 blocker。
+     */
+    private List<String> blockingFields(CoverageContract contract) {
+        if (contract == null || contract.getFields() == null) {
+            return List.of();
+        }
+        return contract.getFields().stream()
+                .filter(field -> field != null && field.getBlockingLevel() == CoverageBlockingLevel.BLOCKER)
+                .map(CoverageFieldContract::getField)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * 汇总 coverageContract 里的查询意图。
+     * 当前阶段先输出字段级 query intent 轻量视图，后续再细化到 fieldName/pathKey 级别的采集计划。
+     */
+    private List<String> queryIntentsForSourcePlan(CoverageContract contract, SourcePlan sourcePlan) {
+        if (contract == null || contract.getFields() == null) {
+            return List.of();
+        }
+        return contract.getFields().stream()
+                .flatMap(field -> field.getQueryIntents() == null ? java.util.stream.Stream.empty() : field.getQueryIntents().stream())
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
     }
 
     /**

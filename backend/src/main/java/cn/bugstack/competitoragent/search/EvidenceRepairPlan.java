@@ -1,0 +1,78 @@
+package cn.bugstack.competitoragent.search;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import lombok.Builder;
+import lombok.Value;
+import lombok.extern.jackson.Jacksonized;
+
+import java.util.List;
+
+/**
+ * ??????????
+ * ?????????? repair ??????????????? URL ?????????????????????
+ * ???? metadata???????????????????
+ */
+@Value
+@Builder(toBuilder = true)
+@Jacksonized
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class EvidenceRepairPlan {
+
+    EvidenceRepairState state;
+    String reason;
+    String sourceUrl;
+    List<String> repairQueries;
+    List<String> candidateUrls;
+    List<String> promotedUrls;
+
+    /**
+     * ????????????????repair ?????????
+     * ???????????????????????????????????
+     */
+    public boolean isComplete() {
+        return state == EvidenceRepairState.REPAIR_EVIDENCE_PROMOTED;
+    }
+
+    /**
+     * ???????????????????
+     * ???????? verified URL????? QUERY_PROPOSED??? repair ??????????????
+     * ????? verified URL???? CANDIDATE_VERIFIED??????????????
+     */
+    public EvidenceRepairPlan verifyCandidates(List<String> verifiedUrls) {
+        List<String> normalizedUrls = immutableList(verifiedUrls);
+        if (normalizedUrls.isEmpty()) {
+            return this.toBuilder()
+                    .state(EvidenceRepairState.REPAIR_QUERY_PROPOSED)
+                    .candidateUrls(List.of())
+                    .build();
+        }
+        return this.toBuilder()
+                .state(EvidenceRepairState.REPAIR_CANDIDATE_VERIFIED)
+                .candidateUrls(normalizedUrls)
+                .build();
+    }
+
+    /**
+     * ???? URL ????????
+     * ?? promoted URL ????? FAILED?????????????????? repair??
+     */
+    public EvidenceRepairPlan promoteEvidence(List<String> promotedUrls) {
+        List<String> normalizedUrls = immutableList(promotedUrls);
+        if (normalizedUrls.isEmpty()) {
+            return this.toBuilder()
+                    .state(EvidenceRepairState.REPAIR_FAILED)
+                    .promotedUrls(List.of())
+                    .build();
+        }
+        return this.toBuilder()
+                .state(EvidenceRepairState.REPAIR_EVIDENCE_PROMOTED)
+                .promotedUrls(normalizedUrls)
+                .build();
+    }
+
+    private List<String> immutableList(List<String> urls) {
+        return urls == null || urls.isEmpty() ? List.of() : List.copyOf(urls);
+    }
+}

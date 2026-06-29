@@ -52,6 +52,7 @@ public class WorkflowPlanAssembler {
         return WorkflowPlan.builder()
                 .contractType(executionPlan == null ? null : executionPlan.getContractType())
                 .goal(executionPlan == null ? null : executionPlan.getGoal())
+                .coverageContract(executionPlan == null ? null : executionPlan.getCoverageContract())
                 .stages(stages)
                 .nodes(nodes)
                 .build();
