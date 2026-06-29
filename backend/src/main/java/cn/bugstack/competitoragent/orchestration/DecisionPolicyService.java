@@ -2,7 +2,9 @@ package cn.bugstack.competitoragent.orchestration;
 
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 
@@ -74,6 +76,7 @@ public class DecisionPolicyService {
                 || rules.getConfirmationRequiredDecisionTypes().contains(decision.getDecisionType())
                 || matchedRiskRules.stream().anyMatch(DecisionPolicyRuleSet.PolicyRiskRule::isRequiresConfirmation);
         String riskLevel = resolveRiskLevel(matchedRiskRules, requiresConfirmation, blockedReasons);
+        DecisionRoutingHints routingHints = resolveRoutingHints(decision, normalizedAction, blockedReasons.isEmpty());
 
         return DecisionPolicyResult.builder()
                 .decisionId(decision.getDecisionId())
@@ -86,6 +89,12 @@ public class DecisionPolicyService {
                 .sourceUrls(decision.getSourceUrls())
                 .evidenceState(decision.getEvidenceState())
                 .policyVersion(rules.getPolicyVersion())
+                .preferredSearchProvider(routingHints.preferredSearchProvider())
+                .tavilyQueryMode(routingHints.tavilyQueryMode())
+                .suggestedQueries(routingHints.suggestedQueries())
+                .includeDomainPolicy(routingHints.includeDomainPolicy())
+                .preferredDomains(routingHints.preferredDomains())
+                .includeDomains(routingHints.includeDomains())
                 .build()
                 .normalized();
     }
@@ -93,6 +102,7 @@ public class DecisionPolicyService {
     private String resolveNormalizedAction(OrchestrationDecision decision) {
         return switch (decision.getActionType()) {
             case "SUPPLEMENT_EVIDENCE" -> "CREATE_SUPPLEMENT_BRANCH";
+            case "DOMAIN_HINT_DISCOVERY" -> "MANUAL_ONLY";
             case "RERUN_NODE" -> "CREATE_RERUN_BRANCH";
             case "REWRITE_SECTION", "REWRITE_CLAIM" -> "CREATE_REWRITE_BRANCH";
             case "NO_ACTION" -> "NO_ACTION";
@@ -136,5 +146,116 @@ public class DecisionPolicyService {
 
     private String normalizeStatus(String status) {
         return status == null || status.isBlank() ? "" : status.trim().toUpperCase(Locale.ROOT);
+    }
+
+    /**
+     * Task 9 先把 Tavily evidence repair 所需 hint 固化在策略结果里，
+     * adapter 只负责把这些 hint 透传给 collector 节点，不再重复推断业务语义。
+     */
+    private DecisionRoutingHints resolveRoutingHints(OrchestrationDecision decision,
+                                                     String normalizedAction,
+                                                     boolean allowed) {
+        if (!allowed || !"CREATE_SUPPLEMENT_BRANCH".equals(normalizedAction)) {
+            return DecisionRoutingHints.empty();
+        }
+        List<String> preferredDomains = extractDomains(decision.getSourceUrls());
+        String includeDomainPolicy = shouldNarrowToOfficialDomains(decision)
+                ? "NARROW_OFFICIAL"
+                : "OPEN_WEB";
+        List<String> includeDomains = "NARROW_OFFICIAL".equals(includeDomainPolicy)
+                ? preferredDomains
+                : List.of();
+        return new DecisionRoutingHints(
+                "tavily",
+                "EVIDENCE_REPAIR",
+                resolveRepairQueries(decision),
+                includeDomainPolicy,
+                preferredDomains,
+                includeDomains
+        );
+    }
+
+    private List<String> resolveRepairQueries(OrchestrationDecision decision) {
+        if (decision != null && decision.getSuggestedQueries() != null && !decision.getSuggestedQueries().isEmpty()) {
+            return decision.getSuggestedQueries();
+        }
+        if (decision == null || decision.getReason() == null || decision.getReason().isBlank()) {
+            return List.of();
+        }
+        return List.of(decision.getReason().trim());
+    }
+
+    /**
+     * 官方/文档/定价类缺口优先走收窄域名策略，
+     * 其余补证据场景保留 OPEN_WEB，避免把 Tavily repair 过度锁死在单一域名上。
+     */
+    private boolean shouldNarrowToOfficialDomains(OrchestrationDecision decision) {
+        if (decision == null) {
+            return false;
+        }
+        String keywords = String.join(" ",
+                decision.getTargetSection() == null ? "" : decision.getTargetSection(),
+                decision.getReason() == null ? "" : decision.getReason(),
+                decision.getSuggestedQueries() == null ? "" : String.join(" ", decision.getSuggestedQueries()))
+                .toLowerCase(Locale.ROOT);
+        if (keywords.contains("official")
+                || keywords.contains("官网")
+                || keywords.contains("官方")
+                || keywords.contains("docs")
+                || keywords.contains("文档")
+                || keywords.contains("api")
+                || keywords.contains("pricing")
+                || keywords.contains("定价")
+                || keywords.contains("协议")
+                || keywords.contains("规则")) {
+            return true;
+        }
+        for (String domain : extractDomains(decision.getSourceUrls())) {
+            String normalizedDomain = domain.toLowerCase(Locale.ROOT);
+            if (normalizedDomain.startsWith("docs.")
+                    || normalizedDomain.startsWith("open.")
+                    || normalizedDomain.startsWith("developer.")
+                    || normalizedDomain.startsWith("help.")
+                    || normalizedDomain.contains("api")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private List<String> extractDomains(List<String> sourceUrls) {
+        LinkedHashSet<String> domains = new LinkedHashSet<>();
+        if (sourceUrls == null) {
+            return List.of();
+        }
+        for (String sourceUrl : sourceUrls) {
+            if (sourceUrl == null || sourceUrl.isBlank()) {
+                continue;
+            }
+            try {
+                URI uri = URI.create(sourceUrl.trim());
+                String host = uri.getHost();
+                if (host == null || host.isBlank()) {
+                    continue;
+                }
+                String normalizedHost = host.trim().toLowerCase(Locale.ROOT);
+                domains.add(normalizedHost.startsWith("www.") ? normalizedHost.substring(4) : normalizedHost);
+            } catch (Exception ignored) {
+                // 脏 sourceUrl 不应该中断策略评估，直接跳过即可。
+            }
+        }
+        return new ArrayList<>(domains);
+    }
+
+    private record DecisionRoutingHints(String preferredSearchProvider,
+                                        String tavilyQueryMode,
+                                        List<String> suggestedQueries,
+                                        String includeDomainPolicy,
+                                        List<String> preferredDomains,
+                                        List<String> includeDomains) {
+
+        private static DecisionRoutingHints empty() {
+            return new DecisionRoutingHints(null, null, List.of(), null, List.of(), List.of());
+        }
     }
 }

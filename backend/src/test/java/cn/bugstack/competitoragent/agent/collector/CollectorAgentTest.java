@@ -838,6 +838,9 @@ class CollectorAgentTest {
                           "searchMode": "HTTP_ONLY",
                           "minVerifiedCandidates": 1,
                           "maxSearchResults": 4,
+                          "searchRuntimePolicy": {
+                            "maxCandidatesPerDomain": 4
+                          },
                           "sourceCandidates": [
                             {
                               "url": "https://example.com/help",
@@ -880,7 +883,7 @@ class CollectorAgentTest {
                               "selectionReason": "配置提供"
                             }
                           ],
-                          "_testNote": "该场景需要让 competitorUrls 数量与 maxSearchResults 一致，才能稳定复现 rerun 后 4 个 prefetched target 的顺序漂移",
+                          "_testNote": "该场景需要让 competitorUrls 数量与 maxSearchResults 一致，并显式放宽 maxCandidatesPerDomain，否则 Phase 1 默认 per-domain 软平衡会先把同域 4 个候选裁成 2 个，无法稳定复现 rerun 后 4 个 prefetched target 的顺序漂移",
                           "collectionAuditCheckpoint": {
                             "summary": {
                               "totalPackages": 4,

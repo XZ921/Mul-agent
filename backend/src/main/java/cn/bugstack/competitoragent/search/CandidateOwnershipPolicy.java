@@ -110,7 +110,7 @@ public class CandidateOwnershipPolicy {
         String stage = candidate.getSelectionStage();
         String provider = candidate.getProviderKey();
         return equalsAny(method, "BROWSER", "SEARCH", "SEARCH_ROOT_TEMPLATE")
-                || equalsAny(stage, "BROWSER", "SUPPLEMENTED")
+                || equalsAny(stage, "BROWSER", "SUPPLEMENTED", "BOOTSTRAPPED")
                 || equalsAny(provider, "browser", "http");
     }
 

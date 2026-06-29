@@ -125,7 +125,7 @@ public class CollectorPlanTemplateFactory {
                 .userAgents(defaultUserAgents)
                 .blockedSignals(searchBrowserProperties.getBlockedSignals())
                 .blockedUrlKeywords(searchBrowserProperties.getBlockedUrlKeywords())
-                .recoveryHint("如搜索中断，优先从 VERIFY_TOP_CANDIDATES 或 BROWSER_SUPPLEMENT_SEARCH 继续排查。")
+                .recoveryHint("如搜索中断，优先从 VERIFY_TOP_CANDIDATES 或 BROWSER_SUPPLEMENT_SEARCH 继续排查（展示语义：运行期补源）。")
                 .build();
     }
 
@@ -145,8 +145,9 @@ public class CollectorPlanTemplateFactory {
                 .minVerifiedCount(minVerifiedCandidates)
                 .steps(List.of(
                         step("LOAD_CANDIDATES", "读取规划期候选来源", 500, "nodeConfig"),
+                        step("TAVILY_BOOTSTRAP_ENRICH", "对弱规划期候选执行 Tavily Phase 1 候选增强", 4000, "tavily"),
                         step("VERIFY_TOP_CANDIDATES", "验证高优先级候选来源是否可用", 5000, "browser"),
-                        step("BROWSER_SUPPLEMENT_SEARCH", "候选不足时执行浏览器补充搜索", 8000, "searchEngine"),
+                        step("BROWSER_SUPPLEMENT_SEARCH", "候选不足时执行运行期补源", 8000, "searchEngine"),
                         step("SELECT_TARGETS", "合并候选并选出最终采集目标", 1000, "ranker"),
                         step("COLLECT_PAGES", "抓取页面正文并持久化证据", 12000, "collector")
                 ))

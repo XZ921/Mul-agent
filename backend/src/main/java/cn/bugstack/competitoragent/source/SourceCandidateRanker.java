@@ -52,7 +52,10 @@ public class SourceCandidateRanker {
             }
 
             SourceCandidate preferred = preferCandidate(existing, scored);
-            deduplicated.put(key, preferred);
+            SourceCandidate merged = preferred == scored
+                    ? mergeDuplicateMetadata(annotateDuplicateWinner(preferred), existing)
+                    : mergeDuplicateMetadata(preferred, scored);
+            deduplicated.put(key, merged);
         }
 
         List<SourceCandidate> ranked = new ArrayList<>(deduplicated.values());
@@ -61,6 +64,36 @@ public class SourceCandidateRanker {
                         Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(SourceCandidate::getUrl));
         return ranked;
+    }
+
+    /**
+     * 预算裁剪必须发生在“先排序去重”之后，
+     * 这样才能保证留下来的仍然是同一套排序语义里的最优候选，而不是被输入顺序偶然左右。
+     */
+    public List<SourceCandidate> rankDeduplicateAndLimit(List<SourceCandidate> candidates,
+                                                         int maxCount,
+                                                         int perDomainCap) {
+        List<SourceCandidate> ranked = rankAndDeduplicate(candidates);
+        if (ranked.isEmpty()) {
+            return ranked;
+        }
+        Map<String, Integer> perDomainCounter = new LinkedHashMap<>();
+        List<SourceCandidate> limited = new ArrayList<>();
+        for (SourceCandidate candidate : ranked) {
+            String domain = StringUtils.hasText(candidate.getDomain())
+                    ? candidate.getDomain()
+                    : extractDomain(candidate.getUrl());
+            int current = perDomainCounter.getOrDefault(domain, 0);
+            if (perDomainCap > 0 && current >= perDomainCap) {
+                continue;
+            }
+            limited.add(candidate);
+            perDomainCounter.put(domain, current + 1);
+            if (maxCount > 0 && limited.size() >= maxCount) {
+                break;
+            }
+        }
+        return limited;
     }
 
     /**
@@ -110,6 +143,24 @@ public class SourceCandidateRanker {
                 .searchEngine(candidate.getSearchEngine())
                 .resultRank(candidate.getResultRank())
                 .browserTraceId(candidate.getBrowserTraceId())
+                /**
+                 * Tavily Fast Lane 相关轻量字段必须在运行期排序链路中完整透传。
+                 * 否则 provider 刚刚注册好的 prefetchedContentRef、queryMode、fastLaneUsable 等元数据
+                 * 会在 ensureScores 重新构建对象时被悄悄丢失，导致后续 coordinator / executor 无法识别快速通道候选。
+                 */
+                .hasPrefetchedContent(candidate.getHasPrefetchedContent())
+                .prefetchedContentRef(candidate.getPrefetchedContentRef())
+                .prefetchedRawContentLength(candidate.getPrefetchedRawContentLength())
+                .tavilyScore(candidate.getTavilyScore())
+                .tavilyRequestId(candidate.getTavilyRequestId())
+                .tavilyQuery(candidate.getTavilyQuery())
+                .tavilyQueryMode(candidate.getTavilyQueryMode())
+                .pageType(candidate.getPageType())
+                .qualityTier(candidate.getQualityTier())
+                .fastLaneUsable(candidate.getFastLaneUsable())
+                .fastLaneRejectReason(candidate.getFastLaneRejectReason())
+                .contentCompleteness(candidate.getContentCompleteness())
+                .skipNetworkVerification(candidate.getSkipNetworkVerification())
                 .verified(candidate.getVerified())
                 .verificationReason(candidate.getVerificationReason())
                 .matchedSignals(candidate.getMatchedSignals())
@@ -156,6 +207,27 @@ public class SourceCandidateRanker {
                 .selectionStage(SourceSelectionReason.KEEP_FRESHER_SEARCH_RESULT.getSelectionStage())
                 .selectionReason(SourceSelectionReason.KEEP_FRESHER_SEARCH_RESULT.name())
                 .selectionSummary(SourceSelectionReason.KEEP_FRESHER_SEARCH_RESULT.getSummary())
+                .build();
+    }
+
+    /**
+     * planned 与 bootstrap/supplement 命中同一 canonical URL 时，
+     * 排序胜者负责保留，但 Tavily fast-lane 元数据与 sourceUrls 不能在去重时被吞掉。
+     */
+    private SourceCandidate mergeDuplicateMetadata(SourceCandidate winner, SourceCandidate loser) {
+        LinkedHashSet<String> mergedSourceUrls = new LinkedHashSet<>(resolveSourceUrls(winner));
+        mergedSourceUrls.addAll(resolveSourceUrls(loser));
+        return winner.toBuilder()
+                .sourceUrls(new ArrayList<>(mergedSourceUrls))
+                .hasPrefetchedContent(orTrue(winner.getHasPrefetchedContent(), loser.getHasPrefetchedContent()))
+                .prefetchedContentRef(firstText(winner.getPrefetchedContentRef(), loser.getPrefetchedContentRef()))
+                .prefetchedRawContentLength(firstNonNull(winner.getPrefetchedRawContentLength(), loser.getPrefetchedRawContentLength()))
+                .tavilyScore(firstNonNull(winner.getTavilyScore(), loser.getTavilyScore()))
+                .tavilyRequestId(firstText(winner.getTavilyRequestId(), loser.getTavilyRequestId()))
+                .tavilyQuery(firstText(winner.getTavilyQuery(), loser.getTavilyQuery()))
+                .tavilyQueryMode(firstText(winner.getTavilyQueryMode(), loser.getTavilyQueryMode()))
+                .fastLaneUsable(orTrue(winner.getFastLaneUsable(), loser.getFastLaneUsable()))
+                .skipNetworkVerification(orTrue(winner.getSkipNetworkVerification(), loser.getSkipNetworkVerification()))
                 .build();
     }
 
@@ -467,6 +539,18 @@ public class SourceCandidateRanker {
 
     private String defaultText(String value) {
         return value == null ? "" : value;
+    }
+
+    private Boolean orTrue(Boolean left, Boolean right) {
+        return Boolean.TRUE.equals(left) || Boolean.TRUE.equals(right);
+    }
+
+    private String firstText(String first, String second) {
+        return StringUtils.hasText(first) ? first : second;
+    }
+
+    private <T> T firstNonNull(T first, T second) {
+        return first != null ? first : second;
     }
 
     private double clamp(double value) {

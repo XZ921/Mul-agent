@@ -25,6 +25,11 @@ public class CollectionTaskPackage {
     String primaryTool;
     String url;
     String resourceLocator;
+    String prefetchedContentRef;
+    Integer prefetchedRawContentLength;
+    String pageType;
+    String qualityTier;
+    String contentCompleteness;
     WebPageRenderHint renderHint;
     List<String> expectedBlockTypes;
     List<String> targetFields;

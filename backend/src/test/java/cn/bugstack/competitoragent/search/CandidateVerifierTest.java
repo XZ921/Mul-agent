@@ -18,6 +18,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class CandidateVerifierTest {
@@ -280,6 +281,63 @@ class CandidateVerifierTest {
 
         assertEquals(1, result.getVerificationConcurrency());
         assertEquals(1, result.getAttemptedTargets().size());
+    }
+
+    @Test
+    void shouldSkipNetworkVerificationForStrongTavilyFastLaneCandidate() {
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        CandidateVerifier verifier = new CandidateVerifier(sourceCollector);
+
+        CandidateVerificationResult result = verifier.verify("抖音", "DOCS", List.of(
+                SourceCandidate.builder()
+                        .url("https://open.douyin.com/docs/api")
+                        .sourceType("DOCS")
+                        .providerKey("tavily")
+                        .hasPrefetchedContent(true)
+                        .fastLaneUsable(true)
+                        .skipNetworkVerification(true)
+                        .pageType("OFFICIAL_DOC")
+                        .qualityTier("STRONG")
+                        .sourceUrls(List.of("https://open.douyin.com/docs/api"))
+                        .build()
+        ));
+
+        assertEquals(1, result.getVerifiedCandidateCount());
+        assertTrue(Boolean.TRUE.equals(result.getUpdatedCandidates().get(0).getVerified()));
+        assertTrue(result.getUpdatedCandidates().get(0).getQualitySignals().contains("TAVILY_VERIFICATION_SKIPPED"));
+        assertEquals("TAVILY_FAST_LANE_GATE_VERIFIED", result.getUpdatedCandidates().get(0).getVerificationReason());
+        verifyNoInteractions(sourceCollector);
+    }
+
+    @Test
+    void shouldFallbackToCollectorForWeakTavilyFastLaneCandidate() {
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(sourceCollector.collect("https://open.douyin.com/search", "抖音", "DOCS"))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://open.douyin.com/search")
+                        .title("Open Search")
+                        .content("documentation api reference guide")
+                        .snippet("documentation")
+                        .competitorName("抖音")
+                        .sourceType("DOCS")
+                        .success(true)
+                        .build());
+        CandidateVerifier verifier = new CandidateVerifier(sourceCollector);
+
+        CandidateVerificationResult result = verifier.verify("抖音", "DOCS", List.of(
+                SourceCandidate.builder()
+                        .url("https://open.douyin.com/search")
+                        .sourceType("DOCS")
+                        .providerKey("tavily")
+                        .fastLaneUsable(false)
+                        .skipNetworkVerification(true)
+                        .pageType("SEARCH_PAGE")
+                        .sourceUrls(List.of("https://open.douyin.com/search"))
+                        .build()
+        ));
+
+        assertEquals(1, result.getVerifiedCandidateCount());
+        verify(sourceCollector, times(1)).collect("https://open.douyin.com/search", "抖音", "DOCS");
     }
 
     @SuppressWarnings("unchecked")

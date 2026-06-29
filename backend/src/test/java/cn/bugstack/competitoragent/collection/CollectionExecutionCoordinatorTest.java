@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -232,12 +233,56 @@ class CollectionExecutionCoordinatorTest {
         assertThat(elapsedMillis).isLessThan(550L);
     }
 
+    @Test
+    void shouldPrioritizePrefetchedPackagesBeforeSlowWebPackages() {
+        CollectionExecutor executor = mock(CollectionExecutor.class);
+        when(executor.supports(any())).thenReturn(true);
+        List<String> invocationOrder = new CopyOnWriteArrayList<>();
+        when(executor.execute(any())).thenAnswer(invocation -> {
+            CollectionTaskPackage taskPackage = invocation.getArgument(0);
+            invocationOrder.add(taskPackage.getPrimaryTool());
+            return CollectionExecutionResult.builder()
+                    .executorType(taskPackage.getPrimaryTool())
+                    .success(true)
+                    .status("SUCCESS")
+                    .resourceLocator(taskPackage.getResourceLocator())
+                    .sourceUrls(taskPackage.getSourceUrls())
+                    .build();
+        });
+
+        CollectionExecutionProperties properties = new CollectionExecutionProperties();
+        properties.setConcurrency(1);
+        properties.setPrioritizePrefetchedPackages(true);
+
+        CollectionExecutionCoordinator coordinator = new CollectionExecutionCoordinator(
+                new CollectionTaskPackageBuilder(),
+                new CollectionExecutorRegistry(List.of(executor)),
+                new cn.bugstack.competitoragent.search.CanonicalUrlResolver(),
+                new InternalLinkDiscoveryProperties(),
+                properties
+        );
+
+        coordinator.execute(1L, "collect_test", null, "抖音", List.of(
+                target("https://open.douyin.com/docs/1", true),
+                target("https://www.douyin.com/slow-page", false)
+        ));
+
+        assertThat(invocationOrder.get(0)).isEqualTo("TAVILY_PREFETCHED");
+    }
+
     private SearchCollectionTarget target(String url) {
+        return target(url, false);
+    }
+
+    private SearchCollectionTarget target(String url, boolean prefetched) {
         return SearchCollectionTarget.builder()
                 .candidate(SourceCandidate.builder()
                         .url(url)
                         .sourceType("DOCS")
                         .sourceFamilyKey("official")
+                        .fastLaneUsable(prefetched)
+                        .hasPrefetchedContent(prefetched)
+                        .prefetchedContentRef(prefetched ? "prefetch-" + Math.abs(url.hashCode()) : null)
                         .sourceUrls(List.of(url))
                         .build())
                 .build();

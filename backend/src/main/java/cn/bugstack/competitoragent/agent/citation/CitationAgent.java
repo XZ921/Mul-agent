@@ -85,6 +85,7 @@ public class CitationAgent extends BaseAgent {
         int sensitiveClaims = 0;
         int supportedSensitiveClaims = 0;
         int issueIndex = 1;
+        List<String> repairableSourceUrls = distinctTexts(writerOutputSnapshot.fallbackSourceUrls());
 
         for (CitationClaim extractedClaim : citationClaimExtractor.extract(writerOutputSnapshot.reportContent())) {
             List<String> resolvedSourceUrls = new ArrayList<>();
@@ -96,7 +97,11 @@ public class CitationAgent extends BaseAgent {
                 EvidenceSource evidenceSource = evidenceById.get(evidenceId);
                 if (evidenceSource == null) {
                     allEvidenceKnown = false;
-                    citationIssues.add(buildUnknownEvidenceIssue(issueIndex++, extractedClaim, evidenceId));
+                    citationIssues.add(buildUnknownEvidenceIssue(
+                            issueIndex++,
+                            extractedClaim,
+                            evidenceId,
+                            repairableSourceUrls));
                     continue;
                 }
                 if (hasText(evidenceSource.getUrl())) {
@@ -120,7 +125,7 @@ public class CitationAgent extends BaseAgent {
             if (resolvedClaim.isTraceabilitySensitive()
                     && resolvedClaim.getEvidenceIds().isEmpty()
                     && !resolvedClaim.isExplicitlyDowngraded()) {
-                citationIssues.add(buildMissingCitationIssue(issueIndex++, resolvedClaim));
+                citationIssues.add(buildMissingCitationIssue(issueIndex++, resolvedClaim, repairableSourceUrls));
                 continue;
             }
 
@@ -227,7 +232,14 @@ public class CitationAgent extends BaseAgent {
         return List.copyOf(findings);
     }
 
-    private CitationIssue buildMissingCitationIssue(int issueIndex, CitationClaim claim) {
+    /**
+     * Writer 已经带回可追溯 sourceUrls 时，这类问题应被视为“可重写修复”，
+     * 不能继续误判为完全缺少来源。
+     */
+    private CitationIssue buildMissingCitationIssue(int issueIndex,
+                                                    CitationClaim claim,
+                                                    List<String> repairableSourceUrls) {
+        List<String> sourceUrls = distinctTexts(repairableSourceUrls);
         return CitationIssue.builder()
                 .issueId("ci-" + issueIndex)
                 .issueType("MISSING_CITATION")
@@ -235,15 +247,23 @@ public class CitationAgent extends BaseAgent {
                 .targetSection(defaultIfBlank(claim.getSectionKey(), "report"))
                 .claimId(claim.getClaimId())
                 .summary(defaultIfBlank(claim.getSectionTitle(), "报告章节") + " 中存在敏感判断句，但未附带有效引用。")
-                .sourceUrls(List.of())
-                .evidenceState("MISSING_SOURCE")
+                .sourceUrls(sourceUrls)
+                .evidenceState(resolveRepairableEvidenceState(sourceUrls))
                 .suggestedQueries(List.of(defaultIfBlank(claim.getSectionKey(), "report") + " official evidence"))
-                .issueFlags(List.of("MISSING_SOURCE_URL"))
+                .issueFlags(resolveRepairableIssueFlags(sourceUrls))
                 .build()
                 .normalized();
     }
 
-    private CitationIssue buildUnknownEvidenceIssue(int issueIndex, CitationClaim claim, String evidenceId) {
+    /**
+     * UNKNOWN_EVIDENCE_ID 表示 evidenceId 无法回指数据库证据，
+     * 但只要 Writer 还保留了 fallback sourceUrls，就应该让编排层继续自动修复。
+     */
+    private CitationIssue buildUnknownEvidenceIssue(int issueIndex,
+                                                    CitationClaim claim,
+                                                    String evidenceId,
+                                                    List<String> repairableSourceUrls) {
+        List<String> sourceUrls = distinctTexts(repairableSourceUrls);
         return CitationIssue.builder()
                 .issueId("ci-" + issueIndex)
                 .issueType("UNKNOWN_EVIDENCE_ID")
@@ -252,10 +272,10 @@ public class CitationAgent extends BaseAgent {
                 .claimId(claim.getClaimId())
                 .evidenceId(evidenceId)
                 .summary("报告引用了未知证据编号 " + evidenceId + "，当前任务内无法回指来源。")
-                .sourceUrls(List.of())
-                .evidenceState("MISSING_SOURCE")
+                .sourceUrls(sourceUrls)
+                .evidenceState(resolveRepairableEvidenceState(sourceUrls))
                 .suggestedQueries(List.of(evidenceId + " official evidence"))
-                .issueFlags(List.of("UNKNOWN_EVIDENCE_ID", "MISSING_SOURCE_URL"))
+                .issueFlags(mergeFlags(List.of("UNKNOWN_EVIDENCE_ID"), resolveRepairableIssueFlags(sourceUrls)))
                 .build()
                 .normalized();
     }
@@ -316,6 +336,18 @@ public class CitationAgent extends BaseAgent {
             return "PARTIAL_SOURCE";
         }
         return resultSourceUrls.isEmpty() ? "MISSING_SOURCE" : "FULL_SOURCE";
+    }
+
+    /**
+     * Citation issue 只要还能关联到 Writer 保留下来的 sourceUrls，
+     * 就应明确标记为 PARTIAL_SOURCE，避免编排层把“可修复缺口”误拦截成人工介入。
+     */
+    private String resolveRepairableEvidenceState(List<String> sourceUrls) {
+        return hasAnyText(sourceUrls) ? "PARTIAL_SOURCE" : "MISSING_SOURCE";
+    }
+
+    private List<String> resolveRepairableIssueFlags(List<String> sourceUrls) {
+        return hasAnyText(sourceUrls) ? List.of() : List.of("MISSING_SOURCE_URL");
     }
 
     private List<String> collectResultSourceUrls(WriterOutputSnapshot writerOutputSnapshot,

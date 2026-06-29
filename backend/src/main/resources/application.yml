@@ -169,7 +169,8 @@ collection:
     max-links-per-node: 30
   execution:
     reuse-prefetched-page: true
-    concurrency: 1
+    concurrency: 3
+    prioritize-prefetched-packages: true
     timing-enabled: true
   web-page:
     playwright-link-supplement-enabled: true
@@ -181,11 +182,15 @@ collection:
 source-discovery:
   search:
     provider-order:
+      - tavily
       - qianfan
       - serpapi
       - browserPreview
       - http
     providers:
+      tavily:
+        enabled: true
+        fail-open: true
       qianfan:
         enabled: true
         fail-open: true
@@ -361,7 +366,7 @@ search:
     continue-on-search-timeout: true
     continue-on-page-collect-failure: true
     recover-partial-content-on-timeout: true
-    verification-concurrency: 3
+    verification-concurrency: 4
     verification-timing-enabled: true
     verification-direct-first-enabled: true
     verification-direct-positive-shortcut-enabled: true
@@ -401,6 +406,18 @@ qianfan-search:
   api-key: ${QIANFAN_API_KEY:}
   endpoint: https://qianfan.baidubce.com/v2/ai_search/web_search
   default-engine: baidu
+
+tavily-search:
+  enabled: true
+  endpoint: https://api.tavily.com/search
+  api-key: ${TAVILY_API_KEY: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}
+  search-depth: advanced
+  include-raw-content: true
+  max-results: 5
+  timeout-seconds: 20
+  max-retries: 2
+  min-raw-content-chars: 500
+  min-tavily-score: 0.45
 
 task:
   rag:
@@ -506,7 +523,8 @@ collector:
 collection:
   execution:
     reuse-prefetched-page: true
-    concurrency: 1
+    concurrency: 3
+    prioritize-prefetched-packages: true
     timing-enabled: true
 
 search:
@@ -534,7 +552,7 @@ search:
     continue-on-search-timeout: true
     continue-on-page-collect-failure: true
     recover-partial-content-on-timeout: true
-    verification-concurrency: 3
+    verification-concurrency: 4
     verification-timing-enabled: true
     verification-direct-first-enabled: true
     verification-direct-positive-shortcut-enabled: true
@@ -550,11 +568,15 @@ search:
 source-discovery:
   search:
     provider-order:
+      - tavily
       - qianfan
       - serpapi
       - browserPreview
       - http
     providers:
+      tavily:
+        enabled: false
+        fail-open: true
       qianfan:
         enabled: true
         fail-open: true

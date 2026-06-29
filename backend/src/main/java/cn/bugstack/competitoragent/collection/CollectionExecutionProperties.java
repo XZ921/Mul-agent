@@ -21,9 +21,15 @@ public class CollectionExecutionProperties {
 
     /**
      * Collection 同一层级任务的最大并发数。
-     * 默认 1 表示保持现有串行行为；调大后只并发同一 depth 的独立页面。
+     * 默认 3 表示在不打破同层顺序语义的前提下，优先把真实可并发的页面任务跑起来。
      */
-    private int concurrency = 1;
+    private int concurrency = 3;
+
+    /**
+     * 是否优先执行带有 Tavily 预取正文的任务包。
+     * 开启后可先消费 TAVILY_PREFETCHED，减少慢网页包拖住整批结果。
+     */
+    private boolean prioritizePrefetchedPackages = true;
 
     /**
      * 是否在 CollectionExecutionReport 中写入耗时统计。

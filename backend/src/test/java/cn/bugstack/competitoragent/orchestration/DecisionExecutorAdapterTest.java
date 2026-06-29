@@ -66,4 +66,45 @@ class DecisionExecutorAdapterTest {
         assertThat(mutation.getMutationType()).isEqualTo("NO_MUTATION");
         assertThat(mutation.getNodeTemplates()).isEmpty();
     }
+    @Test
+    void shouldWriteTavilyHintsIntoSupplementCollectorNodeConfig() {
+        OrchestrationDecision decision = OrchestrationDecision.builder()
+                .decisionId("od-010")
+                .taskId(80L)
+                .triggerNodeName("citation_check")
+                .decisionType("APPEND_DYNAMIC_BRANCH")
+                .actionType("SUPPLEMENT_EVIDENCE")
+                .targetNode("collect_sources")
+                .targetSection("pricing")
+                .reason("补充抖音开放平台官方定价证据")
+                .suggestedQueries(List.of("抖音 开放平台 定价 官方"))
+                .sourceUrls(List.of("https://open.douyin.com/platform/pricing"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .build()
+                .normalized();
+        DecisionPolicyResult policyResult = DecisionPolicyResult.builder()
+                .decisionId("od-010")
+                .allowed(true)
+                .normalizedAction("CREATE_SUPPLEMENT_BRANCH")
+                .sourceUrls(List.of("https://open.douyin.com/platform/pricing"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .preferredSearchProvider("tavily")
+                .tavilyQueryMode("EVIDENCE_REPAIR")
+                .suggestedQueries(List.of("抖音 开放平台 定价 官方"))
+                .includeDomainPolicy("NARROW_OFFICIAL")
+                .preferredDomains(List.of("open.douyin.com"))
+                .includeDomains(List.of("open.douyin.com"))
+                .policyVersion("ORCHESTRATION_POLICY_V1")
+                .build();
+
+        DynamicPlanMutation mutation = adapter.toMutation(decision, policyResult, 10L, 3);
+
+        assertThat(mutation.getNodeTemplates()).hasSize(1);
+        assertThat(mutation.getNodeTemplates().get(0).getNodeConfig())
+                .contains("\"preferredSearchProvider\":\"tavily\"")
+                .contains("\"tavilyQueryMode\":\"EVIDENCE_REPAIR\"")
+                .contains("\"searchQueries\":[\"抖音 开放平台 定价 官方\"]")
+                .contains("\"preferredDomains\":[\"open.douyin.com\"]")
+                .contains("\"includeDomains\":[\"open.douyin.com\"]");
+    }
 }

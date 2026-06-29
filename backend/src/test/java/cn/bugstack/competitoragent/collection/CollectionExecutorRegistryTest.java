@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.collection;
 
+import cn.bugstack.competitoragent.search.tavily.TavilyPrefetchedContentRegistry;
 import cn.bugstack.competitoragent.source.GithubApiClient;
 import org.junit.jupiter.api.Test;
 
@@ -96,5 +97,20 @@ class CollectionExecutorRegistryTest {
                 .build();
 
         assertThat(registry.resolve(taskPackage).executorType()).isEqualTo("API_DATA");
+    }
+
+    @Test
+    void shouldResolveTavilyPrefetchedExecutorByPrimaryTool() {
+        TavilyPrefetchedContentRegistry registryStore = new TavilyPrefetchedContentRegistry();
+        CollectionExecutor tavilyExecutor = new TavilyPrefetchedExecutor(registryStore);
+        CollectionExecutor webExecutor = new WebPageCollectionExecutor(null, null);
+        CollectionExecutorRegistry registry = new CollectionExecutorRegistry(List.of(tavilyExecutor, webExecutor));
+
+        CollectionTaskPackage taskPackage = CollectionTaskPackage.builder()
+                .primaryTool("TAVILY_PREFETCHED")
+                .prefetchedContentRef("tavily:req-1:0")
+                .build();
+
+        assertThat(registry.resolve(taskPackage).executorType()).isEqualTo("TAVILY_PREFETCHED");
     }
 }

@@ -397,4 +397,36 @@ class OrchestrationDecisionServiceTest {
         assertThat(decisions.get(0).getTargetNode()).isEqualTo("rewrite_report");
         assertThat(decisions.get(0).getTargetSection()).isEqualTo("pricing");
     }
+    @Test
+    void shouldCreateSupplementDecisionFromCitationSuggestionWhenEvidenceRepairIsRequested() {
+        AgentSuggestion suggestion = AgentSuggestion.builder()
+                .suggestionId("as-task-91-citation_check-citation-1")
+                .taskId(91L)
+                .producerNodeName("citation_check")
+                .producerAgentType("CITATION")
+                .suggestionType("CITATION_VERIFICATION_GAP")
+                .targetSection("pricing")
+                .summary("unsupported claim: 抖音推荐算法支持跨域投放")
+                .severity("HIGH")
+                .confidence(0.72d)
+                .sourceUrls(List.of("https://open.douyin.com/docs"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .suggestedQueries(List.of())
+                .suggestedTargetNode("collect_sources")
+                .build()
+                .normalized();
+
+        List<OrchestrationDecision> decisions = service.decide(OrchestrationContext.builder()
+                .taskId(91L)
+                .triggerNodeName("citation_check")
+                .agentSuggestions(List.of(suggestion))
+                .sourceUrls(List.of("https://open.douyin.com/docs"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .build());
+
+        assertThat(decisions).hasSize(1);
+        assertThat(decisions.get(0).getDecisionType()).isEqualTo("APPEND_DYNAMIC_BRANCH");
+        assertThat(decisions.get(0).getActionType()).isEqualTo("SUPPLEMENT_EVIDENCE");
+        assertThat(decisions.get(0).getTargetNode()).isEqualTo("collect_sources");
+    }
 }

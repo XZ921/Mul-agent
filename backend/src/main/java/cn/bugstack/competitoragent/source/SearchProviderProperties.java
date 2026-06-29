@@ -23,7 +23,7 @@ public class SearchProviderProperties {
      * 默认顺序遵循“结构化搜索优先、浏览器预览次之、通用 HTTP 兜底”的原则，
      * 这样即使某一条渠道失败，也能继续尝试后续 provider。
      */
-    private List<String> providerOrder = List.of("qianfan", "serpapi", "browserPreview", "http");
+    private List<String> providerOrder = List.of("tavily", "qianfan", "serpapi", "browserPreview", "http");
 
     /**
      * 各 Provider 的路由开关与降级策略。

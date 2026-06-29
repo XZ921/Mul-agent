@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.search;
 
+import cn.bugstack.competitoragent.search.tavily.TavilyFastLaneAudit;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
@@ -63,6 +64,11 @@ public class SearchExecutionTrace {
     private String fallbackDecision;
     private String recoveryCheckpoint;
     private String recoveryAdvice;
+    /**
+     * 把 Tavily 快速通道结果跟随搜索 trace 一起落盘，
+     * 便于后续报告聚合和节点级别审计直接从 trace 读取。
+     */
+    private TavilyFastLaneAudit tavilyFastLaneAudit;
     private Boolean resumedFromCheckpoint;
     private String checkpointSource;
     private LocalDateTime generatedAt;

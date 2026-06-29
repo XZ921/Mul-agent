@@ -161,4 +161,87 @@ class DecisionPolicyServiceTest {
         assertThat(result.isAllowed()).isFalse();
         assertThat(result.getBlockedReasons()).contains("搜索补证 query 数量超过上限：6/5");
     }
+    @Test
+    void shouldMarkSupplementEvidenceAsTavilyEvidenceRepairForOfficialGap() {
+        OrchestrationDecision decision = OrchestrationDecision.builder()
+                .decisionId("od-007")
+                .decisionType("APPEND_DYNAMIC_BRANCH")
+                .actionType("SUPPLEMENT_EVIDENCE")
+                .targetNode("collect_sources")
+                .targetSection("pricing")
+                .reason("补充抖音开放平台官方定价与规则证据")
+                .sourceUrls(List.of("https://open.douyin.com/platform/pricing"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .suggestedQueries(List.of("抖音 开放平台 定价 官方"))
+                .build()
+                .normalized();
+
+        DecisionPolicyResult result = service.evaluate(
+                decision,
+                DecisionPolicyRuleSet.builder().build(),
+                0,
+                "RUNNING",
+                "SUCCESS");
+
+        assertThat(result.isAllowed()).isTrue();
+        assertThat(result.getPreferredSearchProvider()).isEqualTo("tavily");
+        assertThat(result.getTavilyQueryMode()).isEqualTo("EVIDENCE_REPAIR");
+        assertThat(result.getIncludeDomainPolicy()).isEqualTo("NARROW_OFFICIAL");
+        assertThat(result.getSuggestedQueries()).containsExactly("抖音 开放平台 定价 官方");
+        assertThat(result.getPreferredDomains()).containsExactly("open.douyin.com");
+        assertThat(result.getIncludeDomains()).containsExactly("open.douyin.com");
+    }
+
+    @Test
+    void shouldUseDecisionReasonAsRepairQueryWhenSuggestedQueriesAreMissing() {
+        OrchestrationDecision decision = OrchestrationDecision.builder()
+                .decisionId("od-008")
+                .decisionType("APPEND_DYNAMIC_BRANCH")
+                .actionType("SUPPLEMENT_EVIDENCE")
+                .targetNode("collect_sources")
+                .targetSection("pricing")
+                .reason("unsupported claim: 抖音推荐算法支持跨域投放")
+                .sourceUrls(List.of("https://open.douyin.com/docs"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .suggestedQueries(List.of())
+                .build()
+                .normalized();
+
+        DecisionPolicyResult result = service.evaluate(
+                decision,
+                DecisionPolicyRuleSet.builder().build(),
+                0,
+                "RUNNING",
+                "SUCCESS");
+
+        assertThat(result.isAllowed()).isTrue();
+        assertThat(result.getSuggestedQueries())
+                .containsExactly("unsupported claim: 抖音推荐算法支持跨域投放");
+        assertThat(result.getTavilyQueryMode()).isEqualTo("EVIDENCE_REPAIR");
+    }
+
+    @Test
+    void shouldDowngradeDomainHintDiscoveryToManualOnlyInMvp() {
+        OrchestrationDecision decision = OrchestrationDecision.builder()
+                .decisionId("od-009")
+                .decisionType("APPEND_DYNAMIC_BRANCH")
+                .actionType("DOMAIN_HINT_DISCOVERY")
+                .targetNode("collect_sources")
+                .reason("需要先补齐官方域名线索")
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build()
+                .normalized();
+
+        DecisionPolicyResult result = service.evaluate(
+                decision,
+                DecisionPolicyRuleSet.builder().build(),
+                0,
+                "RUNNING",
+                "SUCCESS");
+
+        assertThat(result.isAllowed()).isTrue();
+        assertThat(result.getNormalizedAction()).isEqualTo("MANUAL_ONLY");
+        assertThat(result.getPreferredSearchProvider()).isNull();
+    }
 }

@@ -2,12 +2,14 @@ package cn.bugstack.competitoragent.search;
 
 import cn.bugstack.competitoragent.llm.LlmClient;
 import cn.bugstack.competitoragent.security.UrlSecurityUtils;
+import cn.bugstack.competitoragent.search.tavily.TavilySearchProperties;
 import cn.bugstack.competitoragent.source.GithubApiProperties;
 import cn.bugstack.competitoragent.source.SearchProviderProperties;
 import lombok.Builder;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
@@ -42,6 +44,7 @@ public class SearchCapabilityReadinessGuard implements ApplicationRunner {
     private final GithubApiProperties githubApiProperties;
     private final SerpApiProperties serpApiProperties;
     private final QianfanSearchProperties qianfanSearchProperties;
+    private final TavilySearchProperties tavilySearchProperties;
     private final DomainDiscoveryProperties domainDiscoveryProperties;
     private final SitemapDiscoveryProperties sitemapDiscoveryProperties;
     private final ObjectProvider<LlmClient> llmClientProvider;
@@ -55,12 +58,36 @@ public class SearchCapabilityReadinessGuard implements ApplicationRunner {
                                           DomainDiscoveryProperties domainDiscoveryProperties,
                                           SitemapDiscoveryProperties sitemapDiscoveryProperties,
                                           ObjectProvider<LlmClient> llmClientProvider) {
+        this(searchProperties,
+                searchProviderProperties,
+                searchBrowserProperties,
+                githubApiProperties,
+                serpApiProperties,
+                qianfanSearchProperties,
+                new TavilySearchProperties(),
+                domainDiscoveryProperties,
+                sitemapDiscoveryProperties,
+                llmClientProvider);
+    }
+
+    @Autowired
+    public SearchCapabilityReadinessGuard(SearchProperties searchProperties,
+                                          SearchProviderProperties searchProviderProperties,
+                                          SearchBrowserProperties searchBrowserProperties,
+                                          GithubApiProperties githubApiProperties,
+                                          SerpApiProperties serpApiProperties,
+                                          QianfanSearchProperties qianfanSearchProperties,
+                                          TavilySearchProperties tavilySearchProperties,
+                                          DomainDiscoveryProperties domainDiscoveryProperties,
+                                          SitemapDiscoveryProperties sitemapDiscoveryProperties,
+                                          ObjectProvider<LlmClient> llmClientProvider) {
         this.searchProperties = searchProperties;
         this.searchProviderProperties = searchProviderProperties;
         this.searchBrowserProperties = searchBrowserProperties;
         this.githubApiProperties = githubApiProperties;
         this.serpApiProperties = serpApiProperties;
         this.qianfanSearchProperties = qianfanSearchProperties;
+        this.tavilySearchProperties = tavilySearchProperties == null ? new TavilySearchProperties() : tavilySearchProperties;
         this.domainDiscoveryProperties = domainDiscoveryProperties;
         this.sitemapDiscoveryProperties = sitemapDiscoveryProperties;
         this.llmClientProvider = llmClientProvider;
@@ -102,6 +129,7 @@ public class SearchCapabilityReadinessGuard implements ApplicationRunner {
      */
     ReadinessSummary buildSummary() {
         Map<String, ProviderReadiness> providers = new LinkedHashMap<>();
+        providers.put("tavily", buildTavilyReadiness());
         providers.put("qianfan", buildQianfanReadiness());
         providers.put("serpapi", buildSerpApiReadiness());
         providers.put("http", buildHttpProviderReadiness());
@@ -164,6 +192,23 @@ public class SearchCapabilityReadinessGuard implements ApplicationRunner {
         String endpoint = qianfanSearchProperties == null ? null : qianfanSearchProperties.getEndpoint();
         String apiKey = qianfanSearchProperties == null ? null : qianfanSearchProperties.getApiKey();
         return buildApiProviderReadiness("qianfan", endpoint, apiKey);
+    }
+
+    /**
+     * Tavily 虽然在 MVP 中默认关闭，但 readiness 仍然要把它显式纳入摘要，
+     * 这样排查“为什么路由里看不到 Tavily”时，可以直接从启动摘要判断是开关、endpoint 还是 api key 问题。
+     */
+    private ProviderReadiness buildTavilyReadiness() {
+        boolean routeEnabled = isRouteEnabled("tavily");
+        boolean available = tavilySearchProperties != null && tavilySearchProperties.isReady();
+        return ProviderReadiness.builder()
+                .providerKey("tavily")
+                .routeEnabled(routeEnabled)
+                .available(available)
+                .unavailableReason(available || tavilySearchProperties == null
+                        ? null
+                        : tavilySearchProperties.resolveReadinessFailureMessage())
+                .build();
     }
 
     private ProviderReadiness buildSerpApiReadiness() {

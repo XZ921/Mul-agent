@@ -31,6 +31,17 @@ public interface SearchSourceProvider {
     }
 
     /**
+     * 基于完整上下文执行补源搜索。
+     * 新 provider 可以直接读取 query、域名提示与种子候选；旧 provider 默认回退到老入口，保持兼容。
+     */
+    default List<SourceCandidate> search(SearchSourceRequest request) {
+        if (request == null) {
+            return List.of();
+        }
+        return search(request.getCompetitorName(), request.getRequestedScopes());
+    }
+
+    /**
      * 根据竞品与来源范围返回搜索候选项。
      */
     List<SourceCandidate> search(String competitorName, List<String> requestedScopes);

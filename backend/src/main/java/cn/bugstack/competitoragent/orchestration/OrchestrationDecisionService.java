@@ -175,6 +175,9 @@ public class OrchestrationDecisionService {
         }
         for (AgentSuggestion suggestion : suggestions) {
             if ("CITATION_VERIFICATION_GAP".equalsIgnoreCase(suggestion.getSuggestionType())) {
+                if (shouldRepairEvidenceFromCitationSuggestion(suggestion)) {
+                    return List.of(supplementEvidenceFromSuggestion(context, suggestion));
+                }
                 return List.of(rewriteClaimFromSuggestion(context, suggestion));
             }
         }
@@ -251,6 +254,15 @@ public class OrchestrationDecisionService {
                 .evidenceState(suggestion.getEvidenceState())
                 .build()
                 .normalized();
+    }
+
+    /**
+     * Citation 建议如果已经显式要求回到 collect_sources，
+     * 说明当前问题不是简单重写能消解，而是需要补充可溯源证据，先映射成 evidence repair 分支。
+     */
+    private boolean shouldRepairEvidenceFromCitationSuggestion(AgentSuggestion suggestion) {
+        return suggestion != null
+                && "collect_sources".equalsIgnoreCase(suggestion.getSuggestedTargetNode());
     }
 
     private boolean hasBlockingDiagnosis(OrchestrationContext context) {

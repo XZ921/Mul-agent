@@ -1242,17 +1242,11 @@ public class ReportService {
             collectors.add(collector);
 
             if (traceRecorded) {
-                SearchAuditSummary summary = SearchAuditSummary.builder()
-                        .candidateCount(readInteger(trace, "plannedCandidateCount"))
-                        .selectedCount(readInteger(trace, "selectedCandidateCount"))
-                        .discardedCount(readInteger(trace, "discardedCandidateCount"))
-                        .attemptedCount(readInteger(trace, "attemptedCandidateCount"))
-                        .degraded(readBoolean(trace, "degraded"))
-                        .degradationReason(trace.path("degradationReason").asText(null))
-                        .fallbackDecision(trace.path("fallbackDecision").asText(null))
-                        .recoveryCheckpoint(trace.path("recoveryCheckpoint").asText(null))
-                        .sourceUrls(readStringList(trace.path("selectedUrls")))
-                        .build();
+                SearchAuditSummary summary = SearchAuditSummary.fromTrace(
+                        objectMapper,
+                        trace,
+                        output == null ? null : output.path("searchAudit")
+                );
                 searchAuditSummaries.add(summary);
                 traceRecordedCount++;
                 if (Boolean.TRUE.equals(collector.getResumedFromCheckpoint())) {
@@ -1283,7 +1277,7 @@ public class ReportService {
                 .verifiedCandidateCount(verifiedCandidateCount)
                 .supplementedCandidateCount(supplementedCandidateCount)
                 .selectedCandidateCount(selectedCandidateCount)
-                .searchAuditSummary(mergeSearchAuditSummaries(searchAuditSummaries))
+                .searchAuditSummary(SearchAuditSummary.merge(searchAuditSummaries))
                 .collectors(collectors)
                 .build();
     }
@@ -1292,45 +1286,15 @@ public class ReportService {
      * 报告主路径只聚合轻量搜索审计摘要。
      * 这样可追溯性、计数和降级结论都有统一入口，不再要求下游重新解析节点大 JSON。
      */
-    private SearchAuditSummary mergeSearchAuditSummaries(List<SearchAuditSummary> summaries) {
-        if (summaries == null || summaries.isEmpty()) {
-            return SearchAuditSummary.builder()
-                    .candidateCount(0)
-                    .selectedCount(0)
-                    .discardedCount(0)
-                    .attemptedCount(0)
-                    .sourceUrls(List.of())
-                    .build();
-        }
-        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
-        int candidateCount = 0;
-        int selectedCount = 0;
-        int discardedCount = 0;
-        int attemptedCount = 0;
-        for (SearchAuditSummary summary : summaries) {
-            if (summary == null) {
-                continue;
-            }
-            candidateCount += summary.getCandidateCount() == null ? 0 : summary.getCandidateCount();
-            selectedCount += summary.getSelectedCount() == null ? 0 : summary.getSelectedCount();
-            discardedCount += summary.getDiscardedCount() == null ? 0 : summary.getDiscardedCount();
-            attemptedCount += summary.getAttemptedCount() == null ? 0 : summary.getAttemptedCount();
-            if (summary.getSourceUrls() != null) {
-                sourceUrls.addAll(summary.getSourceUrls());
-            }
-        }
-        return SearchAuditSummary.builder()
-                .candidateCount(candidateCount)
-                .selectedCount(selectedCount)
-                .discardedCount(discardedCount)
-                .attemptedCount(attemptedCount)
-                .sourceUrls(new ArrayList<>(sourceUrls))
-                .build();
-    }
 
     /**
      * 把结构化知识里的字段级 evidenceCoverage 汇总成章节级概览，供报告页展示和 Reviewer 强约束复用。
      */
+    /**
+     * 报告聚合优先从 trace 里读取 Tavily 审计；如果历史节点还没把字段投影到 trace，
+     * 再回退读取 searchAudit 顶层或 summary，确保新旧快照都能平滑兼容。
+     */
+
     private EvidenceCoverageOverview buildEvidenceCoverageOverview(List<CompetitorKnowledgeInfo> knowledges) {
         if (knowledges == null || knowledges.isEmpty()) {
             return EvidenceCoverageOverview.builder()

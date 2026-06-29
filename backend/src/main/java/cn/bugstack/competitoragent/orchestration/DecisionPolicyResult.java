@@ -33,6 +33,15 @@ public class DecisionPolicyResult {
     private List<String> sourceUrls = List.of();
     private EvidenceState evidenceState;
     private String policyVersion;
+    private String preferredSearchProvider;
+    private String tavilyQueryMode;
+    @Builder.Default
+    private List<String> suggestedQueries = List.of();
+    private String includeDomainPolicy;
+    @Builder.Default
+    private List<String> preferredDomains = List.of();
+    @Builder.Default
+    private List<String> includeDomains = List.of();
 
     /**
      * 归一化策略结果，保证执行适配器只消费稳定动作和显式证据状态。
@@ -46,6 +55,12 @@ public class DecisionPolicyResult {
                 .sourceUrls(normalizeDistinctList(sourceUrls))
                 .evidenceState(resolveEvidenceState())
                 .policyVersion(blankToDefault(policyVersion, "ORCHESTRATION_POLICY_V1"))
+                .preferredSearchProvider(lowerOrNull(preferredSearchProvider))
+                .tavilyQueryMode(upperOrNull(tavilyQueryMode))
+                .suggestedQueries(normalizeDistinctList(suggestedQueries))
+                .includeDomainPolicy(upperOrNull(includeDomainPolicy))
+                .preferredDomains(normalizeDistinctList(preferredDomains))
+                .includeDomains(normalizeDistinctList(includeDomains))
                 .build();
     }
 
@@ -66,6 +81,16 @@ public class DecisionPolicyResult {
     private String blankToDefault(String value, String defaultValue) {
         String normalized = blankToNull(value);
         return normalized == null ? defaultValue : normalized;
+    }
+
+    private String upperOrNull(String value) {
+        String normalized = blankToNull(value);
+        return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
+    }
+
+    private String lowerOrNull(String value) {
+        String normalized = blankToNull(value);
+        return normalized == null ? null : normalized.toLowerCase(Locale.ROOT);
     }
 
     private List<String> normalizeDistinctList(List<String> values) {

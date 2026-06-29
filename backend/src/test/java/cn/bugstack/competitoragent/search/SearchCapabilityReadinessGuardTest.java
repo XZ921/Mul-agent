@@ -86,6 +86,39 @@ class SearchCapabilityReadinessGuardTest {
     }
 
     @Test
+    void shouldIncludeTavilyReadinessInSummary() {
+        GithubApiProperties githubApiProperties = new GithubApiProperties();
+        githubApiProperties.setEnabled(true);
+        githubApiProperties.setEndpoint("https://api.github.com");
+        githubApiProperties.setApiToken("token");
+
+        SearchProviderProperties searchProviderProperties = createSearchProviderProperties(true, true, true, true, true);
+        searchProviderProperties.getProviders().put("tavily", SearchProviderProperties.ProviderRouteProperties.builder()
+                .enabled(true)
+                .failOpen(true)
+                .build());
+
+        SearchCapabilityReadinessGuard guard = new SearchCapabilityReadinessGuard(
+                createSearchProperties(true, true),
+                searchProviderProperties,
+                createSearchBrowserProperties(true),
+                githubApiProperties,
+                new SerpApiProperties(),
+                new QianfanSearchProperties(),
+                new DomainDiscoveryProperties(),
+                new SitemapDiscoveryProperties(),
+                emptyLlmClientProvider()
+        );
+
+        SearchCapabilityReadinessGuard.ReadinessSummary summary = guard.buildSummary();
+
+        assertThat(summary.getProviders()).containsKey("tavily");
+        assertThat(summary.getProviders().get("tavily").isRouteEnabled()).isTrue();
+        assertThat(summary.getProviders().get("tavily").isAvailable()).isFalse();
+        assertThat(summary.getProviders().get("tavily").getUnavailableReason()).isEqualTo("tavily disabled");
+    }
+
+    @Test
     void shouldDistinguishPlanningBrowserPreviewFromRuntimeBrowserReadiness() {
         GithubApiProperties githubApiProperties = new GithubApiProperties();
         githubApiProperties.setEnabled(true);

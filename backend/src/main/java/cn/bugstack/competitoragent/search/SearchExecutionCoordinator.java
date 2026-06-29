@@ -1,6 +1,10 @@
 package cn.bugstack.competitoragent.search;
 
 import cn.bugstack.competitoragent.agent.collector.CollectorNodeConfig;
+import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
+import cn.bugstack.competitoragent.search.tavily.TavilyFastLaneAudit;
+import cn.bugstack.competitoragent.source.SearchRequestPhase;
+import cn.bugstack.competitoragent.source.SearchSourceRequest;
 import cn.bugstack.competitoragent.source.SearchSourceProvider;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
@@ -36,6 +40,7 @@ public class SearchExecutionCoordinator {
     private final SourceFamilyDirectDiscoveryPlanner directDiscoveryPlanner;
     private final SitemapDiscoveryService sitemapDiscoveryService;
     private final CandidateOwnershipPolicy candidateOwnershipPolicy;
+    private final TavilyBootstrapPlanner tavilyBootstrapPlanner;
 
     public SearchExecutionCoordinator(CandidateVerifier candidateVerifier,
                                       BrowserSearchRuntimeService browserSearchRuntimeService,
@@ -51,7 +56,8 @@ public class SearchExecutionCoordinator {
                 searchPolicyResolver,
                 new CanonicalUrlResolver(),
                 new SitemapDiscoveryService(new SitemapDiscoveryProperties()),
-                new CandidateOwnershipPolicy());
+                new CandidateOwnershipPolicy(),
+                new TavilyBootstrapPlanner());
     }
 
     @Autowired
@@ -71,7 +77,8 @@ public class SearchExecutionCoordinator {
                 searchPolicyResolver,
                 canonicalUrlResolver,
                 sitemapDiscoveryService,
-                new CandidateOwnershipPolicy());
+                new CandidateOwnershipPolicy(),
+                new TavilyBootstrapPlanner());
     }
 
     public SearchExecutionCoordinator(CandidateVerifier candidateVerifier,
@@ -83,6 +90,28 @@ public class SearchExecutionCoordinator {
                                       CanonicalUrlResolver canonicalUrlResolver,
                                       SitemapDiscoveryService sitemapDiscoveryService,
                                       CandidateOwnershipPolicy candidateOwnershipPolicy) {
+        this(candidateVerifier,
+                browserSearchRuntimeService,
+                searchSourceProvider,
+                sourceCandidateRanker,
+                collectionTargetSelector,
+                searchPolicyResolver,
+                canonicalUrlResolver,
+                sitemapDiscoveryService,
+                candidateOwnershipPolicy,
+                new TavilyBootstrapPlanner());
+    }
+
+    public SearchExecutionCoordinator(CandidateVerifier candidateVerifier,
+                                      BrowserSearchRuntimeService browserSearchRuntimeService,
+                                      SearchSourceProvider searchSourceProvider,
+                                      SourceCandidateRanker sourceCandidateRanker,
+                                      CollectionTargetSelector collectionTargetSelector,
+                                      SearchPolicyResolver searchPolicyResolver,
+                                      CanonicalUrlResolver canonicalUrlResolver,
+                                      SitemapDiscoveryService sitemapDiscoveryService,
+                                      CandidateOwnershipPolicy candidateOwnershipPolicy,
+                                      TavilyBootstrapPlanner tavilyBootstrapPlanner) {
         this.candidateVerifier = candidateVerifier;
         this.browserSearchRuntimeService = browserSearchRuntimeService;
         this.searchSourceProvider = searchSourceProvider;
@@ -97,6 +126,9 @@ public class SearchExecutionCoordinator {
         this.candidateOwnershipPolicy = candidateOwnershipPolicy == null
                 ? new CandidateOwnershipPolicy()
                 : candidateOwnershipPolicy;
+        this.tavilyBootstrapPlanner = tavilyBootstrapPlanner == null
+                ? new TavilyBootstrapPlanner()
+                : tavilyBootstrapPlanner;
     }
 
     public SearchExecutionResult execute(CollectorNodeConfig config) {
@@ -137,6 +169,11 @@ public class SearchExecutionCoordinator {
                 plannedUrlCount,
                 targetCount
         );
+        SearchRuntimePolicy runtimePolicy = resolveRuntimePolicy(config);
+        int bootstrapCandidateLimit = searchPolicyResolver.resolveBootstrapCandidateLimit(runtimePolicy, targetCount);
+        int supplementCandidateLimit = searchPolicyResolver.resolveSupplementCandidateLimit(runtimePolicy, targetCount);
+        int maxCandidatePoolSize = searchPolicyResolver.resolveMaxCandidatePoolSize(runtimePolicy, targetCount);
+        int maxCandidatesPerDomain = searchPolicyResolver.resolveMaxCandidatesPerDomain(runtimePolicy);
         executionPlan = enrichExecutionPlan(executionPlan, config, targetCount, minVerifiedCount);
         boolean circuitBroken = false;
         String degradationReason = null;
@@ -149,6 +186,45 @@ public class SearchExecutionCoordinator {
         appendSnapshotAndPublish(progressSnapshots, executionPlan, "LOAD_CANDIDATES",
                 (resumedFromCheckpoint ? "已从恢复检查点加载 " : "已加载 ") + allCandidates.size() + " 条规划期候选来源",
                 false, null, progressListener, allCandidates, List.of(), null);
+
+        TavilyBootstrapDecision bootstrapDecision = tavilyBootstrapPlanner.plan(config, allCandidates);
+        if (bootstrapDecision.isShouldExecute()) {
+            markStepRunning(executionPlan, "TAVILY_BOOTSTRAP_ENRICH", bootstrapDecision.getReason());
+            appendSnapshotAndPublish(progressSnapshots, executionPlan, "TAVILY_BOOTSTRAP_ENRICH",
+                    bootstrapDecision.getReason(), false, null, progressListener, allCandidates, List.of(), null);
+            try {
+                List<SourceCandidate> bootstrapCandidates = normalizeCandidates(
+                        searchSourceProvider.search(bootstrapDecision.getRequest()),
+                        "BOOTSTRAPPED",
+                        config
+                );
+                bootstrapCandidates = sourceCandidateRanker.rankDeduplicateAndLimit(
+                        bootstrapCandidates,
+                        bootstrapCandidateLimit,
+                        maxCandidatesPerDomain
+                );
+                allCandidates = sourceCandidateRanker.rankDeduplicateAndLimit(
+                        concat(allCandidates, bootstrapCandidates),
+                        maxCandidatePoolSize,
+                        maxCandidatesPerDomain
+                );
+                String bootstrapMessage = bootstrapCandidates.isEmpty()
+                        ? "Tavily Phase 1 bootstrap 已执行，但未新增候选"
+                        : "Tavily Phase 1 bootstrap 新增 " + bootstrapCandidates.size() + " 条候选";
+                markStepSuccess(executionPlan, "TAVILY_BOOTSTRAP_ENRICH", bootstrapMessage);
+                appendSnapshotAndPublish(progressSnapshots, executionPlan, "TAVILY_BOOTSTRAP_ENRICH",
+                        bootstrapMessage, false, null, progressListener, allCandidates, List.of(), null);
+            } catch (RuntimeException exception) {
+                String failOpenMessage = "Tavily Phase 1 bootstrap 执行失败，按 fail-open 继续验证规划期候选";
+                markStepSuccess(executionPlan, "TAVILY_BOOTSTRAP_ENRICH", failOpenMessage);
+                appendSnapshotAndPublish(progressSnapshots, executionPlan, "TAVILY_BOOTSTRAP_ENRICH",
+                        failOpenMessage, false, null, progressListener, allCandidates, List.of(), null);
+            }
+        } else {
+            markStepSkipped(executionPlan, "TAVILY_BOOTSTRAP_ENRICH", bootstrapDecision.getReason());
+            appendSnapshotAndPublish(progressSnapshots, executionPlan, "TAVILY_BOOTSTRAP_ENRICH",
+                    bootstrapDecision.getReason(), false, null, progressListener, allCandidates, List.of(), null);
+        }
 
         int verifiedCount = 0;
         int supplementedCount = 0;
@@ -240,14 +316,22 @@ public class SearchExecutionCoordinator {
                         allCandidates,
                         supplementTargetPoolSize
                 );
-                List<SourceCandidate> supplementedCandidates = supplementOutcome.getSupplementedCandidates();
+                List<SourceCandidate> supplementedCandidates = sourceCandidateRanker.rankDeduplicateAndLimit(
+                        supplementOutcome.getSupplementedCandidates(),
+                        supplementCandidateLimit,
+                        maxCandidatesPerDomain
+                );
                 browserSearchResult = supplementOutcome.getBrowserSearchResult();
                 supplementMethod = supplementOutcome.getSupplementMethod();
                 providerFallbackUsed = supplementOutcome.isProviderFallbackUsed();
                 fallbackDecision = supplementOutcome.getFallbackDecision();
                 supplementedCount = supplementedCandidates.size();
                 if (!supplementedCandidates.isEmpty()) {
-                    allCandidates = sourceCandidateRanker.rankAndDeduplicate(concat(allCandidates, supplementedCandidates));
+                    allCandidates = sourceCandidateRanker.rankDeduplicateAndLimit(
+                            concat(allCandidates, supplementedCandidates),
+                            maxCandidatePoolSize,
+                            maxCandidatesPerDomain
+                    );
                     int needed = Math.max(0, minVerifiedCount - verifiedCount);
                     if (Boolean.TRUE.equals(config.getVerifyCandidates()) && resultPageVerificationEnabled && needed > 0) {
                         if (isTimedOut(searchStartedAt, searchTimeoutMillis)) {
@@ -333,6 +417,12 @@ public class SearchExecutionCoordinator {
                 "已选出 " + selectedTargets.size() + " 条正式采集目标", circuitBroken, degradationReason,
                 progressListener, allCandidates, selectedTargets, null);
 
+        TavilyFastLaneAudit tavilyFastLaneAudit = buildTavilyFastLaneAudit(
+                allCandidates,
+                selectedTargets,
+                providerFallbackUsed
+        );
+
         SearchExecutionTrace executionTrace = SearchExecutionTrace.builder()
                 .traceVersion("v1")
                 .searchMode(config.getSearchMode())
@@ -372,12 +462,21 @@ public class SearchExecutionCoordinator {
                 .fallbackDecision(fallbackDecision)
                 .recoveryCheckpoint(resolveRecoveryCheckpoint(executionPlan))
                 .recoveryAdvice(buildRecoveryAdvice(circuitBroken, degradationReason, browserSearchResult, selectedTargets, config))
+                .tavilyFastLaneAudit(tavilyFastLaneAudit)
                 .resumedFromCheckpoint(resumedFromCheckpoint)
                 .checkpointSource(checkpointSource)
                 .runtimePolicy(resolveRuntimePolicy(config))
                 .selectedUrls(selectionDecision.getSourceUrls() == null ? List.of() : selectionDecision.getSourceUrls())
                 .generatedAt(LocalDateTime.now())
                 .build();
+        SearchAuditSummary auditSummary = buildSearchAuditSummary(
+                allCandidates,
+                attemptedTargetList,
+                selectedTargets,
+                discardedCandidates,
+                executionTrace,
+                tavilyFastLaneAudit
+        );
         publishProgress(progressListener, executionPlan, progressSnapshots, allCandidates, selectedTargets, executionTrace);
         List<SearchReplayTimelineItem> replayTimeline = buildReplayTimeline(
                 progressSnapshots,
@@ -414,10 +513,12 @@ public class SearchExecutionCoordinator {
                 .reasoningSummary(reasoningSummary)
                 .executionTrace(executionTrace)
                 .auditSnapshot(SearchAuditSnapshot.builder()
+                        .summary(auditSummary)
                         .executionTrace(executionTrace)
                         .executionPlan(executionPlan)
                         .latestProgress(latestProgress)
                         .progressHistory(progressSnapshots)
+                        .tavilyFastLaneAudit(tavilyFastLaneAudit)
                         .replayTimeline(replayTimeline)
                         .sourceCandidates(allCandidates)
                         .attemptedTargets(attemptedTargetList)
@@ -537,6 +638,13 @@ public class SearchExecutionCoordinator {
                         .status(SearchExecutionStep.StepStatus.PENDING)
                         .build(),
                 SearchExecutionStep.builder()
+                        .stepCode("TAVILY_BOOTSTRAP_ENRICH")
+                        .goal("对弱规划期候选执行 Tavily Phase 1 候选增强")
+                        .expectedDurationMs(4000L)
+                        .dependency("tavily")
+                        .status(SearchExecutionStep.StepStatus.PENDING)
+                        .build(),
+                SearchExecutionStep.builder()
                         .stepCode("VERIFY_TOP_CANDIDATES")
                         .goal("验证高优先级候选来源是否可用")
                         .expectedDurationMs(5000L)
@@ -615,9 +723,14 @@ public class SearchExecutionCoordinator {
 
             if ("HTTP".equals(stage) && httpModeEnabled && !httpExecuted) {
                 List<SourceCandidate> httpSearchCandidates = searchSourceProvider.search(
-                        config.getCompetitorName(),
-                        List.of(config.getSourceType())
+                        buildSearchSourceRequest(config, existingCandidates)
                 );
+                if (httpSearchCandidates == null || httpSearchCandidates.isEmpty()) {
+                    httpSearchCandidates = searchSourceProvider.search(
+                            config.getCompetitorName(),
+                            List.of(config.getSourceType())
+                    );
+                }
                 List<SourceCandidate> httpCandidates = removeExistingCandidates(
                         concat(
                                 normalizeCandidates(httpSearchCandidates, "HTTP", config),
@@ -670,7 +783,7 @@ public class SearchExecutionCoordinator {
                         return null;
                     }
                     String providerKey = resolveProviderKey(base, stage);
-                    String effectiveStage = StringUtils.hasText(base.getSelectionStage()) ? base.getSelectionStage() : stage;
+                    String effectiveStage = resolveSelectionStage(base, stage);
                     String effectiveReason = StringUtils.hasText(base.getSelectionReason())
                             ? base.getSelectionReason()
                             : ("PLANNED".equals(stage) ? "来自规划期补源候选" : "来自运行期补源候选");
@@ -696,6 +809,43 @@ public class SearchExecutionCoordinator {
         return sourceCandidateRanker.rankAndDeduplicate(normalized);
     }
 
+    /**
+     * Tavily/bootstrap 等运行期候选在 provider 层可能先以 PLANNED 形态出厂，
+     * 这里必须按真正进入系统的阶段覆写成 BOOTSTRAPPED / SUPPLEMENTED，
+     * 否则审计与黄金路径会误把运行期增强候选当成规划期候选。
+     */
+    private String resolveSelectionStage(SourceCandidate candidate, String stage) {
+        String selectionStage = candidate == null ? null : candidate.getSelectionStage();
+        if (!StringUtils.hasText(selectionStage)) {
+            return stage;
+        }
+        if (!"PLANNED".equalsIgnoreCase(stage)
+                && "PLANNED".equalsIgnoreCase(selectionStage)) {
+            return stage;
+        }
+        return selectionStage;
+    }
+
+    /**
+     * 运行期补源统一构造 SearchSourceRequest。
+     * 这里显式透传 query、域名偏好、黑名单与当前候选池，让 Tavily 这类上下文敏感 provider 能拿到完整输入。
+     */
+    private SearchSourceRequest buildSearchSourceRequest(CollectorNodeConfig config,
+                                                         List<SourceCandidate> allCandidates) {
+        return SearchSourceRequest.builder()
+                .competitorName(config.getCompetitorName())
+                .requestedScopes(List.of(config.getSourceType()))
+                .searchQueries(resolveSearchQueries(config, null))
+                .preferredDomains(defaultList(config.getPreferredDomains()))
+                .includeDomains(defaultList(config.getIncludeDomains()))
+                .blockedDomains(defaultList(config.getBlockedDomains()))
+                .seedCandidates(allCandidates == null ? List.of() : allCandidates)
+                .preferredProviderKey(config.getPreferredSearchProvider())
+                .preferredQueryMode(config.getTavilyQueryMode())
+                .requestPhase(SearchRequestPhase.SUPPLEMENT)
+                .build();
+    }
+
     private List<String> resolveSearchQueries(CollectorNodeConfig config, SearchExecutionPlan executionPlan) {
         if (config.getSearchQueries() != null && !config.getSearchQueries().isEmpty()) {
             return config.getSearchQueries();
@@ -704,6 +854,10 @@ public class SearchExecutionCoordinator {
             return executionPlan.getSearchQueries();
         }
         return List.of();
+    }
+
+    private List<String> defaultList(List<String> values) {
+        return values == null ? List.of() : values;
     }
 
     /**
@@ -718,6 +872,9 @@ public class SearchExecutionCoordinator {
         }
         if ("BROWSER".equalsIgnoreCase(stage)) {
             return "browser";
+        }
+        if ("BOOTSTRAPPED".equalsIgnoreCase(stage)) {
+            return "tavily";
         }
         return "planned";
     }
@@ -1356,13 +1513,195 @@ public class SearchExecutionCoordinator {
                 .toList();
     }
 
+    /**
+     * Tavily 快速通道的审计聚合放在 coordinator 末端统一完成，
+     * 这样可以直接复用排序、补源、筛选之后已经稳定下来的候选集合，避免把 provider 链路改得过深。
+     */
+    private TavilyFastLaneAudit buildTavilyFastLaneAudit(List<SourceCandidate> sourceCandidates,
+                                                         List<SearchCollectionTarget> selectedTargets,
+                                                         boolean providerFallbackUsed) {
+        if (sourceCandidates == null || sourceCandidates.isEmpty()) {
+            return null;
+        }
+        Map<String, SourceCandidate> uniqueTavilyCandidates = new LinkedHashMap<>();
+        for (int index = 0; index < sourceCandidates.size(); index++) {
+            SourceCandidate candidate = sourceCandidates.get(index);
+            if (!isTavilyCandidate(candidate)) {
+                continue;
+            }
+            uniqueTavilyCandidates.putIfAbsent(resolveTavilyAuditKey(candidate, index), candidate);
+        }
+        if (uniqueTavilyCandidates.isEmpty()) {
+            return null;
+        }
+
+        LinkedHashSet<String> queryModes = new LinkedHashSet<>();
+        LinkedHashSet<String> queryOrigins = new LinkedHashSet<>();
+        LinkedHashSet<String> requestIds = new LinkedHashSet<>();
+        LinkedHashSet<String> queryFingerprints = new LinkedHashSet<>();
+        LinkedHashMap<String, Integer> rejectionReasons = new LinkedHashMap<>();
+        int fastLaneUsableCount = 0;
+        int fastLaneRejectedCount = 0;
+
+        for (SourceCandidate candidate : uniqueTavilyCandidates.values()) {
+            addDistinctText(queryModes, candidate.getTavilyQueryMode());
+            addDistinctText(queryOrigins, resolveTavilyQueryOrigin(candidate));
+            addDistinctText(requestIds, candidate.getTavilyRequestId());
+            addDistinctText(queryFingerprints, resolveTavilyQueryFingerprint(candidate));
+            if (Boolean.TRUE.equals(candidate.getFastLaneUsable())) {
+                fastLaneUsableCount++;
+                continue;
+            }
+            fastLaneRejectedCount++;
+            rejectionReasons.merge(resolveFastLaneRejectReason(candidate), 1, Integer::sum);
+        }
+
+        int queriesSent = !requestIds.isEmpty()
+                ? requestIds.size()
+                : !queryFingerprints.isEmpty() ? queryFingerprints.size() : queryModes.size();
+        boolean bootstrapTriggered = queryOrigins.stream().anyMatch("BOOTSTRAP"::equalsIgnoreCase);
+        return TavilyFastLaneAudit.builder()
+                .queryModes(new ArrayList<>(queryModes))
+                .queryOrigins(new ArrayList<>(queryOrigins))
+                .queriesSent(queriesSent)
+                .totalResults(uniqueTavilyCandidates.size())
+                .fastLaneUsableCount(fastLaneUsableCount)
+                .fastLaneRejectedCount(fastLaneRejectedCount)
+                .rejectionReasons(rejectionReasons.isEmpty() ? Map.of() : rejectionReasons)
+                .bootstrapTriggered(bootstrapTriggered)
+                .fallbackTriggered(providerFallbackUsed || fastLaneRejectedCount > 0)
+                .tavilyRequestIds(new ArrayList<>(requestIds))
+                .playwrightInvocationBaselineHint(countSelectedTavilyFastLaneTargets(selectedTargets))
+                .build();
+    }
+
+    /**
+     * SearchAuditSummary 是对外稳定消费面，显式把 Tavily 审计挂进去，
+     * 后续 report / replay / 节点洞察都可以只看 summary 而不必重新解析大快照。
+     */
+    private SearchAuditSummary buildSearchAuditSummary(List<SourceCandidate> allCandidates,
+                                                       List<SearchCollectionTarget> attemptedTargets,
+                                                       List<SearchCollectionTarget> selectedTargets,
+                                                       List<SourceCandidate> discardedCandidates,
+                                                       SearchExecutionTrace executionTrace,
+                                                       TavilyFastLaneAudit tavilyFastLaneAudit) {
+        return SearchAuditSummary.builder()
+                .candidateCount(allCandidates == null ? 0 : allCandidates.size())
+                .selectedCount(selectedTargets == null ? 0 : selectedTargets.size())
+                .discardedCount(discardedCandidates == null ? 0 : discardedCandidates.size())
+                .attemptedCount(attemptedTargets == null ? 0 : attemptedTargets.size())
+                .degraded(executionTrace == null ? null : executionTrace.getDegraded())
+                .degradationReason(executionTrace == null ? null : executionTrace.getDegradationReason())
+                .fallbackDecision(executionTrace == null ? null : executionTrace.getFallbackDecision())
+                .recoveryCheckpoint(executionTrace == null ? null : executionTrace.getRecoveryCheckpoint())
+                .sourceUrls(executionTrace == null || executionTrace.getSelectedUrls() == null
+                        ? List.of()
+                        : executionTrace.getSelectedUrls())
+                .tavilyFastLaneAudit(tavilyFastLaneAudit)
+                .build();
+    }
+
+    private boolean isTavilyCandidate(SourceCandidate candidate) {
+        return candidate != null && "tavily".equalsIgnoreCase(candidate.getProviderKey());
+    }
+
+    private String resolveTavilyAuditKey(SourceCandidate candidate, int index) {
+        if (candidate != null && StringUtils.hasText(candidate.getUrl())) {
+            return candidate.getUrl().trim();
+        }
+        if (candidate != null && StringUtils.hasText(candidate.getPrefetchedContentRef())) {
+            return candidate.getPrefetchedContentRef().trim();
+        }
+        if (candidate != null && StringUtils.hasText(candidate.getTavilyRequestId())) {
+            return candidate.getTavilyRequestId().trim() + "#" + index;
+        }
+        return "tavily#" + index;
+    }
+
+    private String resolveTavilyQueryFingerprint(SourceCandidate candidate) {
+        if (candidate == null) {
+            return null;
+        }
+        String queryMode = StringUtils.hasText(candidate.getTavilyQueryMode())
+                ? candidate.getTavilyQueryMode().trim()
+                : "";
+        String query = StringUtils.hasText(candidate.getTavilyQuery())
+                ? candidate.getTavilyQuery().trim()
+                : "";
+        if (!StringUtils.hasText(queryMode) && !StringUtils.hasText(query)) {
+            return null;
+        }
+        return queryMode + "::" + query;
+    }
+
+    private String resolveFastLaneRejectReason(SourceCandidate candidate) {
+        if (candidate == null) {
+            return "UNKNOWN";
+        }
+        if (StringUtils.hasText(candidate.getFastLaneRejectReason())) {
+            return candidate.getFastLaneRejectReason().trim();
+        }
+        if (StringUtils.hasText(candidate.getPageType())) {
+            return candidate.getPageType().trim();
+        }
+        if (StringUtils.hasText(candidate.getQualityTier())) {
+            return candidate.getQualityTier().trim();
+        }
+        return "UNKNOWN";
+    }
+
+    /**
+     * Tavily 审计只需要区分“这次查询起源于 Phase 1 bootstrap 还是运行期 supplement”，
+     * 因此这里把候选阶段归一成 BOOTSTRAP / SUPPLEMENT 两种稳定标签，避免上层继续理解内部 stage 细节。
+     */
+    private String resolveTavilyQueryOrigin(SourceCandidate candidate) {
+        if (candidate == null) {
+            return null;
+        }
+        if ("TAVILY_PHASE1_BOOTSTRAP".equalsIgnoreCase(candidate.getDiscoveryMethod())) {
+            return "BOOTSTRAP";
+        }
+        if (!StringUtils.hasText(candidate.getSelectionStage())) {
+            return null;
+        }
+        String selectionStage = candidate.getSelectionStage().trim().toUpperCase(Locale.ROOT);
+        if ("BOOTSTRAPPED".equals(selectionStage)) {
+            return "BOOTSTRAP";
+        }
+        if ("SUPPLEMENTED".equals(selectionStage)) {
+            return "SUPPLEMENT";
+        }
+        return null;
+    }
+
+    private void addDistinctText(Set<String> values, String value) {
+        if (values == null || !StringUtils.hasText(value)) {
+            return;
+        }
+        values.add(value.trim());
+    }
+
+    private int countSelectedTavilyFastLaneTargets(List<SearchCollectionTarget> selectedTargets) {
+        if (selectedTargets == null || selectedTargets.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (SearchCollectionTarget selectedTarget : selectedTargets) {
+            SourceCandidate candidate = selectedTarget == null ? null : selectedTarget.getCandidate();
+            if (isTavilyCandidate(candidate) && Boolean.TRUE.equals(candidate.getFastLaneUsable())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     private SearchRuntimePolicy resolveRuntimePolicy(CollectorNodeConfig config) {
         SearchRuntimePolicy existing = config.getSearchRuntimePolicy();
         if (existing != null) {
             return existing;
         }
         return SearchRuntimePolicy.builder()
-                .recoveryHint("建议从 VERIFY_TOP_CANDIDATES 或 BROWSER_SUPPLEMENT_SEARCH 继续排查")
+                .recoveryHint("建议从 VERIFY_TOP_CANDIDATES 或 BROWSER_SUPPLEMENT_SEARCH 继续排查（展示语义：运行期补源）")
                 .build();
     }
 

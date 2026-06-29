@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.search;
 
 import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
+import cn.bugstack.competitoragent.search.tavily.TavilyFastLaneAudit;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -87,6 +88,7 @@ public class SearchSharedProjection {
                     .fallbackDecision(textOrNull(traceNode, "fallbackDecision"))
                     .recoveryCheckpoint(recoveryCheckpoint)
                     .sourceUrls(stableSourceUrls)
+                    .tavilyFastLaneAudit(readTavilyFastLaneAudit(objectMapper, traceNode, output.path("searchAudit")))
                     .build();
 
             return SearchSharedProjection.builder()
@@ -183,6 +185,27 @@ public class SearchSharedProjection {
         }
         String value = valueNode.asText(null);
         return value == null || value.isBlank() ? null : value;
+    }
+
+    private static TavilyFastLaneAudit readTavilyFastLaneAudit(ObjectMapper objectMapper,
+                                                               JsonNode traceNode,
+                                                               JsonNode auditNode) {
+        if (objectMapper == null) {
+            return null;
+        }
+        JsonNode traceAudit = traceNode == null ? null : traceNode.path("tavilyFastLaneAudit");
+        if (traceAudit != null && !traceAudit.isMissingNode() && !traceAudit.isNull()) {
+            return objectMapper.convertValue(traceAudit, TavilyFastLaneAudit.class);
+        }
+        JsonNode auditSummary = auditNode == null ? null : auditNode.path("summary").path("tavilyFastLaneAudit");
+        if (auditSummary != null && !auditSummary.isMissingNode() && !auditSummary.isNull()) {
+            return objectMapper.convertValue(auditSummary, TavilyFastLaneAudit.class);
+        }
+        JsonNode topLevelAudit = auditNode == null ? null : auditNode.path("tavilyFastLaneAudit");
+        if (topLevelAudit != null && !topLevelAudit.isMissingNode() && !topLevelAudit.isNull()) {
+            return objectMapper.convertValue(topLevelAudit, TavilyFastLaneAudit.class);
+        }
+        return null;
     }
 
     private static JsonNode readOutput(ObjectMapper objectMapper, String rawOutput) {

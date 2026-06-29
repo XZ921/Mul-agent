@@ -140,6 +140,49 @@ class SourceCandidateRankerTest {
     }
 
     @Test
+    void shouldMergeTavilyMetadataAndSourceUrlsWhenBootstrapAndPlannedShareUrl() {
+        SourceCandidate planned = SourceCandidate.builder()
+                .url("https://open.douyin.com/platform/resource/docs/accession-guide/platform-introduction")
+                .title("平台简介")
+                .sourceType("DOCS")
+                .selectionStage("PLANNED")
+                .reason("规划期直达候选")
+                .sourceUrls(List.of("https://open.douyin.com/"))
+                .relevanceScore(0.92D)
+                .freshnessScore(0.70D)
+                .qualityScore(0.90D)
+                .build();
+        SourceCandidate bootstrap = SourceCandidate.builder()
+                .url("https://open.douyin.com/platform/resource/docs/accession-guide/platform-introduction")
+                .title("平台简介")
+                .sourceType("DOCS")
+                .selectionStage("BOOTSTRAPPED")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .providerKey("tavily")
+                .prefetchedContentRef("prefetch-001")
+                .tavilyScore(0.82D)
+                .fastLaneUsable(Boolean.TRUE)
+                .sourceUrls(List.of(
+                        "https://open.douyin.com/platform/resource/docs/accession-guide/platform-introduction",
+                        "https://open.douyin.com/"))
+                .relevanceScore(0.93D)
+                .freshnessScore(0.72D)
+                .qualityScore(0.91D)
+                .build();
+
+        List<SourceCandidate> ranked = ranker.rankAndDeduplicate(List.of(planned, bootstrap));
+
+        assertEquals(1, ranked.size());
+        SourceCandidate merged = ranked.get(0);
+        assertEquals("prefetch-001", merged.getPrefetchedContentRef());
+        assertEquals(0.82D, merged.getTavilyScore());
+        assertTrue(Boolean.TRUE.equals(merged.getFastLaneUsable()));
+        assertTrue(merged.getSourceUrls().contains("https://open.douyin.com/"));
+        assertTrue(merged.getSourceUrls().contains(
+                "https://open.douyin.com/platform/resource/docs/accession-guide/platform-introduction"));
+    }
+
+    @Test
     void shouldAttachTrustTierAndRankingReasonsToRankedCandidates() {
         List<SourceCandidate> ranked = ranker.rankAndDeduplicate(List.of(
                 candidate("https://docs.example.com/api", "Example API Reference", "DOCS", "SEARCH",
@@ -167,6 +210,26 @@ class SourceCandidateRankerTest {
         assertTrue(reviewCandidate.getRankingReasons().stream().anyMatch(reason -> reason.contains("第三方")));
     }
 
+    @Test
+    void shouldTrimCandidatePoolWithOverallBudgetAndPerDomainCap() {
+        List<SourceCandidate> candidates = List.of(
+                candidateWithDomain("https://a.example.com/1", "a.example.com", 0.98D),
+                candidateWithDomain("https://a.example.com/2", "a.example.com", 0.97D),
+                candidateWithDomain("https://a.example.com/3", "a.example.com", 0.96D),
+                candidateWithDomain("https://b.example.com/1", "b.example.com", 0.95D),
+                candidateWithDomain("https://b.example.com/2", "b.example.com", 0.94D),
+                candidateWithDomain("https://b.example.com/3", "b.example.com", 0.93D),
+                candidateWithDomain("https://c.example.com/1", "c.example.com", 0.92D),
+                candidateWithDomain("https://c.example.com/2", "c.example.com", 0.91D)
+        );
+
+        List<SourceCandidate> limited = ranker.rankDeduplicateAndLimit(candidates, 6, 2);
+
+        assertEquals(6, limited.size());
+        assertTrue(limited.stream().filter(item -> "a.example.com".equals(item.getDomain())).count() <= 2);
+        assertTrue(limited.stream().filter(item -> "b.example.com".equals(item.getDomain())).count() <= 2);
+    }
+
     private SourceCandidate candidate(String url,
                                       String title,
                                       String sourceType,
@@ -184,6 +247,18 @@ class SourceCandidateRankerTest {
                 .relevanceScore(relevanceScore)
                 .freshnessScore(freshnessScore)
                 .qualityScore(qualityScore)
+                .build();
+    }
+
+    private SourceCandidate candidateWithDomain(String url, String domain, double totalScoreSeed) {
+        return SourceCandidate.builder()
+                .url(url)
+                .title(url)
+                .sourceType("DOCS")
+                .domain(domain)
+                .relevanceScore(totalScoreSeed)
+                .freshnessScore(0.70D)
+                .qualityScore(0.80D)
                 .build();
     }
 

@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.search;
 
 import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
+import cn.bugstack.competitoragent.search.tavily.TavilyFastLaneAudit;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
@@ -32,6 +33,11 @@ public class SearchAuditSnapshot {
     private SearchExecutionPlan executionPlan;
     private SearchProgressSnapshot latestProgress;
     private List<SearchProgressSnapshot> progressHistory;
+    /**
+     * Tavily 快速通道的聚合审计摘要。
+     * 顶层单独保留一份，方便 replay / checkpoint / report 不必深入 trace 再解析。
+     */
+    private TavilyFastLaneAudit tavilyFastLaneAudit;
     /**
      * 面向回放接口的稳定时间线投影。
      * 该字段不替代 progressHistory，只把关键步骤、候选数量和来源回指整理成更易消费的结构。

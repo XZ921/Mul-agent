@@ -1,6 +1,8 @@
 package cn.bugstack.competitoragent.search;
 
 import cn.bugstack.competitoragent.agent.collector.CollectorNodeConfig;
+import cn.bugstack.competitoragent.source.SearchRequestPhase;
+import cn.bugstack.competitoragent.source.SearchSourceRequest;
 import cn.bugstack.competitoragent.source.SearchSourceProvider;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
@@ -9,7 +11,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
 import java.util.List;
+import java.util.stream.IntStream;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
@@ -24,6 +28,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -50,6 +55,7 @@ class SearchExecutionCoordinatorTest {
                 .fallbackSuggested(true)
                 .build());
         when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        when(searchSourceProvider.search(any(SearchSourceRequest.class))).thenReturn(List.of());
         when(sourceCollector.collect("https://docs.example.com/guide", "Notion AI", "DOCS"))
                 .thenReturn(SourceCollector.CollectedPage.builder()
                         .url("https://docs.example.com/guide")
@@ -121,6 +127,7 @@ class SearchExecutionCoordinatorTest {
                 .fallbackSuggested(false)
                 .browserTraceId("trace-browser-002")
                 .build());
+        when(searchSourceProvider.search(any(SearchSourceRequest.class))).thenReturn(List.of());
         when(sourceCollector.collect("https://planned.example.com/docs", "Notion AI", "DOCS"))
                 .thenReturn(SourceCollector.CollectedPage.builder()
                         .url("https://planned.example.com/docs")
@@ -232,8 +239,199 @@ class SearchExecutionCoordinatorTest {
     }
 
     @Test
+    void shouldPassRuntimeSearchContextThroughSearchSourceRequest() {
+        RecordingSearchSourceProvider provider = new RecordingSearchSourceProvider();
+        SearchExecutionCoordinator searchCoordinator = new SearchExecutionCoordinator(
+                new CandidateVerifier(sourceCollector),
+                browserSearchRuntimeService,
+                provider,
+                new SourceCandidateRanker(),
+                new CollectionTargetSelector(),
+                new SearchPolicyResolver()
+        );
+
+        when(sourceCollector.collect("https://planned.example.com/docs", "抖音", "DOCS"))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://planned.example.com/docs")
+                        .title("Planned Docs")
+                        .content("")
+                        .snippet("")
+                        .competitorName("抖音")
+                        .sourceType("DOCS")
+                        .success(false)
+                        .errorMessage("planned page unavailable")
+                        .build());
+
+        searchCoordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("抖音")
+                .sourceType("DOCS")
+                .sourceCandidates(List.of(SourceCandidate.builder()
+                        .url("https://planned.example.com/docs")
+                        .title("Planned Docs")
+                        .sourceType("DOCS")
+                        .sourceFamilyKey("official")
+                        .relevanceScore(0.90)
+                        .freshnessScore(0.70)
+                        .qualityScore(0.88)
+                        .build()))
+                .verifyCandidates(Boolean.TRUE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .searchQueries(List.of("抖音 开放平台 API 官方文档"))
+                .preferredDomains(List.of("open.douyin.com"))
+                .includeDomains(List.of("open.douyin.com"))
+                .blockedDomains(List.of("spam.example.com"))
+                .preferredSearchProvider("tavily")
+                .tavilyQueryMode("OFFICIAL_DOCS")
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertThat(provider.lastRequest).isNotNull();
+        assertThat(provider.lastRequest.getCompetitorName()).isEqualTo("抖音");
+        assertThat(provider.lastRequest.getRequestedScopes()).containsExactly("DOCS");
+        assertThat(provider.lastRequest.getSearchQueries()).containsExactly("抖音 开放平台 API 官方文档");
+        assertThat(provider.lastRequest.getPreferredDomains()).containsExactly("open.douyin.com");
+        assertThat(provider.lastRequest.getIncludeDomains()).containsExactly("open.douyin.com");
+        assertThat(provider.lastRequest.getBlockedDomains()).containsExactly("spam.example.com");
+        assertThat(provider.lastRequest.getPreferredProviderKey()).isEqualTo("tavily");
+        assertThat(provider.lastRequest.getPreferredQueryMode()).isEqualTo("OFFICIAL_DOCS");
+        assertThat(provider.lastRequest.getSeedCandidates()).isNotEmpty();
+    }
+
+    @Test
+    void shouldRunTavilyBootstrapBeforeVerifyWhenPlannedCandidateIsWeakEntryUrl() {
+        SearchSourceProvider provider = mock(SearchSourceProvider.class);
+        CandidateVerifier candidateVerifier = mock(CandidateVerifier.class);
+        when(candidateVerifier.verify(any(), any(), any()))
+                .thenReturn(CandidateVerificationResult.builder()
+                        .updatedCandidates(List.of())
+                        .attemptedTargets(List.of())
+                        .verifiedTargets(List.of())
+                        .build());
+        when(provider.search(argThat(request ->
+                request != null
+                        && request.getRequestPhase() == SearchRequestPhase.BOOTSTRAP
+                        && "tavily".equalsIgnoreCase(request.getPreferredProviderKey()))))
+                .thenReturn(List.of(SourceCandidate.builder()
+                        .url("https://open.douyin.com/platform/resource/docs/accession-guide/platform-introduction")
+                        .title("平台简介")
+                        .sourceType("DOCS")
+                        .providerKey("tavily")
+                        .build()));
+
+        SearchExecutionCoordinator bootstrapCoordinator = new SearchExecutionCoordinator(
+                candidateVerifier,
+                mock(BrowserSearchRuntimeService.class),
+                provider,
+                new SourceCandidateRanker(),
+                new CollectionTargetSelector(),
+                new SearchPolicyResolver()
+        );
+
+        SearchExecutionResult result = bootstrapCoordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("抖音")
+                .sourceType("DOCS")
+                .preferredDomains(List.of("open.douyin.com"))
+                .includeDomains(List.of("open.douyin.com"))
+                .sourceCandidates(List.of(SourceCandidate.builder()
+                        .url("https://open.douyin.com/")
+                        .title("抖音开放平台")
+                        .sourceType("DOCS")
+                        .build()))
+                .verifyCandidates(Boolean.TRUE)
+                .build());
+
+        assertThat(result.getExecutionPlan().getSteps()).extracting(SearchExecutionStep::getStepCode)
+                .containsSubsequence("LOAD_CANDIDATES", "TAVILY_BOOTSTRAP_ENRICH", "VERIFY_TOP_CANDIDATES");
+        verify(provider, times(1)).search(argThat(request ->
+                request != null && request.getRequestPhase() == SearchRequestPhase.BOOTSTRAP));
+    }
+
+    @Test
+    void shouldCapBootstrapCandidatesToBalancedBudget() {
+        SearchSourceProvider provider = mock(SearchSourceProvider.class);
+        when(provider.search(argThat(request -> request != null && request.getRequestPhase() == SearchRequestPhase.BOOTSTRAP)))
+                .thenReturn(IntStream.rangeClosed(1, 20)
+                        .mapToObj(index -> SourceCandidate.builder()
+                                .url("https://docs.example.com/page-" + index)
+                                .domain("docs.example.com")
+                                .providerKey("tavily")
+                                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                                .sourceType("DOCS")
+                                .title("Doc " + index)
+                                .relevanceScore(0.99D - index * 0.01D)
+                                .qualityScore(0.90D)
+                                .freshnessScore(0.70D)
+                                .build())
+                        .toList());
+
+        SearchRuntimePolicy runtimePolicy = SearchRuntimePolicy.builder()
+                .bootstrapCandidateLimit(6)
+                .supplementCandidateLimit(6)
+                .maxCandidatePoolSize(8)
+                .maxCandidatesPerDomain(2)
+                .build();
+
+        SearchExecutionResult result = new SearchExecutionCoordinator(
+                mock(CandidateVerifier.class),
+                mock(BrowserSearchRuntimeService.class),
+                provider,
+                new SourceCandidateRanker(),
+                new CollectionTargetSelector(),
+                new SearchPolicyResolver()
+        ).execute(CollectorNodeConfig.builder()
+                .competitorName("抖音")
+                .sourceType("DOCS")
+                .preferredDomains(List.of("open.douyin.com"))
+                .includeDomains(List.of("open.douyin.com"))
+                .searchRuntimePolicy(runtimePolicy)
+                .sourceCandidates(List.of(SourceCandidate.builder()
+                        .url("https://open.douyin.com/")
+                        .title("抖音开放平台")
+                        .sourceType("DOCS")
+                        .build()))
+                .verifyCandidates(Boolean.FALSE)
+                .build());
+
+        assertThat(result.getSourceCandidates().size()).isLessThanOrEqualTo(8);
+        assertThat(result.getSourceCandidates().stream()
+                .filter(candidate -> "docs.example.com".equals(candidate.getDomain()))
+                .count()).isLessThanOrEqualTo(2);
+    }
+
+    @Test
+    void shouldSkipTavilyBootstrapForStrongExactPlannedPage() {
+        SearchSourceProvider provider = mock(SearchSourceProvider.class);
+        SearchExecutionCoordinator bootstrapCoordinator = new SearchExecutionCoordinator(
+                new CandidateVerifier(mock(SourceCollector.class)),
+                mock(BrowserSearchRuntimeService.class),
+                provider,
+                new SourceCandidateRanker(),
+                new CollectionTargetSelector(),
+                new SearchPolicyResolver()
+        );
+
+        bootstrapCoordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("抖音")
+                .sourceType("DOCS")
+                .preferredDomains(List.of("open.douyin.com"))
+                .includeDomains(List.of("open.douyin.com"))
+                .sourceCandidates(List.of(SourceCandidate.builder()
+                        .url("https://open.douyin.com/platform/resource/docs/accession-guide/platform-introduction")
+                        .title("平台简介")
+                        .sourceType("DOCS")
+                        .build()))
+                .verifyCandidates(Boolean.FALSE)
+                .build());
+
+        verify(provider, never()).search(any(SearchSourceRequest.class));
+    }
+
+    @Test
     void shouldSkipPublicSearchSupplementWhenOfficialDirectCandidatesAlreadyVerified() {
         when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        when(searchSourceProvider.search(any(SearchSourceRequest.class))).thenReturn(List.of());
         when(sourceCollector.collect("https://www.acme.ai/docs", "Acme AI", "DOCS"))
                 .thenReturn(SourceCollector.CollectedPage.builder()
                         .url("https://www.acme.ai/docs")
@@ -326,6 +524,87 @@ class SearchExecutionCoordinatorTest {
         assertEquals(1, result.getAuditSnapshot().getAttemptedTargets().size());
         assertEquals(1, result.getAuditSnapshot().getDiscardedCandidates().size());
         assertFalse(result.getAuditSnapshot().getReplayTimeline().isEmpty());
+    }
+
+    @Test
+    void shouldAggregateTavilyFastLaneAuditIntoTraceSnapshotAndSummary() {
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Douyin")
+                .sourceType("DOCS")
+                .sourceCandidates(List.of(
+                        SourceCandidate.builder()
+                                .url("https://open.douyin.com/docs/api")
+                                .title("Open Platform Docs")
+                                .sourceType("DOCS")
+                                .providerKey("tavily")
+                                .tavilyRequestId("req-1")
+                                .tavilyQueryMode("OFFICIAL_DOCS")
+                                .tavilyQuery("抖音 开放平台 API 官方文档")
+                                .pageType("OFFICIAL_DOC")
+                                .fastLaneUsable(true)
+                                .skipNetworkVerification(true)
+                                .fastLaneRejectReason(null)
+                                .sourceUrls(List.of("https://open.douyin.com/docs/api"))
+                                .relevanceScore(0.95)
+                                .freshnessScore(0.80)
+                                .qualityScore(0.94)
+                                .build(),
+                        SourceCandidate.builder()
+                                .url("https://www.douyin.com/search/%E5%BC%80%E6%94%BE%E5%B9%B3%E5%8F%B0")
+                                .title("Search Result Page")
+                                .sourceType("DOCS")
+                                .providerKey("tavily")
+                                .tavilyRequestId("req-1")
+                                .tavilyQueryMode("OFFICIAL_DOCS")
+                                .tavilyQuery("抖音 开放平台 API 官方文档")
+                                .pageType("SEARCH_PAGE")
+                                .fastLaneUsable(false)
+                                .fastLaneRejectReason("SEARCH_PAGE")
+                                .sourceUrls(List.of("https://www.douyin.com/search/%E5%BC%80%E6%94%BE%E5%B9%B3%E5%8F%B0"))
+                                .relevanceScore(0.20)
+                                .freshnessScore(0.10)
+                                .qualityScore(0.05)
+                                .build(),
+                        SourceCandidate.builder()
+                                .url("https://analysis.example.com/douyin-api-overview")
+                                .title("Third-party Analysis")
+                                .sourceType("DOCS")
+                                .providerKey("tavily")
+                                .tavilyRequestId("req-2")
+                                .tavilyQueryMode("OPEN_WEB")
+                                .tavilyQuery("抖音 开放平台 API 评测")
+                                .pageType("ARTICLE")
+                                .fastLaneUsable(false)
+                                .fastLaneRejectReason("WEAK_CONTENT")
+                                .sourceUrls(List.of("https://analysis.example.com/douyin-api-overview"))
+                                .relevanceScore(0.40)
+                                .freshnessScore(0.35)
+                                .qualityScore(0.30)
+                                .build()))
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertThat(result.getExecutionTrace().getTavilyFastLaneAudit()).isNotNull();
+        assertThat(result.getExecutionTrace().getTavilyFastLaneAudit().getQueryModes())
+                .containsExactly("OFFICIAL_DOCS", "OPEN_WEB");
+        assertThat(result.getExecutionTrace().getTavilyFastLaneAudit().getQueriesSent()).isEqualTo(2);
+        assertThat(result.getExecutionTrace().getTavilyFastLaneAudit().getTotalResults()).isEqualTo(3);
+        assertThat(result.getExecutionTrace().getTavilyFastLaneAudit().getFastLaneUsableCount()).isEqualTo(1);
+        assertThat(result.getExecutionTrace().getTavilyFastLaneAudit().getFastLaneRejectedCount()).isEqualTo(2);
+        assertThat(result.getExecutionTrace().getTavilyFastLaneAudit().getFallbackTriggered()).isTrue();
+        assertThat(result.getExecutionTrace().getTavilyFastLaneAudit().getRejectionReasons())
+                .containsEntry("SEARCH_PAGE", 1)
+                .containsEntry("WEAK_CONTENT", 1);
+        assertThat(result.getExecutionTrace().getTavilyFastLaneAudit().getTavilyRequestIds())
+                .containsExactly("req-1", "req-2");
+        assertThat(result.getExecutionTrace().getTavilyFastLaneAudit().getPlaywrightInvocationBaselineHint())
+                .isEqualTo(1);
+        assertThat(result.getAuditSnapshot().getTavilyFastLaneAudit().getFastLaneRejectedCount()).isEqualTo(2);
+        assertThat(result.getAuditSnapshot().getSummary().getTavilyFastLaneAudit().getQueriesSent()).isEqualTo(2);
     }
 
     @Test
@@ -1065,5 +1344,21 @@ class SearchExecutionCoordinatorTest {
         assertTrue(result.getDiscardedCandidates().stream()
                 .anyMatch(candidate -> candidate.getUrl() != null
                         && candidate.getUrl().contains("aiqicha.baidu.com/feedback/official")));
+    }
+
+    private static class RecordingSearchSourceProvider implements SearchSourceProvider {
+
+        private SearchSourceRequest lastRequest;
+
+        @Override
+        public List<SourceCandidate> search(SearchSourceRequest request) {
+            this.lastRequest = request;
+            return List.of();
+        }
+
+        @Override
+        public List<SourceCandidate> search(String competitorName, List<String> requestedScopes) {
+            return List.of();
+        }
     }
 }

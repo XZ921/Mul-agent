@@ -151,4 +151,32 @@ class CollectionTaskPackageBuilderTest {
         assertThat(feedbackPackage.getPrimaryTool()).isEqualTo("JINA_READER");
         assertThat(sitemapPackage.getPrimaryTool()).isEqualTo("JINA_READER");
     }
+
+    @Test
+    void shouldRouteFastLaneUsableCandidateToTavilyPrefetchedTool() {
+        CollectionTaskPackageBuilder builder = new CollectionTaskPackageBuilder(new SearchPolicyResolver());
+        SourceCandidate candidate = SourceCandidate.builder()
+                .url("https://open.douyin.com/docs/a")
+                .sourceType("DOCS")
+                .sourceFamilyKey("official")
+                .hasPrefetchedContent(true)
+                .prefetchedContentRef("tavily:req-1:0")
+                .prefetchedRawContentLength(2400)
+                .fastLaneUsable(true)
+                .pageType("OFFICIAL_DOC")
+                .qualityTier("STRONG")
+                .contentCompleteness("FULL_ENOUGH")
+                .sourceUrls(List.of("https://open.douyin.com/docs/a"))
+                .build();
+
+        CollectionTaskPackage taskPackage = builder.build(1L, "collector", 1L, "抖音", candidate, 0);
+
+        assertThat(taskPackage.getPrimaryTool()).isEqualTo("TAVILY_PREFETCHED");
+        assertThat(taskPackage.getPrefetchedContentRef()).isEqualTo("tavily:req-1:0");
+        assertThat(taskPackage.getPrefetchedRawContentLength()).isEqualTo(2400);
+        assertThat(taskPackage.getPageType()).isEqualTo("OFFICIAL_DOC");
+        assertThat(taskPackage.getQualityTier()).isEqualTo("STRONG");
+        assertThat(taskPackage.getContentCompleteness()).isEqualTo("FULL_ENOUGH");
+        assertThat(taskPackage.getSourceUrls()).contains("https://open.douyin.com/docs/a");
+    }
 }

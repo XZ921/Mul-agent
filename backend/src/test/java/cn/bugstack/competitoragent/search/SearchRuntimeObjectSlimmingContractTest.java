@@ -4,6 +4,8 @@ import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -86,5 +88,29 @@ class SearchRuntimeObjectSlimmingContractTest {
         assertThat(target.getSelectedSummary().getUrl()).isEqualTo("https://docs.example.com/reference");
         assertThat(target.getSelectedSummary().getSourceUrls())
                 .containsExactly("https://docs.example.com/reference");
+    }
+
+    @Test
+    void sourceCandidateShouldNotStoreFullTavilyRawContent() {
+        List<String> fieldNames = Arrays.stream(SourceCandidate.class.getDeclaredFields())
+                .map(Field::getName)
+                .toList();
+
+        assertThat(fieldNames).contains(
+                "hasPrefetchedContent",
+                "prefetchedContentRef",
+                "prefetchedRawContentLength",
+                "tavilyScore",
+                "tavilyRequestId",
+                "tavilyQuery",
+                "tavilyQueryMode",
+                "pageType",
+                "qualityTier",
+                "fastLaneUsable",
+                "fastLaneRejectReason",
+                "contentCompleteness",
+                "skipNetworkVerification"
+        );
+        assertThat(fieldNames).doesNotContain("prefetchedRawContent", "rawContent");
     }
 }

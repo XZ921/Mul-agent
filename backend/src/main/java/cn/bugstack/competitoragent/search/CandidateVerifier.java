@@ -154,6 +154,10 @@ public class CandidateVerifier {
                                                       String competitorName,
                                                       String sourceType,
                                                       DirectVerificationCounters directCounters) {
+        if (shouldSkipNetworkVerification(candidate)) {
+            return buildTavilyFastLaneVerificationTarget(candidate);
+        }
+
         SourceCollector.CollectedPage directPage = collectByDirectForPositiveShortcut(
                 candidate,
                 competitorName,
@@ -242,6 +246,51 @@ public class CandidateVerifier {
         return SearchCollectionTarget.builder()
                 .candidate(updatedCandidate)
                 .collectedPage(page)
+                .build();
+    }
+
+    /**
+     * Tavily Fast Lane 的强候选在搜索阶段已经经过 pageType / qualityTier / completeness 闸门，
+     * 这里不再重复发起 DirectHtml 或 Playwright 重验，避免把 Fast Lane 又退化回“搜索后仍然重新抓网页”的旧链路。
+     */
+    private boolean shouldSkipNetworkVerification(SourceCandidate candidate) {
+        if (candidate == null) {
+            return false;
+        }
+        if (!"tavily".equalsIgnoreCase(candidate.getProviderKey())) {
+            return false;
+        }
+        if (!Boolean.TRUE.equals(candidate.getFastLaneUsable())
+                || !Boolean.TRUE.equals(candidate.getSkipNetworkVerification())) {
+            return false;
+        }
+        if (candidate.getSourceUrls() == null || candidate.getSourceUrls().isEmpty()) {
+            return false;
+        }
+        if (!StringUtils.hasText(candidate.getPageType())) {
+            return false;
+        }
+        String pageType = candidate.getPageType().trim().toUpperCase(Locale.ROOT);
+        return "ARTICLE".equals(pageType) || "OFFICIAL_DOC".equals(pageType) || "PDF".equals(pageType);
+    }
+
+    private SearchCollectionTarget buildTavilyFastLaneVerificationTarget(SourceCandidate candidate) {
+        List<String> qualitySignals = new ArrayList<>();
+        if (candidate.getQualitySignals() != null) {
+            qualitySignals.addAll(candidate.getQualitySignals());
+        }
+        qualitySignals.add("TAVILY_VERIFICATION_SKIPPED");
+
+        SourceCandidate updatedCandidate = candidate.toBuilder()
+                .verified(true)
+                .verificationReason("TAVILY_FAST_LANE_GATE_VERIFIED")
+                .qualitySignals(qualitySignals)
+                .selectionStage("VERIFIED")
+                .selectionReason("通过 Tavily Prefetched Content Gate，跳过网络重验")
+                .build();
+        return SearchCollectionTarget.builder()
+                .candidate(updatedCandidate)
+                .collectedPage(null)
                 .build();
     }
 

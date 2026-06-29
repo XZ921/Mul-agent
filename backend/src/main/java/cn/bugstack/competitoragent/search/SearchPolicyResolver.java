@@ -112,6 +112,34 @@ public class SearchPolicyResolver {
         return Math.max(1, candidateCount);
     }
 
+    public int resolveBootstrapCandidateLimit(SearchRuntimePolicy policy, int targetCount) {
+        if (policy != null && policy.getBootstrapCandidateLimit() != null && policy.getBootstrapCandidateLimit() > 0) {
+            return policy.getBootstrapCandidateLimit();
+        }
+        return Math.max(6, Math.max(1, targetCount) * 2);
+    }
+
+    public int resolveSupplementCandidateLimit(SearchRuntimePolicy policy, int targetCount) {
+        if (policy != null && policy.getSupplementCandidateLimit() != null && policy.getSupplementCandidateLimit() > 0) {
+            return policy.getSupplementCandidateLimit();
+        }
+        return Math.max(6, Math.max(1, targetCount) * 2);
+    }
+
+    public int resolveMaxCandidatePoolSize(SearchRuntimePolicy policy, int targetCount) {
+        if (policy != null && policy.getMaxCandidatePoolSize() != null && policy.getMaxCandidatePoolSize() > 0) {
+            return policy.getMaxCandidatePoolSize();
+        }
+        return Math.max(10, Math.max(1, targetCount) * 3);
+    }
+
+    public int resolveMaxCandidatesPerDomain(SearchRuntimePolicy policy) {
+        if (policy != null && policy.getMaxCandidatesPerDomain() != null && policy.getMaxCandidatesPerDomain() > 0) {
+            return policy.getMaxCandidatesPerDomain();
+        }
+        return 2;
+    }
+
     /**
      * 搜索超时优先使用节点显式配置；未配置时按执行计划预计时长折算搜索预算。
      */

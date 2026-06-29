@@ -42,7 +42,10 @@ import java.util.List;
         "verifyCandidates",
         "verifyResultPage",
         "minVerifiedCandidates",
+        "preferredSearchProvider",
+        "tavilyQueryMode",
         "preferredDomains",
+        "includeDomains",
         "blockedDomains",
         "browserSearchEnabled",
         "maxSearchResults",
@@ -148,9 +151,27 @@ public class CollectorNodeConfig {
     private Integer minVerifiedCandidates;
 
     /**
+     * 运行期搜索偏好的 provider key。
+     * 这里只表达搜索路由提示，不改变现有 Agent prompt 输出结构。
+     */
+    private String preferredSearchProvider;
+
+    /**
+     * 运行期 Tavily 查询模式提示。
+     * orchestration 在补证据场景下可以通过它约束搜索形态，例如 OFFICIAL_DOCS / EVIDENCE_REPAIR。
+     */
+    private String tavilyQueryMode;
+
+    /**
      * 优先推荐或倾向采纳的网站域名后缀/白名单列表（例如：gov.cn、csdn.net）
      */
     private List<String> preferredDomains;
+
+    /**
+     * 运行期强制包含的域名范围。
+     * 与 preferredDomains 不同，这里表达的是更强的 include_domains 提示。
+     */
+    private List<String> includeDomains;
 
     /**
      * 明确排除、禁止访问的黑名单网站域名列表（常用于过滤广告或低质量噪声源）

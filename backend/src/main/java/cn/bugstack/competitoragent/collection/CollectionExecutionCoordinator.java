@@ -326,11 +326,14 @@ public class CollectionExecutionCoordinator {
                                                          Map<String, CollectionExecutionResult> checkpointIdentityMap,
                                                          Set<String> consumedCheckpointKeys,
                                                          MutableCollectionCounters counters) {
+        List<QueuedCollectionTask> executionBatch = collectionExecutionProperties.isPrioritizePrefetchedPackages()
+                ? sortBatchForExecution(batch)
+                : batch;
         int concurrency = Math.max(1, collectionExecutionProperties.getConcurrency());
-        if (concurrency == 1 || batch.size() <= 1) {
-            List<CollectionExecutionResult> batchResults = new ArrayList<>();
-            for (QueuedCollectionTask task : batch) {
-                batchResults.add(executeQueuedTask(
+        if (concurrency == 1 || executionBatch.size() <= 1) {
+            Map<QueuedCollectionTask, CollectionExecutionResult> resultByTask = new LinkedHashMap<>();
+            for (QueuedCollectionTask task : executionBatch) {
+                resultByTask.put(task, executeQueuedTask(
                         task,
                         taskId,
                         nodeName,
@@ -342,35 +345,55 @@ public class CollectionExecutionCoordinator {
                         counters
                 ));
             }
-            return batchResults;
+            return batch.stream().map(resultByTask::get).toList();
         }
 
-        ExecutorService executor = Executors.newFixedThreadPool(Math.min(concurrency, batch.size()));
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(concurrency, executionBatch.size()));
         try {
-            List<CompletableFuture<CollectionExecutionResult>> futures = batch.stream()
+            List<CompletableFuture<Map.Entry<QueuedCollectionTask, CollectionExecutionResult>>> futures = executionBatch.stream()
                     .map(task -> CompletableFuture.supplyAsync(
-                            () -> executeQueuedTask(
+                            () -> Map.entry(
                                     task,
-                                    taskId,
-                                    nodeName,
-                                    planVersionId,
-                                    competitorName,
-                                    checkpointResultMap,
-                                    checkpointIdentityMap,
-                                    consumedCheckpointKeys,
-                                    counters
+                                    executeQueuedTask(
+                                            task,
+                                            taskId,
+                                            nodeName,
+                                            planVersionId,
+                                            competitorName,
+                                            checkpointResultMap,
+                                            checkpointIdentityMap,
+                                            consumedCheckpointKeys,
+                                            counters
+                                    )
                             ),
                             executor
                     ))
                     .toList();
-            List<CollectionExecutionResult> batchResults = new ArrayList<>();
-            for (CompletableFuture<CollectionExecutionResult> future : futures) {
-                batchResults.add(future.join());
+            Map<QueuedCollectionTask, CollectionExecutionResult> resultByTask = new LinkedHashMap<>();
+            for (CompletableFuture<Map.Entry<QueuedCollectionTask, CollectionExecutionResult>> future : futures) {
+                Map.Entry<QueuedCollectionTask, CollectionExecutionResult> entry = future.join();
+                resultByTask.put(entry.getKey(), entry.getValue());
             }
-            return batchResults;
+            return batch.stream().map(resultByTask::get).toList();
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    private List<QueuedCollectionTask> sortBatchForExecution(List<QueuedCollectionTask> batch) {
+        if (batch == null || batch.isEmpty()) {
+            return List.of();
+        }
+        return batch.stream()
+                .sorted(java.util.Comparator.comparing(task -> !isPrefetchedPriorityTask(task)))
+                .toList();
+    }
+
+    private boolean isPrefetchedPriorityTask(QueuedCollectionTask task) {
+        SourceCandidate candidate = task == null ? null : task.candidate();
+        return Boolean.TRUE.equals(candidate == null ? null : candidate.getFastLaneUsable())
+                && Boolean.TRUE.equals(candidate == null ? null : candidate.getHasPrefetchedContent())
+                && StringUtils.hasText(candidate == null ? null : candidate.getPrefetchedContentRef());
     }
 
     private CollectionExecutionResult executeQueuedTask(QueuedCollectionTask queuedTask,

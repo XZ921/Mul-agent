@@ -11,15 +11,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 从报告正文里抽取可追溯的引用声明。
- * 这个类只做文本解析，不做外部抓取、模型推断或编排决策。
+ * 从报告 Markdown 正文里抽取需要做引用核查的 claim。
+ * 这里只做文本结构化，不做外部抓取、模型推断或编排决策。
  */
 @Component
 public class CitationClaimExtractor {
 
     private static final Pattern HEADING_PATTERN = Pattern.compile("^#{1,6}\\s+(.+)$");
-    private static final Pattern EVIDENCE_PATTERN = Pattern.compile("\\[证据[:：]\\s*([A-Za-z0-9_-]+)]");
-    private static final Pattern SENTENCE_SPLIT_PATTERN = Pattern.compile("(?<=[。！？!?；;])\\s*");
+    private static final Pattern EVIDENCE_PATTERN = Pattern.compile(
+            "\\[(?:证据|[Ee]vidence)\\s*[:：]\\s*([A-Za-z0-9_-]+)]");
+    private static final Pattern SENTENCE_SPLIT_PATTERN = Pattern.compile("(?<=[。！？!?])\\s*");
+
     private static final List<String> TRACEABILITY_KEYWORDS = List.of(
             "建议",
             "结论",
@@ -31,6 +33,7 @@ public class CitationClaimExtractor {
             "必须",
             "优先"
     );
+
     private static final List<String> DOWNGRADE_KEYWORDS = List.of(
             "当前公开资料未能验证",
             "公开资料未能验证",
@@ -42,9 +45,9 @@ public class CitationClaimExtractor {
 
     /**
      * 逐行扫描报告内容：
-     * 1. 遇到 Markdown heading 时更新当前章节上下文；
-     * 2. 普通内容再按中文/英文句末标点切分成候选声明；
-     * 3. 每条候选声明抽取证据编号、敏感度与降级语义。
+     * 1. 遇到标题时更新当前章节上下文；
+     * 2. 普通文本再按句号/问号/感叹号切分；
+     * 3. 每条候选 claim 再判断证据编号、敏感度与降级语义。
      */
     public List<CitationClaim> extract(String reportContent) {
         if (reportContent == null || reportContent.isBlank()) {
@@ -70,17 +73,22 @@ public class CitationClaimExtractor {
             }
 
             for (String sentence : splitSentences(line)) {
-                String normalizedSentence = normalizeText(sentence);
+                // 证据标记必须先从原始句子中提取，随后才能做正文归一化；
+                // 否则 normalizeClaimText 会先把 `[证据：E001]` 剥掉，导致 UNKNOWN_EVIDENCE_ID 全部漏报。
+                List<String> evidenceIds = extractEvidenceIds(sentence);
+                String normalizedSentence = normalizeClaimText(sentence);
                 if (normalizedSentence == null) {
                     continue;
                 }
+                if (isFormattingOnlyFragment(normalizedSentence) || isSectionLeadOnlyFragment(normalizedSentence)) {
+                    continue;
+                }
 
-                List<String> evidenceIds = extractEvidenceIds(normalizedSentence);
                 boolean traceabilitySensitive = !evidenceIds.isEmpty()
                         || containsAny(currentSectionTitle, TRACEABILITY_KEYWORDS)
                         || containsAny(normalizedSentence, TRACEABILITY_KEYWORDS);
 
-                // 降级短语一旦出现，就明确告诉后续 Citation Agent：这里不是“硬性结论”，而是需要保留审慎态度的陈述。
+                // 只要句子显式带有“推测 / 待验证 / 需补证”等语义，就保留下游可识别的降级标记。
                 boolean explicitlyDowngraded = containsAny(normalizedSentence, DOWNGRADE_KEYWORDS);
 
                 claims.add(CitationClaim.builder()
@@ -102,8 +110,8 @@ public class CitationClaimExtractor {
     }
 
     /**
-     * 中文引证标记解析块。
-     * 这里仅负责把 `[证据：E001]` / `[证据:E001]` 这种稳定格式抽出来，不做语义判断。
+     * 这里只负责从稳定格式的引用标记中抽 evidenceId，
+     * 如 `[证据：E001]`、`[证据:E001]`、`[Evidence: E001]`。
      */
     private List<String> extractEvidenceIds(String sentence) {
         LinkedHashSet<String> evidenceIds = new LinkedHashSet<>();
@@ -126,6 +134,10 @@ public class CitationClaimExtractor {
         return new ArrayList<>(flags);
     }
 
+    /**
+     * Writer 输出常带 Markdown 列表和加粗片段。
+     * 这里先拆句，再把“只有证据标记的尾片段”或“被句号错误拆开的降级前缀”重新并回上一句。
+     */
     private List<String> splitSentences(String line) {
         List<String> sentences = new ArrayList<>();
         for (String fragment : SENTENCE_SPLIT_PATTERN.split(line)) {
@@ -139,9 +151,15 @@ public class CitationClaimExtractor {
                 sentences.set(lastIndex, sentences.get(lastIndex) + normalizedFragment);
                 continue;
             }
+            if (shouldMergeWithPreviousFragment(sentences, normalizedFragment)) {
+                int lastIndex = sentences.size() - 1;
+                sentences.set(lastIndex, mergeMarkdownFragments(sentences.get(lastIndex), normalizedFragment));
+                continue;
+            }
 
             sentences.add(normalizedFragment);
         }
+
         if (sentences.isEmpty()) {
             sentences.add(line);
         }
@@ -163,6 +181,101 @@ public class CitationClaimExtractor {
     private String stripEvidenceMarkers(String sentence) {
         String cleaned = EVIDENCE_PATTERN.matcher(sentence).replaceAll("");
         return normalizeText(cleaned);
+    }
+
+    /**
+     * Citation 检查直接消费 Markdown 正文，
+     * 所以这里先折叠列表前缀、加粗标记和多余空白，避免把纯格式符号当成 claim。
+     */
+    private String normalizeClaimText(String sentence) {
+        if (sentence == null) {
+            return null;
+        }
+        String normalized = stripEvidenceMarkers(sentence);
+        if (normalized == null) {
+            return null;
+        }
+        normalized = normalized
+                .replaceFirst("^\\s*([*+-]|\\d+\\.)\\s*", "")
+                .replaceAll("\\*\\*", "")
+                .replaceAll("\\s+", " ")
+                .trim();
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    /**
+     * 真实报告里会出现 `**`、`---`、`|` 之类纯 Markdown 装饰片段，
+     * 这类内容没有业务语义，必须在抽取阶段直接忽略。
+     */
+    private boolean isFormattingOnlyFragment(String fragment) {
+        if (fragment == null || fragment.isBlank()) {
+            return true;
+        }
+        String stripped = fragment
+                .replace("*", "")
+                .replace("|", "")
+                .replace("-", "")
+                .replace("_", "")
+                .replace("`", "")
+                .replace(" ", "")
+                .trim();
+        return stripped.isBlank();
+    }
+
+    /**
+     * 只包含“小标题/列表标签”的片段本身不是需要核查的判断句，
+     * 例如“生态互补性探索：”“潜在短板与风险：”应交由后续正文承载事实内容。
+     */
+    private boolean isSectionLeadOnlyFragment(String fragment) {
+        if (fragment == null || fragment.isBlank()) {
+            return false;
+        }
+        String stripped = fragment.trim();
+        if (!stripped.endsWith("：") && !stripped.endsWith(":")) {
+            return false;
+        }
+        return !stripped.contains("。")
+                && !stripped.contains("？")
+                && !stripped.contains("?")
+                && !stripped.contains("[证据")
+                && !stripped.contains("[Evidence");
+    }
+
+    /**
+     * Writer 常把“推测，当前公开资料未能验证……”这种降级前缀单独拆成一句，
+     * 这里需要显式与下一句合并，避免后续 Citation Agent 丢失谨慎语义。
+     */
+    private boolean shouldMergeWithPreviousFragment(List<String> sentences, String currentFragment) {
+        if (sentences == null || sentences.isEmpty() || currentFragment == null || currentFragment.isBlank()) {
+            return false;
+        }
+        String previous = normalizeClaimText(sentences.get(sentences.size() - 1));
+        String current = normalizeClaimText(currentFragment);
+        if (previous == null || current == null) {
+            return false;
+        }
+        return isStandaloneDowngradeFragment(previous)
+                && !isFormattingOnlyFragment(current)
+                && !isSectionLeadOnlyFragment(current);
+    }
+
+    private boolean isStandaloneDowngradeFragment(String fragment) {
+        if (fragment == null || fragment.isBlank()) {
+            return false;
+        }
+        return containsAny(fragment, DOWNGRADE_KEYWORDS) && fragment.length() <= 32;
+    }
+
+    private String mergeMarkdownFragments(String previousFragment, String currentFragment) {
+        String previous = normalizeClaimText(previousFragment);
+        String current = normalizeClaimText(currentFragment);
+        if (previous == null) {
+            return currentFragment;
+        }
+        if (current == null) {
+            return previousFragment;
+        }
+        return previous + " " + current;
     }
 
     private boolean isEvidenceOnlyFragment(String fragment) {

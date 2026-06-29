@@ -57,7 +57,7 @@ public class CollectionTaskPackageBuilder {
         String sourceType = candidate == null ? null : candidate.getSourceType();
         String url = candidate == null ? null : candidate.getUrl();
         WebPageRenderHint renderHint = resolveRenderHint(sourceFamilyKey, sourceType);
-        String primaryTool = resolvePrimaryTool(sourceFamilyKey, sourceType, url, renderHint);
+        String primaryTool = resolvePrimaryTool(candidate, sourceFamilyKey, sourceType, url, renderHint);
         return CollectionTaskPackage.builder()
                 .taskId(taskId)
                 .nodeName(nodeName)
@@ -70,6 +70,11 @@ public class CollectionTaskPackageBuilder {
                 .primaryTool(primaryTool)
                 .url(url)
                 .resourceLocator(resolveResourceLocator(primaryTool, url))
+                .prefetchedContentRef(candidate == null ? null : candidate.getPrefetchedContentRef())
+                .prefetchedRawContentLength(candidate == null ? null : candidate.getPrefetchedRawContentLength())
+                .pageType(candidate == null ? null : candidate.getPageType())
+                .qualityTier(candidate == null ? null : candidate.getQualityTier())
+                .contentCompleteness(candidate == null ? null : candidate.getContentCompleteness())
                 .renderHint(renderHint)
                 .expectedBlockTypes(searchPolicyResolver.resolveExpectedBlockTypes(sourceFamilyKey, sourceType))
                 .targetFields(List.of())
@@ -91,10 +96,16 @@ public class CollectionTaskPackageBuilder {
      * 当前阶段先用最小规则判断执行器主工具。
      * GitHub 走 API_DATA，其余网页型来源继续复用网页采集执行器。
      */
-    private String resolvePrimaryTool(String sourceFamilyKey,
+    private String resolvePrimaryTool(SourceCandidate candidate,
+                                      String sourceFamilyKey,
                                       String sourceType,
                                       String url,
                                       WebPageRenderHint renderHint) {
+        if (Boolean.TRUE.equals(candidate == null ? null : candidate.getFastLaneUsable())
+                && Boolean.TRUE.equals(candidate == null ? null : candidate.getHasPrefetchedContent())
+                && StringUtils.hasText(candidate == null ? null : candidate.getPrefetchedContentRef())) {
+            return "TAVILY_PREFETCHED";
+        }
         if ("github".equalsIgnoreCase(sourceFamilyKey)
                 || "GITHUB".equalsIgnoreCase(sourceType)) {
             return "GITHUB_API";

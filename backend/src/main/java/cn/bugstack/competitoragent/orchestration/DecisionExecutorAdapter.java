@@ -6,8 +6,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
+import java.net.URI;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -53,7 +57,7 @@ public class DecisionExecutorAdapter {
                             .dependsOn(List.of(decision.getTriggerNodeName()))
                             .required(true)
                             .executionOrder(0)
-                            .nodeConfig(writeJson(buildSupplementNodeConfig(decision)))
+                            .nodeConfig(writeJson(buildSupplementNodeConfig(decision, policyResult)))
                             .notes("Orchestrator 决策触发的动态补证分支")
                             .dynamicNode(true)
                             .originNodeName(decision.getTriggerNodeName())
@@ -95,16 +99,87 @@ public class DecisionExecutorAdapter {
         return noMutation(decision, policyResult);
     }
 
-    private Map<String, Object> buildSupplementNodeConfig(OrchestrationDecision decision) {
+    private Map<String, Object> buildSupplementNodeConfig(OrchestrationDecision decision,
+                                                          DecisionPolicyResult policyResult) {
         Map<String, Object> config = new LinkedHashMap<>();
         config.put("decisionId", decision.getDecisionId());
         config.put("sourceType", "SUPPLEMENTAL");
-        config.put("searchQueries", decision.getSuggestedQueries());
+        config.put("searchQueries", resolveSuggestedQueries(decision, policyResult));
         config.put("sourceUrls", decision.getSourceUrls());
         config.put("evidenceState", decision.getEvidenceState().name());
         config.put("summary", decision.getReason());
         config.put("targetSection", decision.getTargetSection());
+        putIfPresent(config, "preferredSearchProvider", policyResult == null ? null : policyResult.getPreferredSearchProvider());
+        putIfPresent(config, "tavilyQueryMode", policyResult == null ? null : policyResult.getTavilyQueryMode());
+        putIfNotEmpty(config, "preferredDomains", resolvePreferredDomains(decision, policyResult));
+        putIfNotEmpty(config, "includeDomains", resolveIncludeDomains(decision, policyResult));
         return config;
+    }
+
+    private List<String> resolveSuggestedQueries(OrchestrationDecision decision, DecisionPolicyResult policyResult) {
+        if (policyResult != null && policyResult.getSuggestedQueries() != null && !policyResult.getSuggestedQueries().isEmpty()) {
+            return policyResult.getSuggestedQueries();
+        }
+        return decision == null || decision.getSuggestedQueries() == null ? List.of() : decision.getSuggestedQueries();
+    }
+
+    private List<String> resolvePreferredDomains(OrchestrationDecision decision, DecisionPolicyResult policyResult) {
+        if (policyResult != null && policyResult.getPreferredDomains() != null && !policyResult.getPreferredDomains().isEmpty()) {
+            return policyResult.getPreferredDomains();
+        }
+        return extractDomains(decision == null ? List.of() : decision.getSourceUrls());
+    }
+
+    /**
+     * includeDomains 只在策略显式收窄到官方域名时下发，
+     * OPEN_WEB repair 仍然保留 preferredDomains 作为弱提示，不强行约束召回范围。
+     */
+    private List<String> resolveIncludeDomains(OrchestrationDecision decision, DecisionPolicyResult policyResult) {
+        if (policyResult != null && policyResult.getIncludeDomains() != null && !policyResult.getIncludeDomains().isEmpty()) {
+            return policyResult.getIncludeDomains();
+        }
+        if (policyResult != null && "NARROW_OFFICIAL".equalsIgnoreCase(policyResult.getIncludeDomainPolicy())) {
+            return resolvePreferredDomains(decision, policyResult);
+        }
+        return List.of();
+    }
+
+    private List<String> extractDomains(List<String> sourceUrls) {
+        LinkedHashSet<String> domains = new LinkedHashSet<>();
+        if (sourceUrls == null) {
+            return List.of();
+        }
+        for (String sourceUrl : sourceUrls) {
+            if (sourceUrl == null || sourceUrl.isBlank()) {
+                continue;
+            }
+            try {
+                URI uri = URI.create(sourceUrl.trim());
+                String host = uri.getHost();
+                if (host == null || host.isBlank()) {
+                    continue;
+                }
+                String normalizedHost = host.trim().toLowerCase(Locale.ROOT);
+                domains.add(normalizedHost.startsWith("www.") ? normalizedHost.substring(4) : normalizedHost);
+            } catch (Exception ignored) {
+                // 节点配置允许带历史脏 URL，这里只做 best-effort 提取，不能影响整个 mutation 生成。
+            }
+        }
+        return new ArrayList<>(domains);
+    }
+
+    private void putIfPresent(Map<String, Object> config, String key, String value) {
+        if (config == null || value == null || value.isBlank()) {
+            return;
+        }
+        config.put(key, value);
+    }
+
+    private void putIfNotEmpty(Map<String, Object> config, String key, List<String> values) {
+        if (config == null || values == null || values.isEmpty()) {
+            return;
+        }
+        config.put(key, values);
     }
 
     private DynamicPlanMutation noMutation(OrchestrationDecision decision, DecisionPolicyResult policyResult) {

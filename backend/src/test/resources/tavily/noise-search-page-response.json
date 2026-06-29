@@ -1,0 +1,27 @@
+{
+  "query": "douyin recommendation algorithm docs",
+  "request_id": "req-noise-1",
+  "results": [
+    {
+      "title": "Douyin Search Results",
+      "url": "https://www.douyin.com/search/algorithm?query=recommendation",
+      "content": "Search results page with no stable article body.",
+      "raw_content": "",
+      "score": 0.71
+    },
+    {
+      "title": "Bilibili Popular Videos",
+      "url": "https://www.bilibili.com/v/popular/all",
+      "content": "A video list page with highlights and ranking cards.",
+      "raw_content": "",
+      "score": 0.63
+    },
+    {
+      "title": "How does Douyin recommendation work?",
+      "url": "https://www.reddit.com/r/socialmedia/comments/12345/how_douyin_recommendation_works/",
+      "content": "A discussion thread with mixed opinions and no first-party verification.",
+      "raw_content": "Forum discussion snippets compare user guesses, anecdotal creator stories, ranking folklore, and speculative retention advice, but the thread never becomes a first-party document and should not be promoted into direct evidence. Forum discussion snippets compare user guesses, anecdotal creator stories, ranking folklore, and speculative retention advice, but the thread never becomes a first-party document and should not be promoted into direct evidence. Forum discussion snippets compare user guesses, anecdotal creator stories, ranking folklore, and speculative retention advice, but the thread never becomes a first-party document and should not be promoted into direct evidence. Forum discussion snippets compare user guesses, anecdotal creator stories, ranking folklore, and speculative retention advice, but the thread never becomes a first-party document and should not be promoted into direct evidence.",
+      "score": 0.58
+    }
+  ]
+}

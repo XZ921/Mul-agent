@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.search;
 
 import cn.bugstack.competitoragent.collection.CollectionExecutionProperties;
 import cn.bugstack.competitoragent.collection.WebPageCollectionProperties;
+import cn.bugstack.competitoragent.search.tavily.TavilySearchProperties;
 import cn.bugstack.competitoragent.source.DirectHtmlReaderProperties;
 import cn.bugstack.competitoragent.source.JinaReaderProperties;
 import cn.bugstack.competitoragent.source.SearchProviderProperties;
@@ -94,6 +95,7 @@ class SearchPropertiesBindingTest {
                     "collection.web-page.playwright-link-supplement-source-types[1]=OFFICIAL",
                     "collection.execution.reuse-prefetched-page=true",
                     "collection.execution.concurrency=3",
+                    "collection.execution.prioritize-prefetched-packages=true",
                     "collection.execution.timing-enabled=true",
                     "source-discovery.search.primary-candidate-threshold=1",
                     "source-discovery.search.run-auxiliary-when-primary-satisfied=false",
@@ -178,6 +180,7 @@ class SearchPropertiesBindingTest {
                     .containsExactly("DOCS", "OFFICIAL");
             assertThat(collectionExecutionProperties.isReusePrefetchedPage()).isTrue();
             assertThat(collectionExecutionProperties.getConcurrency()).isEqualTo(3);
+            assertThat(collectionExecutionProperties.isPrioritizePrefetchedPackages()).isTrue();
             assertThat(collectionExecutionProperties.isTimingEnabled()).isTrue();
             assertThat(searchProperties.getSourceCatalog().getFamilies()).containsKeys("official", "news", "github");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getRole())
@@ -253,6 +256,27 @@ class SearchPropertiesBindingTest {
                 });
     }
 
+    @Test
+    void shouldRejectNonHttpsTavilyEndpointConfiguration() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(TestConfiguration.class, SearchSecurityConfigurationGuard.class)
+                .withPropertyValues(
+                        "search.engines.bing.name=Bing",
+                        "search.engines.bing.base-url=https://www.bing.com/search",
+                        "search.engines.bing.query-param=q",
+                        "search.engines.bing.enabled=true",
+                        "serpapi.endpoint=https://serpapi.com/search",
+                        "tavily-search.enabled=true",
+                        "tavily-search.api-key=test-tavily-key",
+                        "tavily-search.endpoint=http://api.tavily.com/search"
+                )
+                .run(context -> {
+                    SearchSecurityConfigurationGuard guard = context.getBean(SearchSecurityConfigurationGuard.class);
+                    org.assertj.core.api.Assertions.assertThatThrownBy(() -> guard.run(null))
+                            .hasMessageContaining("tavily-search.endpoint");
+                });
+    }
+
     @Configuration(proxyBeanMethods = false)
     @EnableConfigurationProperties({
             SearchProviderProperties.class,
@@ -265,7 +289,8 @@ class SearchPropertiesBindingTest {
             WebPageCollectionProperties.class,
             CollectionExecutionProperties.class,
             SerpApiProperties.class,
-            QianfanSearchProperties.class
+            QianfanSearchProperties.class,
+            TavilySearchProperties.class
     })
     static class TestConfiguration {
     }

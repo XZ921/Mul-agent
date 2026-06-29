@@ -44,6 +44,23 @@ public class SourceCandidate {
     private String searchEngine;
     private Integer resultRank;
     private String browserTraceId;
+    /**
+     * Tavily Fast Lane 只在候选里保留轻量引用与质量元数据，
+     * 不在主对象中携带完整 raw_content，避免搜索链路对象膨胀。
+     */
+    private Boolean hasPrefetchedContent;
+    private String prefetchedContentRef;
+    private Integer prefetchedRawContentLength;
+    private Double tavilyScore;
+    private String tavilyRequestId;
+    private String tavilyQuery;
+    private String tavilyQueryMode;
+    private String pageType;
+    private String qualityTier;
+    private Boolean fastLaneUsable;
+    private String fastLaneRejectReason;
+    private String contentCompleteness;
+    private Boolean skipNetworkVerification;
     private Boolean verified;
     private String verificationReason;
     private List<String> matchedSignals;

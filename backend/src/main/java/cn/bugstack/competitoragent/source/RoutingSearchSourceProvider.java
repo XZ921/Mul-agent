@@ -13,6 +13,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * 搜索补源路由器。
@@ -36,6 +38,7 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
      */
     @Autowired
     public RoutingSearchSourceProvider(SearchProviderProperties properties,
+                                       TavilyFastLaneProvider tavilyFastLaneProvider,
                                        QianfanSearchSourceProvider qianfanSearchSourceProvider,
                                        SerpApiSearchSourceProvider serpApiSearchSourceProvider,
                                        BrowserPreviewSearchSourceProvider browserPreviewProvider,
@@ -43,7 +46,11 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
                                        SourceCandidateRanker sourceCandidateRanker,
                                        SearchPolicyResolver searchPolicyResolver) {
         this(properties,
-                List.of(qianfanSearchSourceProvider, serpApiSearchSourceProvider, browserPreviewProvider, httpSearchSourceProvider),
+                List.of(tavilyFastLaneProvider,
+                        qianfanSearchSourceProvider,
+                        serpApiSearchSourceProvider,
+                        browserPreviewProvider,
+                        httpSearchSourceProvider),
                 sourceCandidateRanker,
                 searchPolicyResolver);
     }
@@ -65,14 +72,39 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
     }
 
     @Override
+    public List<SourceCandidate> search(SearchSourceRequest request) {
+        if (request == null) {
+            return List.of();
+        }
+        return searchAcrossProviders(
+                provider -> provider.search(request),
+                normalizedProviderKey -> !StringUtils.hasText(request.getPreferredProviderKey())
+                        || normalizeProviderKey(request.getPreferredProviderKey()).equals(normalizedProviderKey)
+        );
+    }
+
+    @Override
     public List<SourceCandidate> search(String competitorName, List<String> requestedScopes) {
+        return searchAcrossProviders(
+                provider -> provider.search(competitorName, requestedScopes),
+                normalizedProviderKey -> true
+        );
+    }
+
+    /**
+     * 旧入口与 request-mode 入口必须复用同一套 provider 路由骨架，
+     * 否则 primarySatisfied、fail-open 和 provider role 语义会在新入口上悄悄失真。
+     */
+    private List<SourceCandidate> searchAcrossProviders(Function<SearchSourceProvider, List<SourceCandidate>> invoker,
+                                                        Predicate<String> providerFilter) {
         List<SourceCandidate> mergedCandidates = new ArrayList<>();
         Map<String, SearchSourceProvider> providersByKey = indexProvidersByKey();
         int primaryCandidateCount = 0;
         boolean primarySatisfied = false;
 
         for (String providerKey : resolveProviderOrder()) {
-            SearchSourceProvider provider = providersByKey.get(normalizeProviderKey(providerKey));
+            String normalizedProviderKey = normalizeProviderKey(providerKey);
+            SearchSourceProvider provider = providersByKey.get(normalizedProviderKey);
             if (provider == null) {
                 continue;
             }
@@ -93,8 +125,11 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
                 log.debug("search provider unavailable, provider={}", descriptor.getProviderKey());
                 continue;
             }
+            if (!providerFilter.test(normalizedProviderKey)) {
+                continue;
+            }
             try {
-                List<SourceCandidate> providerCandidates = provider.search(competitorName, requestedScopes);
+                List<SourceCandidate> providerCandidates = invoker.apply(provider);
                 if (!providerCandidates.isEmpty()) {
                     mergedCandidates.addAll(providerCandidates);
                     if (providerRole == SearchProviderRole.PRIMARY_VERTICAL) {

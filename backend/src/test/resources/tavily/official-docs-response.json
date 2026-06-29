@@ -1,0 +1,27 @@
+{
+  "query": "douyin open platform api official docs",
+  "request_id": "req-official-docs-1",
+  "results": [
+    {
+      "title": "Platform Introduction - Douyin Open Platform API",
+      "url": "https://open.douyin.com/platform/resource/docs/accession-guide/platform-introduction",
+      "content": "Official platform introduction with capability overview, access flow, and integration guidance.",
+      "raw_content": "The official Douyin open platform document explains capability scope, account onboarding, API access, permission review, developer workflow, compliance boundaries, and support channels for traceable implementation. The official Douyin open platform document explains capability scope, account onboarding, API access, permission review, developer workflow, compliance boundaries, and support channels for traceable implementation. The official Douyin open platform document explains capability scope, account onboarding, API access, permission review, developer workflow, compliance boundaries, and support channels for traceable implementation. The official Douyin open platform document explains capability scope, account onboarding, API access, permission review, developer workflow, compliance boundaries, and support channels for traceable implementation. The official Douyin open platform document explains capability scope, account onboarding, API access, permission review, developer workflow, compliance boundaries, and support channels for traceable implementation. The official Douyin open platform document explains capability scope, account onboarding, API access, permission review, developer workflow, compliance boundaries, and support channels for traceable implementation.",
+      "score": 0.68
+    },
+    {
+      "title": "Content Publish Solution - Douyin Open Platform API",
+      "url": "https://open.douyin.com/platform/resource/docs/ability/content-management/douyin-publish-solution",
+      "content": "Official documentation for content publish flows, permissions, and application constraints.",
+      "raw_content": "This official API document describes content publishing scope, permission requirements, supported clients, audit states, callback handling, and verification details that developers need when building a traceable integration. This official API document describes content publishing scope, permission requirements, supported clients, audit states, callback handling, and verification details that developers need when building a traceable integration. This official API document describes content publishing scope, permission requirements, supported clients, audit states, callback handling, and verification details that developers need when building a traceable integration. This official API document describes content publishing scope, permission requirements, supported clients, audit states, callback handling, and verification details that developers need when building a traceable integration. This official API document describes content publishing scope, permission requirements, supported clients, audit states, callback handling, and verification details that developers need when building a traceable integration.",
+      "score": 0.65
+    },
+    {
+      "title": "Video Share Result API - Douyin Open Platform API",
+      "url": "https://open.douyin.com/platform/resource/docs/openapi/video-management/douyin/search-video/video-share-result",
+      "content": "Official API reference for video share result retrieval, response fields, and callback handling.",
+      "raw_content": "The official reference lists request parameters, share identifiers, callback notes, error codes, response schema, and troubleshooting guidance for the video share result API so that evidence remains anchored in first-party documentation. The official reference lists request parameters, share identifiers, callback notes, error codes, response schema, and troubleshooting guidance for the video share result API so that evidence remains anchored in first-party documentation. The official reference lists request parameters, share identifiers, callback notes, error codes, response schema, and troubleshooting guidance for the video share result API so that evidence remains anchored in first-party documentation. The official reference lists request parameters, share identifiers, callback notes, error codes, response schema, and troubleshooting guidance for the video share result API so that evidence remains anchored in first-party documentation. The official reference lists request parameters, share identifiers, callback notes, error codes, response schema, and troubleshooting guidance for the video share result API so that evidence remains anchored in first-party documentation. The official reference lists request parameters, share identifiers, callback notes, error codes, response schema, and troubleshooting guidance for the video share result API so that evidence remains anchored in first-party documentation.",
+      "score": 0.62
+    }
+  ]
+}
