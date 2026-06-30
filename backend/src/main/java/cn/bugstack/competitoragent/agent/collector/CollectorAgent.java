@@ -43,6 +43,10 @@ import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceView;
 import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceViewAssembler;
 import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
 import cn.bugstack.competitoragent.workflow.contract.SectionEvidenceBundle;
+import cn.bugstack.competitoragent.workflow.coverage.DimensionEvidencePlan;
+import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceCoverage;
+import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceCoverageAggregator;
+import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceCoverageStatus;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -79,6 +83,7 @@ public class CollectorAgent extends BaseAgent {
     private final EvidenceQualityGate evidenceQualityGate;
     private final EvidenceSourceSanitizer evidenceSourceSanitizer;
     private final PublicEvidenceRecoveryService publicEvidenceRecoveryService;
+    private final FieldEvidenceCoverageAggregator fieldEvidenceCoverageAggregator;
 
     public CollectorAgent(AgentExecutionLogRepository logRepository,
                           SourceCollector sourceCollector,
@@ -101,7 +106,8 @@ public class CollectorAgent extends BaseAgent {
                 new DownstreamEvidenceViewAssembler(objectMapper),
                 new EvidenceQualityGate(new EvidenceQualityGateProperties()),
                 new EvidenceSourceSanitizer(),
-                new PublicEvidenceRecoveryService());
+                new PublicEvidenceRecoveryService(),
+                new FieldEvidenceCoverageAggregator());
     }
 
     @Autowired
@@ -129,7 +135,8 @@ public class CollectorAgent extends BaseAgent {
                 downstreamEvidenceViewAssembler,
                 evidenceQualityGate,
                 evidenceSourceSanitizer,
-                new PublicEvidenceRecoveryService());
+                new PublicEvidenceRecoveryService(),
+                new FieldEvidenceCoverageAggregator());
     }
 
     public CollectorAgent(AgentExecutionLogRepository logRepository,
@@ -145,6 +152,36 @@ public class CollectorAgent extends BaseAgent {
                           EvidenceQualityGate evidenceQualityGate,
                           EvidenceSourceSanitizer evidenceSourceSanitizer,
                           PublicEvidenceRecoveryService publicEvidenceRecoveryService) {
+        this(logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchExecutionCoordinator,
+                collectionExecutionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper,
+                downstreamEvidenceViewAssembler,
+                evidenceQualityGate,
+                evidenceSourceSanitizer,
+                publicEvidenceRecoveryService,
+                new FieldEvidenceCoverageAggregator());
+    }
+
+    public CollectorAgent(AgentExecutionLogRepository logRepository,
+                          SourceCollector sourceCollector,
+                          EvidenceSourceRepository evidenceRepository,
+                          TaskNodeRepository nodeRepository,
+                          AgentContextAssembler agentContextAssembler,
+                          SearchExecutionCoordinator searchExecutionCoordinator,
+                          CollectionExecutionCoordinator collectionExecutionCoordinator,
+                          TaskRetrievalIndexService taskRetrievalIndexService,
+                          ObjectMapper objectMapper,
+                          DownstreamEvidenceViewAssembler downstreamEvidenceViewAssembler,
+                          EvidenceQualityGate evidenceQualityGate,
+                          EvidenceSourceSanitizer evidenceSourceSanitizer,
+                          PublicEvidenceRecoveryService publicEvidenceRecoveryService,
+                          FieldEvidenceCoverageAggregator fieldEvidenceCoverageAggregator) {
         // Spring 需要明确知道运行期应优先使用带统一证据视图装配器的正式构造器，
         // 否则存在多个 public 构造器时会退回默认实例化路径，导致上下文加载失败。
         super(logRepository, agentContextAssembler);
@@ -168,6 +205,9 @@ public class CollectorAgent extends BaseAgent {
         this.publicEvidenceRecoveryService = publicEvidenceRecoveryService == null
                 ? new PublicEvidenceRecoveryService()
                 : publicEvidenceRecoveryService;
+        this.fieldEvidenceCoverageAggregator = fieldEvidenceCoverageAggregator == null
+                ? new FieldEvidenceCoverageAggregator()
+                : fieldEvidenceCoverageAggregator;
     }
 
     @Override
@@ -437,6 +477,21 @@ public class CollectorAgent extends BaseAgent {
         }
 
         collectionReport = collectionExecutionCoordinator.summarize(auditResults);
+        FieldEvidenceLoopOutcome fieldEvidenceLoopOutcome = applyFieldEvidenceLoopIfNeeded(
+                context,
+                config,
+                sourceType,
+                searchExecutionResult,
+                collectionReport,
+                auditResults,
+                targets,
+                results,
+                successCounterRef
+        );
+        collectionReport = fieldEvidenceLoopOutcome.collectionReport();
+        searchExecutionResult = fieldEvidenceLoopOutcome.searchExecutionResult();
+        targets = fieldEvidenceLoopOutcome.targets();
+        int fieldEvidenceLoopRounds = fieldEvidenceLoopOutcome.rounds();
 
         try {
             if (successCounterRef[0] == 0) {
@@ -768,6 +823,21 @@ public class CollectorAgent extends BaseAgent {
         }
 
         collectionReport = collectionExecutionCoordinator.summarize(auditResults);
+        FieldEvidenceLoopOutcome fieldEvidenceLoopOutcome = applyFieldEvidenceLoopIfNeeded(
+                context,
+                config,
+                sourceType,
+                searchExecutionResult,
+                collectionReport,
+                auditResults,
+                targets,
+                results,
+                successCounterRef
+        );
+        collectionReport = fieldEvidenceLoopOutcome.collectionReport();
+        searchExecutionResult = fieldEvidenceLoopOutcome.searchExecutionResult();
+        targets = fieldEvidenceLoopOutcome.targets();
+        int fieldEvidenceLoopRounds = fieldEvidenceLoopOutcome.rounds();
 
         try {
             if (successCounterRef[0] == 0) {
@@ -782,7 +852,7 @@ public class CollectorAgent extends BaseAgent {
                 }
                 String outputJson = buildCollectorOutput(
                         config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, collectionReport,
-                        progressSnapshots, results, successCounterRef[0], targets);
+                        progressSnapshots, results, successCounterRef[0], targets, fieldEvidenceLoopRounds);
                 String actionableError = hasIssueFlag(results, "EVIDENCE_PERSIST_FAILED")
                         ? "证据落库失败，已保留 collection audit 诊断，请检查字段长度或数据库迁移"
                         : buildNoContentFailureMessage(config, sourceType, searchExecutionResult.getExecutionTrace(), results);
@@ -804,7 +874,7 @@ public class CollectorAgent extends BaseAgent {
                     readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
             String outputJson = buildCollectorOutput(
                     config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, collectionReport,
-                    progressSnapshots, results, successCounterRef[0], targets);
+                    progressSnapshots, results, successCounterRef[0], targets, fieldEvidenceLoopRounds);
             return AgentResult.builder()
                     .status(TaskNodeStatus.SUCCESS)
                     .outputData(outputJson)
@@ -849,7 +919,8 @@ public class CollectorAgent extends BaseAgent {
                     progressSnapshots == null ? List.of() : progressSnapshots,
                     results,
                     successCounter,
-                    targets == null ? List.of() : targets
+                    targets == null ? List.of() : targets,
+                    1
             );
             nodeRepository.findByTaskIdAndNodeName(context.getTaskId(), context.getCurrentNodeName())
                     .ifPresent(node -> {
@@ -874,6 +945,20 @@ public class CollectorAgent extends BaseAgent {
                                         List<Map<String, Object>> results,
                                         int successCounter,
                                         List<SearchCollectionTarget> targets) throws JsonProcessingException {
+        return buildCollectorOutput(config, sourceType, taskRagContext, searchExecutionResult, collectionReport,
+                progressSnapshots, results, successCounter, targets, 1);
+    }
+
+    private String buildCollectorOutput(CollectorNodeConfig config,
+                                        String sourceType,
+                                        String taskRagContext,
+                                        SearchExecutionResult searchExecutionResult,
+                                        CollectionExecutionReport collectionReport,
+                                        List<SearchProgressSnapshot> progressSnapshots,
+                                        List<Map<String, Object>> results,
+                                        int successCounter,
+                                        List<SearchCollectionTarget> targets,
+                                        int fieldEvidenceLoopRounds) throws JsonProcessingException {
         Map<String, Object> output = new LinkedHashMap<>();
         output.put("competitor", config.getCompetitorName());
         output.put("sourceType", sourceType);
@@ -898,6 +983,11 @@ public class CollectorAgent extends BaseAgent {
         output.put("collectionReplayTimeline", collectionReport == null || collectionReport.getAuditSnapshot() == null
                 ? List.of()
                 : collectionReport.getAuditSnapshot().getReplayTimeline());
+        output.put("dimensionEvidencePlan", config.getDimensionEvidencePlan());
+        output.put("fieldEvidenceCoverageStatus", summarizeFieldCoverage(config.getDimensionEvidencePlan()));
+        output.put("fieldEvidenceLoopRounds", fieldEvidenceLoopRounds);
+        output.put("fieldEvidenceRecollectionTriggered", fieldEvidenceLoopRounds > 1);
+        output.put("fieldEvidenceFinalStatus", summarizeFieldEvidenceFinalStatus(config.getDimensionEvidencePlan()));
         CollectResult collectResult = buildCollectResult(config, results, successCounter);
         output.put("contractVersion", collectResult.getContractVersion());
         output.put("documents", collectResult.getDocuments());
@@ -1594,6 +1684,213 @@ public class CollectorAgent extends BaseAgent {
                 + "：" + pageLabel;
     }
 
+    private boolean shouldRunFieldEvidenceRecollection(CollectorNodeConfig config,
+                                                       DimensionEvidencePlan plan,
+                                                       int currentRound) {
+        int maxRounds = plan == null || plan.getMaxCollectionRounds() == null
+                ? 2
+                : Math.max(1, plan.getMaxCollectionRounds());
+        return currentRound < maxRounds
+                && config != null
+                && config.getDimensionEvidencePlan() != null
+                && plan != null
+                && !fieldEvidenceCoverageAggregator.fieldsNeedingRecollection(plan).isEmpty();
+    }
+
+    private FieldEvidenceLoopOutcome applyFieldEvidenceLoopIfNeeded(AgentContext context,
+                                                                    CollectorNodeConfig config,
+                                                                    String sourceType,
+                                                                    SearchExecutionResult searchExecutionResult,
+                                                                    CollectionExecutionReport collectionReport,
+                                                                    List<CollectionExecutionResult> auditResults,
+                                                                    List<SearchCollectionTarget> targets,
+                                                                    List<Map<String, Object>> results,
+                                                                    int[] successCounterRef) {
+        DimensionEvidencePlan updatedPlan = fieldEvidenceCoverageAggregator.applyCollectionResults(
+                config.getDimensionEvidencePlan(),
+                auditResults
+        );
+        config.setDimensionEvidencePlan(updatedPlan);
+        int rounds = 1;
+        if (!shouldRunFieldEvidenceRecollection(config, updatedPlan, rounds)) {
+            return new FieldEvidenceLoopOutcome(collectionReport, searchExecutionResult, targets, rounds);
+        }
+
+        rounds++;
+        DimensionEvidencePlan narrowedPlan = narrowPlanToUnfinishedFields(updatedPlan);
+        config.setDimensionEvidencePlan(narrowedPlan);
+        SearchExecutionResult secondRoundSearchResult = searchExecutionCoordinator.execute(config, update ->
+                persistRunningOutput(context, config, sourceType, update, results, successCounterRef[0]));
+        List<SearchCollectionTarget> secondRoundTargets = secondRoundSearchResult.getSelectedTargets() == null
+                ? List.of()
+                : secondRoundSearchResult.getSelectedTargets();
+        CollectionExecutionReport secondRoundReport = collectFieldEvidenceRound(
+                context,
+                config,
+                sourceType,
+                secondRoundSearchResult,
+                secondRoundTargets,
+                results,
+                successCounterRef
+        );
+        List<CollectionExecutionResult> secondRoundResults = secondRoundReport == null
+                || secondRoundReport.getResults() == null
+                ? List.of()
+                : secondRoundReport.getResults();
+        DimensionEvidencePlan mergedPlan = mergePlanFields(updatedPlan, narrowedPlan);
+        updatedPlan = fieldEvidenceCoverageAggregator.applyCollectionResults(mergedPlan, secondRoundResults);
+        config.setDimensionEvidencePlan(updatedPlan);
+        CollectionExecutionReport mergedReport = collectionExecutionCoordinator.summarize(
+                mergeCollectionResults(auditResults, secondRoundResults));
+        return new FieldEvidenceLoopOutcome(mergedReport, secondRoundSearchResult, secondRoundTargets, rounds);
+    }
+
+    private DimensionEvidencePlan narrowPlanToUnfinishedFields(DimensionEvidencePlan plan) {
+        if (plan == null) {
+            return null;
+        }
+        List<FieldEvidenceCoverage> unfinishedFields = fieldEvidenceCoverageAggregator.fieldsNeedingRecollection(plan);
+        return plan.toBuilder()
+                .fieldCoverages(unfinishedFields)
+                .build();
+    }
+
+    private DimensionEvidencePlan mergePlanFields(DimensionEvidencePlan originalPlan,
+                                                  DimensionEvidencePlan updatedSubset) {
+        if (originalPlan == null || updatedSubset == null || updatedSubset.getFieldCoverages() == null) {
+            return originalPlan;
+        }
+        Map<String, FieldEvidenceCoverage> subsetByField = new LinkedHashMap<>();
+        for (FieldEvidenceCoverage field : updatedSubset.getFieldCoverages()) {
+            if (field != null && StringUtils.hasText(field.getFieldName())) {
+                subsetByField.put(field.getFieldName().toLowerCase(java.util.Locale.ROOT), field);
+            }
+        }
+        List<FieldEvidenceCoverage> mergedFields = new ArrayList<>();
+        for (FieldEvidenceCoverage field : originalPlan.getFieldCoverages() == null
+                ? List.<FieldEvidenceCoverage>of()
+                : originalPlan.getFieldCoverages()) {
+            if (field == null || !StringUtils.hasText(field.getFieldName())) {
+                mergedFields.add(field);
+                continue;
+            }
+            mergedFields.add(subsetByField.getOrDefault(field.getFieldName().toLowerCase(java.util.Locale.ROOT), field));
+        }
+        return originalPlan.toBuilder()
+                .fieldCoverages(mergedFields)
+                .build();
+    }
+
+    private List<CollectionExecutionResult> mergeCollectionResults(List<CollectionExecutionResult> firstRound,
+                                                                   List<CollectionExecutionResult> secondRound) {
+        List<CollectionExecutionResult> merged = new ArrayList<>();
+        if (firstRound != null) {
+            merged.addAll(firstRound);
+        }
+        if (secondRound != null) {
+            merged.addAll(secondRound);
+        }
+        return merged;
+    }
+
+    private CollectionExecutionReport collectFieldEvidenceRound(AgentContext context,
+                                                                CollectorNodeConfig config,
+                                                                String sourceType,
+                                                                SearchExecutionResult searchExecutionResult,
+                                                                List<SearchCollectionTarget> targets,
+                                                                List<Map<String, Object>> results,
+                                                                int[] successCounterRef) {
+        if (targets == null || targets.isEmpty()) {
+            return collectionExecutionCoordinator.summarize(List.of());
+        }
+        CollectionExecutionReport collectionReport = collectionExecutionCoordinator.execute(
+                context.getTaskId(),
+                context.getCurrentNodeName(),
+                context.getPlanVersionId(),
+                config.getCompetitorName(),
+                targets.stream().filter(this::requiresCoordinatorExecution).toList(),
+                config.getCollectionAuditCheckpoint()
+        );
+        List<CollectionExecutionResult> collectionResults = collectionReport == null || collectionReport.getResults() == null
+                ? List.of()
+                : collectionReport.getResults();
+        List<CollectionExecutionResult> auditResults = new ArrayList<>();
+        int[] evidenceCounterRef = new int[] {successCounterRef == null ? 0 : successCounterRef[0]};
+        int index = 0;
+        for (SearchCollectionTarget target : targets) {
+            SourceCandidate matchedCandidate = target == null ? null : target.getCandidate();
+            CollectionExecutionResult collectionResult = index < collectionResults.size()
+                    ? collectionResults.get(index++)
+                    : buildMissingCollectionExecutionResult(context, index + 1, matchedCandidate);
+            collectionResult = gateCollectionResult(config, matchedCandidate, collectionResult);
+            auditResults.add(collectionResult);
+            SourceCollector.CollectedPage page = mapCollectionResultToCollectedPage(
+                    collectionResult,
+                    config.getCompetitorName(),
+                    sourceType);
+            int[] processedCounter = new int[] {auditResults.size()};
+            appendCollectedResultEntry(context, config, sourceType, searchExecutionResult,
+                    searchExecutionResult == null ? null : searchExecutionResult.getExecutionPlan(),
+                    searchExecutionResult == null || searchExecutionResult.getProgressSnapshots() == null
+                            ? new ArrayList<>()
+                            : new ArrayList<>(searchExecutionResult.getProgressSnapshots()),
+                    targets,
+                    results,
+                    successCounterRef,
+                    evidenceCounterRef,
+                    processedCounter[0],
+                    targets.size(),
+                    collectionResult,
+                    page,
+                    matchedCandidate,
+                    matchedCandidate == null ? collectionResult.getResourceLocator() : matchedCandidate.getUrl());
+        }
+        return collectionExecutionCoordinator.summarize(auditResults);
+    }
+
+    private Map<String, Object> summarizeFieldCoverage(DimensionEvidencePlan plan) {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        if (plan == null || plan.getFieldCoverages() == null) {
+            summary.put("totalFields", 0);
+            summary.put("sufficientFields", 0);
+            summary.put("fieldsNeedingRecollection", List.of());
+            return summary;
+        }
+        List<String> pendingFields = fieldEvidenceCoverageAggregator.fieldsNeedingRecollection(plan).stream()
+                .map(FieldEvidenceCoverage::getFieldName)
+                .filter(StringUtils::hasText)
+                .toList();
+        long sufficientFields = plan.getFieldCoverages().stream()
+                .filter(field -> field != null && field.getStatus() == FieldEvidenceCoverageStatus.SUFFICIENT)
+                .count();
+        summary.put("totalFields", plan.getFieldCoverages().size());
+        summary.put("sufficientFields", sufficientFields);
+        summary.put("fieldsNeedingRecollection", pendingFields);
+        return summary;
+    }
+
+    private String summarizeFieldEvidenceFinalStatus(DimensionEvidencePlan plan) {
+        if (plan == null || plan.getFieldCoverages() == null || plan.getFieldCoverages().isEmpty()) {
+            return null;
+        }
+        if (plan.getFieldCoverages().stream()
+                .allMatch(field -> field != null && field.getStatus() == FieldEvidenceCoverageStatus.SUFFICIENT)) {
+            return "SUFFICIENT";
+        }
+        boolean hasAttemptedPath = plan.getFieldCoverages().stream()
+                .filter(field -> field != null && field.getAttemptedPaths() != null)
+                .anyMatch(field -> !field.getAttemptedPaths().isEmpty());
+        return hasAttemptedPath
+                ? FieldEvidenceCoverageStatus.NO_PUBLIC_EVIDENCE_AFTER_SEARCH.name()
+                : FieldEvidenceCoverageStatus.EVIDENCE_PATH_COVERAGE_NOT_MET.name();
+    }
+
+    private record FieldEvidenceLoopOutcome(CollectionExecutionReport collectionReport,
+                                            SearchExecutionResult searchExecutionResult,
+                                            List<SearchCollectionTarget> targets,
+                                            int rounds) {
+    }
+
     private SourceCandidate enrichMatchedCandidate(SourceCandidate matchedCandidate,
                                                    CollectionExecutionResult collectionResult,
                                                    String defaultSourceType) {
@@ -1632,6 +1929,8 @@ public class CollectorAgent extends BaseAgent {
                         : "collection result returned without selected target metadata")
                 .domain(canonicalUrlResolver.canonicalDomain(effectiveUrl))
                 .sourceUrls(result.getSourceUrls() == null ? List.of() : result.getSourceUrls())
+                .fieldName(result.getPublicEvidenceRecoveryFieldName())
+                .evidencePathKey(result.getPublicEvidenceRecoveryEvidencePathKey())
                 .qualitySignals(result.getQualitySignals() == null ? List.of() : result.getQualitySignals())
                 .qualityScore(result.getQualityScore() == null ? 0.0D : result.getQualityScore())
                 .build();
@@ -1993,11 +2292,20 @@ public class CollectorAgent extends BaseAgent {
         String effectiveSourceType = candidate != null && StringUtils.hasText(candidate.getSourceType())
                 ? candidate.getSourceType()
                 : (result == null ? null : result.getExecutorType());
+        String effectiveFieldName = candidate != null && StringUtils.hasText(candidate.getFieldName())
+                ? candidate.getFieldName()
+                : resolveRecoveryFieldName(config);
+        String effectiveEvidencePathKey = candidate != null && StringUtils.hasText(candidate.getEvidencePathKey())
+                ? candidate.getEvidencePathKey()
+                : resolveRecoveryEvidencePathKey(config);
+        List<String> effectiveQueryIntents = candidate != null && StringUtils.hasText(candidate.getQueryIntent())
+                ? List.of(candidate.getQueryIntent())
+                : resolveRecoveryQueryIntents(config);
         return EvidenceQualityContext.builder()
                 .url(result == null ? null : result.getResourceLocator())
                 .sourceType(effectiveSourceType)
-                .fieldName(resolveRecoveryFieldName(config))
-                .evidencePathKey(resolveRecoveryEvidencePathKey(config))
+                .fieldName(effectiveFieldName)
+                .evidencePathKey(effectiveEvidencePathKey)
                 .requiredCoverageFields(config == null || config.getRequiredCoverageFields() == null
                         ? List.of()
                         : config.getRequiredCoverageFields())
@@ -2005,7 +2313,7 @@ public class CollectorAgent extends BaseAgent {
                         ? List.of()
                         : config.getBlockingCoverageFields())
                 .coverageQueryIntents(config == null || config.getCoverageQueryIntents() == null
-                        ? resolveRecoveryQueryIntents(config)
+                        ? effectiveQueryIntents
                         : config.getCoverageQueryIntents())
                 .expectedSignals(resolveExpectedSignals(config, effectiveSourceType))
                 .build();

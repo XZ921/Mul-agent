@@ -396,7 +396,9 @@ class WorkflowFactoryTest {
                 new SourceCandidateRanker(),
                 objectMapper,
                 collectorPlanTemplateFactory,
-                new CoverageContractResolver(new AnalysisDimensionMappingCatalog())
+                new CoverageContractResolver(new AnalysisDimensionMappingCatalog()),
+                new cn.bugstack.competitoragent.workflow.coverage.DimensionEvidencePlanFactory(
+                        new cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQueryPlanner())
         );
         CollaborationGoalAssembler collaborationGoalAssembler = new CollaborationGoalAssembler(objectMapper);
         CollaborationPlanService collaborationPlanService = new CollaborationPlanService();

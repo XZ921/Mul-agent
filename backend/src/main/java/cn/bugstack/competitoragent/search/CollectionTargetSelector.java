@@ -179,6 +179,38 @@ public class CollectionTargetSelector {
                     "显式候选已取得可用公开正文");
         }
 
+        /**
+         * 当 coordinator 显式关闭结果页验证、跳过 verifyCandidates，或直接复用 checkpoint 候选时，
+         * 这些候选不会进入 attemptedTargets，因此也拿不到 collectedPage。
+         * 只要它们没有被明确判定为中介页、工具页或已丢弃候选，就允许作为降级入口继续进入采集，
+         * 否则 planned / supplement / checkpoint 三类正常候选会在 SELECT_TARGETS 阶段被全部清空。
+         */
+        if (!Boolean.TRUE.equals(candidate.getVerified())
+                && attemptedTarget == null
+                && !"DISCARDED".equalsIgnoreCase(candidate.getSelectionStage())
+                && !"SELECTED".equalsIgnoreCase(candidate.getSelectionStage())) {
+            return new SelectionEligibility(true,
+                    "当前节点未执行结果页验证，允许非拒绝型候选作为降级采集入口",
+                    "当前节点未执行结果页验证，按候选排序结果进入降级采集");
+        }
+
+        /**
+         * checkpoint 恢复出的候选可能已经在上一轮被标记为 SELECTED，
+         * 这类候选在当前轮不应该因为没有重新验真就失去入选资格。
+         */
+        if ("SELECTED".equalsIgnoreCase(candidate.getSelectionStage())) {
+            return new SelectionEligibility(true,
+                    "候选来自已恢复的选中快照，允许继续作为正式采集目标",
+                    "候选来自已恢复的选中快照");
+        }
+
+        if ("SUPPLEMENTED".equalsIgnoreCase(candidate.getSelectionStage())
+                && StringUtils.hasText(candidate.getSelectionReason())
+                && candidate.getSelectionReason().toLowerCase(Locale.ROOT).contains("http fallback")) {
+            return new SelectionEligibility(true,
+                    "HTTP fallback 候选已被上游保留为降级采集入口",
+                    "HTTP fallback 候选作为降级采集入口进入正式采集");
+        }
         return new SelectionEligibility(false,
                 "未验证候选不能进入正式采集目标",
                 "未验证候选仅保留为诊断候选");

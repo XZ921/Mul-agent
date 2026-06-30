@@ -33,4 +33,14 @@ public class TavilyPrefetchedContent {
     private String queryMode;
     private Integer resultRank;
     private Double tavilyScore;
+
+    /**
+     * 字段级 query 元数据。
+     * registry 回放时依赖这些字段解释 raw_content 属于哪个字段路径，而不是只知道它来自某次 Tavily 请求。
+     */
+    private String fieldName;
+    private String evidencePathKey;
+    private String queryIntent;
+    private String fieldEvidenceQueryFingerprint;
+    private String fieldEvidenceQueryReason;
 }

@@ -8,6 +8,7 @@ import cn.bugstack.competitoragent.source.SearchSourceRequest;
 import cn.bugstack.competitoragent.source.SearchSourceProvider;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
+import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -650,6 +651,9 @@ public class SearchExecutionCoordinator {
                 .publicEvidenceRecoveryCandidateCount(publicEvidenceRecoveryCandidateCount)
                 .publicEvidenceRecoveryVerifiedCount(publicEvidenceRecoveryVerifiedCount)
                 .publicEvidenceRecoveryStatus(publicEvidenceRecoveryStatus)
+                .fieldEvidenceQueryCount(resolveFieldEvidenceQueries(config).size())
+                .fieldEvidenceFields(resolveDistinctFieldEvidenceFields(config))
+                .fieldEvidencePaths(resolveDistinctFieldEvidencePaths(config))
                 .evidenceRepairPlan(evidenceRepairPlanProjection)
                 .tavilyFastLaneAudit(tavilyFastLaneAudit)
                 .resumedFromCheckpoint(resumedFromCheckpoint)
@@ -1033,6 +1037,7 @@ public class SearchExecutionCoordinator {
                 .competitorName(config.getCompetitorName())
                 .requestedScopes(List.of(config.getSourceType()))
                 .searchQueries(resolveSearchQueries(config, null))
+                .fieldEvidenceQueries(resolveFieldEvidenceQueries(config))
                 .preferredDomains(defaultList(config.getPreferredDomains()))
                 .includeDomains(defaultList(config.getIncludeDomains()))
                 .blockedDomains(defaultList(config.getBlockedDomains()))
@@ -1055,6 +1060,17 @@ public class SearchExecutionCoordinator {
 
     private List<String> defaultList(List<String> values) {
         return values == null ? List.of() : values;
+    }
+
+    /**
+     * 字段级证据计划由 workflow 规划层写入 config，搜索层只负责原样透传给 provider。
+     * 这样 Tavily/HTTP provider 才能在第一轮 supplement 就执行 field-first 多 query。
+     */
+    private List<FieldEvidenceQuery> resolveFieldEvidenceQueries(CollectorNodeConfig config) {
+        if (config == null || config.getDimensionEvidencePlan() == null) {
+            return List.of();
+        }
+        return config.getDimensionEvidencePlan().allPlannedQueries();
     }
 
     /**
@@ -1377,12 +1393,23 @@ public class SearchExecutionCoordinator {
         if (!runtimeSearchEnabled) {
             return false;
         }
+        // 字段证据预算比“是否已有 verified 候选”更细。
+        // 只要还有待执行字段 query，就必须放行 HTTP/Tavily supplement 进入 provider。
+        if (hasPendingFieldEvidenceQueries(config)) {
+            return true;
+        }
         // 一旦启用了结果页验证，是否补源必须由“验证是否达标”决定，
         // 不能仅凭规划期候选数量够用就跳过，否则会把“候选数量够但验证全失败”的场景误判为无需补源。
         if (resultPageVerificationEnabled && Boolean.TRUE.equals(config.getVerifyCandidates())) {
             return verifiedCount < minVerifiedCount;
         }
         return candidateCount < targetCount;
+    }
+
+    private boolean hasPendingFieldEvidenceQueries(CollectorNodeConfig config) {
+        return config != null
+                && config.getDimensionEvidencePlan() != null
+                && config.getDimensionEvidencePlan().hasPendingFieldEvidenceQueries();
     }
 
     /**
@@ -1419,14 +1446,22 @@ public class SearchExecutionCoordinator {
     private boolean shouldTriggerPublicEvidenceRecovery(CollectorNodeConfig config,
                                                         List<SourceCandidate> candidates,
                                                         Map<String, SearchCollectionTarget> attemptedTargets) {
-        boolean hasVerifiedCandidate = (candidates == null ? List.<SourceCandidate>of() : candidates).stream()
+        List<SourceCandidate> safeCandidates = candidates == null ? List.of() : candidates;
+        boolean hasVerifiedCandidate = safeCandidates.stream()
                 .anyMatch(candidate -> candidate != null && Boolean.TRUE.equals(candidate.getVerified()));
-        if (hasVerifiedCandidate) {
+        // public recovery 是弱入口兜底，而不是字段多 query 的主执行器。
+        // 如果 verified 候选已经带字段证据元数据，或者字段预算本身已经满足，就不再继续同域兜底。
+        if (hasVerifiedCandidate && (!hasUnmetRequiredFieldEvidencePath(config)
+                || hasVerifiedFieldEvidenceCandidate(safeCandidates))) {
             return false;
         }
         if (StringUtils.hasText(config.getRecoveryFieldName())
                 || StringUtils.hasText(config.getRecoveryEvidencePathKey())
                 || (config.getRecoveryQueryIntents() != null && !config.getRecoveryQueryIntents().isEmpty())) {
+            return true;
+        }
+        // 只有“存在 verified 候选但字段预算仍未满足，且尚未拿到字段证据候选”时才继续 public recovery。
+        if (hasVerifiedCandidate && hasUnmetRequiredFieldEvidencePath(config)) {
             return true;
         }
         if (attemptedTargets == null || attemptedTargets.isEmpty()) {
@@ -1435,8 +1470,27 @@ public class SearchExecutionCoordinator {
         return attemptedTargets.values().stream().anyMatch(target ->
                 target != null && candidateOwnershipPolicy.isUtilityGatePage(
                         target.getCandidate(),
-                        target.getCollectedPage()
+                    target.getCollectedPage()
                 ));
+    }
+
+    private boolean hasVerifiedFieldEvidenceCandidate(List<SourceCandidate> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return false;
+        }
+        return candidates.stream().anyMatch(candidate -> candidate != null
+                && Boolean.TRUE.equals(candidate.getVerified())
+                && StringUtils.hasText(candidate.getFieldName())
+                && StringUtils.hasText(candidate.getEvidencePathKey())
+                && (StringUtils.hasText(candidate.getFieldEvidenceQueryFingerprint())
+                || (candidate.getSourceUrls() != null && !candidate.getSourceUrls().isEmpty())));
+    }
+
+    private boolean hasUnmetRequiredFieldEvidencePath(CollectorNodeConfig config) {
+        if (config == null || config.getDimensionEvidencePlan() == null) {
+            return false;
+        }
+        return config.getDimensionEvidencePlan().hasUnmetRequiredFieldPath();
     }
 
     private boolean isResultPageVerificationEnabled(CollectorNodeConfig config) {
@@ -1821,8 +1875,37 @@ public class SearchExecutionCoordinator {
                 .sourceUrls(executionTrace == null || executionTrace.getSelectedUrls() == null
                         ? List.of()
                         : executionTrace.getSelectedUrls())
+                .fieldEvidenceQueryCount(executionTrace == null ? 0 : executionTrace.getFieldEvidenceQueryCount())
+                .fieldEvidenceFields(executionTrace == null || executionTrace.getFieldEvidenceFields() == null
+                        ? List.of()
+                        : executionTrace.getFieldEvidenceFields())
+                .fieldEvidencePaths(executionTrace == null || executionTrace.getFieldEvidencePaths() == null
+                        ? List.of()
+                        : executionTrace.getFieldEvidencePaths())
                 .tavilyFastLaneAudit(tavilyFastLaneAudit)
                 .build();
+    }
+
+    /**
+     * 字段 query 摘要只用于审计与可观测性，因此在 coordinator 侧收敛为去重后的轻量列表，
+     * 避免把完整 planned query 明细重复写入 trace / summary。
+     */
+    private List<String> resolveDistinctFieldEvidenceFields(CollectorNodeConfig config) {
+        return resolveFieldEvidenceQueries(config).stream()
+                .map(FieldEvidenceQuery::getFieldName)
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .distinct()
+                .toList();
+    }
+
+    private List<String> resolveDistinctFieldEvidencePaths(CollectorNodeConfig config) {
+        return resolveFieldEvidenceQueries(config).stream()
+                .map(FieldEvidenceQuery::getEvidencePathKey)
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .distinct()
+                .toList();
     }
 
     private boolean isTavilyCandidate(SourceCandidate candidate) {

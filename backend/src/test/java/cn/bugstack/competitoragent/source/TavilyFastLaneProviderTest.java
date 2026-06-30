@@ -1,10 +1,12 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.search.tavily.TavilyPrefetchedContent;
 import cn.bugstack.competitoragent.search.tavily.TavilyPrefetchedContentRegistry;
 import cn.bugstack.competitoragent.search.tavily.TavilyQueryMode;
 import cn.bugstack.competitoragent.search.tavily.TavilySearchProperties;
 import cn.bugstack.competitoragent.search.tavily.TavilySearchProfile;
 import cn.bugstack.competitoragent.search.tavily.TavilySearchProfileResolver;
+import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -143,6 +145,128 @@ class TavilyFastLaneProviderTest {
         assertThat(candidates.get(0).getSourceUrls()).contains("https://www.woshipm.com/operate/6205680.html");
     }
 
+    @Test
+    void shouldCarryFieldEvidenceMetadataFromRequestToCandidateAndPrefetchedContent() {
+        TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
+        StubTavilySearchClient client = new StubTavilySearchClient();
+        client.responses = List.of(TavilySearchClient.TavilySearchResponse.builder()
+                .query("哔哩哔哩 开放平台 API 官方文档")
+                .requestId("req-field-1")
+                .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                        .title("用户管理 API")
+                        .url("https://open.bilibili.com/doc/4/feb66f99")
+                        .content("用户管理 API 文档")
+                        .rawContent("用户管理 API 文档 raw content")
+                        .score(0.86D)
+                        .build()))
+                .build());
+
+        TavilyFastLaneProvider provider = new TavilyFastLaneProvider(
+                properties(),
+                client,
+                new TavilySearchProfileResolver(properties()),
+                registry,
+                new ObjectMapper()
+        );
+
+        List<SourceCandidate> candidates = provider.search(SearchSourceRequest.builder()
+                .competitorName("哔哩哔哩")
+                .requestedScopes(List.of("DOCS"))
+                .fieldEvidenceQueries(List.of(FieldEvidenceQuery.builder()
+                        .fieldName("coreFeatures")
+                        .evidencePathKey("DOCS_API_GUIDE")
+                        .queryIntent("API_DOCS")
+                        .sourceType("DOCS")
+                        .query("哔哩哔哩 开放平台 API 官方文档")
+                        .queryFingerprint("field-query-1")
+                        .reason("核心功能 API 文档路径")
+                        .build()))
+                .preferredProviderKey("tavily")
+                .build());
+
+        assertThat(candidates).hasSize(1);
+        SourceCandidate candidate = candidates.get(0);
+        assertThat(candidate.getFieldName()).isEqualTo("coreFeatures");
+        assertThat(candidate.getEvidencePathKey()).isEqualTo("DOCS_API_GUIDE");
+        assertThat(candidate.getQueryIntent()).isEqualTo("API_DOCS");
+        assertThat(candidate.getFieldEvidenceQueryFingerprint()).isEqualTo("field-query-1");
+        assertThat(candidate.getTavilyQuery()).isEqualTo("哔哩哔哩 开放平台 API 官方文档");
+        assertThat(candidate.getDiscoveryMethod()).isEqualTo("TAVILY_FIELD_EVIDENCE_QUERY");
+
+        TavilyPrefetchedContent prefetchedContent = registry.remove(candidate.getPrefetchedContentRef()).orElseThrow();
+        assertThat(prefetchedContent.getFieldName()).isEqualTo("coreFeatures");
+        assertThat(prefetchedContent.getEvidencePathKey()).isEqualTo("DOCS_API_GUIDE");
+        assertThat(prefetchedContent.getQueryIntent()).isEqualTo("API_DOCS");
+        assertThat(prefetchedContent.getFieldEvidenceQueryFingerprint()).isEqualTo("field-query-1");
+    }
+
+    @Test
+    void shouldExecuteEveryFieldEvidenceQueryInsteadOfOnlyFirstSearchQuery() {
+        TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
+        StubTavilySearchClient client = new StubTavilySearchClient();
+        client.responses = List.of(
+                TavilySearchClient.TavilySearchResponse.builder()
+                        .query("哔哩哔哩 开放平台 API 官方文档")
+                        .requestId("req-field-1")
+                        .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                                .title("用户管理 API")
+                                .url("https://open.bilibili.com/doc/4/feb66f99")
+                                .rawContent("用户管理 API raw")
+                                .score(0.86D)
+                                .build()))
+                        .build(),
+                TavilySearchClient.TavilySearchResponse.builder()
+                        .query("site:open.bilibili.com API SDK 文档")
+                        .requestId("req-field-2")
+                        .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                                .title("授权管理 API")
+                                .url("https://open.bilibili.com/doc/4/authorization")
+                                .rawContent("授权管理 API raw")
+                                .score(0.82D)
+                                .build()))
+                        .build());
+
+        TavilyFastLaneProvider provider = new TavilyFastLaneProvider(
+                properties(),
+                client,
+                new TavilySearchProfileResolver(properties()),
+                registry,
+                new ObjectMapper()
+        );
+
+        List<SourceCandidate> candidates = provider.search(SearchSourceRequest.builder()
+                .competitorName("哔哩哔哩")
+                .requestedScopes(List.of("DOCS"))
+                .preferredProviderKey("tavily")
+                .fieldEvidenceQueries(List.of(
+                        FieldEvidenceQuery.builder()
+                                .fieldName("coreFeatures")
+                                .evidencePathKey("DOCS_API_GUIDE")
+                                .queryIntent("API_DOCS")
+                                .sourceType("DOCS")
+                                .query("哔哩哔哩 开放平台 API 官方文档")
+                                .queryFingerprint("q1")
+                                .reason("API 官方文档")
+                                .build(),
+                        FieldEvidenceQuery.builder()
+                                .fieldName("coreFeatures")
+                                .evidencePathKey("DOCS_API_GUIDE")
+                                .queryIntent("SDK_GUIDE")
+                                .sourceType("DOCS")
+                                .query("site:open.bilibili.com API SDK 文档")
+                                .queryFingerprint("q2")
+                                .reason("站内 SDK 文档")
+                                .build()))
+                .build());
+
+        assertThat(client.executedProfiles).hasSize(2);
+        assertThat(client.executedProfiles).extracting(TavilySearchProfile::getQuery)
+                .containsExactly("哔哩哔哩 开放平台 API 官方文档", "site:open.bilibili.com API SDK 文档");
+        assertThat(candidates).extracting(SourceCandidate::getUrl)
+                .containsExactly("https://open.bilibili.com/doc/4/feb66f99", "https://open.bilibili.com/doc/4/authorization");
+        assertThat(candidates).extracting(SourceCandidate::getFieldEvidenceQueryFingerprint)
+                .containsExactly("q1", "q2");
+    }
     @Test
     void descriptorShouldRemainFailOpenAndDisabledByDefault() {
         TavilyFastLaneProvider provider = new TavilyFastLaneProvider(

@@ -74,6 +74,9 @@ public class SearchExecutionTrace {
     private Integer publicEvidenceRecoveryCandidateCount;
     private Integer publicEvidenceRecoveryVerifiedCount;
     private String publicEvidenceRecoveryStatus;
+    private Integer fieldEvidenceQueryCount;
+    private List<String> fieldEvidenceFields;
+    private List<String> fieldEvidencePaths;
     /**
      * repair 生命周期的稳定审计投影。
      * 使用 Map 是为了让 replay/前端在不绑定内部值对象的情况下，也能识别统一状态词汇和 URL 列表。

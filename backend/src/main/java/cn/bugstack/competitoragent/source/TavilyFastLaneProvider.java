@@ -10,6 +10,7 @@ import cn.bugstack.competitoragent.search.tavily.TavilyQueryMode;
 import cn.bugstack.competitoragent.search.tavily.TavilySearchProfile;
 import cn.bugstack.competitoragent.search.tavily.TavilySearchProfileResolver;
 import cn.bugstack.competitoragent.search.tavily.TavilySearchProperties;
+import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -123,6 +124,9 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
     private List<SourceCandidate> searchScope(SearchSourceRequest request,
                                               String scope,
                                               DomainHintSet domainHintSet) {
+        if (request.getFieldEvidenceQueries() != null && !request.getFieldEvidenceQueries().isEmpty()) {
+            return searchFieldEvidenceQueries(request, scope);
+        }
         TavilySearchProfile primaryProfile = buildPrimaryProfile(request, scope, domainHintSet);
         TavilySearchClient.TavilySearchResponse primaryResponse = client.search(primaryProfile);
         List<SourceCandidate> primaryCandidates = mapResponse(request, primaryResponse, primaryProfile, scope);
@@ -137,6 +141,71 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
             return deduplicateByUrl(concat(primaryCandidates, mapResponse(request, expansionResponse, expansionProfile, scope)));
         }
         return primaryCandidates;
+    }
+
+    /**
+     * 字段级证据 query 必须逐条执行，不能退化成只消费第一条 searchQueries。
+     * 这里按当前 scope 过滤匹配的字段 query，并对单条 Tavily 调用做 fail-open。
+     */
+    private List<SourceCandidate> searchFieldEvidenceQueries(SearchSourceRequest request, String scope) {
+        List<SourceCandidate> candidates = new ArrayList<>();
+        for (FieldEvidenceQuery query : request.getFieldEvidenceQueries()) {
+            if (query == null || !StringUtils.hasText(query.getQuery())) {
+                continue;
+            }
+            String queryScope = resolveScopeForQuery(scope, query);
+            if (!normalizeScope(queryScope).equals(normalizeScope(scope))) {
+                continue;
+            }
+            TavilySearchProfile profile = profileResolver.resolveFieldEvidence(query);
+            try {
+                TavilySearchClient.TavilySearchResponse response = client.search(profile);
+                candidates.addAll(mapResponse(request, response, profile, queryScope));
+            } catch (RuntimeException exception) {
+                candidates.add(buildFailedFieldEvidenceCandidate(query, queryScope, exception.getMessage()));
+            }
+        }
+        return deduplicateByUrl(candidates);
+    }
+
+    /**
+     * 字段 query 的 sourceType 就是它希望命中的证据范围。
+     * 若规划层没有显式给出 sourceType，则回退到当前外层 scope，兼容旧调用方。
+     */
+    private String resolveScopeForQuery(String scope, FieldEvidenceQuery query) {
+        if (query != null && StringUtils.hasText(query.getSourceType())) {
+            return normalizeScope(query.getSourceType());
+        }
+        return normalizeScope(scope);
+    }
+
+    /**
+     * 单条字段 query 失败时也要留下可审计候选，避免调用方只看到空结果却无法追溯失败原因。
+     */
+    private SourceCandidate buildFailedFieldEvidenceCandidate(FieldEvidenceQuery query, String scope, String reason) {
+        String fingerprint = query == null || !StringUtils.hasText(query.getQueryFingerprint())
+                ? \u0022unknown\u0022
+                : query.getQueryFingerprint().trim();
+        return SourceCandidate.builder()
+                .url(\u0022field-evidence-query://\u0022 + fingerprint)
+                .title(\u0022字段证据 query 执行失败\u0022)
+                .sourceType(resolveScopeForQuery(scope, query))
+                .providerKey(\u0022tavily\u0022)
+                .discoveryMethod(\u0022TAVILY_FIELD_EVIDENCE_QUERY\u0022)
+                .reason(query == null ? \u0022字段证据 query 执行失败\u0022 : query.getReason())
+                .sourceUrls(List.of())
+                .fieldName(query == null ? null : query.getFieldName())
+                .evidencePathKey(query == null ? null : query.getEvidencePathKey())
+                .queryIntent(query == null ? null : query.getQueryIntent())
+                .fieldEvidenceQueryFingerprint(query == null ? null : query.getQueryFingerprint())
+                .fieldEvidenceQueryReason(query == null ? null : query.getReason())
+                .searchQuery(query == null ? null : query.getQuery())
+                .searchEngine(\u0022tavily\u0022)
+                .tavilyQuery(query == null ? null : query.getQuery())
+                .qualitySignals(List.of(\u0022TAVILY_FIELD_QUERY_FAILED\u0022))
+                .selectionStage(\u0022FAILED\u0022)
+                .selectionReason(StringUtils.hasText(reason) ? reason : \u0022Tavily 字段 query 执行失败\u0022)
+                .build();
     }
 
     /**
@@ -266,6 +335,11 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
                     .queryMode(profile == null || profile.getQueryMode() == null ? null : profile.getQueryMode().name())
                     .resultRank(rank)
                     .tavilyScore(tavilyScore)
+                    .fieldName(profile == null ? null : profile.getFieldName())
+                    .evidencePathKey(profile == null ? null : profile.getEvidencePathKey())
+                    .queryIntent(profile == null ? null : profile.getQueryIntent())
+                    .fieldEvidenceQueryFingerprint(profile == null ? null : profile.getFieldEvidenceQueryFingerprint())
+                    .fieldEvidenceQueryReason(profile == null ? null : profile.getFieldEvidenceQueryReason())
                     .build();
 
             String prefetchedContentRef = null;
@@ -278,7 +352,7 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
                     .title(StringUtils.hasText(result.getTitle()) ? result.getTitle() : result.getUrl())
                     .sourceType(normalizeScope(scope))
                     .providerKey("tavily")
-                    .discoveryMethod(resolveDiscoveryMethod(request))
+                    .discoveryMethod(resolveDiscoveryMethod(request, profile))
                     .reason(buildReason(profile, result))
                     .domain(extractDomain(result.getUrl()))
                     .sourceUrls(List.of(result.getUrl()))
@@ -297,6 +371,11 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
                     .tavilyRequestId(response.getRequestId())
                     .tavilyQuery(profile == null ? null : profile.getQuery())
                     .tavilyQueryMode(profile == null || profile.getQueryMode() == null ? null : profile.getQueryMode().name())
+                    .fieldName(profile == null ? null : profile.getFieldName())
+                    .evidencePathKey(profile == null ? null : profile.getEvidencePathKey())
+                    .queryIntent(profile == null ? null : profile.getQueryIntent())
+                    .fieldEvidenceQueryFingerprint(profile == null ? null : profile.getFieldEvidenceQueryFingerprint())
+                    .fieldEvidenceQueryReason(profile == null ? null : profile.getFieldEvidenceQueryReason())
                     .build();
 
             candidates.add(prefetchedContentGate.apply(
@@ -320,7 +399,10 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
      * bootstrap 与 supplement 必须在候选层保留不同的 discoveryMethod，
      * 这样后续排序、审计和黄金路径回放才能解释“这条 Tavily 候选是在 Phase 1 还是补源阶段出现的”。
      */
-    private String resolveDiscoveryMethod(SearchSourceRequest request) {
+    private String resolveDiscoveryMethod(SearchSourceRequest request, TavilySearchProfile profile) {
+        if (profile != null && StringUtils.hasText(profile.getFieldEvidenceQueryFingerprint())) {
+            return "TAVILY_FIELD_EVIDENCE_QUERY";
+        }
         if (request != null && request.getRequestPhase() == SearchRequestPhase.BOOTSTRAP) {
             return "TAVILY_PHASE1_BOOTSTRAP";
         }

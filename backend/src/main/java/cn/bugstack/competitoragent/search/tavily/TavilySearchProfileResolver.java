@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.search.tavily;
 
+import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -70,6 +71,52 @@ public class TavilySearchProfileResolver {
                 .includeRawContent(properties.isIncludeRawContent())
                 .maxResults(properties.getMaxResults())
                 .build();
+    }
+
+    /**
+     * 为字段级证据查询构造 Tavily profile。
+     * 这里不再依赖 competitorName + family 模板，而是直接尊重 FieldEvidenceQuery 已经规划好的 query 文本与 includeDomains。
+     */
+    public TavilySearchProfile resolveFieldEvidence(FieldEvidenceQuery query) {
+        if (query == null || !StringUtils.hasText(query.getQuery())) {
+            return TavilySearchProfile.builder()
+                    .family("OPEN_WEB")
+                    .queryMode(TavilyQueryMode.OPEN_WEB)
+                    .query("")
+                    .includeDomains(List.of())
+                    .searchDepth(properties.getSearchDepth())
+                    .includeRawContent(properties.isIncludeRawContent())
+                    .maxResults(properties.getMaxResults())
+                    .build();
+        }
+        return TavilySearchProfile.builder()
+                .family(normalizeFamily(query.getSourceType()))
+                .queryMode(resolveFieldEvidenceMode(query))
+                .query(query.getQuery())
+                .includeDomains(query.getIncludeDomains() == null ? List.of() : query.getIncludeDomains())
+                .searchDepth(properties.getSearchDepth())
+                .includeRawContent(properties.isIncludeRawContent())
+                .maxResults(properties.getMaxResults())
+                .fieldName(query.getFieldName())
+                .evidencePathKey(query.getEvidencePathKey())
+                .queryIntent(query.getQueryIntent())
+                .fieldEvidenceQueryFingerprint(query.getQueryFingerprint())
+                .fieldEvidenceQueryReason(query.getReason())
+                .build();
+    }
+
+    /**
+     * 字段级 query 的查询模式按 sourceType 收口。
+     * 官方/文档/定价类路径仍优先走 OFFICIAL_DOCS，其余路径再退回 OPEN_WEB。
+     */
+    private TavilyQueryMode resolveFieldEvidenceMode(FieldEvidenceQuery query) {
+        String sourceType = query == null ? null : query.getSourceType();
+        if ("OFFICIAL".equalsIgnoreCase(sourceType)
+                || "DOCS".equalsIgnoreCase(sourceType)
+                || "PRICING".equalsIgnoreCase(sourceType)) {
+            return TavilyQueryMode.OFFICIAL_DOCS;
+        }
+        return TavilyQueryMode.OPEN_WEB;
     }
 
     /**

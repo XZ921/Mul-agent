@@ -39,6 +39,9 @@ public class SearchAuditSummary {
     private String fallbackDecision;
     private String recoveryCheckpoint;
     private List<String> sourceUrls;
+    private Integer fieldEvidenceQueryCount;
+    private List<String> fieldEvidenceFields;
+    private List<String> fieldEvidencePaths;
     private TavilyFastLaneAudit tavilyFastLaneAudit;
 
     /**
@@ -68,6 +71,9 @@ public class SearchAuditSummary {
                 .fallbackDecision(text(traceNode, "fallbackDecision"))
                 .recoveryCheckpoint(text(traceNode, "recoveryCheckpoint"))
                 .sourceUrls(readStringList(traceNode.path("selectedUrls")))
+                .fieldEvidenceQueryCount(readInteger(traceNode, "fieldEvidenceQueryCount"))
+                .fieldEvidenceFields(readStringList(traceNode.path("fieldEvidenceFields")))
+                .fieldEvidencePaths(readStringList(traceNode.path("fieldEvidencePaths")))
                 .tavilyFastLaneAudit(readTavilyFastLaneAudit(objectMapper, traceNode, auditNode))
                 .build();
     }
@@ -92,6 +98,9 @@ public class SearchAuditSummary {
         int selectedCount = 0;
         int discardedCount = 0;
         int attemptedCount = 0;
+        int fieldEvidenceQueryCount = 0;
+        LinkedHashSet<String> fieldEvidenceFields = new LinkedHashSet<>();
+        LinkedHashSet<String> fieldEvidencePaths = new LinkedHashSet<>();
         for (SearchAuditSummary summary : summaries) {
             if (summary == null) {
                 continue;
@@ -100,8 +109,15 @@ public class SearchAuditSummary {
             selectedCount += summary.getSelectedCount() == null ? 0 : summary.getSelectedCount();
             discardedCount += summary.getDiscardedCount() == null ? 0 : summary.getDiscardedCount();
             attemptedCount += summary.getAttemptedCount() == null ? 0 : summary.getAttemptedCount();
+            fieldEvidenceQueryCount += summary.getFieldEvidenceQueryCount() == null ? 0 : summary.getFieldEvidenceQueryCount();
             if (summary.getSourceUrls() != null) {
                 sourceUrls.addAll(summary.getSourceUrls());
+            }
+            if (summary.getFieldEvidenceFields() != null) {
+                fieldEvidenceFields.addAll(summary.getFieldEvidenceFields());
+            }
+            if (summary.getFieldEvidencePaths() != null) {
+                fieldEvidencePaths.addAll(summary.getFieldEvidencePaths());
             }
         }
         TavilyFastLaneAudit tavilyFastLaneAudit = TavilyFastLaneAudit.merge(
@@ -115,6 +131,9 @@ public class SearchAuditSummary {
                 .discardedCount(discardedCount)
                 .attemptedCount(attemptedCount)
                 .sourceUrls(new ArrayList<>(sourceUrls))
+                .fieldEvidenceQueryCount(fieldEvidenceQueryCount)
+                .fieldEvidenceFields(new ArrayList<>(fieldEvidenceFields))
+                .fieldEvidencePaths(new ArrayList<>(fieldEvidencePaths))
                 .tavilyFastLaneAudit(tavilyFastLaneAudit)
                 .build();
     }
@@ -154,6 +173,14 @@ public class SearchAuditSummary {
                 .sourceUrls(snapshot.getSourceUrls() != null
                         ? snapshot.getSourceUrls()
                         : existing == null || existing.getSourceUrls() == null ? List.of() : existing.getSourceUrls())
+                .fieldEvidenceQueryCount(trace != null ? trace.getFieldEvidenceQueryCount()
+                        : existing == null ? null : existing.getFieldEvidenceQueryCount())
+                .fieldEvidenceFields(trace != null && trace.getFieldEvidenceFields() != null
+                        ? trace.getFieldEvidenceFields()
+                        : existing == null || existing.getFieldEvidenceFields() == null ? List.of() : existing.getFieldEvidenceFields())
+                .fieldEvidencePaths(trace != null && trace.getFieldEvidencePaths() != null
+                        ? trace.getFieldEvidencePaths()
+                        : existing == null || existing.getFieldEvidencePaths() == null ? List.of() : existing.getFieldEvidencePaths())
                 .tavilyFastLaneAudit(tavilyFastLaneAudit)
                 .build();
     }

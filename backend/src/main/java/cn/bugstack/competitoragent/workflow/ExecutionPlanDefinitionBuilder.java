@@ -16,6 +16,7 @@ import cn.bugstack.competitoragent.workflow.coverage.CoverageContract;
 import cn.bugstack.competitoragent.workflow.coverage.CoverageContractResolver;
 import cn.bugstack.competitoragent.workflow.coverage.CoverageFieldContract;
 import cn.bugstack.competitoragent.workflow.coverage.CoverageFieldStatus;
+import cn.bugstack.competitoragent.workflow.coverage.DimensionEvidencePlanFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -51,6 +52,7 @@ public class ExecutionPlanDefinitionBuilder {
     private final ObjectMapper objectMapper;
     private final CollectorPlanTemplateFactory collectorPlanTemplateFactory;
     private final CoverageContractResolver coverageContractResolver;
+    private final DimensionEvidencePlanFactory dimensionEvidencePlanFactory;
 
     public ExecutionPlanDefinition build(AnalysisTask task, boolean previewOnly) {
         return build(task, previewOnly, null, null);
@@ -105,6 +107,11 @@ public class ExecutionPlanDefinitionBuilder {
                 collectorNodeConfig.setRequiredCoverageFields(requiredFields(coverageContract));
                 collectorNodeConfig.setBlockingCoverageFields(blockingFields(coverageContract));
                 collectorNodeConfig.setCoverageQueryIntents(queryIntentsForSourcePlan(coverageContract, sourcePlan));
+                collectorNodeConfig.setDimensionEvidencePlan(dimensionEvidencePlanFactory.create(
+                        competitorName,
+                        coverageContract,
+                        preferredDomainsForFieldEvidence(providedUrls, sourcePlan)
+                ));
 
                 collectNodeNames.add(nodeName);
                 collectorSourceUrls.addAll(nodeSourceUrls);
@@ -336,6 +343,31 @@ public class ExecutionPlanDefinitionBuilder {
                 .nodes(nodes)
                 .sourceUrls(distinctNonBlank(planSourceUrls))
                 .build();
+    }
+
+    private List<String> preferredDomainsForFieldEvidence(List<String> providedUrls, SourcePlan sourcePlan) {
+        LinkedHashSet<String> domains = new LinkedHashSet<>();
+        for (String url : defaultIfEmpty(providedUrls, List.of())) {
+            extractHost(url).ifPresent(domains::add);
+        }
+        if (sourcePlan != null && sourcePlan.getCandidates() != null) {
+            for (SourceCandidate candidate : sourcePlan.getCandidates()) {
+                extractHost(candidate == null ? null : candidate.getUrl()).ifPresent(domains::add);
+            }
+        }
+        return new ArrayList<>(domains);
+    }
+
+    private Optional<String> extractHost(String url) {
+        if (!StringUtils.hasText(url)) {
+            return Optional.empty();
+        }
+        try {
+            java.net.URI uri = java.net.URI.create(url.trim());
+            return StringUtils.hasText(uri.getHost()) ? Optional.of(uri.getHost()) : Optional.empty();
+        } catch (Exception ignored) {
+            return Optional.empty();
+        }
     }
 
     /**

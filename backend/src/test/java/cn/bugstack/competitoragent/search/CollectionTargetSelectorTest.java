@@ -285,4 +285,42 @@ class CollectionTargetSelectorTest {
         assertTrue(decision.getSelectedTargets().get(0).getCandidate().getSelectionSummary()
                 .contains("公开正文"));
     }
+
+    @Test
+    void shouldAllowRetainedHttpFallbackCandidateEvenWhenVerificationReturnedNoUsablePage() {
+        SourceCandidate fallbackCandidate = SourceCandidate.builder()
+                .url("https://http.example.com/docs")
+                .title("HTTP Docs")
+                .sourceType("DOCS")
+                .providerKey("http")
+                .discoveryMethod("SEARCH")
+                .selectionStage("SUPPLEMENTED")
+                .selectionReason("browser disabled keep http fallback")
+                .selectionSummary("HTTP fallback candidate should remain selectable")
+                .verified(Boolean.FALSE)
+                .totalScore(0.81)
+                .build();
+
+        Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
+        attemptedTargets.put(fallbackCandidate.getUrl(), SearchCollectionTarget.builder()
+                .candidate(fallbackCandidate)
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url(fallbackCandidate.getUrl())
+                        .success(false)
+                        .errorMessage("verification page unavailable")
+                        .build())
+                .build());
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                List.of(fallbackCandidate),
+                attemptedTargets,
+                1
+        );
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        assertEquals("https://http.example.com/docs",
+                decision.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertEquals("SELECTED",
+                decision.getSelectedTargets().get(0).getCandidate().getSelectionStage());
+    }
 }

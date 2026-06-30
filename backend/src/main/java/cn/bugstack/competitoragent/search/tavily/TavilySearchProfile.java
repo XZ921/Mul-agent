@@ -29,4 +29,14 @@ public class TavilySearchProfile {
     private boolean includeRawContent;
     private int maxResults;
     private String expansionReason;
+
+    /**
+     * 字段级 query 元数据。
+     * profile 需要携带这些字段，保证搜索结果、prefetched content 和审计日志都能回溯到原始字段路径。
+     */
+    private String fieldName;
+    private String evidencePathKey;
+    private String queryIntent;
+    private String fieldEvidenceQueryFingerprint;
+    private String fieldEvidenceQueryReason;
 }

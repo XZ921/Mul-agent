@@ -139,6 +139,11 @@ public class SourceCandidateRanker {
                 .qualitySignals(qualitySignals)
                 .rankingReasons(rankingReasons)
                 .rankingSummary(buildRankingSummary(trustTier, rankingReasons))
+                .fieldName(candidate.getFieldName())
+                .evidencePathKey(candidate.getEvidencePathKey())
+                .queryIntent(candidate.getQueryIntent())
+                .fieldEvidenceQueryFingerprint(candidate.getFieldEvidenceQueryFingerprint())
+                .fieldEvidenceQueryReason(candidate.getFieldEvidenceQueryReason())
                 .searchQuery(candidate.getSearchQuery())
                 .searchEngine(candidate.getSearchEngine())
                 .resultRank(candidate.getResultRank())
@@ -219,6 +224,20 @@ public class SourceCandidateRanker {
         mergedSourceUrls.addAll(resolveSourceUrls(loser));
         return winner.toBuilder()
                 .sourceUrls(new ArrayList<>(mergedSourceUrls))
+                /**
+                 * 字段级 evidence metadata 不能只停留在 provider 出口。
+                 * 一旦 canonical URL 去重时被更高分候选“吞掉”，后续 coordinator 就会误判
+                 * “虽然找到了页面，但没有字段证据命中”，从而错误触发 public recovery。
+                 */
+                .fieldName(firstText(winner.getFieldName(), loser.getFieldName()))
+                .evidencePathKey(firstText(winner.getEvidencePathKey(), loser.getEvidencePathKey()))
+                .queryIntent(firstText(winner.getQueryIntent(), loser.getQueryIntent()))
+                .fieldEvidenceQueryFingerprint(firstText(
+                        winner.getFieldEvidenceQueryFingerprint(),
+                        loser.getFieldEvidenceQueryFingerprint()))
+                .fieldEvidenceQueryReason(firstText(
+                        winner.getFieldEvidenceQueryReason(),
+                        loser.getFieldEvidenceQueryReason()))
                 .hasPrefetchedContent(orTrue(winner.getHasPrefetchedContent(), loser.getHasPrefetchedContent()))
                 .prefetchedContentRef(firstText(winner.getPrefetchedContentRef(), loser.getPrefetchedContentRef()))
                 .prefetchedRawContentLength(firstNonNull(winner.getPrefetchedRawContentLength(), loser.getPrefetchedRawContentLength()))

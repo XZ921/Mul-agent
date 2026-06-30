@@ -39,6 +39,16 @@ public class SourceCandidate {
     private List<String> rankingReasons;
     private String rankingSummary;
 
+    /**
+     * 字段级证据查询元数据。
+     * 这些字段用于解释候选来源来自哪个 field-first query，保证后续覆盖闭环与审计可回溯。
+     */
+    private String fieldName;
+    private String evidencePathKey;
+    private String queryIntent;
+    private String fieldEvidenceQueryFingerprint;
+    private String fieldEvidenceQueryReason;
+
     // 以下字段为后续浏览器搜索与运行期筛选预留。
     private String searchQuery;
     private String searchEngine;

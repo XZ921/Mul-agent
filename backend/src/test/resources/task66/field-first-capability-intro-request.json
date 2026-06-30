@@ -1,0 +1,10 @@
+{
+  "reportTemplate": "能力介绍",
+  "competitorNames": ["哔哩哔哩"],
+  "competitorUrls": ["https://open.bilibili.com"],
+  "reportLanguage": "中文",
+  "subjectProduct": "短视频平台开放生态与开发者能力",
+  "sourceScope": ["官网", "产品文档"],
+  "analysisDimensions": ["开放平台", "开发者生态", "产品功能"],
+  "taskName": "Task66-06 字段优先能力介绍样本"
+}

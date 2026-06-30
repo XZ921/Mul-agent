@@ -5,6 +5,7 @@ import cn.bugstack.competitoragent.search.SearchExecutionPlan;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
 import cn.bugstack.competitoragent.search.SearchRuntimePolicy;
 import cn.bugstack.competitoragent.source.SourceCandidate;
+import cn.bugstack.competitoragent.workflow.coverage.DimensionEvidencePlan;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import lombok.AllArgsConstructor;
@@ -38,6 +39,7 @@ import java.util.List;
         "requiredCoverageFields",
         "blockingCoverageFields",
         "coverageQueryIntents",
+        "dimensionEvidencePlan",
         "recoveryFieldName",
         "recoveryEvidencePathKey",
         "recoveryQueryIntents",
@@ -143,6 +145,12 @@ public class CollectorNodeConfig {
      * 当前补采链路要优先服务的字段名。
      * 公开证据补采只负责利用它规划同域公开入口，不在这里直接决定字段最终覆盖结论。
      */
+    /**
+     * 当前 Collector 节点携带的字段级证据计划。
+     * 它把 CoverageContract 中 required 字段翻译成运行态预算，后续搜索与采集闭环直接消费这份快照。
+     */
+    private DimensionEvidencePlan dimensionEvidencePlan;
+
     private String recoveryFieldName;
 
     /**
