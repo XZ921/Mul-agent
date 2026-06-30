@@ -1,3 +1,46 @@
+[WARNING] 
+[WARNING] Some problems were encountered while building the effective settings
+[WARNING] Unrecognised tag: 'mirrors' (position: START_TAG seen ...</mirror>\n     -->\n    <mirrors>... @168:14)  @ E:\java\maven\maven\apache-maven-3.9.9-bin\apache-maven-3.9.9\conf\settings.xml, line 168, column 14
+[WARNING] 
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------------< cn.bugstack:backend >-------------------------
+[INFO] Building AI 竞品分析 Agent 协作系统 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:3.3.5:run (default-cli) > test-compile @ backend >>>
+[WARNING] 1 problem was encountered while building the effective model for org.javassist:javassist:jar:3.21.0-GA during dependency collection step for project (use -X to see details)
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ backend ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 37 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ backend ---
+[INFO] Copying 9 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] <<< spring-boot:3.3.5:run (default-cli) < test-compile @ backend <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:3.3.5:run (default-cli) @ backend ---
+[INFO] Attaching agents: []
+Standard Commons Logging discovery in action with spring-jcl: please remove commons-logging.jar from classpath in order to avoid potential conflicts
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.3.5)
+
 2026-06-30 14:57:34.824 [main] INFO  c.b.c.CompetitorAgentApplication - Starting CompetitorAgentApplication using Java 17.0.3.1 with PID 29560 (E:\java_study\Mul-agnet\backend\target\classes started by Lenovo in E:\java_study\Mul-agnet\backend)
 2026-06-30 14:57:34.834 [main] DEBUG c.b.c.CompetitorAgentApplication - Running with Spring Boot v3.3.5, Spring v6.1.14
 2026-06-30 14:57:34.835 [main] INFO  c.b.c.CompetitorAgentApplication - The following 1 profile is active: "dev"
@@ -43,6 +86,7 @@
 2026-06-30 14:57:37.984 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
 2026-06-30 14:57:37.984 [main] DEBUG o.s.b.w.s.c.ServletWebServerApplicationContext - Published root WebApplicationContext as ServletContext attribute with name [org.springframework.web.context.WebApplicationContext.ROOT]
 2026-06-30 14:57:37.985 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 3078 ms
+Standard Commons Logging discovery in action with spring-jcl: please remove commons-logging.jar from classpath in order to avoid potential conflicts
 2026-06-30 14:57:38.009 [main] DEBUG o.s.b.w.s.ServletContextInitializerBeans - Mapping filters: traceFilter urls=[/*] order=-2147483648, characterEncodingFilter urls=[/*] order=-2147483648, formContentFilter urls=[/*] order=-9900, requestContextFilter urls=[/*] order=-105
 2026-06-30 14:57:38.010 [main] DEBUG o.s.b.w.s.ServletContextInitializerBeans - Mapping servlets: dispatcherServlet urls=[/]
 2026-06-30 14:57:38.039 [main] DEBUG o.s.b.w.s.f.OrderedRequestContextFilter - Filter 'requestContextFilter' configured for use
@@ -12077,6 +12121,7 @@ For more information, please visit the url, https://rocketmq.apache.org/docs/bes
     where
         id=? 
         and state_version=?
+[Fatal Error] :1:10: 将功能 "http://apache.org/xml/features/disallow-doctype-decl" 设置为“真”时, 不允许使用 DOCTYPE。
 2026-06-30 15:00:06.655 [pool-5-thread-3] DEBUG org.hibernate.SQL - 
     select
         tn1_0.id,
@@ -12631,6 +12676,7 @@ For more information, please visit the url, https://rocketmq.apache.org/docs/bes
     where
         id=? 
         and state_version=?
+[Fatal Error] :1:3: 文档中根元素前面的标记必须格式正确。
 2026-06-30 15:00:27.785 [pool-5-thread-2] DEBUG org.hibernate.SQL - 
     select
         tn1_0.id,
@@ -13050,6 +13096,7 @@ For more information, please visit the url, https://rocketmq.apache.org/docs/bes
     where
         id=? 
         and state_version=?
+[Fatal Error] :1:3: 文档中根元素前面的标记必须格式正确。
 2026-06-30 15:00:37.209 [pool-5-thread-1] DEBUG org.hibernate.SQL - 
     select
         tn1_0.id,
@@ -13542,6 +13589,7 @@ For more information, please visit the url, https://rocketmq.apache.org/docs/bes
     where
         id=? 
         and state_version=?
+[Fatal Error] :1:10: 将功能 "http://apache.org/xml/features/disallow-doctype-decl" 设置为“真”时, 不允许使用 DOCTYPE。
 2026-06-30 15:00:49.166 [pool-5-thread-4] DEBUG org.hibernate.SQL - 
     select
         tn1_0.id,
@@ -19368,6 +19416,7 @@ For more information, please visit the url, https://rocketmq.apache.org/docs/bes
     where
         id=? 
         and state_version=?
+[Fatal Error] :1:3: 文档中根元素前面的标记必须格式正确。
 2026-06-30 15:02:36.991 [pool-5-thread-2] DEBUG org.hibernate.SQL - 
     select
         tn1_0.id,
@@ -19849,6 +19898,7 @@ For more information, please visit the url, https://rocketmq.apache.org/docs/bes
     where
         id=? 
         and state_version=?
+[Fatal Error] :1:3: 文档中根元素前面的标记必须格式正确。
 2026-06-30 15:02:46.675 [pool-5-thread-1] DEBUG org.hibernate.SQL - 
     select
         tn1_0.id,
@@ -25058,6 +25108,7 @@ For more information, please visit the url, https://rocketmq.apache.org/docs/bes
     where
         id=? 
         and state_version=?
+[Fatal Error] :1:10: 将功能 "http://apache.org/xml/features/disallow-doctype-decl" 设置为“真”时, 不允许使用 DOCTYPE。
 2026-06-30 15:04:17.605 [pool-5-thread-3] DEBUG org.hibernate.SQL - 
     select
         tn1_0.id,
@@ -25472,6 +25523,7 @@ For more information, please visit the url, https://rocketmq.apache.org/docs/bes
     where
         id=? 
         and state_version=?
+[Fatal Error] :1:10: 将功能 "http://apache.org/xml/features/disallow-doctype-decl" 设置为“真”时, 不允许使用 DOCTYPE。
 2026-06-30 15:04:27.677 [pool-5-thread-4] DEBUG org.hibernate.SQL - 
     select
         tn1_0.id,

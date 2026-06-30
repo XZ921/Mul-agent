@@ -96,7 +96,8 @@ public class CoverageContractResolver {
                                 List.of("DOCS", "OFFICIAL"),
                                 List.of("API_DOCS", "SDK_GUIDE"),
                                 List.of("DEVELOPER_DOCS_BLOCK", "FEATURE_BLOCK"),
-                                true)))
+                                true),
+                        thirdPartyPath("FEATURE_BLOCK")))
                 .minimumAttemptedPaths(1)
                 .minDistinctEvidenceCount(2)
                 .allowOfficialOnly(true)
@@ -200,7 +201,8 @@ public class CoverageContractResolver {
                                 List.of("DOCS", "OFFICIAL"),
                                 List.of("DOCS_BILLING"),
                                 List.of("PRICING_BLOCK", "LIMITATION_OR_POLICY_BLOCK"),
-                                true)))
+                                true),
+                        thirdPartyPath("PRICING_BLOCK")))
                 .minimumAttemptedPaths(2)
                 .minDistinctEvidenceCount(2)
                 .allowOfficialOnly(true)
@@ -217,7 +219,8 @@ public class CoverageContractResolver {
                                 List.of("OFFICIAL", "DOCS"),
                                 List.of("OFFICIAL_DOCS"),
                                 List.of("FEATURE_BLOCK", "ECOSYSTEM_BLOCK"),
-                                true)))
+                                true),
+                        thirdPartyPath("FEATURE_BLOCK", "ECOSYSTEM_BLOCK")))
                 .minimumAttemptedPaths(1)
                 .minDistinctEvidenceCount(1)
                 .allowOfficialOnly(true)
@@ -263,7 +266,8 @@ public class CoverageContractResolver {
                             List.of("DOCS", "OFFICIAL"),
                             List.of("DOCS_BILLING"),
                             List.of("PRICING_BLOCK", "LIMITATION_OR_POLICY_BLOCK"),
-                            true));
+                            true),
+                    thirdPartyPath("PRICING_BLOCK"));
         }
         if ("weaknesses".equalsIgnoreCase(fieldName)) {
             return List.of(
@@ -284,14 +288,16 @@ public class CoverageContractResolver {
                             List.of("DOCS", "OFFICIAL"),
                             List.of("API_DOCS", "SDK_GUIDE"),
                             List.of("DEVELOPER_DOCS_BLOCK", "FEATURE_BLOCK"),
-                            true));
+                            true),
+                    thirdPartyPath("FEATURE_BLOCK"));
         }
         return List.of(
                 evidencePath("OFFICIAL_PUBLIC_PROFILE",
-                        defaultIfNull(mapping.getSourceTypes()),
-                        defaultIfNull(mapping.getQueryIntents()),
-                        defaultIfNull(mapping.getEvidencePathKeys()),
-                        true));
+                        officialSourceTypes(mapping.getSourceTypes()),
+                        officialQueryIntents(mapping.getQueryIntents()),
+                        List.of("FEATURE_BLOCK", "PROFILE_BLOCK"),
+                        true),
+                thirdPartyPath("FEATURE_BLOCK", "PROFILE_BLOCK"));
     }
 
     /**
@@ -315,6 +321,18 @@ public class CoverageContractResolver {
     }
 
     /**
+     * 构造全字段通用的第三方补充路径。
+     * 该路径不阻断交付，但允许测评、新闻、教程等高质量第三方材料进入字段证据候选。
+     */
+    private CoverageEvidencePath thirdPartyPath(String... expectedSignals) {
+        return evidencePath("PUBLIC_REVIEW_OR_NEWS",
+                List.of("REVIEW", "NEWS", "OPEN_WEB"),
+                List.of("THIRD_PARTY_REVIEW"),
+                expectedSignals == null ? List.of("FEATURE_BLOCK") : List.of(expectedSignals),
+                false);
+    }
+
+    /**
      * 构造能力介绍默认必填字段。
      * 这些字段是 capability-intro 任务当前阶段稳定交付的核心字段。
      */
@@ -330,7 +348,8 @@ public class CoverageContractResolver {
                                 List.of("OFFICIAL", "DOCS"),
                                 List.of("OFFICIAL_DOCS"),
                                 List.of("FEATURE_BLOCK", "PROFILE_BLOCK"),
-                                true)))
+                                true),
+                        thirdPartyPath("FEATURE_BLOCK", "PROFILE_BLOCK")))
                 .minimumAttemptedPaths(1)
                 .minDistinctEvidenceCount(1)
                 .allowOfficialOnly(true)
@@ -382,5 +401,22 @@ public class CoverageContractResolver {
             }
         }
         return new ArrayList<>(normalized);
+    }
+
+    private List<String> officialSourceTypes(List<String> sourceTypes) {
+        List<String> official = defaultIfNull(sourceTypes).stream()
+                .filter(type -> !"REVIEW".equalsIgnoreCase(type)
+                        && !"NEWS".equalsIgnoreCase(type)
+                        && !"OPEN_WEB".equalsIgnoreCase(type)
+                        && !"THIRD_PARTY_REVIEW".equalsIgnoreCase(type))
+                .toList();
+        return official.isEmpty() ? List.of("OFFICIAL", "DOCS") : official;
+    }
+
+    private List<String> officialQueryIntents(List<String> queryIntents) {
+        List<String> official = defaultIfNull(queryIntents).stream()
+                .filter(intent -> !"THIRD_PARTY_REVIEW".equalsIgnoreCase(intent))
+                .toList();
+        return official.isEmpty() ? List.of("OFFICIAL_DOCS") : official;
     }
 }

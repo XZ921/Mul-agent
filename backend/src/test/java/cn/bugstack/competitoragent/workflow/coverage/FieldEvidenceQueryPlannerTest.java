@@ -39,7 +39,13 @@ class FieldEvidenceQueryPlannerTest {
         assertThat(queries).extracting(FieldEvidenceQuery::getQuery)
                 .anySatisfy(query -> assertThat(query).contains("开放平台").contains("API").contains("官方文档"))
                 .anySatisfy(query -> assertThat(query).contains("SDK").contains("接入"))
-                .anySatisfy(query -> assertThat(query).contains("site:open.bilibili.com").contains("API"));
+                .anySatisfy(query -> assertThat(query).contains("评测").contains("用户反馈"));
+        assertThat(queries)
+                .filteredOn(query -> !"OPEN_WEB".equals(query.getSourceType()))
+                .allSatisfy(query -> assertThat(query.getIncludeDomains()).contains("open.bilibili.com"));
+        assertThat(queries)
+                .filteredOn(query -> "OPEN_WEB".equals(query.getSourceType()))
+                .allSatisfy(query -> assertThat(query.getIncludeDomains()).isEmpty());
         assertThat(queries).allSatisfy(query -> {
             assertThat(query.getReason()).isNotBlank();
             assertThat(query.getQueryFingerprint()).isNotBlank();

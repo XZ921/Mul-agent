@@ -21,6 +21,7 @@ public class EvidenceQualityVerdict {
 
     double sourceAuthenticityScore;
     double contentUsabilityScore;
+    String sourceTier;
     double taskRelevanceScore;
     double evidenceUsabilityScore;
     List<EvidenceQualityIssue> issues;

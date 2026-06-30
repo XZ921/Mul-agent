@@ -1,5 +1,9 @@
 package cn.bugstack.competitoragent.collection.quality;
 
+import cn.bugstack.competitoragent.search.CollectedPageView;
+import cn.bugstack.competitoragent.search.ContentUsabilityScore;
+import cn.bugstack.competitoragent.search.ContentUsabilityScorer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -21,9 +25,17 @@ public class EvidenceQualityGate {
     );
 
     private final EvidenceQualityGateProperties properties;
+    private final ContentUsabilityScorer contentUsabilityScorer;
 
     public EvidenceQualityGate(EvidenceQualityGateProperties properties) {
+        this(properties, new ContentUsabilityScorer());
+    }
+
+    @Autowired
+    public EvidenceQualityGate(EvidenceQualityGateProperties properties,
+                               ContentUsabilityScorer contentUsabilityScorer) {
         this.properties = properties == null ? new EvidenceQualityGateProperties() : properties;
+        this.contentUsabilityScorer = contentUsabilityScorer == null ? new ContentUsabilityScorer() : contentUsabilityScorer;
     }
 
     /**
@@ -43,7 +55,8 @@ public class EvidenceQualityGate {
         String safeContent = content == null ? "" : content;
         double sourceScore = isOfficial(context == null ? null : context.getSourceType(),
                 context == null ? null : context.getUrl()) ? 0.90D : 0.60D;
-        double contentScore = calculateContentUsabilityScore(safeContent, issues, signals);
+        ContentUsabilityScore contentUsabilityScore = calculateContentUsabilityScore(context, safeContent, issues, signals);
+        double contentScore = contentUsabilityScore.getUsability();
         double taskScore = taskRelevanceScore(context, safeContent, issues, signals);
 
         if (isAuthGateContent(safeContent)) {
@@ -75,6 +88,7 @@ public class EvidenceQualityGate {
         return EvidenceQualityVerdict.builder()
                 .sourceAuthenticityScore(sourceScore)
                 .contentUsabilityScore(contentScore)
+                .sourceTier(contentUsabilityScore.getSourceTier())
                 .taskRelevanceScore(taskScore)
                 .evidenceUsabilityScore(usabilityScore)
                 .issues(issues.stream().distinct().toList())
@@ -106,25 +120,37 @@ public class EvidenceQualityGate {
      * 正文可用性判断优先防误判。
      * 这里不追求一步到位理解整页，只先把导航壳、链接农场和薄正文压低，防止它们越过报告级门槛。
      */
-    private double calculateContentUsabilityScore(String content,
-                                                  List<EvidenceQualityIssue> issues,
-                                                  List<String> signals) {
+    private ContentUsabilityScore calculateContentUsabilityScore(EvidenceQualityContext context,
+                                                                 String content,
+                                                                 List<EvidenceQualityIssue> issues,
+                                                                 List<String> signals) {
         if (!StringUtils.hasText(content)) {
             issues.add(EvidenceQualityIssue.WEAK_MAIN_CONTENT);
             signals.add("WEAK_MAIN_CONTENT");
             signals.add("EVIDENCE_REPAIR_REQUIRED");
-            return 0.0D;
+            return ContentUsabilityScore.builder()
+                    .usability(0.0D)
+                    .sourceTier("THIRD_PARTY")
+                    .reasons(List.of("EMPTY_BODY"))
+                    .build();
         }
 
-        String normalizedContent = normalizeContent(content);
-        int usefulLength = normalizedContent.length();
+        ContentUsabilityScore score = contentUsabilityScorer.score(CollectedPageView.builder()
+                .url(context == null ? null : context.getUrl())
+                .sourceType(context == null ? null : context.getSourceType())
+                .sourceTrust(isOfficial(context == null ? null : context.getSourceType(),
+                        context == null ? null : context.getUrl()) ? 0.90D : 0.60D)
+                .bodyText(content)
+                .structuredBlocks(context == null || context.getExpectedSignals() == null ? List.of() : context.getExpectedSignals())
+                .build());
+        int usefulLength = normalizeContent(content).length();
         int navigationHits = countContains(content, NAVIGATION_MARKERS);
         double navigationLinkRatio = estimateNavigationLinkRatio(content);
-        boolean navigationShell = navigationHits >= 4
-                && navigationLinkRatio >= properties.getNavigationShellLinkRatioThreshold();
+        boolean navigationShell = score.getReasons().contains("NAV_SHELL_DETECTED")
+                || (navigationHits >= 4 && navigationLinkRatio >= properties.getNavigationShellLinkRatioThreshold());
         boolean thinContent = usefulLength < properties.getMinUsefulParagraphLength();
 
-        double contentScore = thinContent ? 0.35D : 0.70D;
+        double contentScore = score.getUsability();
         if (thinContent) {
             issues.add(EvidenceQualityIssue.WEAK_MAIN_CONTENT);
             signals.add("WEAK_MAIN_CONTENT");
@@ -142,7 +168,9 @@ public class EvidenceQualityGate {
             signals.add("EVIDENCE_REPAIR_REQUIRED");
             contentScore = Math.min(contentScore, properties.getNavigationShellScoreCap());
         }
-        return contentScore;
+        return score.toBuilder()
+                .usability(contentScore)
+                .build();
     }
 
     /**

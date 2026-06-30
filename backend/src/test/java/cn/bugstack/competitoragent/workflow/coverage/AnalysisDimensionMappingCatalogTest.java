@@ -35,4 +35,23 @@ class AnalysisDimensionMappingCatalogTest {
                 .noneMatch(mapping -> mapping.getTargetFields().contains("weaknesses")
                         && mapping.isRequiredByDefault());
     }
+
+    @Test
+    void everyFieldMappingShouldIncludeThirdPartySourceType() {
+        List<AnalysisDimensionMapping> mappings = catalog.resolve(
+                List.of("开放平台", "开发者生态", "产品功能"),
+                List.of("官网"));
+
+        AnalysisDimensionMapping capability = mappings.stream()
+                .filter(mapping -> "CAPABILITY_INTRO".equals(mapping.getDimensionKey()))
+                .findFirst()
+                .orElseThrow();
+
+        // 第三方准入与字段语义无关：正向能力介绍字段也允许测评、新闻、开放网络等补充来源。
+        assertThat(capability.getSourceTypes())
+                .as("正向字段也应允许第三方来源，官方只是权重")
+                .anySatisfy(type -> assertThat(type).isIn("REVIEW", "NEWS", "OPEN_WEB"));
+        assertThat(capability.getEvidencePathKeys())
+                .anySatisfy(pathKey -> assertThat(pathKey).contains("PUBLIC_REVIEW_OR_NEWS"));
+    }
 }
