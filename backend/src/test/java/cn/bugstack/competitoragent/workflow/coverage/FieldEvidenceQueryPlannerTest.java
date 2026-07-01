@@ -96,4 +96,43 @@ class FieldEvidenceQueryPlannerTest {
             assertThat(query.getQueryFingerprint()).isNotBlank();
         });
     }
+
+    @Test
+    void shouldPlanBestEffortThirdPartyQueriesForNonRequiredReviewPath() {
+        CoverageFieldContract weaknesses = CoverageFieldContract.builder()
+                .field("weaknesses")
+                .status(CoverageFieldStatus.REQUIRED)
+                .evidencePaths(List.of(
+                        CoverageEvidencePath.builder()
+                                .pathKey("OFFICIAL_PUBLIC_PROFILE")
+                                .sourceTypes(List.of("OFFICIAL"))
+                                .queryIntents(List.of("FIELD_EVIDENCE"))
+                                .expectedSignals(List.of("PROFILE_BLOCK"))
+                                .required(true)
+                                .build(),
+                        CoverageEvidencePath.builder()
+                                .pathKey("PUBLIC_REVIEW_OR_NEWS")
+                                .sourceTypes(List.of("REVIEW", "NEWS"))
+                                .queryIntents(List.of("THIRD_PARTY_REVIEW"))
+                                .expectedSignals(List.of("PUBLIC_RISK_BLOCK"))
+                                .required(false)
+                                .build()))
+                .minimumAttemptedPaths(1)
+                .minDistinctEvidenceCount(2)
+                .build();
+
+        List<FieldEvidenceQuery> queries = planner.plan(
+                "抖音开放平台",
+                weaknesses,
+                List.of("open.douyin.com"));
+
+        assertThat(queries)
+                .filteredOn(query -> "PUBLIC_REVIEW_OR_NEWS".equals(query.getEvidencePathKey()))
+                .isNotEmpty()
+                .allSatisfy(query -> {
+                    assertThat(query.getIncludeDomains()).isEmpty();
+                    assertThat(query.getQuery()).contains("抖音开放平台");
+                    assertThat(query.getReason()).contains("PUBLIC_REVIEW_OR_NEWS");
+                });
+    }
 }

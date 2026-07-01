@@ -77,23 +77,80 @@ public class SourceCandidateRanker {
         if (ranked.isEmpty()) {
             return ranked;
         }
+        Map<String, SourceCandidate> reservedPrefetchByDomain = reserveUsablePrefetchCandidates(ranked);
         Map<String, Integer> perDomainCounter = new LinkedHashMap<>();
+        Map<String, Integer> perDomainNonReservedCounter = new LinkedHashMap<>();
         List<SourceCandidate> limited = new ArrayList<>();
         for (SourceCandidate candidate : ranked) {
             String domain = StringUtils.hasText(candidate.getDomain())
                     ? candidate.getDomain()
                     : extractDomain(candidate.getUrl());
+            SourceCandidate reservedPrefetch = reservedPrefetchByDomain.get(domain);
+            boolean reservedCandidate = sameCandidate(reservedPrefetch, candidate);
             int current = perDomainCounter.getOrDefault(domain, 0);
+            int currentNonReserved = perDomainNonReservedCounter.getOrDefault(domain, 0);
+            int nonReservedCap = reservedPrefetch == null || perDomainCap <= 0
+                    ? perDomainCap
+                    : Math.max(0, perDomainCap - 1);
+            /**
+             * 当同域里存在“已拿到正文”的 Tavily prefetch 候选时，
+             * 普通候选最多只能占用 perDomainCap-1 个名额，把最后一个名额留给 prefetch 真文。
+             * 这样既保留域内均衡，也避免 rich content 在进入 selector 之前就被壳页挤出工作集。
+             */
+            if (!reservedCandidate && nonReservedCap >= 0 && perDomainCap > 0 && currentNonReserved >= nonReservedCap) {
+                continue;
+            }
             if (perDomainCap > 0 && current >= perDomainCap) {
                 continue;
             }
             limited.add(candidate);
             perDomainCounter.put(domain, current + 1);
+            if (!reservedCandidate) {
+                perDomainNonReservedCounter.put(domain, currentNonReserved + 1);
+            }
             if (maxCount > 0 && limited.size() >= maxCount) {
                 break;
             }
         }
         return limited;
+    }
+
+    /**
+     * 同域限额用于抑制壳页洪水，但不能把已经拿到正文的 Tavily fast-lane 候选提前裁掉。
+     * 这里为每个域名最多保留一个“已 gate 判可用”的 prefetch 候选名额，避免它在进入 selector 前就消失。
+     */
+    private Map<String, SourceCandidate> reserveUsablePrefetchCandidates(List<SourceCandidate> ranked) {
+        Map<String, SourceCandidate> reserved = new LinkedHashMap<>();
+        for (SourceCandidate candidate : ranked) {
+            if (!isUsablePrefetchCandidate(candidate)) {
+                continue;
+            }
+            String domain = StringUtils.hasText(candidate.getDomain())
+                    ? candidate.getDomain()
+                    : extractDomain(candidate.getUrl());
+            if (!StringUtils.hasText(domain) || reserved.containsKey(domain)) {
+                continue;
+            }
+            reserved.put(domain, candidate);
+        }
+        return reserved;
+    }
+
+    private boolean isUsablePrefetchCandidate(SourceCandidate candidate) {
+        if (candidate == null) {
+            return false;
+        }
+        return Boolean.TRUE.equals(candidate.getFastLaneUsable())
+                && Boolean.TRUE.equals(candidate.getHasPrefetchedContent())
+                && (StringUtils.hasText(candidate.getPrefetchedContentRef())
+                || candidate.getPrefetchedRawContentLength() != null && candidate.getPrefetchedRawContentLength() > 0);
+    }
+
+    private boolean sameCandidate(SourceCandidate left, SourceCandidate right) {
+        if (left == null || right == null) {
+            return false;
+        }
+        return normalizeUrl(left.getUrl()).equals(normalizeUrl(right.getUrl()));
     }
 
     /**

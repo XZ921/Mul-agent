@@ -1,0 +1,23 @@
+{
+  "taskName": "抖音vsB站开放平台能力分析-09验收-20260701-1422",
+  "subjectProduct": "短视频平台开放生态与开发者能力",
+  "competitorNames": [
+    "抖音",
+    "哔哩哔哩"
+  ],
+  "competitorUrls": [
+    "https://open.douyin.com/",
+    "https://open.bilibili.com/"
+  ],
+  "analysisDimensions": [
+    "开放平台",
+    "开发者生态",
+    "产品功能"
+  ],
+  "sourceScope": [
+    "官网",
+    "产品文档"
+  ],
+  "reportLanguage": "中文",
+  "reportTemplate": "标准版"
+}

@@ -1,9 +1,0 @@
-HTTP/1.1 200 
-Vary: Origin
-Vary: Access-Control-Request-Method
-Vary: Access-Control-Request-Headers
-Content-Disposition: attachment; filename="competitor-analysis-report.md"; filename*=UTF-8''competitor-analysis-report.md
-Content-Type: text/markdown;charset=UTF-8
-Content-Length: 12163
-Date: Fri, 26 Jun 2026 09:32:47 GMT
-

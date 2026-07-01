@@ -401,6 +401,131 @@ class SearchExecutionCoordinatorTest {
     }
 
     @Test
+    void shouldKeepUsablePrefetchCandidateInPoolWhenPerDomainCapIsTight() {
+        SearchSourceProvider provider = mock(SearchSourceProvider.class);
+        when(provider.search(argThat(request -> request != null && request.getRequestPhase() == SearchRequestPhase.BOOTSTRAP)))
+                .thenReturn(List.of(SourceCandidate.builder()
+                        .url("https://open.douyin.com/platform/resource/docs/develop/guide/douyin-sdk/js")
+                        .title("抖音开放平台 SDK 文档")
+                        .domain("open.douyin.com")
+                        .providerKey("tavily")
+                        .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                        .sourceType("DOCS")
+                        .hasPrefetchedContent(Boolean.TRUE)
+                        .prefetchedContentRef("prefetch-douyin-js")
+                        .prefetchedRawContentLength(2049)
+                        .fastLaneUsable(Boolean.TRUE)
+                        .relevanceScore(0.56D)
+                        .qualityScore(0.56D)
+                        .freshnessScore(0.55D)
+                        .build()));
+        when(provider.search(any(), any())).thenReturn(List.of(
+                SourceCandidate.builder()
+                        .url("https://open.douyin.com/docs")
+                        .title("Open Douyin Docs")
+                        .domain("open.douyin.com")
+                        .discoveryMethod("SEARCH_ROOT_TEMPLATE")
+                        .sourceType("DOCS")
+                        .relevanceScore(0.96D)
+                        .qualityScore(0.96D)
+                        .freshnessScore(0.55D)
+                        .build(),
+                SourceCandidate.builder()
+                        .url("https://open.douyin.com/documentation")
+                        .title("Open Douyin Documentation")
+                        .domain("open.douyin.com")
+                        .discoveryMethod("SEARCH_ROOT_TEMPLATE")
+                        .sourceType("DOCS")
+                        .relevanceScore(0.96D)
+                        .qualityScore(0.95D)
+                        .freshnessScore(0.55D)
+                        .build(),
+                SourceCandidate.builder()
+                        .url("https://game.open.douyin.com/docs")
+                        .title("Game Docs")
+                        .domain("game.open.douyin.com")
+                        .discoveryMethod("SEARCH_ROOT_TEMPLATE")
+                        .sourceType("DOCS")
+                        .relevanceScore(0.88D)
+                        .qualityScore(0.88D)
+                        .freshnessScore(0.55D)
+                        .build(),
+                SourceCandidate.builder()
+                        .url("https://game.open.douyin.com/documentation")
+                        .title("Game Documentation")
+                        .domain("game.open.douyin.com")
+                        .discoveryMethod("SEARCH_ROOT_TEMPLATE")
+                        .sourceType("DOCS")
+                        .relevanceScore(0.88D)
+                        .qualityScore(0.87D)
+                        .freshnessScore(0.55D)
+                        .build(),
+                SourceCandidate.builder()
+                        .url("https://douyin.com/docs")
+                        .title("Douyin Docs")
+                        .domain("douyin.com")
+                        .discoveryMethod("SEARCH_ROOT_TEMPLATE")
+                        .sourceType("DOCS")
+                        .relevanceScore(0.88D)
+                        .qualityScore(0.88D)
+                        .freshnessScore(0.55D)
+                        .build(),
+                SourceCandidate.builder()
+                        .url("https://douyin.com/documentation")
+                        .title("Douyin Documentation")
+                        .domain("douyin.com")
+                        .discoveryMethod("SEARCH_ROOT_TEMPLATE")
+                        .sourceType("DOCS")
+                        .relevanceScore(0.88D)
+                        .qualityScore(0.87D)
+                        .freshnessScore(0.55D)
+                        .build()
+        ));
+
+        SearchRuntimePolicy runtimePolicy = SearchRuntimePolicy.builder()
+                .bootstrapCandidateLimit(6)
+                .supplementCandidateLimit(6)
+                .maxCandidatePoolSize(10)
+                .maxCandidatesPerDomain(2)
+                .build();
+
+        SearchExecutionResult result = new SearchExecutionCoordinator(
+                mock(CandidateVerifier.class),
+                mock(BrowserSearchRuntimeService.class),
+                provider,
+                new SourceCandidateRanker(),
+                new CollectionTargetSelector(),
+                new SearchPolicyResolver()
+        ).execute(CollectorNodeConfig.builder()
+                .competitorName("抖音")
+                .sourceType("DOCS")
+                .preferredDomains(List.of("open.douyin.com"))
+                .includeDomains(List.of("open.douyin.com"))
+                .searchRuntimePolicy(runtimePolicy)
+                .sourceCandidates(List.of(SourceCandidate.builder()
+                        .url("https://open.douyin.com/")
+                        .title("抖音开放平台")
+                        .domain("open.douyin.com")
+                        .sourceType("DOCS")
+                        .discoveryMethod("DIRECT_LOCATOR")
+                        .relevanceScore(0.87D)
+                        .qualityScore(0.87D)
+                        .freshnessScore(0.55D)
+                        .build()))
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertThat(result.getSourceCandidates()).anyMatch(candidate ->
+                "https://open.douyin.com/platform/resource/docs/develop/guide/douyin-sdk/js".equals(candidate.getUrl())
+                        && Boolean.TRUE.equals(candidate.getFastLaneUsable())
+                        && Boolean.TRUE.equals(candidate.getHasPrefetchedContent()));
+    }
+
+    @Test
     void shouldSkipTavilyBootstrapForStrongExactPlannedPage() {
         SearchSourceProvider provider = mock(SearchSourceProvider.class);
         SearchExecutionCoordinator bootstrapCoordinator = new SearchExecutionCoordinator(

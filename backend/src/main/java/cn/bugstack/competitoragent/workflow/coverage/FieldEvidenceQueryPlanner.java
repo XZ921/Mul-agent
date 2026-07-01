@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -16,6 +17,8 @@ import java.util.Map;
  */
 @Component
 public class FieldEvidenceQueryPlanner {
+
+    private static final int MAX_OPTIONAL_THIRD_PARTY_VARIANTS = 2;
 
     private final FieldQueryComposition fieldQueryComposition;
     private final IncludeDomainPlanner includeDomainPlanner;
@@ -49,7 +52,7 @@ public class FieldEvidenceQueryPlanner {
         Map<String, FieldEvidenceQuery> deduplicated = new LinkedHashMap<>();
         int priority = 0;
         for (CoverageEvidencePath path : paths) {
-            if (path == null || !path.isRequired()) {
+            if (path == null) {
                 continue;
             }
             List<FieldQueryComposition.QueryVariant> variants = fieldQueryComposition.compose(
@@ -58,6 +61,19 @@ public class FieldEvidenceQueryPlanner {
                     path,
                     field.getQueryIntents(),
                     List.of("OPEN_WEB"));
+            if (!path.isRequired()) {
+                /**
+                 * 非 required 路径不能再一刀切跳过，否则 PUBLIC_REVIEW_OR_NEWS 这类第三方证据路径永远发不出去。
+                 * 这里仅放行“第三方/开放网络”语义的可选路径，并限制每条路径最多取前 2 个 query variant，
+                 * 这样既能保证第三方材料进入执行队列，又不会把所有 optional path 无上限放大。
+                 */
+                if (!isBestEffortThirdPartyPath(path)) {
+                    continue;
+                }
+                variants = variants.stream()
+                        .limit(MAX_OPTIONAL_THIRD_PARTY_VARIANTS)
+                        .toList();
+            }
             for (FieldQueryComposition.QueryVariant variant : variants) {
                 FieldEvidenceQuery planned = buildQuery(
                         competitorName,
@@ -70,6 +86,31 @@ public class FieldEvidenceQueryPlanner {
             }
         }
         return new ArrayList<>(deduplicated.values());
+    }
+
+    /**
+     * 只有第三方/开放网络语义的 optional 路径才允许以 best-effort 方式进入 query 规划。
+     * 这样可以精准覆盖 PUBLIC_REVIEW_OR_NEWS，而不会误把任意非必填官方路径都拉进待执行集合。
+     */
+    private boolean isBestEffortThirdPartyPath(CoverageEvidencePath path) {
+        if (containsThirdPartyToken(path.getPathKey())) {
+            return true;
+        }
+        if (path.getSourceTypes() == null || path.getSourceTypes().isEmpty()) {
+            return false;
+        }
+        return path.getSourceTypes().stream().anyMatch(this::containsThirdPartyToken);
+    }
+
+    private boolean containsThirdPartyToken(String value) {
+        if (!StringUtils.hasText(value)) {
+            return false;
+        }
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        return normalized.contains("REVIEW")
+                || normalized.contains("NEWS")
+                || normalized.contains("OPEN_WEB")
+                || normalized.contains("THIRD_PARTY");
     }
 
     /**

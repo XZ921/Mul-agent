@@ -230,6 +230,41 @@ class SourceCandidateRankerTest {
         assertTrue(limited.stream().filter(item -> "b.example.com".equals(item.getDomain())).count() <= 2);
     }
 
+    @Test
+    void shouldRetainUsableTavilyPrefetchCandidateWithinPerDomainCap() {
+        // task78 运行态证明：同域 cap=2 时，两个高分 docs 壳页会把低分但已拿到 2049 字正文的
+        // Tavily prefetch 候选提前挤出候选池，导致它根本走不到 SELECT_TARGETS。
+        // 这里先把这个断点固化成测试，要求 ranker 至少为可用 prefetch 真文保留一个同域名额。
+        List<SourceCandidate> limited = ranker.rankDeduplicateAndLimit(List.of(
+                candidateWithDomain("https://open.douyin.com/docs", "open.douyin.com", 0.96D),
+                candidateWithDomain("https://open.douyin.com/documentation", "open.douyin.com", 0.95D),
+                SourceCandidate.builder()
+                        .url("https://open.douyin.com/platform/resource/docs/develop/guide/douyin-sdk/js")
+                        .title("抖音开放平台 SDK 文档")
+                        .sourceType("DOCS")
+                        .domain("open.douyin.com")
+                        .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                        .providerKey("tavily")
+                        .hasPrefetchedContent(Boolean.TRUE)
+                        .prefetchedContentRef("prefetch-douyin-js")
+                        .prefetchedRawContentLength(2049)
+                        .fastLaneUsable(Boolean.TRUE)
+                        .relevanceScore(0.56D)
+                        .freshnessScore(0.55D)
+                        .qualityScore(0.56D)
+                        .build()
+        ), 8, 2);
+
+        assertEquals(2, limited.stream()
+                .filter(item -> "open.douyin.com".equals(item.getDomain()))
+                .count());
+        assertTrue(limited.stream().anyMatch(item ->
+                        "https://open.douyin.com/platform/resource/docs/develop/guide/douyin-sdk/js".equals(item.getUrl())),
+                "同域 cap 不应把已拿到可用正文的 Tavily prefetch 候选提前裁掉");
+        assertTrue(limited.stream().anyMatch(item ->
+                "https://open.douyin.com/docs".equals(item.getUrl())));
+    }
+
     private SourceCandidate candidate(String url,
                                       String title,
                                       String sourceType,

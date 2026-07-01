@@ -22,6 +22,8 @@ import java.util.Set;
 @Component
 public class CollectionTargetSelector {
 
+    private static final String TAVILY_PREFETCH_SELECTED_REASON = "Tavily prefetch 正文可用";
+
     private final CanonicalUrlResolver canonicalUrlResolver;
     private final CandidateOwnershipPolicy candidateOwnershipPolicy;
 
@@ -66,7 +68,8 @@ public class CollectionTargetSelector {
 
         List<SourceCandidate> rankedCandidates = candidates.stream()
                 .filter(candidate -> candidate != null && StringUtils.hasText(candidate.getUrl()))
-                .sorted(Comparator.comparingInt(this::resolveSelectionTier)
+                .sorted(Comparator.<SourceCandidate>comparingInt(
+                                candidate -> resolveSelectionTier(candidate, normalizedAttemptedTargets))
                         .thenComparing(SourceCandidate::getTotalScore, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
 
@@ -98,7 +101,9 @@ public class CollectionTargetSelector {
         List<SourceCandidate> updatedCandidates = candidates.stream()
                 .map(candidate -> mergeSelectionResult(candidate, selectedUrls, normalizedAttemptedTargets, rejectedByUrl))
                 .toList();
-        List<SourceCandidate> discardedCandidates = resolveDiscardedCandidates(updatedCandidates, selectedUrls);
+        List<SourceCandidate> discardedCandidates = resolveDiscardedCandidates(updatedCandidates,
+                selectedUrls,
+                normalizedAttemptedTargets);
         Map<String, SourceCandidate> updatedCandidatesByUrl = indexCandidatesByNormalizedUrl(updatedCandidates);
         List<SearchCollectionTarget> refreshedTargets = selectedTargets.stream()
                 .map(target -> refreshTargetCandidate(target, updatedCandidatesByUrl))
@@ -160,6 +165,18 @@ public class CollectionTargetSelector {
             return new SelectionEligibility(false,
                     "登录、验证码或工具页不能直接进入正式采集目标",
                     "工具页仅保留为公开壳恢复输入");
+        }
+
+        if (isUsablePrefetchedCandidate(candidate)) {
+            /**
+             * Tavily Fast Lane 候选在 gate 阶段已经完成原始正文长度与质量可用性判定，
+             * 这里直接复用 fastLaneUsable + hasPrefetchedContent + prefetchedContentRef 三元组作为正式入选条件。
+             * 这样 selector 的放行条件与下游 CollectionTaskPackageBuilder 触发 TAVILY_PREFETCHED 的条件严格对齐，
+             * 保证“这里放进去的候选，下游一定能按 prefetched ref 取回正文”。
+             */
+            return new SelectionEligibility(true,
+                    TAVILY_PREFETCH_SELECTED_REASON,
+                    TAVILY_PREFETCH_SELECTED_REASON);
         }
 
         if (Boolean.TRUE.equals(candidate.getVerified())) {
@@ -252,6 +269,19 @@ public class CollectionTargetSelector {
                 || joined.contains("ANTI_BOT_PARTIAL");
     }
 
+    /**
+     * prefetch 候选是否可直接进入正式采集，完全对齐下游 TAVILY_PREFETCHED 的激活条件：
+     * 1. gate 判过可用（fastLaneUsable=true）
+     * 2. 确实有预取正文
+     * 3. 持有可消费的轻量 ref
+     */
+    private boolean isUsablePrefetchedCandidate(SourceCandidate candidate) {
+        return candidate != null
+                && Boolean.TRUE.equals(candidate.getFastLaneUsable())
+                && Boolean.TRUE.equals(candidate.getHasPrefetchedContent())
+                && StringUtils.hasText(candidate.getPrefetchedContentRef());
+    }
+
     private SourceCandidate mergeSelectionResult(SourceCandidate candidate,
                                                  Set<String> selectedUrls,
                                                  Map<String, SearchCollectionTarget> attemptedTargets,
@@ -272,30 +302,42 @@ public class CollectionTargetSelector {
      * 未被选中但也未明确丢弃的候选仍保留在 sourceCandidates，避免误判。
      */
     private List<SourceCandidate> resolveDiscardedCandidates(List<SourceCandidate> candidates,
-                                                             Set<String> selectedUrls) {
+                                                             Set<String> selectedUrls,
+                                                             Map<String, SearchCollectionTarget> attemptedTargets) {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
         return candidates.stream()
                 .filter(candidate -> candidate != null && "DISCARDED".equalsIgnoreCase(candidate.getSelectionStage()))
                 .filter(candidate -> !selectedUrls.contains(normalizeUrl(candidate.getUrl())))
+                .filter(candidate -> !shouldSuppressDiscardedFact(candidate, attemptedTargets))
                 .toList();
     }
 
     /**
-     * 已验证通过的候选永远优先于未验证候选，明确丢弃的候选即使分高也只能排在最后。
+     * 排序优先级需要同时满足两条约束：
+     * 1. 可用 Tavily prefetch 真文必须严格优先于 verified 根域壳页，避免 targetCount=1 时被高分壳页挤掉。
+     * 2. verified 的真内容候选仍然保持与 prefetch 同档竞争，不能被一刀切降级。
      */
-    private int resolveSelectionTier(SourceCandidate candidate) {
+    private int resolveSelectionTier(SourceCandidate candidate,
+                                     Map<String, SearchCollectionTarget> attemptedTargets) {
         if (candidate == null) {
             return Integer.MAX_VALUE;
+        }
+        SearchCollectionTarget attemptedTarget = attemptedTargets.get(normalizeUrl(candidate.getUrl()));
+        if (isUsablePrefetchedCandidate(candidate)) {
+            return 0;
+        }
+        if (Boolean.TRUE.equals(candidate.getVerified()) && isVerifiedRootShellCandidate(candidate, attemptedTarget)) {
+            return 1;
         }
         if (Boolean.TRUE.equals(candidate.getVerified())) {
             return 0;
         }
         if ("DISCARDED".equalsIgnoreCase(candidate.getSelectionStage())) {
-            return 2;
+            return 3;
         }
-        return 1;
+        return 2;
     }
 
     /**
@@ -339,6 +381,13 @@ public class CollectionTargetSelector {
             return candidate;
         }
         SearchCollectionTarget attemptedTarget = attemptedTargets.get(normalizedUrl);
+        if (isUsablePrefetchedCandidate(candidate)) {
+            return candidate.toBuilder()
+                    .selectionStage("SELECTED")
+                    .selectionReason(TAVILY_PREFETCH_SELECTED_REASON)
+                    .selectionSummary(TAVILY_PREFETCH_SELECTED_REASON)
+                    .build();
+        }
         boolean publicShellSelected = !Boolean.TRUE.equals(candidate.getVerified())
                 && hasPublicShellSignal(candidate, attemptedTarget);
         String selectedReason = Boolean.TRUE.equals(candidate.getVerified())
@@ -356,6 +405,47 @@ public class CollectionTargetSelector {
                 .selectionReason(selectedReason)
                 .selectionSummary(selectedSummary)
                 .build();
+    }
+
+    /**
+     * 这里识别的是“verified 但只有根域公开壳价值”的候选。
+     * 只有这类壳页才需要给 prefetch 真文让位；verified 的真内容文档仍保持正常优先级竞争。
+     */
+    private boolean isVerifiedRootShellCandidate(SourceCandidate candidate,
+                                                 SearchCollectionTarget attemptedTarget) {
+        if (candidate == null || !Boolean.TRUE.equals(candidate.getVerified())) {
+            return false;
+        }
+        if (!hasPublicShellSignal(candidate, attemptedTarget)) {
+            return false;
+        }
+        String normalizedUrl = normalizeUrl(candidate.getUrl());
+        if (!StringUtils.hasText(normalizedUrl)) {
+            return false;
+        }
+        try {
+            java.net.URI uri = java.net.URI.create(normalizedUrl);
+            String path = uri.getPath();
+            return !StringUtils.hasText(path) || "/".equals(path);
+        } catch (Exception e) {
+            return normalizedUrl.endsWith("/");
+        }
+    }
+
+    /**
+     * 显式直达候选如果在上游已经被判为 DISCARDED、且当前轮既没有 attemptedTarget 也没有被重新选择，
+     * 就不再把它重复写进 discardedCandidates。
+     * 这样 discardedCandidates 更聚焦“本轮 selector 实际拒绝掉的候选”，避免把原始直达候选和中介页诊断混在一起。
+     */
+    private boolean shouldSuppressDiscardedFact(SourceCandidate candidate,
+                                                Map<String, SearchCollectionTarget> attemptedTargets) {
+        if (candidate == null || !isExplicitCandidate(candidate)) {
+            return false;
+        }
+        if (!"候选已在验证或排序阶段被丢弃".equals(candidate.getSelectionReason())) {
+            return false;
+        }
+        return !attemptedTargets.containsKey(normalizeUrl(candidate.getUrl()));
     }
 
     private Map<String, SourceCandidate> indexCandidatesByNormalizedUrl(List<SourceCandidate> candidates) {

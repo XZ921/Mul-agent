@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -322,5 +323,144 @@ class CollectionTargetSelectorTest {
                 decision.getSelectedTargets().get(0).getCandidate().getUrl());
         assertEquals("SELECTED",
                 decision.getSelectedTargets().get(0).getCandidate().getSelectionStage());
+    }
+
+    @Test
+    void shouldSelectUsableTavilyPrefetchCandidateAheadOfHigherScoredVerifiedRootShell() {
+        SourceCandidate verifiedRootShell = SourceCandidate.builder()
+                .url("https://open.douyin.com/")
+                .title("抖音开放平台")
+                .sourceType("OFFICIAL")
+                .discoveryMethod("SEARCH_ROOT_TEMPLATE")
+                .qualitySignals(List.of("PUBLIC_SHELL_ONLY"))
+                .selectionStage("VERIFIED")
+                .verified(Boolean.TRUE)
+                .totalScore(0.98)
+                .build();
+        SourceCandidate prefetchedLongForm = SourceCandidate.builder()
+                .url("https://open.douyin.com/platform/resource/docs/develop/guide")
+                .title("开发指南")
+                .sourceType("DOCS")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .selectionStage("BOOTSTRAPPED")
+                .verified(null)
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("tavily:req-75:1")
+                .prefetchedRawContentLength(2049)
+                .totalScore(0.41)
+                .build();
+
+        Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
+        attemptedTargets.put(verifiedRootShell.getUrl(), SearchCollectionTarget.builder()
+                .candidate(verifiedRootShell)
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url(verifiedRootShell.getUrl())
+                        .title("抖音开放平台")
+                        .content("开放平台首页公开壳")
+                        .snippet("开放平台首页公开壳")
+                        .metadata("{\"qualitySignals\":[\"PUBLIC_SHELL_ONLY\"]}")
+                        .success(true)
+                        .build())
+                .build());
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                List.of(verifiedRootShell, prefetchedLongForm),
+                attemptedTargets,
+                1
+        );
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        assertEquals(prefetchedLongForm.getUrl(), decision.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertEquals("SELECTED", decision.getSelectedTargets().get(0).getCandidate().getSelectionStage());
+        assertEquals("Tavily prefetch 正文可用",
+                decision.getSelectedTargets().get(0).getCandidate().getSelectionReason());
+        assertEquals("Tavily prefetch 正文可用",
+                decision.getSelectedTargets().get(0).getCandidate().getSelectionSummary());
+    }
+
+    @Test
+    void shouldKeepVerifiedRichContentCompetingNormallyAgainstPrefetchCandidate() {
+        SourceCandidate verifiedRichDoc = SourceCandidate.builder()
+                .url("https://open.douyin.com/doc/api/reference")
+                .title("API 参考文档")
+                .sourceType("DOCS")
+                .discoveryMethod("SEARCH")
+                .selectionStage("VERIFIED")
+                .verified(Boolean.TRUE)
+                .totalScore(0.93)
+                .build();
+        SourceCandidate prefetchedLongForm = SourceCandidate.builder()
+                .url("https://open.douyin.com/platform/resource/docs/develop/guide")
+                .title("开发指南")
+                .sourceType("DOCS")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .selectionStage("BOOTSTRAPPED")
+                .verified(null)
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("tavily:req-75:2")
+                .prefetchedRawContentLength(2049)
+                .totalScore(0.41)
+                .build();
+
+        Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
+        attemptedTargets.put(verifiedRichDoc.getUrl(), SearchCollectionTarget.builder()
+                .candidate(verifiedRichDoc)
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url(verifiedRichDoc.getUrl())
+                        .title("API 参考文档")
+                        .content("这里是完整 API 参考文档内容，不是官网壳页。")
+                        .snippet("完整 API 参考文档")
+                        .metadata("{\"collector\":\"http\"}")
+                        .success(true)
+                        .build())
+                .build());
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                List.of(verifiedRichDoc, prefetchedLongForm),
+                attemptedTargets,
+                1
+        );
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        assertEquals(verifiedRichDoc.getUrl(), decision.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertEquals("运行期验证通过后被选为正式采集目标",
+                decision.getSelectedTargets().get(0).getCandidate().getSelectionReason());
+    }
+
+    @Test
+    void shouldRejectUnverifiedCandidateWithoutPrefetchWhenAttemptedTargetHasNoUsableContent() {
+        SourceCandidate ordinaryUnverified = SourceCandidate.builder()
+                .url("https://open.douyin.com/platform/overview")
+                .title("平台概览")
+                .sourceType("OFFICIAL")
+                .discoveryMethod("SEARCH")
+                .selectionStage("SUPPLEMENTED")
+                .verified(Boolean.FALSE)
+                .totalScore(0.77)
+                .build();
+
+        Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
+        attemptedTargets.put(ordinaryUnverified.getUrl(), SearchCollectionTarget.builder()
+                .candidate(ordinaryUnverified)
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url(ordinaryUnverified.getUrl())
+                        .title("平台概览")
+                        .success(false)
+                        .errorMessage("collector returned no usable content")
+                        .build())
+                .build());
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                List.of(ordinaryUnverified),
+                attemptedTargets,
+                1
+        );
+
+        assertTrue(decision.getSelectedTargets().isEmpty());
+        assertFalse(decision.getDiscardedCandidates().isEmpty());
+        assertEquals("未验证候选不能进入正式采集目标",
+                decision.getDiscardedCandidates().get(0).getSelectionReason());
     }
 }
