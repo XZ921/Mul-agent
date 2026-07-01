@@ -1,0 +1,259 @@
+﻿{
+    "taskId":  72,
+    "pollDir":  "E:\\java_study\\Mul-agnet\\tmp\\task72-live-20260701-100816",
+    "startedAt":  "2026-07-01T10:08:16",
+    "observations":  [
+                         {
+                             "index":  1,
+                             "time":  "2026-07-01T10:08:16",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  2,
+                             "time":  "2026-07-01T10:08:42",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  3,
+                             "time":  "2026-07-01T10:09:02",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  4,
+                             "time":  "2026-07-01T10:09:22",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  5,
+                             "time":  "2026-07-01T10:09:48",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  6,
+                             "time":  "2026-07-01T10:10:08",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  7,
+                             "time":  "2026-07-01T10:10:29",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  8,
+                             "time":  "2026-07-01T10:10:49",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  9,
+                             "time":  "2026-07-01T10:11:09",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  10,
+                             "time":  "2026-07-01T10:11:29",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  11,
+                             "time":  "2026-07-01T10:11:50",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  12,
+                             "time":  "2026-07-01T10:12:10",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  13,
+                             "time":  "2026-07-01T10:12:30",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  14,
+                             "time":  "2026-07-01T10:12:51",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  15,
+                             "time":  "2026-07-01T10:13:11",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  16,
+                             "time":  "2026-07-01T10:13:31",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  17,
+                             "time":  "2026-07-01T10:13:52",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         },
+                         {
+                             "index":  18,
+                             "time":  "2026-07-01T10:14:12",
+                             "status":  "RUNNING",
+                             "currentStage":  "æé³ - OFFICIALéé",
+                             "completedNodes":  0,
+                             "totalNodes":  12,
+                             "activeNodeNames":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02"
+                                                 ]
+                         }
+                     ]
+}

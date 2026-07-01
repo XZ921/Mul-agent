@@ -1,0 +1,100 @@
+{
+    "round":  18,
+    "sampledAt":  "2026-07-01T10:24:12",
+    "taskStatus":  "RUNNING",
+    "completedNodes":  0,
+    "totalNodes":  12,
+    "currentStage":  "???¨¦?3 - OFFICIAL¨¦??¨¦??",
+    "collectors":  [
+                       {
+                           "nodeName":  "collect_sources_01_01",
+                           "step":  null,
+                           "progressPercent":  null,
+                           "degraded":  null,
+                           "degradationReason":  null,
+                           "candidateCount":  null,
+                           "selectedCount":  null,
+                           "discardedCount":  null,
+                           "attemptedCount":  null,
+                           "sourceUrlCount":  1,
+                           "sourceUrls":  [
+                                              "https://open.douyin.com"
+                                          ],
+                           "selectedTargets":  [
+                                                   null
+                                               ],
+                           "discardedCandidates":  [
+                                                       null
+                                                   ]
+                       },
+                       {
+                           "nodeName":  "collect_sources_01_02",
+                           "step":  null,
+                           "progressPercent":  null,
+                           "degraded":  null,
+                           "degradationReason":  null,
+                           "candidateCount":  null,
+                           "selectedCount":  null,
+                           "discardedCount":  null,
+                           "attemptedCount":  null,
+                           "sourceUrlCount":  4,
+                           "sourceUrls":  [
+                                              "https://open.douyin.com/docs",
+                                              "https://open.douyin.com/documentation",
+                                              "https://open.douyin.com/help",
+                                              "https://open.douyin.com/guide"
+                                          ],
+                           "selectedTargets":  [
+                                                   null
+                                               ],
+                           "discardedCandidates":  [
+                                                       null
+                                                   ]
+                       },
+                       {
+                           "nodeName":  "collect_sources_02_01",
+                           "step":  null,
+                           "progressPercent":  null,
+                           "degraded":  null,
+                           "degradationReason":  null,
+                           "candidateCount":  null,
+                           "selectedCount":  null,
+                           "discardedCount":  null,
+                           "attemptedCount":  null,
+                           "sourceUrlCount":  1,
+                           "sourceUrls":  [
+                                              "https://open.bilibili.com"
+                                          ],
+                           "selectedTargets":  [
+                                                   null
+                                               ],
+                           "discardedCandidates":  [
+                                                       null
+                                                   ]
+                       },
+                       {
+                           "nodeName":  "collect_sources_02_02",
+                           "step":  null,
+                           "progressPercent":  null,
+                           "degraded":  null,
+                           "degradationReason":  null,
+                           "candidateCount":  null,
+                           "selectedCount":  null,
+                           "discardedCount":  null,
+                           "attemptedCount":  null,
+                           "sourceUrlCount":  4,
+                           "sourceUrls":  [
+                                              "https://open.bilibili.com/docs",
+                                              "https://open.bilibili.com/documentation",
+                                              "https://open.bilibili.com/help",
+                                              "https://open.bilibili.com/guide"
+                                          ],
+                           "selectedTargets":  [
+                                                   null
+                                               ],
+                           "discardedCandidates":  [
+                                                       null
+                                                   ]
+                       }
+                   ]
+}

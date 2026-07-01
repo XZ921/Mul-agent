@@ -1,0 +1,75 @@
+{
+    "round":  3,
+    "sampledAt":  "2026-07-01T10:51:42",
+    "taskStatus":  "RUNNING",
+    "completedNodes":  0,
+    "currentStage":  "???¨¦?3 - OFFICIAL¨¦??¨¦??",
+    "collectors":  [
+                       {
+                           "nodeName":  "collect_sources_01_01",
+                           "status":  "RUNNING",
+                           "candidateCount":  2,
+                           "selectedCount":  0,
+                           "fieldEvidenceQueryCount":  null,
+                           "supplementMethod":  null,
+                           "fallbackDecision":  null,
+                           "searchElapsedMillis":  null,
+                           "badCandidates":  [
+
+                                             ],
+                           "selectedBad":  [
+
+                                           ]
+                       },
+                       {
+                           "nodeName":  "collect_sources_01_02",
+                           "status":  "RUNNING",
+                           "candidateCount":  164,
+                           "selectedCount":  0,
+                           "fieldEvidenceQueryCount":  null,
+                           "supplementMethod":  null,
+                           "fallbackDecision":  null,
+                           "searchElapsedMillis":  null,
+                           "badCandidates":  [
+                                                 "https://blog.51cto.com/u_16213419/13198297",
+                                                 "https://blog.csdn.net/c_zyer/article/details/128451555"
+                                             ],
+                           "selectedBad":  [
+
+                                           ]
+                       },
+                       {
+                           "nodeName":  "collect_sources_02_01",
+                           "status":  "RUNNING",
+                           "candidateCount":  6,
+                           "selectedCount":  0,
+                           "fieldEvidenceQueryCount":  null,
+                           "supplementMethod":  null,
+                           "fallbackDecision":  null,
+                           "searchElapsedMillis":  null,
+                           "badCandidates":  [
+
+                                             ],
+                           "selectedBad":  [
+
+                                           ]
+                       },
+                       {
+                           "nodeName":  "collect_sources_02_02",
+                           "status":  "RUNNING",
+                           "candidateCount":  14,
+                           "selectedCount":  0,
+                           "fieldEvidenceQueryCount":  null,
+                           "supplementMethod":  null,
+                           "fallbackDecision":  null,
+                           "searchElapsedMillis":  null,
+                           "badCandidates":  [
+                                                 "https://blog.csdn.net/gitblog_00403/article/details/155085971",
+                                                 "https://blog.csdn.net/gitblog_01156/article/details/159494957"
+                                             ],
+                           "selectedBad":  [
+
+                                           ]
+                       }
+                   ]
+}

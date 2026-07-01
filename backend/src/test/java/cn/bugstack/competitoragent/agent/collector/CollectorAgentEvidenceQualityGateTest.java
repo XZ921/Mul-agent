@@ -17,6 +17,7 @@ class CollectorAgentEvidenceQualityGateTest {
     void shouldAttachEvidenceQualityVerdictToCollectionResult() {
         EvidenceQualityGate gate = new EvidenceQualityGate(new EvidenceQualityGateProperties());
         CollectorNodeConfig config = CollectorNodeConfig.builder()
+                .competitorUrls(List.of("https://open.bilibili.com"))
                 .requiredCoverageFields(List.of("coreFeatures"))
                 .blockingCoverageFields(List.of("coreFeatures"))
                 .coverageQueryIntents(List.of("OFFICIAL_DOCS", "API_DOCS"))

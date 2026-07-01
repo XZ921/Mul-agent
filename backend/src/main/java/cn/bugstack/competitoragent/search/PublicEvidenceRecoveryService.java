@@ -57,6 +57,7 @@ public class PublicEvidenceRecoveryService {
      * ?????????????????????? sourceType ???
      */
     public RecoveryContext toRecoveryContext(String competitorName,
+                                             List<String> competitorUrls,
                                              String sourceType,
                                              String fieldName,
                                              String evidencePathKey,
@@ -64,6 +65,7 @@ public class PublicEvidenceRecoveryService {
                                              EvidenceQualityVerdict verdict) {
         return RecoveryContext.builder()
                 .competitorName(competitorName)
+                .competitorUrls(copyList(competitorUrls))
                 .sourceType(sourceType)
                 .fieldName(fieldName)
                 .evidencePathKey(evidencePathKey)
@@ -484,6 +486,12 @@ public class PublicEvidenceRecoveryService {
                 || candidateOwnershipPolicy.isUtilityGatePage(candidate, null)) {
             return;
         }
+        if (!candidateOwnershipPolicy.hasCompetitorDomainOwnershipSignalForCandidate(
+                context == null ? null : context.getCompetitorName(),
+                context == null ? List.of() : context.getCompetitorUrls(),
+                candidate)) {
+            return;
+        }
         recoveredCandidates.putIfAbsent(canonicalUrl, candidate);
     }
 
@@ -653,6 +661,7 @@ public class PublicEvidenceRecoveryService {
     public static class RecoveryContext {
 
         private String competitorName;
+        private List<String> competitorUrls;
         private String sourceType;
         private String fieldName;
         private String evidencePathKey;

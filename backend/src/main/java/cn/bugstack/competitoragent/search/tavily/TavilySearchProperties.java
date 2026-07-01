@@ -48,7 +48,7 @@ public class TavilySearchProperties {
     /**
      * HTTP 调用超时时间，单位秒。
      */
-    private int timeoutSeconds = 20;
+    private int timeoutSeconds = 45;
 
     /**
      * Tavily 调用最大重试次数。

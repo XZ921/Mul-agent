@@ -278,7 +278,6 @@ public class CollectionTargetSelector {
         }
         return candidates.stream()
                 .filter(candidate -> candidate != null && "DISCARDED".equalsIgnoreCase(candidate.getSelectionStage()))
-                .filter(candidate -> !StringUtils.hasText(candidate.getVerificationReason()))
                 .filter(candidate -> !selectedUrls.contains(normalizeUrl(candidate.getUrl())))
                 .toList();
     }

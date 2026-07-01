@@ -861,6 +861,133 @@ class SearchExecutionCoordinatorTest {
     }
 
     @Test
+    void shouldNotExpandSitemapForUnownedSearchRoot() {
+        SitemapDiscoveryService sitemapDiscoveryService = mock(SitemapDiscoveryService.class);
+        SearchExecutionCoordinator searchCoordinator = new SearchExecutionCoordinator(
+                new CandidateVerifier(sourceCollector),
+                browserSearchRuntimeService,
+                searchSourceProvider,
+                new SourceCandidateRanker(),
+                new CollectionTargetSelector(),
+                new SearchPolicyResolver(),
+                new CanonicalUrlResolver(),
+                sitemapDiscoveryService
+        );
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+
+        searchCoordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩")
+                .competitorUrls(List.of("https://www.bilibili.com"))
+                .sourceType("DOCS")
+                .sourceCandidates(List.of(SourceCandidate.builder()
+                        .url("https://apps.microsoft.com/store/detail/9nblggh4nns1")
+                        .title("Download Bilibili")
+                        .sourceType("OFFICIAL")
+                        .discoveryMethod("SITEMAP_DISCOVERY")
+                        .selectionStage("SUPPLEMENTED")
+                        .domain("apps.microsoft.com")
+                        .relevanceScore(0.84)
+                        .freshnessScore(0.62)
+                        .qualityScore(0.82)
+                        .build()))
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .maxSearchResults(2)
+                .minVerifiedCandidates(1)
+                .build());
+
+        verify(sitemapDiscoveryService, never()).discover(
+                any(),
+                any(),
+                argThat(rootUrls -> rootUrls != null && rootUrls.contains("https://blog.csdn.net"))
+        );
+    }
+
+    @Test
+    void shouldNotExpandDirectDiscoveryTemplatesForUnownedRuntimeSearchRoot() {
+        when(searchSourceProvider.search(any(SearchSourceRequest.class))).thenReturn(List.of(
+                SourceCandidate.builder()
+                        .url("https://apps.microsoft.com/detail/xpffsrj7q4n302?launch=true&hl=zh-CN&gl=CN")
+                        .title("Download Douyin")
+                        .sourceType("OFFICIAL")
+                        .providerKey("qianfan")
+                        .discoveryMethod("QIANFAN_SEARCH")
+                        .selectionStage("HTTP")
+                        .domain("apps.microsoft.com")
+                        .relevanceScore(0.84)
+                        .freshnessScore(0.62)
+                        .qualityScore(0.82)
+                        .build()
+        ));
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("抖音")
+                .competitorUrls(List.of("https://open.douyin.com"))
+                .sourceType("DOCS")
+                .sourceCandidates(List.of())
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .maxSearchResults(5)
+                .minVerifiedCandidates(1)
+                .build());
+
+        assertFalse(result.getSourceCandidates().stream()
+                .anyMatch(candidate -> candidate != null
+                        && "SEARCH_ROOT_TEMPLATE".equals(candidate.getDiscoveryMethod())
+                        && candidate.getUrl() != null
+                        && candidate.getUrl().contains("apps.microsoft.com")));
+    }
+
+    @Test
+    void shouldNotDiscoverSitemapForUnownedRuntimeSearchBlogRoot() {
+        SitemapDiscoveryService sitemapDiscoveryService = mock(SitemapDiscoveryService.class);
+        SearchExecutionCoordinator searchCoordinator = new SearchExecutionCoordinator(
+                new CandidateVerifier(sourceCollector),
+                browserSearchRuntimeService,
+                searchSourceProvider,
+                new SourceCandidateRanker(),
+                new CollectionTargetSelector(),
+                new SearchPolicyResolver(),
+                new CanonicalUrlResolver(),
+                sitemapDiscoveryService
+        );
+        when(searchSourceProvider.search(any(SearchSourceRequest.class))).thenReturn(List.of(
+                SourceCandidate.builder()
+                        .url("https://blog.csdn.net/c_zyer/article/details/128451555")
+                        .title("Douyin API Blog")
+                        .sourceType("DOCS")
+                        .providerKey("qianfan")
+                        .discoveryMethod("QIANFAN_SEARCH")
+                        .selectionStage("HTTP")
+                        .domain("blog.csdn.net")
+                        .relevanceScore(0.84)
+                        .freshnessScore(0.62)
+                        .qualityScore(0.82)
+                        .build()
+        ));
+
+        searchCoordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("抖音")
+                .competitorUrls(List.of("https://open.douyin.com"))
+                .sourceType("DOCS")
+                .sourceCandidates(List.of())
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .maxSearchResults(5)
+                .minVerifiedCandidates(1)
+                .build());
+
+        verify(sitemapDiscoveryService, never()).discover(
+                any(),
+                any(),
+                argThat(rootUrls -> rootUrls != null && rootUrls.contains("https://blog.csdn.net"))
+        );
+    }
+
+    @Test
     void shouldSkipSupplementWhenSearchTimeoutExceeded() {
         when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
 

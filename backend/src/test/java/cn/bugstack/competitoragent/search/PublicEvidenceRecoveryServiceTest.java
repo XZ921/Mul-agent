@@ -119,9 +119,70 @@ class PublicEvidenceRecoveryServiceTest {
     }
 
     @Test
+    void shouldRejectRecoveryCandidatesWithoutCompetitorDomainOwnershipSignal() {
+        SourceCandidate blockedCandidate = SourceCandidate.builder()
+                .url("https://apps.microsoft.com/detail/xpffsrj7q4n302?launch=true&hl=zh-CN&gl=CN")
+                .domain("apps.microsoft.com")
+                .title("Download Douyin")
+                .sourceType("OFFICIAL")
+                .discoveryMethod("QIANFAN_SEARCH")
+                .sourceUrls(List.of("https://apps.microsoft.com/detail/xpffsrj7q4n302?launch=true&hl=zh-CN&gl=CN"))
+                .qualitySignals(List.of("NAVIGATION_SHELL"))
+                .build();
+
+        PublicEvidenceRecoveryService.RecoveryResult result = service.recover(
+                PublicEvidenceRecoveryService.RecoveryContext.builder()
+                        .competitorName("抖音")
+                        .competitorUrls(List.of("https://open.douyin.com"))
+                        .sourceType("OFFICIAL")
+                        .fieldName("summary")
+                        .evidencePathKey("OFFICIAL_PUBLIC_PROFILE")
+                        .queryIntents(List.of("OFFICIAL_DOCS"))
+                        .seedCandidates(List.of(blockedCandidate))
+                        .attemptedTargets(Map.of())
+                        .build()
+        );
+
+        assertThat(result.getAttemptedAlternativeUrls())
+                .contains("https://apps.microsoft.com/about", "https://apps.microsoft.com/app");
+        assertThat(result.getCandidates()).isEmpty();
+    }
+
+    @Test
+    void shouldKeepRecoveryCandidatesWhenCompetitorDomainOwnershipSignalMatchesCompetitorUrls() {
+        SourceCandidate blockedCandidate = SourceCandidate.builder()
+                .url("https://open.feishu.cn/login")
+                .domain("open.feishu.cn")
+                .title("Open Feishu Login")
+                .sourceType("OFFICIAL")
+                .discoveryMethod("DIRECT_LOCATOR")
+                .sourceUrls(List.of("https://open.feishu.cn/login"))
+                .qualitySignals(List.of("LOGIN_GATE_PARTIAL"))
+                .build();
+
+        PublicEvidenceRecoveryService.RecoveryResult result = service.recover(
+                PublicEvidenceRecoveryService.RecoveryContext.builder()
+                        .competitorName("飞书")
+                        .competitorUrls(List.of("https://www.feishu.cn"))
+                        .sourceType("OFFICIAL")
+                        .fieldName("summary")
+                        .evidencePathKey("OFFICIAL_PUBLIC_PROFILE")
+                        .queryIntents(List.of("OFFICIAL_DOCS"))
+                        .seedCandidates(List.of(blockedCandidate))
+                        .attemptedTargets(Map.of())
+                        .build()
+        );
+
+        assertThat(result.getCandidates())
+                .extracting(SourceCandidate::getUrl)
+                .contains("https://open.feishu.cn/about", "https://open.feishu.cn/app");
+    }
+
+    @Test
     void shouldGenerateRepairCandidatesWithFieldEvidenceContext() {
         PublicEvidenceRecoveryService.RecoveryContext context = service.toRecoveryContext(
-                "????",
+                "Bilibili",
+                List.of("https://open.bilibili.com"),
                 "DOCS",
                 "coreFeatures",
                 "DOCS_API_GUIDE",

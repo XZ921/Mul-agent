@@ -190,7 +190,7 @@ public class TavilySearchClient {
     }
 
     private static int resolveTimeoutSeconds(TavilySearchProperties properties) {
-        return Math.max(1, properties == null ? 20 : properties.getTimeoutSeconds());
+        return Math.max(1, properties == null ? 45 : properties.getTimeoutSeconds());
     }
 
     private String defaultText(String value) {

@@ -2164,6 +2164,7 @@ public class CollectorAgent extends BaseAgent {
                                                                             CollectionExecutionResult result) {
         return applyEvidenceQualityGate(
                 gate,
+                config,
                 buildEvidenceQualityContext(config, candidate, result),
                 result,
                 resolveCandidateScore(candidate),
@@ -2179,6 +2180,7 @@ public class CollectorAgent extends BaseAgent {
                                                            CollectionExecutionResult result) {
         return applyEvidenceQualityGate(
                 evidenceQualityGate,
+                config,
                 buildEvidenceQualityContext(config, candidate, result),
                 result,
                 resolveCandidateScore(candidate),
@@ -2190,6 +2192,7 @@ public class CollectorAgent extends BaseAgent {
      * 这里统一把 verdict、质量信号和封顶后的可用性得分写回 CollectionExecutionResult，供后续 audit 与落库复用。
      */
     private static CollectionExecutionResult applyEvidenceQualityGate(EvidenceQualityGate gate,
+                                                                      CollectorNodeConfig config,
                                                                       EvidenceQualityContext qualityContext,
                                                                       CollectionExecutionResult result,
                                                                       Double candidateScore,
@@ -2213,6 +2216,7 @@ public class CollectorAgent extends BaseAgent {
         }
         EvidenceRepairPlan repairPlan = buildEvidenceRepairPlan(
                 publicEvidenceRecoveryService,
+                config,
                 qualityContext,
                 result,
                 verdict);
@@ -2237,14 +2241,17 @@ public class CollectorAgent extends BaseAgent {
      * 这里只生成公开补采候选计划，不直接访问外部网络，也不宣称替代证据已经可用。
      */
     private static EvidenceRepairPlan buildEvidenceRepairPlan(PublicEvidenceRecoveryService publicEvidenceRecoveryService,
+                                                              CollectorNodeConfig config,
                                                               EvidenceQualityContext qualityContext,
                                                               CollectionExecutionResult result,
                                                               EvidenceQualityVerdict verdict) {
         PublicEvidenceRecoveryService recoveryService = publicEvidenceRecoveryService == null
                 ? new PublicEvidenceRecoveryService()
                 : publicEvidenceRecoveryService;
+        // page-level repair 也要带上竞品归属信号，避免第三方壳页从 recovery 展开路径重新漏回候选池。
         PublicEvidenceRecoveryService.RecoveryContext recoveryContext = recoveryService.toRecoveryContext(
-                null,
+                config == null ? null : config.getCompetitorName(),
+                config == null || config.getCompetitorUrls() == null ? List.of() : config.getCompetitorUrls(),
                 qualityContext == null ? null : qualityContext.getSourceType(),
                 qualityContext == null ? null : qualityContext.getFieldName(),
                 qualityContext == null ? null : qualityContext.getEvidencePathKey(),

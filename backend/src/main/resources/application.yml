@@ -433,7 +433,7 @@ tavily-search:
   search-depth: advanced
   include-raw-content: true
   max-results: 5
-  timeout-seconds: 20
+  timeout-seconds: 45
   max-retries: 2
   min-raw-content-chars: 500
   min-tavily-score: 0.45

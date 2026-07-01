@@ -1,0 +1,45 @@
+{
+    "round":  7,
+    "sampledAt":  "2026-07-01T10:48:35",
+    "taskStatus":  "RUNNING",
+    "completedNodes":  0,
+    "currentStage":  "???¨¦?3 - OFFICIAL¨¦??¨¦??",
+    "collectors":  [
+                       {
+                           "nodeName":  "collect_sources_01_01",
+                           "status":  "RUNNING",
+                           "sourceUrlCount":  2,
+                           "candidateCount":  2,
+                           "badUrls":  [
+
+                                       ]
+                       },
+                       {
+                           "nodeName":  "collect_sources_01_02",
+                           "status":  "RUNNING",
+                           "sourceUrlCount":  4,
+                           "candidateCount":  2,
+                           "badUrls":  [
+
+                                       ]
+                       },
+                       {
+                           "nodeName":  "collect_sources_02_01",
+                           "status":  "RUNNING",
+                           "sourceUrlCount":  12,
+                           "candidateCount":  6,
+                           "badUrls":  [
+
+                                       ]
+                       },
+                       {
+                           "nodeName":  "collect_sources_02_02",
+                           "status":  "RUNNING",
+                           "sourceUrlCount":  4,
+                           "candidateCount":  2,
+                           "badUrls":  [
+
+                                       ]
+                       }
+                   ]
+}

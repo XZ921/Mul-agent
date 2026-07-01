@@ -1,0 +1,71 @@
+{
+    "code":  200,
+    "message":  "????????????",
+    "data":  {
+                 "id":  73,
+                 "taskName":  "???иж?3vsB??????????13??буии???????????-08?бш?ижa?-ии???????????-20260701-1017",
+                 "subjectProduct":  "??-иибь?ижбщ??13??бу?????????????????????ии?\u0085ии?????",
+                 "competitorNames":  "[\"???иж?3\",\"????????????\"]",
+                 "competitorUrls":  "[\"https://open.douyin.com/\",\"https://open.bilibili.com/\"]",
+                 "analysisDimensions":  "[\"???????13??бу\",\"??????ии?\u0085??????\",\"?oбь??????ии??\"]",
+                 "sourceScope":  "[\"??????\",\"?oбь????????бъ\"]",
+                 "status":  "RUNNING",
+                 "errorMessage":  null,
+                 "statusSummary":  null,
+                 "currentPlanVersionId":  43,
+                 "currentPlanVersion":  1,
+                 "totalNodes":  12,
+                 "completedNodes":  0,
+                 "waitingRetryNodeCount":  0,
+                 "waitingInterventionNodeCount":  0,
+                 "compensatedNodeCount":  0,
+                 "createdAt":  [
+                                   2026,
+                                   7,
+                                   1,
+                                   10,
+                                   18,
+                                   4,
+                                   867044000
+                               ],
+                 "updatedAt":  [
+                                   2026,
+                                   7,
+                                   1,
+                                   10,
+                                   18,
+                                   50,
+                                   466860000
+                               ],
+                 "completedAt":  null,
+                 "canExecute":  false,
+                 "canResume":  false,
+                 "canRetry":  false,
+                 "canStop":  true,
+                 "canViewReport":  false,
+                 "canViewDraftReport":  false,
+                 "interventionSummary":  "??????ии??ии????-??бе???????-бщ??бф????????????ии????1??бе???????бу???a??бе??бз???ии????1????????бзиибд3ии????a??бе??бзии????1???????бе1ии??ии????-ии????1???ииж╠бд?????????????-бщиибебд?б└????",
+                 "resumeAdvice":  null,
+                 "retryAdvice":  null,
+                 "replayEntrySummary":  "??бе??????ии????1ии??ии?a???иж???oбьиибе???-??гд???????бь???бьии??ии?бзии?1???иибе????????o?????????????",
+                 "currentStage":  "???иж?3 - OFFICIALиж??иж??",
+                 "activeNodeNames":  [
+                                         "collect_sources_01_01",
+                                         "collect_sources_01_02",
+                                         "collect_sources_02_01",
+                                         "collect_sources_02_02"
+                                     ],
+                 "snapshotUpdatedAt":  [
+                                           2026,
+                                           7,
+                                           1,
+                                           10,
+                                           18,
+                                           50,
+                                           640355600
+                                       ],
+                 "eventStreamPath":  "/api/task/73/events"
+             },
+    "timestamp":  "2026-07-01T10:19:10.526093400",
+    "traceId":  "94c1efa9768448d89a0cda037e4765f8"
+}

@@ -1,0 +1,71 @@
+﻿{
+    "code":  200,
+    "message":  "æä½æå",
+    "data":  {
+                 "id":  72,
+                 "taskName":  "æé³vsBç«å¼æ¾å¹³å°è½ååæ-08å¤éª-20260701-100745",
+                 "subjectProduct":  "ç­è§é¢å¹³å°å¼æ¾çæä¸å¼åè\u0085è½å",
+                 "competitorNames":  "[\"æé³\",\"åå©åå©\"]",
+                 "competitorUrls":  "[\"https://open.douyin.com/\",\"https://open.bilibili.com/\"]",
+                 "analysisDimensions":  "[\"å¼æ¾å¹³å°\",\"å¼åè\u0085çæ\",\"äº§ååè½\"]",
+                 "sourceScope":  "[\"å®ç½\",\"äº§åææ¡£\"]",
+                 "status":  "RUNNING",
+                 "errorMessage":  null,
+                 "statusSummary":  null,
+                 "currentPlanVersionId":  42,
+                 "currentPlanVersion":  1,
+                 "totalNodes":  12,
+                 "completedNodes":  0,
+                 "waitingRetryNodeCount":  0,
+                 "waitingInterventionNodeCount":  0,
+                 "compensatedNodeCount":  0,
+                 "createdAt":  [
+                                   2026,
+                                   7,
+                                   1,
+                                   10,
+                                   7,
+                                   46,
+                                   31993000
+                               ],
+                 "updatedAt":  [
+                                   2026,
+                                   7,
+                                   1,
+                                   10,
+                                   7,
+                                   57,
+                                   392637000
+                               ],
+                 "completedAt":  null,
+                 "canExecute":  false,
+                 "canResume":  false,
+                 "canRetry":  false,
+                 "canStop":  true,
+                 "canViewReport":  false,
+                 "canViewDraftReport":  false,
+                 "interventionSummary":  "ä»»å¡è¿è¡ä¸­æ¯æåæ­¢æ´ä»»å¡ï¼åèç¹å¯æåå°æªå¯å¨çèç¹ãæå¨è·³è¿æªå¯å¨èç¹ï¼æå¯¹è¿è¡ä¸­èç¹åèµ·åä½å¼ç»æ­¢è¯·æ±ã",
+                 "resumeAdvice":  null,
+                 "retryAdvice":  null,
+                 "replayEntrySummary":  "å¯åå¾èç¹è¿½è¸ªä¸é«çº§è¯æ­æ¥çåå§æ§è¡è½¨è¿¹ãè¯æ®ä¸äºä»¶ççã",
+                 "currentStage":  "æé³ - OFFICIALéé",
+                 "activeNodeNames":  [
+                                         "collect_sources_01_01",
+                                         "collect_sources_01_02",
+                                         "collect_sources_02_01",
+                                         "collect_sources_02_02"
+                                     ],
+                 "snapshotUpdatedAt":  [
+                                           2026,
+                                           7,
+                                           1,
+                                           10,
+                                           7,
+                                           57,
+                                           602420200
+                                       ],
+                 "eventStreamPath":  "/api/task/72/events"
+             },
+    "timestamp":  "2026-07-01T10:14:12.310287700",
+    "traceId":  "03a4f4e1aa71410a828290b4e8d5e02b"
+}

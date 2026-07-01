@@ -13,8 +13,8 @@ import java.util.Locale;
 
 /**
  * 候选来源归属策略。
- * 这里专门负责判断搜索命中的页面到底是不是“官方公开证据”，
- * 避免把搜索认证页、企业信息页、百科页或登录工具页误当成正式来源。
+ * 负责判断候选页是否属于竞品自身，避免把中介认证页、企业信息页、登录壳页、
+ * 以及与竞品无关的 sitemap 根域错误扩展为正式候选来源。
  */
 @Component
 public class CandidateOwnershipPolicy {
@@ -97,8 +97,8 @@ public class CandidateOwnershipPolicy {
     }
 
     /**
-     * 登录页、验证码页和人机校验页只允许作为公开壳恢复输入，
-     * 不能直接被提升成正式证据页面。
+     * 登录页、验证码页和人机校验页只能作为公开壳恢复输入，
+     * 不能直接提升成正式证据页面。
      */
     public boolean isUtilityGatePage(SourceCandidate candidate, SourceCollector.CollectedPage page) {
         String url = firstText(candidate == null ? null : candidate.getUrl(), page == null ? null : page.getUrl());
@@ -109,6 +109,16 @@ public class CandidateOwnershipPolicy {
     }
 
     public boolean isTrustedSearchRoot(String competitorName, SourceCandidate candidate) {
+        return isTrustedSearchRoot(competitorName, List.of(), candidate);
+    }
+
+    /**
+     * sitemap / direct discovery 继续向根域扩展前，必须确认当前候选确实属于竞品自身。
+     * 这里同时使用 competitorName 与 competitorUrls 推导出的别名，避免只靠中文品牌名硬编码。
+     */
+    public boolean isTrustedSearchRoot(String competitorName,
+                                       List<String> competitorUrls,
+                                       SourceCandidate candidate) {
         if (candidate == null || !StringUtils.hasText(candidate.getUrl())) {
             return false;
         }
@@ -118,14 +128,16 @@ public class CandidateOwnershipPolicy {
         if (Boolean.TRUE.equals(candidate.getVerified())) {
             return true;
         }
-        if (shouldRequireOwnershipValidation(candidate, candidate.getSourceType())) {
-            return hasCompetitorOwnershipSignal(competitorName, candidate, null);
+        // 只要是搜索发现/运行期补源得到的候选，继续向根域扩展前都必须过归属校验，
+        // 否则 sitemap 很容易把无关域名当成官方根域继续放大。
+        if (isSearchDiscovered(candidate)) {
+            return hasCompetitorDomainOwnershipSignal(competitorName, competitorUrls, candidate);
         }
         return true;
     }
 
     /**
-     * 归属校验只对“搜索发现的官网候选”强制开启，
+     * 归属校验只对“搜索发现的官方候选”强制开启。
      * 规划期直达候选与文档/定价等页面仍允许继续走后续验证流程。
      */
     public boolean shouldRequireOwnershipValidation(SourceCandidate candidate, String sourceType) {
@@ -135,9 +147,20 @@ public class CandidateOwnershipPolicy {
     public boolean hasCompetitorOwnershipSignal(String competitorName,
                                                 SourceCandidate candidate,
                                                 SourceCollector.CollectedPage page) {
-        List<String> aliases = buildAliases(competitorName);
+        return hasCompetitorOwnershipSignal(competitorName, List.of(), candidate, page);
+    }
+
+    /**
+     * 归属校验优先使用用户给出的 competitorUrls 主域信号，其次回退到 competitorName 别名。
+     * 当没有任何归属信号时，默认判定为不通过，避免 sitemap 把无关域名放大进候选池。
+     */
+    public boolean hasCompetitorOwnershipSignal(String competitorName,
+                                                List<String> competitorUrls,
+                                                SourceCandidate candidate,
+                                                SourceCollector.CollectedPage page) {
+        List<String> aliases = buildAliases(competitorName, competitorUrls);
         if (aliases.isEmpty()) {
-            return true;
+            return false;
         }
         String domain = normalizeDomain(firstText(candidate == null ? null : candidate.getDomain(),
                 extractDomain(firstText(candidate == null ? null : candidate.getUrl(), page == null ? null : page.getUrl()))));
@@ -154,13 +177,71 @@ public class CandidateOwnershipPolicy {
         return false;
     }
 
+    /**
+     * 根域扩展只看候选自身 URL / domain 是否带有竞品归属，不接受“正文里提到了竞品”的宽松匹配。
+     * 这样可以挡住 apps.microsoft.com 这类第三方商店页被继续扩展成 sitemap 根域。
+     */
+    private boolean hasCompetitorDomainOwnershipSignal(String competitorName,
+                                                       List<String> competitorUrls,
+                                                       SourceCandidate candidate) {
+        List<String> aliases = buildAliases(competitorName, competitorUrls);
+        if (aliases.isEmpty()) {
+            return false;
+        }
+        String domain = normalizeDomain(firstText(
+                candidate == null ? null : candidate.getDomain(),
+                extractDomain(candidate == null ? null : candidate.getUrl())
+        ));
+        for (String alias : aliases) {
+            String normalizedAlias = compact(alias);
+            if (!StringUtils.hasText(normalizedAlias)) {
+                continue;
+            }
+            if (domain.contains(normalizedAlias)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * PublicEvidenceRecoveryService 这类“只生成候选、不读取正文”的路径，
+     * 需要复用与根域扩展一致的 domain ownership 闸门，
+     * 避免 apps.microsoft.com 这类第三方壳页从 recovery 第三路径重新漏回候选池。
+     */
+    public boolean hasCompetitorDomainOwnershipSignalForCandidate(String competitorName,
+                                                                  List<String> competitorUrls,
+                                                                  SourceCandidate candidate) {
+        return hasCompetitorDomainOwnershipSignal(competitorName, competitorUrls, candidate);
+    }
+
+    /**
+     * 运行期搜索补源候选必须统一纳入“search discovered”集合，后续根域扩张 / sitemap 才会走归属校验。
+     * 否则像 Qianfan/Tavily 这类 provider 返回的第三方根域，会因为仍带着 provider 私有 discoveryMethod
+     * 或被标成 HTTP stage 而绕开闸门，继续被放大成 SEARCH_ROOT_TEMPLATE / SITEMAP_DISCOVERY。
+     */
     private boolean isSearchDiscovered(SourceCandidate candidate) {
         String method = candidate.getDiscoveryMethod();
         String stage = candidate.getSelectionStage();
         String provider = candidate.getProviderKey();
-        return equalsAny(method, "BROWSER", "SEARCH", "SEARCH_ROOT_TEMPLATE")
-                || equalsAny(stage, "BROWSER", "SUPPLEMENTED", "BOOTSTRAPPED")
-                || equalsAny(provider, "browser", "http");
+        return equalsAny(method, "BROWSER", "SEARCH", "SEARCH_ROOT_TEMPLATE", "SITEMAP_DISCOVERY")
+                || looksLikeRuntimeSearchMethod(method)
+                || equalsAny(stage, "BROWSER", "HTTP", "SUPPLEMENTED", "BOOTSTRAPPED")
+                || equalsAny(provider, "browser", "http", "tavily", "qianfan");
+    }
+
+    /**
+     * 这里不枚举所有 provider 的私有 discoveryMethod，而是识别“运行期搜索产物”的稳定命名模式：
+     * 1. * _SEARCH：例如 QIANFAN_SEARCH
+     * 2. TAVILY_*：例如 TAVILY_FAST_LANE / TAVILY_FIELD_EVIDENCE_QUERY / TAVILY_PHASE1_BOOTSTRAP
+     */
+    private boolean looksLikeRuntimeSearchMethod(String discoveryMethod) {
+        if (!StringUtils.hasText(discoveryMethod)) {
+            return false;
+        }
+        String normalizedMethod = discoveryMethod.trim().toUpperCase(Locale.ROOT);
+        return normalizedMethod.endsWith("_SEARCH")
+                || normalizedMethod.startsWith("TAVILY_");
     }
 
     private boolean equalsAny(String value, String... candidates) {
@@ -175,16 +256,22 @@ public class CandidateOwnershipPolicy {
         return false;
     }
 
-    private List<String> buildAliases(String competitorName) {
-        if (!StringUtils.hasText(competitorName)) {
-            return List.of();
-        }
+    /**
+     * 别名构成优先级：
+     * 1. 用户显式填写的 competitorUrls 主域 / 注册域 / 主标签
+     * 2. competitorName 本身
+     * 3. 为兼容旧任务保留的少量历史品牌英文别名
+     */
+    private List<String> buildAliases(String competitorName, List<String> competitorUrls) {
         LinkedHashSet<String> aliases = new LinkedHashSet<>();
+        aliases.addAll(extractAliasesFromCompetitorUrls(competitorUrls));
+
         String compactName = compact(competitorName);
         if (StringUtils.hasText(compactName)) {
             aliases.add(compactName);
         }
-        // 中文品牌经常使用英文主域名，这里先覆盖当前 live 样本里已经出现的高频别名。
+
+        // 兼容历史任务里已落地的少量中文品牌别名，避免回归。
         if ("哔哩哔哩".equals(compactName)) {
             aliases.add("bilibili");
             aliases.add("b站");
@@ -192,7 +279,56 @@ public class CandidateOwnershipPolicy {
         if ("抖音".equals(compactName)) {
             aliases.add("douyin");
         }
+
+        aliases.removeIf(alias -> !StringUtils.hasText(alias));
         return new ArrayList<>(aliases);
+    }
+
+    private List<String> extractAliasesFromCompetitorUrls(List<String> competitorUrls) {
+        if (competitorUrls == null || competitorUrls.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> aliases = new LinkedHashSet<>();
+        for (String competitorUrl : competitorUrls) {
+            String domain = normalizeDomain(extractDomain(competitorUrl));
+            if (!StringUtils.hasText(domain)) {
+                domain = normalizeDomain(competitorUrl);
+            }
+            if (!StringUtils.hasText(domain)) {
+                continue;
+            }
+            aliases.add(compact(domain));
+            String registrableDomain = extractRegistrableDomain(domain);
+            if (StringUtils.hasText(registrableDomain)) {
+                aliases.add(compact(registrableDomain));
+            }
+            String primaryLabel = extractPrimaryLabel(domain);
+            if (StringUtils.hasText(primaryLabel)) {
+                aliases.add(compact(primaryLabel));
+            }
+        }
+        aliases.removeIf(alias -> !StringUtils.hasText(alias));
+        return new ArrayList<>(aliases);
+    }
+
+    private String extractRegistrableDomain(String domain) {
+        if (!StringUtils.hasText(domain)) {
+            return "";
+        }
+        String[] segments = normalizeDomain(domain).split("\\.");
+        if (segments.length < 2) {
+            return normalizeDomain(domain);
+        }
+        return segments[segments.length - 2] + "." + segments[segments.length - 1];
+    }
+
+    private String extractPrimaryLabel(String domain) {
+        String registrableDomain = extractRegistrableDomain(domain);
+        if (!StringUtils.hasText(registrableDomain)) {
+            return "";
+        }
+        int dotIndex = registrableDomain.indexOf('.');
+        return dotIndex > 0 ? registrableDomain.substring(0, dotIndex) : registrableDomain;
     }
 
     private String candidateAndPageText(SourceCandidate candidate, SourceCollector.CollectedPage page) {

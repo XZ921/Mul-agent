@@ -25,6 +25,13 @@ class TavilySearchPropertiesTest {
             );
 
     @Test
+    void shouldDefaultTimeoutToFortyFiveSeconds() {
+        TavilySearchProperties properties = new TavilySearchProperties();
+
+        assertThat(properties.getTimeoutSeconds()).isEqualTo(45);
+    }
+
+    @Test
     void shouldBindTavilySearchPropertiesAndExposeReadinessHelpers() {
         contextRunner.run(context -> {
             TavilySearchProperties properties = context.getBean(TavilySearchProperties.class);

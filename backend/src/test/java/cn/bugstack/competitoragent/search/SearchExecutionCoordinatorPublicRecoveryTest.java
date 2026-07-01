@@ -65,6 +65,7 @@ class SearchExecutionCoordinatorPublicRecoveryTest {
 
         SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
                 .competitorName("Example Cloud")
+                .competitorUrls(List.of("https://example.com"))
                 .sourceType("PRICING")
                 .sourceCandidates(List.of(SourceCandidate.builder()
                         .url("https://example.com/login")

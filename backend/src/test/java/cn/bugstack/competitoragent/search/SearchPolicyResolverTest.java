@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.search;
 
+import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -39,6 +40,23 @@ class SearchPolicyResolverTest {
 
         assertEquals(3000L, resolver.resolveSearchTimeoutMillis(null, executionPlan));
         assertEquals(12000L, resolver.resolveSearchTimeoutMillis(12000L, executionPlan));
+    }
+
+    @Test
+    void shouldRaiseTimeoutWhenFieldEvidenceQueriesNeedMinimumBudget() {
+        long resolved = resolver.ensureMinimumTimeoutForFieldEvidenceQueries(
+                18300L,
+                List.of(
+                        FieldEvidenceQuery.builder().query("q1").build(),
+                        FieldEvidenceQuery.builder().query("q2").build()
+                )
+        );
+
+        assertEquals(24000L, resolved);
+        assertEquals(30000L, resolver.ensureMinimumTimeoutForFieldEvidenceQueries(
+                30000L,
+                List.of(FieldEvidenceQuery.builder().query("q1").build())
+        ));
     }
 
     @Test

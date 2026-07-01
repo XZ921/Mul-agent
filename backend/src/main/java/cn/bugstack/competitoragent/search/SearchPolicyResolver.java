@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.search;
 
 import cn.bugstack.competitoragent.collection.WebPageRenderHint;
+import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -20,6 +21,11 @@ import java.util.Map;
  */
 @Component
 public class SearchPolicyResolver {
+
+    private static final long DEFAULT_SEARCH_TIMEOUT_MILLIS = 15000L;
+    private static final long MIN_TIMEOUT_MILLIS = 1000L;
+    private static final long FIELD_QUERY_BASE_TIMEOUT_MILLIS = 12000L;
+    private static final long FIELD_QUERY_PER_QUERY_TIMEOUT_MILLIS = 6000L;
 
     /**
      * resolver 既会被 Spring 注入，也会在测试里直接 new。
@@ -151,9 +157,24 @@ public class SearchPolicyResolver {
                 ? 0L
                 : executionPlan.getSteps().stream().mapToLong(SearchExecutionStep::getExpectedDurationMs).sum();
         if (expectedNodeDuration <= 0L) {
-            return 15000L;
+            return DEFAULT_SEARCH_TIMEOUT_MILLIS;
         }
-        return Math.max(1000L, Math.round(expectedNodeDuration * 0.6D));
+        return Math.max(MIN_TIMEOUT_MILLIS, Math.round(expectedNodeDuration * 0.6D));
+    }
+
+    /**
+     * 字段证据 query 是补源阶段的主力取证手段，若节点显式超时预算过短，
+     * 会在进入 HTTP stage 之前就被 Playwright 壳页或前置验证耗光。
+     * 这里为 pending field query 场景提供一个最小预算兜底，避免 query 根本发不出去。
+     */
+    public long ensureMinimumTimeoutForFieldEvidenceQueries(long baseTimeoutMillis,
+                                                            List<FieldEvidenceQuery> fieldEvidenceQueries) {
+        if (fieldEvidenceQueries == null || fieldEvidenceQueries.isEmpty()) {
+            return baseTimeoutMillis;
+        }
+        long minimumTimeoutMillis = FIELD_QUERY_BASE_TIMEOUT_MILLIS
+                + (long) fieldEvidenceQueries.size() * FIELD_QUERY_PER_QUERY_TIMEOUT_MILLIS;
+        return Math.max(baseTimeoutMillis, minimumTimeoutMillis);
     }
 
     /**

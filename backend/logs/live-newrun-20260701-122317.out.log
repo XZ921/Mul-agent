@@ -1,0 +1,1198 @@
+[WARNING] 
+[WARNING] Some problems were encountered while building the effective settings
+[WARNING] Unrecognised tag: 'mirrors' (position: START_TAG seen ...</mirror>\n     -->\n    <mirrors>... @168:14)  @ E:\java\maven\maven\apache-maven-3.9.9-bin\apache-maven-3.9.9\conf\settings.xml, line 168, column 14
+[WARNING] 
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------------< cn.bugstack:backend >-------------------------
+[INFO] Building AI 竞品分析 Agent 协作系统 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:3.3.5:run (default-cli) > test-compile @ backend >>>
+[WARNING] 1 problem was encountered while building the effective model for org.javassist:javassist:jar:3.21.0-GA during dependency collection step for project (use -X to see details)
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ backend ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 37 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ backend ---
+[INFO] Copying 9 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] <<< spring-boot:3.3.5:run (default-cli) < test-compile @ backend <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:3.3.5:run (default-cli) @ backend ---
+[INFO] Attaching agents: []
+Standard Commons Logging discovery in action with spring-jcl: please remove commons-logging.jar from classpath in order to avoid potential conflicts
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.3.5)
+
+2026-07-01 12:23:26.023 [main] INFO  c.b.c.CompetitorAgentApplication - Starting CompetitorAgentApplication using Java 17.0.3.1 with PID 14920 (E:\java_study\Mul-agnet\backend\target\classes started by Lenovo in E:\java_study\Mul-agnet\backend)
+2026-07-01 12:23:26.026 [main] DEBUG c.b.c.CompetitorAgentApplication - Running with Spring Boot v3.3.5, Spring v6.1.14
+2026-07-01 12:23:26.026 [main] INFO  c.b.c.CompetitorAgentApplication - The following 1 profile is active: "dev"
+2026-07-01 12:23:27.458 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Multiple Spring Data modules found, entering strict repository configuration mode
+2026-07-01 12:23:27.460 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-07-01 12:23:27.734 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 268 ms. Found 26 JPA repository interfaces.
+2026-07-01 12:23:27.753 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Multiple Spring Data modules found, entering strict repository configuration mode
+2026-07-01 12:23:27.754 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-07-01 12:23:27.797 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.AgentExecutionLogRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.797 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.AiCallAuditRecordRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.798 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.AnalysisSchemaRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.798 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.AnalysisTaskRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.798 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.798 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.ConnectorRuntimeLeaseRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.799 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.ConnectorSyncRecordRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.799 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.ConversationSessionRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.799 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.EvidenceSourceRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.800 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.FormDraftRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.800 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.IntentDecisionRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.801 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.KnowledgeDocumentRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.801 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.KnowledgeDomainRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.801 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.MemoryReuseRecordRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.802 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.MemorySnapshotRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.802 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.OrganizationQuotaSnapshotRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.802 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.RecoveryCheckpointRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.802 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.ReportExportRecordRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.802 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.ReportRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.803 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.RetrievalChunkRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.803 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.RetrievalIndexRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.803 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.TaskNodeExecutionAttemptRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.803 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.TaskNodeRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.804 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.TaskPlanRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.804 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.804 [main] INFO  o.s.d.r.c.RepositoryConfigurationExtensionSupport - Spring Data Redis - Could not safely identify store assignment for repository candidate interface cn.bugstack.competitoragent.repository.WorkflowDeadLetterRecordRepository; If you want this repository to be a Redis repository, consider annotating your entities with one of these annotations: org.springframework.data.redis.core.RedisHash (preferred), or consider extending one of the following types with your repository: org.springframework.data.keyvalue.repository.KeyValueRepository
+2026-07-01 12:23:27.804 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 43 ms. Found 0 Redis repository interfaces.
+2026-07-01 12:23:28.752 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 9093 (http)
+2026-07-01 12:23:28.769 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-07-01 12:23:28.769 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.31]
+2026-07-01 12:23:28.852 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-07-01 12:23:28.852 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 2776 ms
+Standard Commons Logging discovery in action with spring-jcl: please remove commons-logging.jar from classpath in order to avoid potential conflicts
+2026-07-01 12:23:29.171 [main] INFO  com.zaxxer.hikari.HikariDataSource - RagentHikariPool - Starting...
+2026-07-01 12:23:29.314 [main] INFO  com.zaxxer.hikari.pool.HikariPool - RagentHikariPool - Added connection org.postgresql.jdbc.PgConnection@45f8415b
+2026-07-01 12:23:29.316 [main] INFO  com.zaxxer.hikari.HikariDataSource - RagentHikariPool - Start completed.
+2026-07-01 12:23:29.350 [main] INFO  org.flywaydb.core.FlywayExecutor - Database: jdbc:postgresql://127.0.0.1:5432/ecommerce_agent (PostgreSQL 16.13)
+2026-07-01 12:23:29.433 [main] INFO  o.f.core.internal.command.DbValidate - Successfully validated 31 migrations (execution time 00:00.057s)
+2026-07-01 12:23:29.453 [main] INFO  o.f.core.internal.command.DbMigrate - Current version of schema "public": 30
+2026-07-01 12:23:29.455 [main] INFO  o.f.core.internal.command.DbMigrate - Schema "public" is up to date. No migration necessary.
+2026-07-01 12:23:29.574 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-07-01 12:23:29.631 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 6.5.3.Final
+2026-07-01 12:23:29.675 [main] INFO  o.h.c.i.RegionFactoryInitiator - HHH000026: Second-level cache disabled
+2026-07-01 12:23:29.994 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-07-01 12:23:30.065 [main] WARN  org.hibernate.orm.deprecation - HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-07-01 12:23:32.069 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-07-01 12:23:32.131 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-07-01 12:23:32.838 [main] INFO  c.b.c.config.PlaywrightConfig - 初始化 Playwright 实例...
+2026-07-01 12:23:35.498 [main] INFO  c.b.c.c.PlaywrightBrowserManager - Playwright 启动期浏览器预热已关闭，将在运行期获取或定时健康检查时按需启动
+2026-07-01 12:23:35.552 [main] INFO  o.s.d.j.r.query.QueryEnhancerFactory - Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-07-01 12:23:36.186 [main] INFO  c.b.c.a.c.SpringAgentCapabilityRegistry - agent capability registry initialized: [COLLECTOR, EXTRACTOR, ANALYZER, WRITER, REVIEWER, CITATION]
+2026-07-01 12:23:38.287 [main] INFO  o.a.r.s.s.RocketMQMessageListenerContainerRegistrar - Register the listener to container, listenerBeanName:workflowEventConsumer, containerBeanName:org.apache.rocketmq.spring.support.DefaultRocketMQListenerContainer_1
+2026-07-01 12:23:40.818 [main] INFO  o.a.r.s.a.RocketMQAutoConfiguration - a producer (competitor-agent-workflow-producer) init on namesrv 127.0.0.1:9876
+2026-07-01 12:23:44.325 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 9093 (http) with context path '/'
+2026-07-01 12:23:49.767 [main] INFO  o.a.r.s.s.DefaultRocketMQListenerContainer - running container: DefaultRocketMQListenerContainer{consumerGroup='competitor-agent-workflow-consumer', namespace='', namespaceV2='', nameServer='127.0.0.1:9876', topic='task-workflow-events', consumeMode=CONCURRENTLY, selectorType=TAG, selectorExpression='*', messageModel=CLUSTERING', tlsEnable=false, instanceName=DEFAULT}
+2026-07-01 12:23:49.781 [main] INFO  c.b.c.CompetitorAgentApplication - Started CompetitorAgentApplication in 24.221 seconds (process running for 24.833)
+2026-07-01 12:23:49.785 [main] INFO  c.b.c.s.SearchSecurityConfigurationGuard - 搜索安全配置校验通过: engineCount=4, serpapiConfigured=false, qianfanConfigured=true, tavilyConfigured=true
+2026-07-01 12:23:49.789 [main] INFO  c.b.c.s.SearchCapabilityReadinessGuard - 搜索能力 readiness 摘要: planningProvidersAvailable=true, runtimeBrowserEnabled=true, runtimeBrowserEngine=baidu
+2026-07-01 12:23:49.789 [main] INFO  c.b.c.s.SearchCapabilityReadinessGuard - 搜索 provider readiness: provider=tavily, routeEnabled=true, available=true, reason=null
+2026-07-01 12:23:49.789 [main] INFO  c.b.c.s.SearchCapabilityReadinessGuard - 搜索 provider readiness: provider=qianfan, routeEnabled=true, available=true, reason=null
+2026-07-01 12:23:49.789 [main] WARN  c.b.c.s.SearchCapabilityReadinessGuard - 搜索 provider 未就绪: provider=serpapi, reason=apiKey missing, planningRouteEnabled=true
+2026-07-01 12:23:49.789 [main] WARN  c.b.c.s.SearchCapabilityReadinessGuard - 搜索 provider 未就绪: provider=http, reason=apiKey missing, planningRouteEnabled=true
+2026-07-01 12:23:49.789 [main] INFO  c.b.c.s.SearchCapabilityReadinessGuard - 搜索 provider readiness: provider=browserpreview, routeEnabled=true, available=true, reason=null
+2026-07-01 12:23:49.789 [main] INFO  c.b.c.s.SearchCapabilityReadinessGuard - 规划期/运行期浏览器 readiness: planningProvidersAvailable=true, browserPreviewRouteEnabled=true, browserPreviewFeatureEnabled=true, runtimeBrowserEnabled=true
+2026-07-01 12:23:49.789 [main] INFO  c.b.c.s.SearchCapabilityReadinessGuard - RSS owner readiness 边界: rss owner ready for explicit feed urls only; news article urls still go through webpage collection; feed subscription monitoring, seed discovery, cursor and replay are out of current scope
+2026-07-01 12:23:49.789 [main] INFO  c.b.c.s.SearchBrowserConfigurationGuard - 浏览器搜索已启用: engine=baidu, fallbackEngines=[bing], mode=HYBRID, verifyResultPage=true, maxOpenResultPages=3
+2026-07-01 12:23:49.790 [main] INFO  c.b.c.s.SearchBrowserConfigurationGuard - 浏览器搜索容错策略: continueOnBrowserUnavailable=true, continueOnSearchTimeout=true, continueOnPageCollectFailure=true, recoverPartialContentOnTimeout=true
+2026-07-01 12:24:04.779 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-07-01 12:25:04.781 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-07-01 12:26:04.782 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-07-01 12:26:41.776 [http-nio-9093-exec-1] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-07-01 12:26:41.776 [http-nio-9093-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2026-07-01 12:26:41.777 [http-nio-9093-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 1 ms
+2026-07-01 12:27:04.782 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-07-01 12:28:04.783 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright 定时健康检查跳过空浏览器预热，将在运行期首次获取时按需启动
+2026-07-01 12:28:38.830 [http-nio-9093-exec-2] INFO  c.b.c.workflow.WorkflowFactory - create workflow success, taskId=75, schemaId=null, nodeCount=10
+2026-07-01 12:28:39.195 [http-nio-9093-exec-2] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=TASK_CREATED, taskId=75, entityId=944
+2026-07-01 12:28:39.196 [http-nio-9093-exec-2] INFO  c.b.c.t.c.TaskDefinitionAppService - create analysis task success, taskId=75, taskName=抖音开放平台 vs B站开放平台竞品分析-08验证-20260701-1227
+2026-07-01 12:28:40.258 [scheduling-1] ERROR o.a.r.spring.core.RocketMQTemplate - syncSend failed. destination:task.collaboration:collaboration_plan_recorded, message:GenericMessage [payload={"eventId":"ff91e29f-bd89-4b20-850f-2d5238438266","taskId":75,"nodeName":"collaboration_plan","planVersionId":45,"branchKey":"root","eventType":"COLLABORATION_PLAN_RECORDED","payload":{"summary":"协作计划已记录：cp-task-75-v1","goalId":"cg-task-75","planId":"cp-task-75-v1","reviewId":"ipr-cp-task-75-v1","allowed":true,"mappedWorkflowTemplate":"STANDARD_COMPETITOR_ANALYSIS_V1","planVersion":1,"evidenceState":"FULL_SOURCE","checkpoints":["after_extract_schema","quality_check_final"],"agentTypes":["COLLECTOR","EXTRACTOR","ANALYZER","WRITER","CITATION","REVIEWER"]},"sourceUrls":["https://open.douyin.com/","https://open.bilibili.com/"],"occurredAt":[2026,7,1,12,28,38,770228000]}, headers={id=fb18b303-c217-a07a-7031-d78f8c1dab35, timestamp=1782880120256}], detail exception info: 
+org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-07-01 12:28:40.261 [scheduling-1] WARN  c.b.c.w.e.WorkflowEventOutboxService - workflow event publish failed, will retry. eventId=ff91e29f-bd89-4b20-850f-2d5238438266, taskId=75, retry=1/6
+org.springframework.messaging.MessagingException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:699)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+Caused by: org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	... 24 common frames omitted
+2026-07-01 12:28:40.271 [scheduling-1] ERROR o.a.r.spring.core.RocketMQTemplate - syncSend failed. destination:task.collaboration:collaboration_checkpoint_updated, message:GenericMessage [payload={"eventId":"7dc89fd8-a3c6-40ce-b43d-eefc6ade8df0","taskId":75,"nodeName":"collaboration_checkpoint","planVersionId":45,"branchKey":"root","eventType":"COLLABORATION_CHECKPOINT_UPDATED","payload":{"summary":"协作检查点已更新：PLAN_APPROVED","checkpointId":"cc-cp-task-75-v1","goalId":"cg-task-75","planId":"cp-task-75-v1","reviewId":"ipr-cp-task-75-v1","phase":"PLAN_APPROVED","mappedWorkflowPlanId":45,"pendingActions":[],"resumeReason":"协作计划已通过初始校验，等待 WorkflowPlan 执行。","evidenceState":"FULL_SOURCE"},"sourceUrls":["https://open.douyin.com/","https://open.bilibili.com/"],"occurredAt":[2026,7,1,12,28,38,779287000]}, headers={id=56eb6ce2-5688-1334-b9c3-6acdcdb30fc9, timestamp=1782880120271}], detail exception info: 
+org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-07-01 12:28:40.272 [scheduling-1] WARN  c.b.c.w.e.WorkflowEventOutboxService - workflow event publish failed, will retry. eventId=7dc89fd8-a3c6-40ce-b43d-eefc6ade8df0, taskId=75, retry=1/6
+org.springframework.messaging.MessagingException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:699)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+Caused by: org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	... 24 common frames omitted
+2026-07-01 12:28:42.361 [ConsumeMessageThread_competitor-agent-workflow-consumer_1] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=06344d48-4af6-4d73-9b21-bfa1f9d35c52, type=TASK_CREATED
+2026-07-01 12:28:47.361 [scheduling-1] ERROR o.a.r.spring.core.RocketMQTemplate - syncSend failed. destination:task.collaboration:collaboration_plan_recorded, message:GenericMessage [payload={"eventId":"ff91e29f-bd89-4b20-850f-2d5238438266","taskId":75,"nodeName":"collaboration_plan","planVersionId":45,"branchKey":"root","eventType":"COLLABORATION_PLAN_RECORDED","payload":{"summary":"协作计划已记录：cp-task-75-v1","goalId":"cg-task-75","planId":"cp-task-75-v1","reviewId":"ipr-cp-task-75-v1","allowed":true,"mappedWorkflowTemplate":"STANDARD_COMPETITOR_ANALYSIS_V1","planVersion":1,"evidenceState":"FULL_SOURCE","checkpoints":["after_extract_schema","quality_check_final"],"agentTypes":["COLLECTOR","EXTRACTOR","ANALYZER","WRITER","CITATION","REVIEWER"]},"sourceUrls":["https://open.douyin.com/","https://open.bilibili.com/"],"occurredAt":[2026,7,1,12,28,38,770228000]}, headers={id=a45e424b-e5a6-a429-42ae-22b022b72c9c, timestamp=1782880127361}], detail exception info: 
+org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-07-01 12:28:47.362 [scheduling-1] WARN  c.b.c.w.e.WorkflowEventOutboxService - workflow event publish failed, will retry. eventId=ff91e29f-bd89-4b20-850f-2d5238438266, taskId=75, retry=2/6
+org.springframework.messaging.MessagingException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:699)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+Caused by: org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	... 24 common frames omitted
+2026-07-01 12:28:47.370 [scheduling-1] ERROR o.a.r.spring.core.RocketMQTemplate - syncSend failed. destination:task.collaboration:collaboration_checkpoint_updated, message:GenericMessage [payload={"eventId":"7dc89fd8-a3c6-40ce-b43d-eefc6ade8df0","taskId":75,"nodeName":"collaboration_checkpoint","planVersionId":45,"branchKey":"root","eventType":"COLLABORATION_CHECKPOINT_UPDATED","payload":{"summary":"协作检查点已更新：PLAN_APPROVED","checkpointId":"cc-cp-task-75-v1","goalId":"cg-task-75","planId":"cp-task-75-v1","reviewId":"ipr-cp-task-75-v1","phase":"PLAN_APPROVED","mappedWorkflowPlanId":45,"pendingActions":[],"resumeReason":"协作计划已通过初始校验，等待 WorkflowPlan 执行。","evidenceState":"FULL_SOURCE"},"sourceUrls":["https://open.douyin.com/","https://open.bilibili.com/"],"occurredAt":[2026,7,1,12,28,38,779287000]}, headers={id=c83bc765-c61b-79c0-9ead-a294bfac99fb, timestamp=1782880127369}], detail exception info: 
+org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-07-01 12:28:47.370 [scheduling-1] WARN  c.b.c.w.e.WorkflowEventOutboxService - workflow event publish failed, will retry. eventId=7dc89fd8-a3c6-40ce-b43d-eefc6ade8df0, taskId=75, retry=2/6
+org.springframework.messaging.MessagingException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:699)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+Caused by: org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	... 24 common frames omitted
+2026-07-01 12:28:51.004 [task-1] INFO  c.b.c.task.AnalysisTaskRunner - start async workflow dispatch, taskId=75
+2026-07-01 12:28:51.004 [task-1] INFO  c.b.c.task.AnalysisTaskRunner - task status event published before workflow dispatch, taskId=75
+2026-07-01 12:28:51.015 [task-1] INFO  c.b.c.task.AnalysisTaskRunner - task execution lock acquired, taskId=75, owner=task-runner-75-45fb3717-6ae5-4c50-941d-51094d70f4c7
+2026-07-01 12:28:51.021 [task-1] INFO  c.b.c.task.AnalysisTaskRunner - task loaded for workflow dispatch, taskId=75, currentPlanVersionId=45
+2026-07-01 12:28:51.026 [task-1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=TASK_EXECUTION_REQUESTED, taskId=75, entityId=945
+2026-07-01 12:28:51.029 [task-1] INFO  c.b.c.task.AnalysisTaskRunner - task execution requested event staged, taskId=75
+2026-07-01 12:28:52.385 [scheduling-1] ERROR o.a.r.spring.core.RocketMQTemplate - syncSend failed. destination:task.collaboration:collaboration_plan_recorded, message:GenericMessage [payload={"eventId":"ff91e29f-bd89-4b20-850f-2d5238438266","taskId":75,"nodeName":"collaboration_plan","planVersionId":45,"branchKey":"root","eventType":"COLLABORATION_PLAN_RECORDED","payload":{"summary":"协作计划已记录：cp-task-75-v1","goalId":"cg-task-75","planId":"cp-task-75-v1","reviewId":"ipr-cp-task-75-v1","allowed":true,"mappedWorkflowTemplate":"STANDARD_COMPETITOR_ANALYSIS_V1","planVersion":1,"evidenceState":"FULL_SOURCE","checkpoints":["after_extract_schema","quality_check_final"],"agentTypes":["COLLECTOR","EXTRACTOR","ANALYZER","WRITER","CITATION","REVIEWER"]},"sourceUrls":["https://open.douyin.com/","https://open.bilibili.com/"],"occurredAt":[2026,7,1,12,28,38,770228000]}, headers={id=29de0d80-e7fc-0ef1-ed4b-114f2269bf3a, timestamp=1782880132385}], detail exception info: 
+org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-07-01 12:28:52.386 [scheduling-1] WARN  c.b.c.w.e.WorkflowEventOutboxService - workflow event publish failed, will retry. eventId=ff91e29f-bd89-4b20-850f-2d5238438266, taskId=75, retry=3/6
+org.springframework.messaging.MessagingException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:699)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+Caused by: org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	... 24 common frames omitted
+2026-07-01 12:28:52.394 [scheduling-1] ERROR o.a.r.spring.core.RocketMQTemplate - syncSend failed. destination:task.collaboration:collaboration_checkpoint_updated, message:GenericMessage [payload={"eventId":"7dc89fd8-a3c6-40ce-b43d-eefc6ade8df0","taskId":75,"nodeName":"collaboration_checkpoint","planVersionId":45,"branchKey":"root","eventType":"COLLABORATION_CHECKPOINT_UPDATED","payload":{"summary":"协作检查点已更新：PLAN_APPROVED","checkpointId":"cc-cp-task-75-v1","goalId":"cg-task-75","planId":"cp-task-75-v1","reviewId":"ipr-cp-task-75-v1","phase":"PLAN_APPROVED","mappedWorkflowPlanId":45,"pendingActions":[],"resumeReason":"协作计划已通过初始校验，等待 WorkflowPlan 执行。","evidenceState":"FULL_SOURCE"},"sourceUrls":["https://open.douyin.com/","https://open.bilibili.com/"],"occurredAt":[2026,7,1,12,28,38,779287000]}, headers={id=ca0aff0d-5c7b-242b-b776-459503dcc684, timestamp=1782880132394}], detail exception info: 
+org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-07-01 12:28:52.395 [scheduling-1] WARN  c.b.c.w.e.WorkflowEventOutboxService - workflow event publish failed, will retry. eventId=7dc89fd8-a3c6-40ce-b43d-eefc6ade8df0, taskId=75, retry=3/6
+org.springframework.messaging.MessagingException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:699)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+Caused by: org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	... 24 common frames omitted
+2026-07-01 12:28:52.421 [ConsumeMessageThread_competitor-agent-workflow-consumer_2] INFO  c.b.c.workflow.DagExecutor - start dag execution, taskId=75
+2026-07-01 12:28:52.493 [ConsumeMessageThread_competitor-agent-workflow-consumer_2] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=75, entityId=946
+2026-07-01 12:28:52.527 [ConsumeMessageThread_competitor-agent-workflow-consumer_2] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=75, entityId=947
+2026-07-01 12:28:52.637 [pool-5-thread-1] INFO  c.b.competitoragent.agent.BaseAgent - [信息采集智能体] 开始执行, taskId=75, traceId=N/A
+2026-07-01 12:28:52.637 [pool-5-thread-2] INFO  c.b.competitoragent.agent.BaseAgent - [信息采集智能体] 开始执行, taskId=75, traceId=N/A
+2026-07-01 12:28:57.429 [scheduling-1] ERROR o.a.r.spring.core.RocketMQTemplate - syncSend failed. destination:task.collaboration:collaboration_plan_recorded, message:GenericMessage [payload={"eventId":"ff91e29f-bd89-4b20-850f-2d5238438266","taskId":75,"nodeName":"collaboration_plan","planVersionId":45,"branchKey":"root","eventType":"COLLABORATION_PLAN_RECORDED","payload":{"summary":"协作计划已记录：cp-task-75-v1","goalId":"cg-task-75","planId":"cp-task-75-v1","reviewId":"ipr-cp-task-75-v1","allowed":true,"mappedWorkflowTemplate":"STANDARD_COMPETITOR_ANALYSIS_V1","planVersion":1,"evidenceState":"FULL_SOURCE","checkpoints":["after_extract_schema","quality_check_final"],"agentTypes":["COLLECTOR","EXTRACTOR","ANALYZER","WRITER","CITATION","REVIEWER"]},"sourceUrls":["https://open.douyin.com/","https://open.bilibili.com/"],"occurredAt":[2026,7,1,12,28,38,770228000]}, headers={id=a871053f-db38-e51e-d4b0-74f8f62b66cd, timestamp=1782880137428}], detail exception info: 
+org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-07-01 12:28:57.430 [scheduling-1] WARN  c.b.c.w.e.WorkflowEventOutboxService - workflow event publish failed, will retry. eventId=ff91e29f-bd89-4b20-850f-2d5238438266, taskId=75, retry=4/6
+org.springframework.messaging.MessagingException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:699)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+Caused by: org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	... 24 common frames omitted
+2026-07-01 12:28:57.438 [scheduling-1] ERROR o.a.r.spring.core.RocketMQTemplate - syncSend failed. destination:task.collaboration:collaboration_checkpoint_updated, message:GenericMessage [payload={"eventId":"7dc89fd8-a3c6-40ce-b43d-eefc6ade8df0","taskId":75,"nodeName":"collaboration_checkpoint","planVersionId":45,"branchKey":"root","eventType":"COLLABORATION_CHECKPOINT_UPDATED","payload":{"summary":"协作检查点已更新：PLAN_APPROVED","checkpointId":"cc-cp-task-75-v1","goalId":"cg-task-75","planId":"cp-task-75-v1","reviewId":"ipr-cp-task-75-v1","phase":"PLAN_APPROVED","mappedWorkflowPlanId":45,"pendingActions":[],"resumeReason":"协作计划已通过初始校验，等待 WorkflowPlan 执行。","evidenceState":"FULL_SOURCE"},"sourceUrls":["https://open.douyin.com/","https://open.bilibili.com/"],"occurredAt":[2026,7,1,12,28,38,779287000]}, headers={id=41ce7f15-d32d-30c6-ab5d-1a74d8eb9289, timestamp=1782880137438}], detail exception info: 
+org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-07-01 12:28:57.438 [scheduling-1] WARN  c.b.c.w.e.WorkflowEventOutboxService - workflow event publish failed, will retry. eventId=7dc89fd8-a3c6-40ce-b43d-eefc6ade8df0, taskId=75, retry=4/6
+org.springframework.messaging.MessagingException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:699)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+Caused by: org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	... 24 common frames omitted
+2026-07-01 12:28:57.459 [ConsumeMessageThread_competitor-agent-workflow-consumer_3] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=9fabc19c-00c9-4b6f-bd33-69437f147b51, type=NODE_READY
+2026-07-01 12:28:57.477 [ConsumeMessageThread_competitor-agent-workflow-consumer_4] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=5ed62ceb-dd51-49c1-a743-08ff594a3982, type=NODE_READY
+2026-07-01 12:28:58.560 [pool-5-thread-2] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=serpapi
+2026-07-01 12:28:58.560 [pool-5-thread-2] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=http
+2026-07-01 12:28:58.903 [pool-6-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.bilibili.com, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:28:59.062 [pool-6-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.bilibili.com
+2026-07-01 12:28:59.062 [pool-6-thread-1] INFO  c.b.c.c.PlaywrightBrowserManager - 启动 Playwright 浏览器: browser=chromium, channel=null, executablePath=D:\Aplaywright\chromium-1117\chrome-win\chrome.exe, headless=true, reason=runtime acquire, attempt=1/1
+2026-07-01 12:29:02.483 [scheduling-1] ERROR o.a.r.spring.core.RocketMQTemplate - syncSend failed. destination:task.collaboration:collaboration_plan_recorded, message:GenericMessage [payload={"eventId":"ff91e29f-bd89-4b20-850f-2d5238438266","taskId":75,"nodeName":"collaboration_plan","planVersionId":45,"branchKey":"root","eventType":"COLLABORATION_PLAN_RECORDED","payload":{"summary":"协作计划已记录：cp-task-75-v1","goalId":"cg-task-75","planId":"cp-task-75-v1","reviewId":"ipr-cp-task-75-v1","allowed":true,"mappedWorkflowTemplate":"STANDARD_COMPETITOR_ANALYSIS_V1","planVersion":1,"evidenceState":"FULL_SOURCE","checkpoints":["after_extract_schema","quality_check_final"],"agentTypes":["COLLECTOR","EXTRACTOR","ANALYZER","WRITER","CITATION","REVIEWER"]},"sourceUrls":["https://open.douyin.com/","https://open.bilibili.com/"],"occurredAt":[2026,7,1,12,28,38,770228000]}, headers={id=e27c4db6-aad7-16b6-9bba-aae51b18d436, timestamp=1782880142482}], detail exception info: 
+org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-07-01 12:29:02.483 [scheduling-1] WARN  c.b.c.w.e.WorkflowEventOutboxService - workflow event publish failed, will retry. eventId=ff91e29f-bd89-4b20-850f-2d5238438266, taskId=75, retry=5/6
+org.springframework.messaging.MessagingException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:699)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+Caused by: org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	... 24 common frames omitted
+2026-07-01 12:29:02.491 [scheduling-1] ERROR o.a.r.spring.core.RocketMQTemplate - syncSend failed. destination:task.collaboration:collaboration_checkpoint_updated, message:GenericMessage [payload={"eventId":"7dc89fd8-a3c6-40ce-b43d-eefc6ade8df0","taskId":75,"nodeName":"collaboration_checkpoint","planVersionId":45,"branchKey":"root","eventType":"COLLABORATION_CHECKPOINT_UPDATED","payload":{"summary":"协作检查点已更新：PLAN_APPROVED","checkpointId":"cc-cp-task-75-v1","goalId":"cg-task-75","planId":"cp-task-75-v1","reviewId":"ipr-cp-task-75-v1","phase":"PLAN_APPROVED","mappedWorkflowPlanId":45,"pendingActions":[],"resumeReason":"协作计划已通过初始校验，等待 WorkflowPlan 执行。","evidenceState":"FULL_SOURCE"},"sourceUrls":["https://open.douyin.com/","https://open.bilibili.com/"],"occurredAt":[2026,7,1,12,28,38,779287000]}, headers={id=e57ead6b-c1f0-3ea1-7be1-70abd46dd949, timestamp=1782880142491}], detail exception info: 
+org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-07-01 12:29:02.492 [scheduling-1] WARN  c.b.c.w.e.WorkflowEventOutboxService - workflow event publish failed, will retry. eventId=7dc89fd8-a3c6-40ce-b43d-eefc6ade8df0, taskId=75, retry=5/6
+org.springframework.messaging.MessagingException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:699)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+Caused by: org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	... 24 common frames omitted
+2026-07-01 12:29:05.433 [pool-6-thread-1] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.bilibili.com, title=哔哩哔哩开放平台
+2026-07-01 12:29:07.506 [scheduling-1] ERROR o.a.r.spring.core.RocketMQTemplate - syncSend failed. destination:task.collaboration:collaboration_plan_recorded, message:GenericMessage [payload={"eventId":"ff91e29f-bd89-4b20-850f-2d5238438266","taskId":75,"nodeName":"collaboration_plan","planVersionId":45,"branchKey":"root","eventType":"COLLABORATION_PLAN_RECORDED","payload":{"summary":"协作计划已记录：cp-task-75-v1","goalId":"cg-task-75","planId":"cp-task-75-v1","reviewId":"ipr-cp-task-75-v1","allowed":true,"mappedWorkflowTemplate":"STANDARD_COMPETITOR_ANALYSIS_V1","planVersion":1,"evidenceState":"FULL_SOURCE","checkpoints":["after_extract_schema","quality_check_final"],"agentTypes":["COLLECTOR","EXTRACTOR","ANALYZER","WRITER","CITATION","REVIEWER"]},"sourceUrls":["https://open.douyin.com/","https://open.bilibili.com/"],"occurredAt":[2026,7,1,12,28,38,770228000]}, headers={id=cffa1920-2288-b769-287b-e4ae87501611, timestamp=1782880147506}], detail exception info: 
+org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-07-01 12:29:07.507 [scheduling-1] ERROR c.b.c.w.e.WorkflowEventOutboxService - workflow event moved to DLQ trace, eventId=ff91e29f-bd89-4b20-850f-2d5238438266, taskId=75, eventType=COLLABORATION_PLAN_RECORDED
+org.springframework.messaging.MessagingException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:699)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+Caused by: org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	... 24 common frames omitted
+2026-07-01 12:29:07.515 [scheduling-1] ERROR o.a.r.spring.core.RocketMQTemplate - syncSend failed. destination:task.collaboration:collaboration_checkpoint_updated, message:GenericMessage [payload={"eventId":"7dc89fd8-a3c6-40ce-b43d-eefc6ade8df0","taskId":75,"nodeName":"collaboration_checkpoint","planVersionId":45,"branchKey":"root","eventType":"COLLABORATION_CHECKPOINT_UPDATED","payload":{"summary":"协作检查点已更新：PLAN_APPROVED","checkpointId":"cc-cp-task-75-v1","goalId":"cg-task-75","planId":"cp-task-75-v1","reviewId":"ipr-cp-task-75-v1","phase":"PLAN_APPROVED","mappedWorkflowPlanId":45,"pendingActions":[],"resumeReason":"协作计划已通过初始校验，等待 WorkflowPlan 执行。","evidenceState":"FULL_SOURCE"},"sourceUrls":["https://open.douyin.com/","https://open.bilibili.com/"],"occurredAt":[2026,7,1,12,28,38,779287000]}, headers={id=0ad3c99b-762a-1963-2d6b-8c9c9e07571b, timestamp=1782880147515}], detail exception info: 
+org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-07-01 12:29:07.516 [scheduling-1] ERROR c.b.c.w.e.WorkflowEventOutboxService - workflow event moved to DLQ trace, eventId=7dc89fd8-a3c6-40ce-b43d-eefc6ade8df0, taskId=75, eventType=COLLABORATION_CHECKPOINT_UPDATED
+org.springframework.messaging.MessagingException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:699)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:487)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:724)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.publishCandidate(WorkflowEventOutboxService.java:124)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService.flushPendingEvents(WorkflowEventOutboxService.java:94)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.aop.support.AopUtils.invokeJoinpointUsingReflection(AopUtils.java:355)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:716)
+	at cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService$$SpringCGLIB$$0.flushPendingEvents(<generated>)
+	at jdk.internal.reflect.GeneratedMethodAccessor62.invoke(Unknown Source)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:305)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+Caused by: org.apache.rocketmq.client.exception.MQClientException: The specified topic[task.collaboration] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$
+For more information, please visit the url, https://rocketmq.apache.org/docs/bestPractice/06FAQ
+	at org.apache.rocketmq.client.Validators.checkTopic(Validators.java:102)
+	at org.apache.rocketmq.client.Validators.checkMessage(Validators.java:67)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.sendDefaultImpl(DefaultMQProducerImpl.java:745)
+	at org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl.send(DefaultMQProducerImpl.java:1603)
+	at org.apache.rocketmq.client.producer.DefaultMQProducer.send(DefaultMQProducer.java:491)
+	at org.apache.rocketmq.spring.core.RocketMQTemplate.syncSend(RocketMQTemplate.java:691)
+	... 24 common frames omitted
+2026-07-01 12:29:11.481 [pool-5-thread-1] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=serpapi
+2026-07-01 12:29:11.481 [pool-5-thread-1] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=http
+2026-07-01 12:29:11.697 [pool-7-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.douyin.com, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:29:11.775 [pool-7-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.douyin.com
+2026-07-01 12:29:24.907 [pool-7-thread-1] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.douyin.com, title=抖音开放平台 - 抖音小程序、字节小程序、头条小程序
+2026-07-01 12:29:52.704 [pool-5-thread-2] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=serpapi
+2026-07-01 12:30:24.786 [pool-5-thread-2] DEBUG c.b.c.s.BrowserSearchRuntimeService - browser search page did not reach LOAD quickly, continue parsing DOM
+2026-07-01 12:30:26.215 [pool-5-thread-2] DEBUG c.b.c.s.BrowserPreviewSearchSourceProvider - browser preview search returned no candidates, competitor=哔哩哔哩开放平台, scope=OFFICIAL, summary=浏览器搜索未提取到有效候选，建议回退到 HTTP 补源
+2026-07-01 12:30:26.215 [pool-5-thread-2] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=http
+[Fatal Error] :1:10: 将功能 "http://apache.org/xml/features/disallow-doctype-decl" 设置为“真”时, 不允许使用 DOCTYPE。
+[Fatal Error] :1:10: 将功能 "http://apache.org/xml/features/disallow-doctype-decl" 设置为“真”时, 不允许使用 DOCTYPE。
+2026-07-01 12:30:26.768 [pool-8-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.bilibili.com/help, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:30:26.777 [pool-8-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.bilibili.com/app, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:30:26.780 [pool-8-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.bilibili.com/about, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:30:26.780 [pool-8-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.bilibili.com/download, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:30:26.882 [pool-8-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.bilibili.com/app
+2026-07-01 12:30:26.890 [pool-8-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.bilibili.com/about
+2026-07-01 12:30:26.905 [pool-8-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.bilibili.com/download
+2026-07-01 12:30:27.888 [pool-8-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.bilibili.com/help
+2026-07-01 12:30:32.722 [pool-8-thread-2] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.bilibili.com/app, title=哔哩哔哩开放平台
+2026-07-01 12:30:32.795 [pool-8-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://openhome.bilibili.com/about, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:30:32.903 [pool-8-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://openhome.bilibili.com/about
+2026-07-01 12:30:38.572 [pool-8-thread-4] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.bilibili.com/help, title=哔哩哔哩开放平台
+2026-07-01 12:30:38.612 [pool-8-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://openhome.bilibili.com/app, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:30:38.656 [pool-8-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://openhome.bilibili.com/app
+2026-07-01 12:30:44.282 [pool-8-thread-3] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.bilibili.com/download, title=哔哩哔哩开放平台
+2026-07-01 12:30:44.321 [pool-8-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://openhome.bilibili.com/download, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:30:44.356 [pool-8-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://openhome.bilibili.com/download
+2026-07-01 12:30:50.238 [pool-8-thread-1] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.bilibili.com/about, title=哔哩哔哩开放平台
+2026-07-01 12:30:50.277 [pool-8-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://openhome.bilibili.com/help, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:30:50.314 [pool-8-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://openhome.bilibili.com/help
+2026-07-01 12:30:50.973 [pool-5-thread-1] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=serpapi
+2026-07-01 12:30:55.981 [pool-8-thread-3] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://openhome.bilibili.com/download, title=哔哩哔哩开放平台
+2026-07-01 12:31:01.881 [pool-8-thread-4] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://openhome.bilibili.com/app, title=哔哩哔哩开放平台
+2026-07-01 12:31:07.803 [pool-8-thread-2] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://openhome.bilibili.com/about, title=哔哩哔哩开放平台
+2026-07-01 12:31:12.403 [pool-5-thread-1] DEBUG c.b.c.s.BrowserPreviewSearchSourceProvider - browser preview search returned no candidates, competitor=抖音开放平台, scope=OFFICIAL, summary=浏览器搜索未提取到有效候选，建议回退到 HTTP 补源
+2026-07-01 12:31:12.403 [pool-5-thread-1] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=http
+2026-07-01 12:31:20.210 [pool-8-thread-1] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://openhome.bilibili.com/help, title=哔哩哔哩开放平台
+[Fatal Error] :1:3: 文档中根元素前面的标记必须格式正确。
+2026-07-01 12:31:22.717 [pool-9-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://game.open.douyin.com/about, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:31:22.946 [pool-9-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://game.open.douyin.com/about
+2026-07-01 12:31:23.176 [pool-9-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://developer.open-douyin.com/about, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:31:23.250 [pool-9-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://developer.open-douyin.com/download, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:31:23.254 [pool-9-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://developer.open-douyin.com/help, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:31:23.558 [pool-9-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://developer.open-douyin.com/download
+2026-07-01 12:31:23.600 [pool-9-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://developer.open-douyin.com/about
+2026-07-01 12:31:23.605 [pool-9-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://developer.open-douyin.com/help
+2026-07-01 12:31:27.568 [pool-9-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 页面采集成功: collector=playwright; fallbackReason=HTTP status error: 404, title=404 Not Found, contentLength=17
+2026-07-01 12:31:27.610 [pool-9-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://game.open.douyin.com/app, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:31:27.646 [pool-9-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://game.open.douyin.com/app
+2026-07-01 12:31:32.694 [pool-9-thread-3] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://developer.open-douyin.com/help, title=抖音开放平台
+2026-07-01 12:31:32.732 [pool-9-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://game.open.douyin.com/download, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:31:32.783 [pool-9-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://game.open.douyin.com/download
+2026-07-01 12:31:37.052 [pool-9-thread-1] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://developer.open-douyin.com/about, title=抖音开放平台
+2026-07-01 12:31:37.086 [pool-9-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://game.open.douyin.com/help, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:31:37.120 [pool-9-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://game.open.douyin.com/help
+2026-07-01 12:31:41.684 [pool-9-thread-2] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://developer.open-douyin.com/download, title=抖音开放平台
+2026-07-01 12:31:42.268 [pool-9-thread-2] INFO  c.b.c.source.DirectHtmlReaderClient - Direct HTML 采集命中: url=https://open-douyin.com/about, selector=body, textLength=7233, readableChineseChars=4668, extractedLinks=22
+2026-07-01 12:31:43.196 [pool-9-thread-2] INFO  c.b.c.source.DirectHtmlReaderClient - Direct HTML 采集命中: url=https://open-douyin.com/app, selector=body, textLength=7233, readableChineseChars=4668, extractedLinks=22
+2026-07-01 12:31:43.601 [pool-9-thread-2] INFO  c.b.c.source.DirectHtmlReaderClient - Direct HTML 采集命中: url=https://open-douyin.com/download, selector=body, textLength=7233, readableChineseChars=4668, extractedLinks=22
+2026-07-01 12:31:44.223 [pool-9-thread-2] INFO  c.b.c.source.DirectHtmlReaderClient - Direct HTML 采集命中: url=https://open-douyin.com/help, selector=body, textLength=7233, readableChineseChars=4668, extractedLinks=22
+2026-07-01 12:31:44.349 [pool-9-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.douyin.com/about, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:31:44.421 [pool-9-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.douyin.com/about
+2026-07-01 12:31:45.978 [pool-9-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 页面采集成功: collector=playwright; fallbackReason=HTTP status error: 404, title=404 Not Found, contentLength=17
+2026-07-01 12:31:46.036 [pool-9-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.douyin.com/app, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:31:46.154 [pool-9-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.douyin.com/app
+2026-07-01 12:31:50.278 [pool-9-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 页面采集成功: collector=playwright; fallbackReason=HTTP status error: 404, title=404 Not Found, contentLength=17
+2026-07-01 12:31:50.422 [pool-9-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.douyin.com/download, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:31:50.483 [pool-9-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.douyin.com/download
+2026-07-01 12:31:54.623 [pool-9-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 页面采集成功: collector=playwright; fallbackReason=HTTP status error: 404, title=404 Not Found, contentLength=17
+2026-07-01 12:31:54.775 [pool-9-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.douyin.com/help, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:31:54.879 [pool-9-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.douyin.com/help
+2026-07-01 12:32:05.812 [pool-9-thread-3] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.douyin.com/download, title=抖音开放平台 - 抖音小程序、字节小程序、头条小程序
+2026-07-01 12:32:17.569 [pool-9-thread-1] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.douyin.com/app, title=抖音开放平台 - 抖音小程序、字节小程序、头条小程序
+2026-07-01 12:32:20.438 [pool-5-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.bilibili.com/docs, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=DOCS
+2026-07-01 12:32:28.741 [pool-9-thread-2] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.douyin.com/about, title=抖音开放平台 - 抖音小程序、字节小程序、头条小程序
+2026-07-01 12:32:34.161 [pool-5-thread-2] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.bilibili.com/docs, title=哔哩哔哩开放平台
+2026-07-01 12:32:40.262 [pool-5-thread-2] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=serpapi
+2026-07-01 12:32:40.262 [pool-5-thread-2] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=http
+2026-07-01 12:32:40.566 [pool-10-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.bilibili.com, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:32:40.699 [pool-10-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.bilibili.com
+2026-07-01 12:32:46.382 [pool-9-thread-4] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.douyin.com/help, title=抖音开放平台 - 抖音小程序、字节小程序、头条小程序
+2026-07-01 12:32:49.864 [pool-5-thread-1] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=serpapi
+2026-07-01 12:32:49.864 [pool-5-thread-1] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=http
+2026-07-01 12:32:49.957 [pool-11-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.douyin.com, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:32:50.021 [pool-11-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.douyin.com
+2026-07-01 12:32:51.620 [pool-10-thread-1] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.bilibili.com, title=哔哩哔哩开放平台
+2026-07-01 12:33:01.972 [pool-11-thread-1] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.douyin.com, title=抖音开放平台 - 抖音小程序、字节小程序、头条小程序
+2026-07-01 12:33:45.435 [pool-5-thread-2] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=serpapi
+2026-07-01 12:33:47.538 [pool-5-thread-1] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=serpapi
+2026-07-01 12:34:37.673 [pool-5-thread-1] DEBUG c.b.c.s.BrowserSearchRuntimeService - browser search page did not reach LOAD quickly, continue parsing DOM
+2026-07-01 12:34:39.141 [pool-5-thread-1] DEBUG c.b.c.s.BrowserPreviewSearchSourceProvider - browser preview search returned no candidates, competitor=抖音开放平台, scope=OFFICIAL, summary=浏览器搜索未提取到有效候选，建议回退到 HTTP 补源
+2026-07-01 12:34:39.142 [pool-5-thread-1] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=http
+2026-07-01 12:34:40.631 [pool-5-thread-2] DEBUG c.b.c.s.BrowserPreviewSearchSourceProvider - browser preview search returned no candidates, competitor=哔哩哔哩开放平台, scope=OFFICIAL, summary=浏览器搜索未提取到有效候选，建议回退到 HTTP 补源
+2026-07-01 12:34:40.632 [pool-5-thread-2] DEBUG c.b.c.s.RoutingSearchSourceProvider - search provider unavailable, provider=http
+[Fatal Error] :1:10: 将功能 "http://apache.org/xml/features/disallow-doctype-decl" 设置为“真”时, 不允许使用 DOCTYPE。
+[Fatal Error] :1:10: 将功能 "http://apache.org/xml/features/disallow-doctype-decl" 设置为“真”时, 不允许使用 DOCTYPE。
+2026-07-01 12:34:41.819 [pool-12-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.bilibili.com/about, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:34:41.825 [pool-12-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.bilibili.com/app, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:34:41.825 [pool-12-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.bilibili.com/help, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:34:41.825 [pool-12-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.bilibili.com/download, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:34:41.923 [pool-12-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.bilibili.com/about
+2026-07-01 12:34:41.944 [pool-12-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.bilibili.com/help
+2026-07-01 12:34:41.944 [pool-12-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.bilibili.com/app
+2026-07-01 12:34:41.944 [pool-12-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.bilibili.com/download
+[Fatal Error] :1:3: 文档中根元素前面的标记必须格式正确。
+[Fatal Error] :1:10: 将功能 "http://apache.org/xml/features/disallow-doctype-decl" 设置为“真”时, 不允许使用 DOCTYPE。
+2026-07-01 12:34:47.717 [pool-13-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://developer.open-douyin.com/about, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:34:47.760 [pool-13-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://developer.open-douyin.com/download, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:34:47.825 [pool-13-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://developer.open-douyin.com/help, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:34:47.858 [pool-13-thread-4] INFO  c.b.c.source.DirectHtmlReaderClient - Direct HTML 采集命中: url=https://open-douyin.com/about, selector=body, textLength=7233, readableChineseChars=4668, extractedLinks=22
+2026-07-01 12:34:47.874 [pool-12-thread-1] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.bilibili.com/about, title=哔哩哔哩开放平台
+2026-07-01 12:34:48.007 [pool-13-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://developer.open-douyin.com/about
+2026-07-01 12:34:48.041 [pool-12-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://openhome.bilibili.com/about, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:34:48.092 [pool-13-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://developer.open-douyin.com/help
+2026-07-01 12:34:48.103 [pool-13-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://developer.open-douyin.com/download
+2026-07-01 12:34:48.176 [pool-12-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://openhome.bilibili.com/about
+2026-07-01 12:34:48.863 [pool-13-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open-douyin.com/app, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:34:49.265 [pool-13-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 页面采集成功: collector=http, title=抖音开放平台 - 抖音小程序、字节小程序、头条小程序, contentLength=5926
+2026-07-01 12:34:49.693 [pool-13-thread-4] INFO  c.b.c.source.DirectHtmlReaderClient - Direct HTML 采集命中: url=https://open-douyin.com/download, selector=body, textLength=7233, readableChineseChars=4668, extractedLinks=22
+2026-07-01 12:34:49.992 [pool-13-thread-4] INFO  c.b.c.source.DirectHtmlReaderClient - Direct HTML 采集命中: url=https://open-douyin.com/help, selector=body, textLength=7233, readableChineseChars=4668, extractedLinks=22
+2026-07-01 12:34:50.120 [pool-13-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.douyin.com/about, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:34:50.263 [pool-13-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.douyin.com/about
+2026-07-01 12:34:53.793 [pool-12-thread-3] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.bilibili.com/download, title=哔哩哔哩开放平台
+2026-07-01 12:34:53.829 [pool-12-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://openhome.bilibili.com/app, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:34:53.878 [pool-12-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://openhome.bilibili.com/app
+2026-07-01 12:34:59.411 [pool-12-thread-2] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.bilibili.com/app, title=哔哩哔哩开放平台
+2026-07-01 12:34:59.459 [pool-12-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://openhome.bilibili.com/download, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:34:59.499 [pool-12-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://openhome.bilibili.com/download
+2026-07-01 12:35:05.426 [pool-12-thread-4] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.bilibili.com/help, title=哔哩哔哩开放平台
+2026-07-01 12:35:05.480 [pool-12-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://openhome.bilibili.com/help, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=OFFICIAL
+2026-07-01 12:35:05.520 [pool-12-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://openhome.bilibili.com/help
+2026-07-01 12:35:11.350 [pool-12-thread-2] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://openhome.bilibili.com/download, title=哔哩哔哩开放平台
+2026-07-01 12:35:17.388 [pool-12-thread-3] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://openhome.bilibili.com/app, title=哔哩哔哩开放平台
+2026-07-01 12:35:30.865 [pool-13-thread-4] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.douyin.com/about, title=抖音开放平台 - 抖音小程序、字节小程序、头条小程序
+2026-07-01 12:35:30.931 [pool-13-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.douyin.com/app, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:35:30.985 [pool-13-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.douyin.com/app
+2026-07-01 12:35:36.531 [pool-12-thread-1] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://openhome.bilibili.com/about, title=哔哩哔哩开放平台
+2026-07-01 12:35:52.864 [pool-13-thread-2] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://developer.open-douyin.com/download, title=抖音开放平台
+2026-07-01 12:35:52.973 [pool-13-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.douyin.com/download, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:35:53.077 [pool-13-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.douyin.com/download
+2026-07-01 12:35:57.902 [pool-13-thread-3] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://developer.open-douyin.com/help, title=抖音开放平台
+2026-07-01 12:35:58.222 [pool-13-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.douyin.com/help, competitor=[REDACTED]抖音开放平台, sourceType=OFFICIAL
+2026-07-01 12:35:58.271 [pool-13-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - 轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url=[REDACTED]https://open.douyin.com/help
+2026-07-01 12:36:02.838 [pool-13-thread-1] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://developer.open-douyin.com/about, title=抖音开放平台
+2026-07-01 12:36:13.695 [pool-13-thread-3] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.douyin.com/help, title=抖音开放平台 - 抖音小程序、字节小程序、头条小程序
+2026-07-01 12:36:26.183 [pool-13-thread-2] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.douyin.com/download, title=抖音开放平台 - 抖音小程序、字节小程序、头条小程序
+2026-07-01 12:36:43.146 [pool-13-thread-4] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.douyin.com/app, title=抖音开放平台 - 抖音小程序、字节小程序、头条小程序
+2026-07-01 12:36:48.981 [pool-12-thread-4] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://openhome.bilibili.com/help, title=哔哩哔哩开放平台
+2026-07-01 12:37:43.543 [pool-5-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://developer.open-douyin.com/docs, competitor=[REDACTED]抖音开放平台, sourceType=DOCS
+2026-07-01 12:37:48.169 [pool-5-thread-1] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://developer.open-douyin.com/docs, title=抖音开放平台
+2026-07-01 12:37:48.256 [pool-5-thread-1] INFO  c.b.competitoragent.agent.BaseAgent - [信息采集智能体] 执行完成, status=SUCCESS, durationMs=535731
+2026-07-01 12:37:48.474 [pool-5-thread-1] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=75, entityId=948
+2026-07-01 12:37:49.190 [pool-5-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - 开始采集页面: url=[REDACTED]https://open.bilibili.com/docs, competitor=[REDACTED]哔哩哔哩开放平台, sourceType=DOCS
+2026-07-01 12:37:51.329 [ConsumeMessageThread_competitor-agent-workflow-consumer_5] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=b5b7e60f-411b-4e92-8e60-93e252a29366, type=NODE_COMPLETED
+2026-07-01 12:37:54.504 [pool-5-thread-2] WARN  c.b.c.source.PlaywrightPageCollector - 页面命中登录/验证码/反爬信号，但公开壳信息恢复成功: url=[REDACTED]https://open.bilibili.com/docs, title=哔哩哔哩开放平台
+2026-07-01 12:37:54.565 [pool-5-thread-2] INFO  c.b.competitoragent.agent.BaseAgent - [信息采集智能体] 执行完成, status=SUCCESS, durationMs=542001
+2026-07-01 12:37:54.663 [pool-5-thread-2] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=75, entityId=949
+2026-07-01 12:37:54.696 [ConsumeMessageThread_competitor-agent-workflow-consumer_2] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=75, entityId=950
+2026-07-01 12:37:54.967 [pool-5-thread-3] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=EMBEDDING, providerKey=deepseek, modelName=null
+2026-07-01 12:37:55.028 [pool-5-thread-3] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=EMBEDDING, providerKey=deepseek, modelName=null
+2026-07-01 12:37:55.914 [pool-5-thread-3] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=EMBEDDING, providerKey=siliconflow, modelName=null
+2026-07-01 12:37:56.282 [pool-5-thread-3] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=EMBEDDING, providerKey=siliconflow, modelName=null
+2026-07-01 12:37:56.335 [pool-5-thread-3] INFO  c.b.competitoragent.agent.BaseAgent - [结构抽取智能体] 开始执行, taskId=75, traceId=N/A
+2026-07-01 12:37:56.345 [ConsumeMessageThread_competitor-agent-workflow-consumer_6] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=d3c3c016-542e-4681-92d6-9343ea4db667, type=NODE_COMPLETED
+2026-07-01 12:37:56.354 [ConsumeMessageThread_competitor-agent-workflow-consumer_7] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=288b244b-7458-4c5d-b458-e608f69b466c, type=NODE_READY
+2026-07-01 12:38:27.425 [pool-5-thread-3] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-07-01 12:39:15.512 [pool-5-thread-3] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-07-01 12:39:15.528 [pool-5-thread-3] INFO  c.b.competitoragent.agent.BaseAgent - [结构抽取智能体] 执行完成, status=SUCCESS, durationMs=80801
+2026-07-01 12:39:15.587 [pool-5-thread-3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=ORCHESTRATION_DECISION_RECORDED, taskId=75, entityId=951
+2026-07-01 12:39:15.623 [pool-5-thread-3] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_COMPLETED, taskId=75, entityId=952
+2026-07-01 12:39:15.648 [ConsumeMessageThread_competitor-agent-workflow-consumer_2] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_READY, taskId=75, entityId=953
+2026-07-01 12:39:15.757 [pool-5-thread-4] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=EMBEDDING, providerKey=deepseek, modelName=null
+2026-07-01 12:39:15.853 [pool-5-thread-4] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=EMBEDDING, providerKey=deepseek, modelName=null
+2026-07-01 12:39:15.885 [pool-5-thread-4] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=EMBEDDING, providerKey=siliconflow, modelName=null
+2026-07-01 12:39:15.917 [pool-5-thread-4] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=EMBEDDING, providerKey=siliconflow, modelName=null
+2026-07-01 12:39:15.956 [pool-5-thread-4] INFO  c.b.competitoragent.agent.BaseAgent - [竞品分析智能体] 开始执行, taskId=75, traceId=N/A
+2026-07-01 12:39:16.436 [ConsumeMessageThread_competitor-agent-workflow-consumer_8] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=3077f7dd-48cd-488c-9df7-41982fed198e, type=ORCHESTRATION_DECISION_RECORDED
+2026-07-01 12:39:16.445 [ConsumeMessageThread_competitor-agent-workflow-consumer_9] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=763de7c7-3a02-472b-bf30-420bf7b7e091, type=NODE_COMPLETED
+2026-07-01 12:39:16.453 [ConsumeMessageThread_competitor-agent-workflow-consumer_10] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=41954c78-dda9-45a6-819f-91333b63b55f, type=NODE_READY
+2026-07-01 12:40:05.305 [pool-5-thread-4] DEBUG c.b.c.llm.AIAuditLogger - record ai audit event, capability=CHAT, providerKey=deepseek, modelName=deepseek-v4-pro
+2026-07-01 12:40:05.308 [pool-5-thread-4] ERROR c.b.c.a.a.CompetitorAnalysisAgent - competitor analysis failed
+com.fasterxml.jackson.core.io.JsonEOFException: Unexpected end-of-input: was expecting closing quote for a string value
+ at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 97, column: 49]
+	at com.fasterxml.jackson.core.base.ParserMinimalBase._reportInvalidEOF(ParserMinimalBase.java:585)
+	at com.fasterxml.jackson.core.json.ReaderBasedJsonParser._finishString2(ReaderBasedJsonParser.java:2187)
+	at com.fasterxml.jackson.core.json.ReaderBasedJsonParser._finishString(ReaderBasedJsonParser.java:2174)
+	at com.fasterxml.jackson.core.json.ReaderBasedJsonParser.getText(ReaderBasedJsonParser.java:295)
+	at com.fasterxml.jackson.databind.deser.std.BaseNodeDeserializer._deserializeContainerNoRecursion(JsonNodeDeserializer.java:627)
+	at com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer.deserialize(JsonNodeDeserializer.java:100)
+	at com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer.deserialize(JsonNodeDeserializer.java:25)
+	at com.fasterxml.jackson.databind.deser.DefaultDeserializationContext.readRootValue(DefaultDeserializationContext.java:342)
+	at com.fasterxml.jackson.databind.ObjectMapper._readTreeAndClose(ObjectMapper.java:4947)
+	at com.fasterxml.jackson.databind.ObjectMapper.readTree(ObjectMapper.java:3280)
+	at cn.bugstack.competitoragent.agent.analyzer.CompetitorAnalysisAgent.doExecute(CompetitorAnalysisAgent.java:117)
+	at cn.bugstack.competitoragent.agent.BaseAgent.execute(BaseAgent.java:48)
+	at cn.bugstack.competitoragent.agent.capability.SpringAgentCapabilityRegistry.lambda$buildCapabilities$0(SpringAgentCapabilityRegistry.java:46)
+	at cn.bugstack.competitoragent.workflow.DagExecutor.executeNodeOnce(DagExecutor.java:401)
+	at cn.bugstack.competitoragent.workflow.DagExecutor.executeRunningNode(DagExecutor.java:541)
+	at cn.bugstack.competitoragent.workflow.DagExecutor.lambda$dispatchExecutableNodes$2(DagExecutor.java:477)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:833)
+2026-07-01 12:40:05.309 [pool-5-thread-4] INFO  c.b.competitoragent.agent.BaseAgent - [竞品分析智能体] 执行完成, status=FAILED, durationMs=49633
+2026-07-01 12:40:05.358 [pool-5-thread-4] INFO  c.b.c.w.e.WorkflowEventOutboxService - workflow event staged into outbox, eventType=NODE_FAILED, taskId=75, entityId=954
+2026-07-01 12:40:06.507 [ConsumeMessageThread_competitor-agent-workflow-consumer_11] DEBUG c.b.c.w.event.WorkflowEventConsumer - workflow lifecycle event consumed for audit only, eventId=1c5646f4-7d37-497a-84fc-9fb9be103af3, type=NODE_FAILED

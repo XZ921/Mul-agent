@@ -1,0 +1,10 @@
+{
+  "taskName": "抖音开放平台 vs B站开放平台竞品分析-08验证-20260701-1227",
+  "subjectProduct": "我方产品：面向内容开发者的短视频与直播开放平台，提供内容分发、数据服务与变现能力",
+  "competitorNames": ["抖音开放平台", "哔哩哔哩开放平台"],
+  "competitorUrls": ["https://open.douyin.com/", "https://open.bilibili.com/"],
+  "analysisDimensions": ["开放平台能力与API", "开发者服务与文档", "商业化与分成政策"],
+  "sourceScope": ["官方", "第三方技术社区"],
+  "reportLanguage": "中文",
+  "reportTemplate": "标准版"
+}

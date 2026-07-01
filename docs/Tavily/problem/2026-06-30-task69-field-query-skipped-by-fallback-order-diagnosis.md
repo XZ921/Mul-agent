@@ -59,8 +59,18 @@ for (String stage : resolveSearchFallbackOrder(config)) {   // HYBRID → [PLANN
   `searchFieldEvidenceQueries` 逐条执行，否则退化成只发 1 条 primary profile。
 - **短路点**：BROWSER 凑满候选池 → 899 行 break → HTTP stage 不执行 → field query 不消费。
 
-**核心矛盾**：`fieldEvidenceFinalStatus=COVERAGE_NOT_MET`（字段没达标）与"候选数够了就 break"并存——
-break 只看候选**数量**，不看字段**覆盖是否达标**，于是"数量够但全是官方壳、字段没覆盖"时仍提前停。
+**核心矛盾**：break 只看候选**数量**（`targetPoolSize = currentCandidateCount + max(1, minVerifiedCount-verifiedCount)`），
+不看字段 query 是否还有 pending，于是"数量够但全是官方壳、field query 还没发"时仍提前停。
+
+**2026-06-30 晚二次复核修正（精确化，避免计划修错层）：**
+- **补源整体其实已被放行**：`shouldSupplement`（1383 行）有 `if (hasPendingFieldEvidenceQueries(config)) return true`（1398 行）。
+  所以不能描述成"整个补源没放行"。真断点是**补源进入后、fallback stage 循环内部的 899 行 break**——
+  BROWSER 先凑满池子就 break，轮不到 HTTP stage 发 field query。
+- **还有一个更早的入口短路**：`shouldSupplement` 中 `shouldSkipSupplementForDirectDiscovery(...)`（1389 行）
+  排在 pending 检查（1398 行）**之前**。某些 direct discovery 场景（competitorUrls + verified 达标）
+  会在看 pending query 前就 `return false`，补源整体不进入。修复必须同时处理这个入口短路。
+- **判据用 `hasPendingFieldEvidenceQueries(config)`（搜索循环稳定可得），不用 `fieldEvidenceFinalStatus=COVERAGE_NOT_MET`**
+  （后者是 Collector 输出摘要、非搜索循环输入）。
 
 ---
 

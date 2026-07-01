@@ -1,0 +1,156 @@
+{
+ "stage": "COLLECTOR_SEARCH_AND_COLLECT",
+ "searchQueries": [
+  "抖音开放平台 官方网站",
+  "site:open.douyin.com 抖音开放平台 官方网站 产品介绍"
+ ],
+ "fallbackOrder": [
+  "PLANNED",
+  "HTTP",
+  "BROWSER"
+ ],
+ "targetCount": 1,
+ "minVerifiedCount": 1,
+ "steps": [
+  {
+   "stepCode": "LOAD_CANDIDATES",
+   "goal": "读取规划期候选来源",
+   "expectedDurationMs": 500,
+   "dependency": "nodeConfig",
+   "status": "SUCCESS",
+   "message": "已加载 1 条规划期候选来源",
+   "startedAt": [
+    2026,
+    7,
+    1,
+    12,
+    32,
+    46,
+    649720500
+   ],
+   "completedAt": [
+    2026,
+    7,
+    1,
+    12,
+    32,
+    46,
+    692432700
+   ]
+  },
+  {
+   "stepCode": "TAVILY_BOOTSTRAP_ENRICH",
+   "goal": "对弱规划期候选执行 Tavily Phase 1 候选增强",
+   "expectedDurationMs": 4000,
+   "dependency": "tavily",
+   "status": "SUCCESS",
+   "message": "Tavily Phase 1 bootstrap 新增 2 条候选",
+   "startedAt": [
+    2026,
+    7,
+    1,
+    12,
+    32,
+    46,
+    722043500
+   ],
+   "completedAt": [
+    2026,
+    7,
+    1,
+    12,
+    32,
+    49,
+    865838600
+   ]
+  },
+  {
+   "stepCode": "VERIFY_TOP_CANDIDATES",
+   "goal": "验证高优先级候选来源是否可用",
+   "expectedDurationMs": 5000,
+   "dependency": "browser",
+   "status": "SUCCESS",
+   "message": "已验证 1 条候选，验证通过 1 条",
+   "startedAt": [
+    2026,
+    7,
+    1,
+    12,
+    32,
+    49,
+    893031900
+   ],
+   "completedAt": [
+    2026,
+    7,
+    1,
+    12,
+    33,
+    1,
+    980260100
+   ]
+  },
+  {
+   "stepCode": "BROWSER_SUPPLEMENT_SEARCH",
+   "goal": "候选不足时执行运行期补源",
+   "expectedDurationMs": 8000,
+   "dependency": "searchEngine",
+   "status": "SUCCESS",
+   "message": "运行期补源新增 6 条候选来源，来源=HTTP_FALLBACK，未触发运行期浏览器补源",
+   "startedAt": [
+    2026,
+    7,
+    1,
+    12,
+    33,
+    1,
+    999794900
+   ],
+   "completedAt": [
+    2026,
+    7,
+    1,
+    12,
+    34,
+    39,
+    156857000
+   ]
+  },
+  {
+   "stepCode": "SELECT_TARGETS",
+   "goal": "合并候选并选出最终采集目标",
+   "expectedDurationMs": 1000,
+   "dependency": "ranker",
+   "status": "SUCCESS",
+   "message": "已选出 1 条正式采集目标",
+   "startedAt": [
+    2026,
+    7,
+    1,
+    12,
+    36,
+    43,
+    191420600
+   ],
+   "completedAt": [
+    2026,
+    7,
+    1,
+    12,
+    36,
+    43,
+    242261500
+   ]
+  },
+  {
+   "stepCode": "COLLECT_PAGES",
+   "goal": "抓取页面正文并持久化证据",
+   "expectedDurationMs": 12000,
+   "dependency": "collector",
+   "status": "PENDING",
+   "message": null,
+   "startedAt": null,
+   "completedAt": null
+  }
+ ]
+}

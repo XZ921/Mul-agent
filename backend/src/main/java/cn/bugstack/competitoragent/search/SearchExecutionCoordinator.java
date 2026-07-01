@@ -200,6 +200,10 @@ public class SearchExecutionCoordinator {
                 config.getSearchTimeoutMillis(),
                 executionPlan
         );
+        searchTimeoutMillis = searchPolicyResolver.ensureMinimumTimeoutForFieldEvidenceQueries(
+                searchTimeoutMillis,
+                resolveFieldEvidenceQueries(config)
+        );
         List<SearchProgressSnapshot> progressSnapshots = new ArrayList<>();
         Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
         SearchAuditSnapshot checkpoint = config.getSearchAuditCheckpoint();
@@ -353,7 +357,8 @@ public class SearchExecutionCoordinator {
 
         // 职责边界 2：补源只负责在“验证不足”或“候选池不足”时扩充候选，补不到也必须保留规划期候选作为兜底。
         if (shouldSupplement(config, verifiedCount, minVerifiedCount, allCandidates.size(), targetCount, resultPageVerificationEnabled)) {
-            if (isTimedOut(searchStartedAt, searchTimeoutMillis)) {
+            boolean pendingFieldEvidenceQueries = hasPendingFieldEvidenceQueries(config);
+            if (isTimedOut(searchStartedAt, searchTimeoutMillis) && !pendingFieldEvidenceQueries) {
                 circuitBroken = true;
                 degradationReason = "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT";
                 supplementMethod = "TIMEOUT_FALLBACK";
@@ -364,7 +369,9 @@ public class SearchExecutionCoordinator {
                         "搜索阶段已达到总超时，跳过运行期补源，直接回退到已有候选",
                         true, degradationReason, progressListener, allCandidates, List.of(), null);
             } else {
-                String supplementStartMessage = buildSupplementRunningMessage(config);
+                String supplementStartMessage = pendingFieldEvidenceQueries
+                        ? buildFieldEvidenceSupplementRunningMessage(config)
+                        : buildSupplementRunningMessage(config);
                 markStepRunning(executionPlan, "BROWSER_SUPPLEMENT_SEARCH", supplementStartMessage);
                 appendSnapshotAndPublish(progressSnapshots, executionPlan, "BROWSER_SUPPLEMENT_SEARCH",
                         supplementStartMessage, false, null, progressListener, allCandidates, List.of(), null);
@@ -466,6 +473,7 @@ public class SearchExecutionCoordinator {
             PublicEvidenceRecoveryService.RecoveryResult recoveryResult = publicEvidenceRecoveryService.recover(
                     PublicEvidenceRecoveryService.RecoveryContext.builder()
                             .competitorName(config.getCompetitorName())
+                            .competitorUrls(defaultList(config.getCompetitorUrls()))
                             .sourceType(config.getSourceType())
                             .fieldName(config.getRecoveryFieldName())
                             .evidencePathKey(config.getRecoveryEvidencePathKey())
@@ -894,9 +902,13 @@ public class SearchExecutionCoordinator {
                 && !"HEURISTIC_ONLY".equalsIgnoreCase(config.getSearchMode());
         boolean browserExecuted = false;
         boolean httpExecuted = false;
+        // 字段 query 仍待执行时，不能仅因候选池已满就提前结束 fallback 循环，
+        // 否则真正承载 field-first query 的 HTTP stage 会被 BROWSER stage 永久饿死。
+        boolean pendingFieldEvidenceQueries = hasPendingFieldEvidenceQueries(config);
 
         for (String stage : resolveSearchFallbackOrder(config)) {
-            if (existingCandidates.size() + supplementedCandidates.size() >= targetPoolSize) {
+            if (existingCandidates.size() + supplementedCandidates.size() >= targetPoolSize
+                    && !pendingFieldEvidenceQueries) {
                 break;
             }
 
@@ -949,6 +961,12 @@ public class SearchExecutionCoordinator {
                     providerFallbackUsed = true;
                     supplementMethod = "HTTP_FALLBACK";
                     fallbackDecision = browserModeEnabled ? "USE_HTTP_FALLBACK" : "BROWSER_DISABLED_USE_HTTP_FALLBACK";
+                    // 08 的新增验收要求是“field query 先跑且不能再被壳页补源盖掉”。
+                    // 因此只要 pending field query 场景下 HTTP 已经召回到候选，
+                    // 就直接结束本轮 supplement，避免后续 BROWSER 再把官方壳页塞回候选池并覆盖审计语义。
+                    if (pendingFieldEvidenceQueries) {
+                        break;
+                    }
                 }
             }
         }
@@ -1191,11 +1209,27 @@ public class SearchExecutionCoordinator {
     }
 
     private List<String> resolveSearchFallbackOrder(CollectorNodeConfig config) {
-        return searchPolicyResolver.resolveFallbackOrder(
+        List<String> resolvedOrder = searchPolicyResolver.resolveFallbackOrder(
                 config.getSearchMode(),
                 Boolean.TRUE.equals(config.getBrowserSearchEnabled()),
                 config.getSearchFallbackOrder()
         );
+        if (!hasPendingFieldEvidenceQueries(config)
+                || !resolvedOrder.contains("HTTP")
+                || !resolvedOrder.contains("BROWSER")) {
+            return resolvedOrder;
+        }
+        List<String> reordered = new ArrayList<>();
+        for (String stage : resolvedOrder) {
+            if ("BROWSER".equals(stage)) {
+                continue;
+            }
+            reordered.add(stage);
+            if ("HTTP".equals(stage)) {
+                reordered.add("BROWSER");
+            }
+        }
+        return reordered;
     }
 
     private BrowserSearchRuntimeResult defaultBrowserSupplementResult(CollectorNodeConfig config) {
@@ -1386,9 +1420,6 @@ public class SearchExecutionCoordinator {
                                      int candidateCount,
                                      int targetCount,
                                      boolean resultPageVerificationEnabled) {
-        if (shouldSkipSupplementForDirectDiscovery(config, verifiedCount, minVerifiedCount)) {
-            return false;
-        }
         boolean runtimeSearchEnabled = !"HEURISTIC_ONLY".equalsIgnoreCase(config.getSearchMode());
         if (!runtimeSearchEnabled) {
             return false;
@@ -1397,6 +1428,9 @@ public class SearchExecutionCoordinator {
         // 只要还有待执行字段 query，就必须放行 HTTP/Tavily supplement 进入 provider。
         if (hasPendingFieldEvidenceQueries(config)) {
             return true;
+        }
+        if (shouldSkipSupplementForDirectDiscovery(config, verifiedCount, minVerifiedCount)) {
+            return false;
         }
         // 一旦启用了结果页验证，是否补源必须由“验证是否达标”决定，
         // 不能仅凭规划期候选数量够用就跳过，否则会把“候选数量够但验证全失败”的场景误判为无需补源。
@@ -1604,6 +1638,7 @@ public class SearchExecutionCoordinator {
         }
         return candidateOwnershipPolicy.isTrustedSearchRoot(
                 config == null ? null : config.getCompetitorName(),
+                config == null ? List.of() : defaultList(config.getCompetitorUrls()),
                 candidate
         );
     }
@@ -2099,6 +2134,30 @@ public class SearchExecutionCoordinator {
             return "候选不足，" + prefix + "，Query：" + queries.get(0);
         }
         return "候选不足，" + prefix + "，共 " + queries.size() + " 个 Query，当前首个 Query：" + queries.get(0);
+    }
+
+    /**
+     * 当字段证据 query 仍待执行时，运行期补源的首要目标是先把 field-first 查询发出去，
+     * 而不是继续强调浏览器壳页补源；这样日志、回放和人工排障都能明确看到当前优先级。
+     */
+    private String buildFieldEvidenceSupplementRunningMessage(CollectorNodeConfig config) {
+        List<FieldEvidenceQuery> fieldEvidenceQueries = resolveFieldEvidenceQueries(config);
+        if (fieldEvidenceQueries.isEmpty()) {
+            return buildSupplementRunningMessage(config);
+        }
+        FieldEvidenceQuery firstQuery = fieldEvidenceQueries.get(0);
+        String firstField = StringUtils.hasText(firstQuery.getFieldName())
+                ? firstQuery.getFieldName()
+                : "UNKNOWN_FIELD";
+        String firstQueryText = StringUtils.hasText(firstQuery.getQuery())
+                ? firstQuery.getQuery()
+                : "未提供 query 文本";
+        return "字段证据仍待补齐，优先执行 field query，共 "
+                + fieldEvidenceQueries.size()
+                + " 条，当前字段="
+                + firstField
+                + "，首条 Query："
+                + firstQueryText;
     }
 
     /**
