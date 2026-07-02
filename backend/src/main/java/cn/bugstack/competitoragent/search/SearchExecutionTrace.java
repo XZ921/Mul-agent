@@ -75,6 +75,10 @@ public class SearchExecutionTrace {
     private Integer publicEvidenceRecoveryVerifiedCount;
     private String publicEvidenceRecoveryStatus;
     private Integer fieldEvidenceQueryCount;
+    private Integer fieldEvidenceQueryPlannedCount;
+    private Integer fieldEvidenceQueryExecutedCount;
+    private Integer fieldEvidenceQuerySkippedCount;
+    private Map<String, Integer> fieldEvidenceQuerySkipReasons;
     private List<String> fieldEvidenceFields;
     private List<String> fieldEvidencePaths;
     /**

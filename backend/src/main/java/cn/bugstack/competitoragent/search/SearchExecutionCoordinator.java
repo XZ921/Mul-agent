@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.search;
 
 import cn.bugstack.competitoragent.agent.collector.CollectorNodeConfig;
 import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
+import cn.bugstack.competitoragent.search.tavily.FieldEvidenceQueryExecutionAudit;
 import cn.bugstack.competitoragent.search.tavily.TavilyFastLaneAudit;
 import cn.bugstack.competitoragent.source.SearchRequestPhase;
 import cn.bugstack.competitoragent.source.SearchSourceRequest;
@@ -21,6 +22,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -196,13 +198,18 @@ public class SearchExecutionCoordinator {
                                          Consumer<SearchExecutionUpdate> progressListener) {
         long searchStartedAt = System.currentTimeMillis();
         SearchExecutionPlan executionPlan = initializePlan(config.getSearchExecutionPlan());
-        long searchTimeoutMillis = searchPolicyResolver.resolveSearchTimeoutMillis(
+        long baseSearchTimeoutMillis = searchPolicyResolver.resolveSearchTimeoutMillis(
                 config.getSearchTimeoutMillis(),
                 executionPlan
         );
+        ResolvedFieldEvidenceQueryPlan fieldEvidenceQueryPlan = resolveExecutableFieldEvidenceQueries(
+                config,
+                baseSearchTimeoutMillis
+        );
+        long searchTimeoutMillis = baseSearchTimeoutMillis;
         searchTimeoutMillis = searchPolicyResolver.ensureMinimumTimeoutForFieldEvidenceQueries(
                 searchTimeoutMillis,
-                resolveFieldEvidenceQueries(config)
+                fieldEvidenceQueryPlan.getPlanned()
         );
         List<SearchProgressSnapshot> progressSnapshots = new ArrayList<>();
         Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
@@ -309,6 +316,7 @@ public class SearchExecutionCoordinator {
                 .fallbackSuggested(false)
                 .blockedCount(0)
                 .build();
+        TavilyFastLaneAudit providerTavilyFastLaneAudit = null;
 
         // 职责边界 1：先验证规划期高优先级候选，只有在验证不足时才允许进入补源阶段。
         if (!Boolean.TRUE.equals(config.getVerifyCandidates()) || allCandidates.isEmpty()) {
@@ -386,7 +394,8 @@ public class SearchExecutionCoordinator {
                 SupplementExecutionOutcome supplementOutcome = executeSupplementByFallbackOrder(
                         config,
                         allCandidates,
-                        supplementTargetPoolSize
+                        supplementTargetPoolSize,
+                        fieldEvidenceQueryPlan
                 );
                 List<SourceCandidate> supplementedCandidates = sourceCandidateRanker.rankDeduplicateAndLimit(
                         supplementOutcome.getSupplementedCandidates(),
@@ -396,6 +405,7 @@ public class SearchExecutionCoordinator {
                 browserSearchResult = supplementOutcome.getBrowserSearchResult();
                 supplementMethod = supplementOutcome.getSupplementMethod();
                 providerFallbackUsed = supplementOutcome.isProviderFallbackUsed();
+                providerTavilyFastLaneAudit = supplementOutcome.getProviderTavilyFastLaneAudit();
                 fallbackDecision = supplementOutcome.getFallbackDecision();
                 supplementedCount = supplementedCandidates.size();
                 if (!supplementedCandidates.isEmpty()) {
@@ -431,6 +441,12 @@ public class SearchExecutionCoordinator {
                         ? "运行期补源未返回新增候选，回退到规划期候选"
                         : "运行期补源新增 " + supplementedCount + " 条候选来源，来源="
                         + supplementMethod + "，" + browserSearchResult.getSummary();
+                if (pendingFieldEvidenceQueries) {
+                    supplementMessage += "；" + buildFieldEvidenceSupplementCompletionMessage(
+                            fieldEvidenceQueryPlan,
+                            providerTavilyFastLaneAudit
+                    );
+                }
                 if (supplementedCount == 0
                         && !"BROWSER_DISABLED_KEEP_PLANNED".equals(fallbackDecision)
                         && !"BROWSER_DISABLED_USE_HTTP_FALLBACK".equals(fallbackDecision)) {
@@ -608,7 +624,12 @@ public class SearchExecutionCoordinator {
         TavilyFastLaneAudit tavilyFastLaneAudit = buildTavilyFastLaneAudit(
                 allCandidates,
                 selectedTargets,
-                providerFallbackUsed
+                providerFallbackUsed,
+                providerTavilyFastLaneAudit
+        );
+        FieldEvidenceExecutionStats fieldEvidenceExecutionStats = resolveFieldEvidenceExecutionStats(
+                fieldEvidenceQueryPlan,
+                providerTavilyFastLaneAudit
         );
 
         SearchExecutionTrace executionTrace = SearchExecutionTrace.builder()
@@ -659,9 +680,13 @@ public class SearchExecutionCoordinator {
                 .publicEvidenceRecoveryCandidateCount(publicEvidenceRecoveryCandidateCount)
                 .publicEvidenceRecoveryVerifiedCount(publicEvidenceRecoveryVerifiedCount)
                 .publicEvidenceRecoveryStatus(publicEvidenceRecoveryStatus)
-                .fieldEvidenceQueryCount(resolveFieldEvidenceQueries(config).size())
-                .fieldEvidenceFields(resolveDistinctFieldEvidenceFields(config))
-                .fieldEvidencePaths(resolveDistinctFieldEvidencePaths(config))
+                .fieldEvidenceQueryCount(fieldEvidenceQueryPlan.getPlanned().size())
+                .fieldEvidenceQueryPlannedCount(fieldEvidenceExecutionStats.getPlannedCount())
+                .fieldEvidenceQueryExecutedCount(fieldEvidenceExecutionStats.getExecutedCount())
+                .fieldEvidenceQuerySkippedCount(fieldEvidenceExecutionStats.getSkippedCount())
+                .fieldEvidenceQuerySkipReasons(fieldEvidenceExecutionStats.getSkipReasons())
+                .fieldEvidenceFields(resolveDistinctFieldEvidenceFields(fieldEvidenceQueryPlan.getPlanned()))
+                .fieldEvidencePaths(resolveDistinctFieldEvidencePaths(fieldEvidenceQueryPlan.getPlanned()))
                 .evidenceRepairPlan(evidenceRepairPlanProjection)
                 .tavilyFastLaneAudit(tavilyFastLaneAudit)
                 .resumedFromCheckpoint(resumedFromCheckpoint)
@@ -889,8 +914,9 @@ public class SearchExecutionCoordinator {
      * 这样同类研究任务可以稳定复现相同的补源策略，避免顺序失控。
      */
     private SupplementExecutionOutcome executeSupplementByFallbackOrder(CollectorNodeConfig config,
-                                                                       List<SourceCandidate> existingCandidates,
-                                                                       int targetPoolSize) {
+                                                                        List<SourceCandidate> existingCandidates,
+                                                                        int targetPoolSize,
+                                                                        ResolvedFieldEvidenceQueryPlan fieldEvidenceQueryPlan) {
         BrowserSearchRuntimeResult browserSearchResult = defaultBrowserSupplementResult(config);
         List<SourceCandidate> supplementedCandidates = new ArrayList<>();
         boolean providerFallbackUsed = false;
@@ -902,6 +928,7 @@ public class SearchExecutionCoordinator {
                 && !"HEURISTIC_ONLY".equalsIgnoreCase(config.getSearchMode());
         boolean browserExecuted = false;
         boolean httpExecuted = false;
+        SearchSourceRequest sourceRequest = null;
         // 字段 query 仍待执行时，不能仅因候选池已满就提前结束 fallback 循环，
         // 否则真正承载 field-first query 的 HTTP stage 会被 BROWSER stage 永久饿死。
         boolean pendingFieldEvidenceQueries = hasPendingFieldEvidenceQueries(config);
@@ -935,9 +962,8 @@ public class SearchExecutionCoordinator {
             }
 
             if ("HTTP".equals(stage) && httpModeEnabled && !httpExecuted) {
-                List<SourceCandidate> httpSearchCandidates = searchSourceProvider.search(
-                        buildSearchSourceRequest(config, existingCandidates)
-                );
+                sourceRequest = buildSearchSourceRequest(config, existingCandidates, fieldEvidenceQueryPlan);
+                List<SourceCandidate> httpSearchCandidates = searchSourceProvider.search(sourceRequest);
                 if (httpSearchCandidates == null || httpSearchCandidates.isEmpty()) {
                     httpSearchCandidates = searchSourceProvider.search(
                             config.getCompetitorName(),
@@ -979,7 +1005,8 @@ public class SearchExecutionCoordinator {
                 supplementedCandidates,
                 supplementMethod,
                 fallbackDecision,
-                providerFallbackUsed);
+                providerFallbackUsed,
+                sourceRequest == null ? null : sourceRequest.getTavilyFastLaneAudit());
     }
 
     /**
@@ -1050,12 +1077,17 @@ public class SearchExecutionCoordinator {
      * 这里显式透传 query、域名偏好、黑名单与当前候选池，让 Tavily 这类上下文敏感 provider 能拿到完整输入。
      */
     private SearchSourceRequest buildSearchSourceRequest(CollectorNodeConfig config,
-                                                         List<SourceCandidate> allCandidates) {
+                                                         List<SourceCandidate> allCandidates,
+                                                         ResolvedFieldEvidenceQueryPlan fieldEvidenceQueryPlan) {
         return SearchSourceRequest.builder()
                 .competitorName(config.getCompetitorName())
                 .requestedScopes(List.of(config.getSourceType()))
                 .searchQueries(resolveSearchQueries(config, null))
-                .fieldEvidenceQueries(resolveFieldEvidenceQueries(config))
+                .fieldEvidenceQueries(fieldEvidenceQueryPlan == null ? List.of() : fieldEvidenceQueryPlan.getExecutable())
+                .fieldEvidenceQueryPlannedCount(fieldEvidenceQueryPlan == null ? 0 : fieldEvidenceQueryPlan.getPlanned().size())
+                .fieldEvidenceQueryExecutableCount(fieldEvidenceQueryPlan == null ? 0 : fieldEvidenceQueryPlan.getExecutable().size())
+                .fieldEvidenceQuerySkippedCount(fieldEvidenceQueryPlan == null ? 0 : fieldEvidenceQueryPlan.getSkipped().size())
+                .fieldEvidenceExecutionDeadlineEpochMillis(resolveFieldEvidenceExecutionDeadlineEpochMillis(config))
                 .preferredDomains(defaultList(config.getPreferredDomains()))
                 .includeDomains(defaultList(config.getIncludeDomains()))
                 .blockedDomains(defaultList(config.getBlockedDomains()))
@@ -1089,6 +1121,63 @@ public class SearchExecutionCoordinator {
             return List.of();
         }
         return config.getDimensionEvidencePlan().allPlannedQueries();
+    }
+
+    /**
+     * 字段 query 的完整计划要保留下来做审计，同时只把预算内、优先级更高的子集透传给 provider。
+     * 这里刻意用“放大前”的 budget 算 quota，避免 minimum timeout 反推回全量执行。
+     */
+    private ResolvedFieldEvidenceQueryPlan resolveExecutableFieldEvidenceQueries(CollectorNodeConfig config,
+                                                                                 long baseSearchTimeoutMillis) {
+        List<FieldEvidenceQuery> planned = resolveFieldEvidenceQueries(config);
+        if (planned.isEmpty()) {
+            return ResolvedFieldEvidenceQueryPlan.empty();
+        }
+        int quota = searchPolicyResolver.resolveExecutableFieldEvidenceQueryQuota(baseSearchTimeoutMillis);
+        List<FieldEvidenceQuery> sorted = planned.stream()
+                .filter(Objects::nonNull)
+                .sorted(Comparator
+                        .comparing(SearchExecutionCoordinator::resolveFieldEvidencePriority)
+                        .thenComparing(SearchExecutionCoordinator::resolveFieldEvidenceFingerprint, Comparator.nullsLast(String::compareTo))
+                        .thenComparing(FieldEvidenceQuery::getQuery, Comparator.nullsLast(String::compareTo)))
+                .toList();
+        // 显式保留一条最低执行额度，避免 pending field query 在“总超时兜底被放行”的场景里被预算层再次完全饿死。
+        // 这与后续档 B 的循环内熔断配合使用：先允许最高优先级 query 起跑，再由执行层决定是否继续。
+        if (quota <= 0) {
+            return new ResolvedFieldEvidenceQueryPlan(
+                    planned,
+                    List.of(sorted.get(0)),
+                    sorted.size() <= 1 ? List.of() : new ArrayList<>(sorted.subList(1, sorted.size())),
+                    sorted.size() <= 1 ? Map.of() : Map.of("SKIPPED_OVER_BUDGET", sorted.size() - 1)
+            );
+        }
+        List<FieldEvidenceQuery> executable = new ArrayList<>(sorted.stream().limit(quota).toList());
+        List<FieldEvidenceQuery> skipped = new ArrayList<>(sorted.stream().skip(quota).toList());
+        return new ResolvedFieldEvidenceQueryPlan(
+                planned,
+                executable,
+                skipped,
+                skipped.isEmpty() ? Map.of() : Map.of("SKIPPED_OVER_BUDGET", skipped.size())
+        );
+    }
+
+    /**
+     * 档 A 的 quota 是基于放大前预算计算的；档 B 的执行 deadline 也必须沿用同一口径，
+     * 避免 request 侧拿到另一个被放大后的 budget，导致“挑出来的 executable 很少，但单条又能跑很久”。
+     */
+    private Long resolveFieldEvidenceExecutionDeadlineEpochMillis(CollectorNodeConfig config) {
+        if (config == null) {
+            return null;
+        }
+        SearchExecutionPlan executionPlan = initializePlan(config.getSearchExecutionPlan());
+        long baseSearchTimeoutMillis = searchPolicyResolver.resolveSearchTimeoutMillis(
+                config.getSearchTimeoutMillis(),
+                executionPlan
+        );
+        if (baseSearchTimeoutMillis < 0L) {
+            return null;
+        }
+        return System.currentTimeMillis() + baseSearchTimeoutMillis;
     }
 
     /**
@@ -1832,7 +1921,35 @@ public class SearchExecutionCoordinator {
      */
     private TavilyFastLaneAudit buildTavilyFastLaneAudit(List<SourceCandidate> sourceCandidates,
                                                          List<SearchCollectionTarget> selectedTargets,
-                                                         boolean providerFallbackUsed) {
+                                                         boolean providerFallbackUsed,
+                                                         TavilyFastLaneAudit providerAudit) {
+        TavilyFastLaneAudit candidateAudit = buildCandidateTavilyFastLaneAudit(
+                sourceCandidates,
+                selectedTargets,
+                providerFallbackUsed
+        );
+        if (providerAudit != null
+                && providerAudit.getFieldEvidenceQueryExecutions() != null
+                && !providerAudit.getFieldEvidenceQueryExecutions().isEmpty()) {
+            return providerAudit.toBuilder()
+                    .playwrightInvocationBaselineHint(candidateAudit == null
+                            ? providerAudit.getPlaywrightInvocationBaselineHint()
+                            : candidateAudit.getPlaywrightInvocationBaselineHint())
+                    .build();
+        }
+        List<TavilyFastLaneAudit> audits = new ArrayList<>();
+        if (providerAudit != null) {
+            audits.add(providerAudit);
+        }
+        if (candidateAudit != null) {
+            audits.add(candidateAudit);
+        }
+        return TavilyFastLaneAudit.merge(audits);
+    }
+
+    private TavilyFastLaneAudit buildCandidateTavilyFastLaneAudit(List<SourceCandidate> sourceCandidates,
+                                                                  List<SearchCollectionTarget> selectedTargets,
+                                                                  boolean providerFallbackUsed) {
         if (sourceCandidates == null || sourceCandidates.isEmpty()) {
             return null;
         }
@@ -1911,6 +2028,12 @@ public class SearchExecutionCoordinator {
                         ? List.of()
                         : executionTrace.getSelectedUrls())
                 .fieldEvidenceQueryCount(executionTrace == null ? 0 : executionTrace.getFieldEvidenceQueryCount())
+                .fieldEvidenceQueryPlannedCount(executionTrace == null ? 0 : executionTrace.getFieldEvidenceQueryPlannedCount())
+                .fieldEvidenceQueryExecutedCount(executionTrace == null ? 0 : executionTrace.getFieldEvidenceQueryExecutedCount())
+                .fieldEvidenceQuerySkippedCount(executionTrace == null ? 0 : executionTrace.getFieldEvidenceQuerySkippedCount())
+                .fieldEvidenceQuerySkipReasons(executionTrace == null || executionTrace.getFieldEvidenceQuerySkipReasons() == null
+                        ? Map.of()
+                        : executionTrace.getFieldEvidenceQuerySkipReasons())
                 .fieldEvidenceFields(executionTrace == null || executionTrace.getFieldEvidenceFields() == null
                         ? List.of()
                         : executionTrace.getFieldEvidenceFields())
@@ -1921,12 +2044,66 @@ public class SearchExecutionCoordinator {
                 .build();
     }
 
+    private FieldEvidenceExecutionStats resolveFieldEvidenceExecutionStats(ResolvedFieldEvidenceQueryPlan fieldEvidenceQueryPlan,
+                                                                           TavilyFastLaneAudit providerAudit) {
+        int plannedCount = fieldEvidenceQueryPlan == null ? 0 : fieldEvidenceQueryPlan.getPlanned().size();
+        Map<String, Integer> skipReasons = new LinkedHashMap<>();
+        if (fieldEvidenceQueryPlan != null) {
+            mergeIntegerCounters(skipReasons, fieldEvidenceQueryPlan.getSkipReasons());
+        }
+        List<FieldEvidenceQueryExecutionAudit> queryAudits = providerAudit == null
+                || providerAudit.getFieldEvidenceQueryExecutions() == null
+                ? List.of()
+                : providerAudit.getFieldEvidenceQueryExecutions();
+        if (queryAudits.isEmpty()) {
+            int executableCount = fieldEvidenceQueryPlan == null ? 0 : fieldEvidenceQueryPlan.getExecutable().size();
+            int skippedCount = fieldEvidenceQueryPlan == null ? 0 : fieldEvidenceQueryPlan.getSkipped().size();
+            return new FieldEvidenceExecutionStats(plannedCount, executableCount, skippedCount, skipReasons, 0L);
+        }
+        int executedCount = 0;
+        int providerSkippedCount = 0;
+        long elapsedMillis = 0L;
+        for (FieldEvidenceQueryExecutionAudit audit : queryAudits) {
+            if (audit == null) {
+                continue;
+            }
+            elapsedMillis += audit.getElapsedMillis() == null ? 0L : Math.max(0L, audit.getElapsedMillis());
+            if ("SKIPPED".equalsIgnoreCase(audit.getStatus())) {
+                providerSkippedCount++;
+                String reason = StringUtils.hasText(audit.getSkipReason())
+                        ? audit.getSkipReason().trim()
+                        : "SKIPPED_UNKNOWN";
+                skipReasons.merge(reason, 1, Integer::sum);
+                continue;
+            }
+            executedCount++;
+        }
+        int coordinatorSkippedCount = fieldEvidenceQueryPlan == null ? 0 : fieldEvidenceQueryPlan.getSkipped().size();
+        return new FieldEvidenceExecutionStats(
+                plannedCount,
+                executedCount,
+                coordinatorSkippedCount + providerSkippedCount,
+                skipReasons,
+                elapsedMillis
+        );
+    }
+
+    private String buildFieldEvidenceSupplementCompletionMessage(ResolvedFieldEvidenceQueryPlan fieldEvidenceQueryPlan,
+                                                                 TavilyFastLaneAudit providerAudit) {
+        FieldEvidenceExecutionStats stats = resolveFieldEvidenceExecutionStats(fieldEvidenceQueryPlan, providerAudit);
+        return "field query 计划 " + stats.getPlannedCount()
+                + " 条，实际执行 " + stats.getExecutedCount()
+                + " 条，跳过 " + stats.getSkippedCount()
+                + " 条，累计耗时 " + stats.getElapsedMillis()
+                + "ms，跳过原因=" + (stats.getSkipReasons().isEmpty() ? "无" : stats.getSkipReasons());
+    }
+
     /**
      * 字段 query 摘要只用于审计与可观测性，因此在 coordinator 侧收敛为去重后的轻量列表，
      * 避免把完整 planned query 明细重复写入 trace / summary。
      */
-    private List<String> resolveDistinctFieldEvidenceFields(CollectorNodeConfig config) {
-        return resolveFieldEvidenceQueries(config).stream()
+    private List<String> resolveDistinctFieldEvidenceFields(List<FieldEvidenceQuery> fieldEvidenceQueries) {
+        return fieldEvidenceQueries.stream()
                 .map(FieldEvidenceQuery::getFieldName)
                 .filter(StringUtils::hasText)
                 .map(String::trim)
@@ -1934,8 +2111,8 @@ public class SearchExecutionCoordinator {
                 .toList();
     }
 
-    private List<String> resolveDistinctFieldEvidencePaths(CollectorNodeConfig config) {
-        return resolveFieldEvidenceQueries(config).stream()
+    private List<String> resolveDistinctFieldEvidencePaths(List<FieldEvidenceQuery> fieldEvidenceQueries) {
+        return fieldEvidenceQueries.stream()
                 .map(FieldEvidenceQuery::getEvidencePathKey)
                 .filter(StringUtils::hasText)
                 .map(String::trim)
@@ -2050,6 +2227,18 @@ public class SearchExecutionCoordinator {
         values.add(value.trim());
     }
 
+    private void mergeIntegerCounters(Map<String, Integer> target, Map<String, Integer> additions) {
+        if (target == null || additions == null || additions.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, Integer> entry : additions.entrySet()) {
+            if (entry == null || !StringUtils.hasText(entry.getKey())) {
+                continue;
+            }
+            target.merge(entry.getKey().trim(), entry.getValue() == null ? 0 : entry.getValue(), Integer::sum);
+        }
+    }
+
     private int countSelectedTavilyFastLaneTargets(List<SearchCollectionTarget> selectedTargets) {
         if (selectedTargets == null || selectedTargets.isEmpty()) {
             return 0;
@@ -2062,6 +2251,20 @@ public class SearchExecutionCoordinator {
             }
         }
         return count;
+    }
+
+    private static Integer resolveFieldEvidencePriority(FieldEvidenceQuery query) {
+        if (query == null || query.getPriority() == null) {
+            return Integer.MAX_VALUE;
+        }
+        return query.getPriority();
+    }
+
+    private static String resolveFieldEvidenceFingerprint(FieldEvidenceQuery query) {
+        if (query == null || !StringUtils.hasText(query.getQueryFingerprint())) {
+            return null;
+        }
+        return query.getQueryFingerprint().trim();
     }
 
     private SearchRuntimePolicy resolveRuntimePolicy(CollectorNodeConfig config) {
@@ -2241,17 +2444,20 @@ public class SearchExecutionCoordinator {
         private final String supplementMethod;
         private final String fallbackDecision;
         private final boolean providerFallbackUsed;
+        private final TavilyFastLaneAudit providerTavilyFastLaneAudit;
 
         private SupplementExecutionOutcome(BrowserSearchRuntimeResult browserSearchResult,
                                            List<SourceCandidate> supplementedCandidates,
                                            String supplementMethod,
                                            String fallbackDecision,
-                                           boolean providerFallbackUsed) {
+                                           boolean providerFallbackUsed,
+                                           TavilyFastLaneAudit providerTavilyFastLaneAudit) {
             this.browserSearchResult = browserSearchResult;
             this.supplementedCandidates = supplementedCandidates;
             this.supplementMethod = supplementMethod;
             this.fallbackDecision = fallbackDecision;
             this.providerFallbackUsed = providerFallbackUsed;
+            this.providerTavilyFastLaneAudit = providerTavilyFastLaneAudit;
         }
 
         private BrowserSearchRuntimeResult getBrowserSearchResult() {
@@ -2272,6 +2478,97 @@ public class SearchExecutionCoordinator {
 
         private boolean isProviderFallbackUsed() {
             return providerFallbackUsed;
+        }
+
+        private TavilyFastLaneAudit getProviderTavilyFastLaneAudit() {
+            return providerTavilyFastLaneAudit;
+        }
+    }
+
+    /**
+     * 字段 query 执行态统计。
+     * 它把 coordinator 预算分层和 provider 真实执行审计合并成同一口径，供 trace、summary 和 step message 使用。
+     */
+    private static class FieldEvidenceExecutionStats {
+
+        private final int plannedCount;
+        private final int executedCount;
+        private final int skippedCount;
+        private final Map<String, Integer> skipReasons;
+        private final long elapsedMillis;
+
+        private FieldEvidenceExecutionStats(int plannedCount,
+                                            int executedCount,
+                                            int skippedCount,
+                                            Map<String, Integer> skipReasons,
+                                            long elapsedMillis) {
+            this.plannedCount = plannedCount;
+            this.executedCount = executedCount;
+            this.skippedCount = skippedCount;
+            this.skipReasons = skipReasons == null || skipReasons.isEmpty() ? Map.of() : Map.copyOf(skipReasons);
+            this.elapsedMillis = elapsedMillis;
+        }
+
+        private int getPlannedCount() {
+            return plannedCount;
+        }
+
+        private int getExecutedCount() {
+            return executedCount;
+        }
+
+        private int getSkippedCount() {
+            return skippedCount;
+        }
+
+        private Map<String, Integer> getSkipReasons() {
+            return skipReasons;
+        }
+
+        private long getElapsedMillis() {
+            return elapsedMillis;
+        }
+    }
+
+    /**
+     * 这份轻量结果对象把字段 query 的“完整计划 / 预算内可执行 / 因预算跳过”三层显式分开，
+     * coordinator、trace、summary 和 provider request 都复用它，避免各处再自行推导导致口径漂移。
+     */
+    private static class ResolvedFieldEvidenceQueryPlan {
+
+        private final List<FieldEvidenceQuery> planned;
+        private final List<FieldEvidenceQuery> executable;
+        private final List<FieldEvidenceQuery> skipped;
+        private final Map<String, Integer> skipReasons;
+
+        private ResolvedFieldEvidenceQueryPlan(List<FieldEvidenceQuery> planned,
+                                               List<FieldEvidenceQuery> executable,
+                                               List<FieldEvidenceQuery> skipped,
+                                               Map<String, Integer> skipReasons) {
+            this.planned = planned == null ? List.of() : List.copyOf(planned);
+            this.executable = executable == null ? List.of() : List.copyOf(executable);
+            this.skipped = skipped == null ? List.of() : List.copyOf(skipped);
+            this.skipReasons = skipReasons == null || skipReasons.isEmpty() ? Map.of() : Map.copyOf(skipReasons);
+        }
+
+        private static ResolvedFieldEvidenceQueryPlan empty() {
+            return new ResolvedFieldEvidenceQueryPlan(List.of(), List.of(), List.of(), Map.of());
+        }
+
+        private List<FieldEvidenceQuery> getPlanned() {
+            return planned;
+        }
+
+        private List<FieldEvidenceQuery> getExecutable() {
+            return executable;
+        }
+
+        private List<FieldEvidenceQuery> getSkipped() {
+            return skipped;
+        }
+
+        private Map<String, Integer> getSkipReasons() {
+            return skipReasons;
         }
     }
 }

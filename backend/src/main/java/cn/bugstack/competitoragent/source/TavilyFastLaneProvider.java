@@ -1,7 +1,9 @@
 package cn.bugstack.competitoragent.source;
 
 import cn.bugstack.competitoragent.search.tavily.DomainHintSet;
+import cn.bugstack.competitoragent.search.tavily.FieldEvidenceQueryExecutionAudit;
 import cn.bugstack.competitoragent.search.tavily.TavilyDomainHintResolver;
+import cn.bugstack.competitoragent.search.tavily.TavilyFastLaneAudit;
 import cn.bugstack.competitoragent.search.tavily.TavilyPageTypeClassifier;
 import cn.bugstack.competitoragent.search.tavily.TavilyPrefetchedContent;
 import cn.bugstack.competitoragent.search.tavily.TavilyPrefetchedContentGate;
@@ -36,6 +38,7 @@ import java.util.Set;
 public class TavilyFastLaneProvider implements SearchSourceProvider {
 
     private static final List<String> DEFAULT_SCOPES = List.of("OFFICIAL", "DOCS", "PRICING", "NEWS", "REVIEW");
+    private static final long FIELD_QUERY_MIN_START_BUDGET_MILLIS = 1_000L;
 
     private final TavilySearchProperties properties;
     private final TavilySearchClient client;
@@ -149,6 +152,9 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
      */
     private List<SourceCandidate> searchFieldEvidenceQueries(SearchSourceRequest request, String scope) {
         List<SourceCandidate> candidates = new ArrayList<>();
+        List<FieldEvidenceQueryExecutionAudit> queryAudits = new ArrayList<>();
+        LinkedHashSet<String> requestIds = new LinkedHashSet<>();
+        boolean startedAnyFieldEvidenceQuery = false;
         for (FieldEvidenceQuery query : request.getFieldEvidenceQueries()) {
             if (query == null || !StringUtils.hasText(query.getQuery())) {
                 continue;
@@ -158,14 +164,116 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
                 continue;
             }
             TavilySearchProfile profile = profileResolver.resolveFieldEvidence(query);
+            long remainingBudgetMillis = resolveRemainingFieldEvidenceBudgetMillis(request);
+            if (startedAnyFieldEvidenceQuery && shouldStopFieldEvidenceExecution(remainingBudgetMillis)) {
+                queryAudits.add(buildFieldEvidenceQueryAudit(query, "SKIPPED", 0L, 0,
+                        null, "SKIPPED_BUDGET_EXHAUSTED", null));
+                break;
+            }
+            long startedAt = System.currentTimeMillis();
             try {
-                TavilySearchClient.TavilySearchResponse response = client.search(profile);
+                TavilySearchClient.TavilySearchResponse response = client.search(profile, remainingBudgetMillis);
+                startedAnyFieldEvidenceQuery = true;
+                int resultCount = response == null || response.getResults() == null ? 0 : response.getResults().size();
+                String requestId = response == null ? null : response.getRequestId();
+                if (StringUtils.hasText(requestId)) {
+                    requestIds.add(requestId.trim());
+                }
+                if (response != null && StringUtils.hasText(response.getFailureReason())) {
+                    queryAudits.add(buildFieldEvidenceQueryAudit(query, "FAILED",
+                            System.currentTimeMillis() - startedAt, resultCount, requestId,
+                            null, response.getFailureReason()));
+                } else {
+                    queryAudits.add(buildFieldEvidenceQueryAudit(query, "SUCCESS",
+                            System.currentTimeMillis() - startedAt, resultCount, requestId,
+                            null, null));
+                }
                 candidates.addAll(mapResponse(request, response, profile, queryScope));
             } catch (RuntimeException exception) {
+                startedAnyFieldEvidenceQuery = true;
+                queryAudits.add(buildFieldEvidenceQueryAudit(query, "FAILED",
+                        System.currentTimeMillis() - startedAt, 0, null,
+                        null, exception.getMessage()));
                 candidates.add(buildFailedFieldEvidenceCandidate(query, queryScope, exception.getMessage()));
             }
         }
+        request.setTavilyFastLaneAudit(buildFieldEvidenceFastLaneAudit(queryAudits, requestIds));
         return deduplicateByUrl(candidates);
+    }
+
+    private TavilyFastLaneAudit buildFieldEvidenceFastLaneAudit(List<FieldEvidenceQueryExecutionAudit> queryAudits,
+                                                               Set<String> requestIds) {
+        if (queryAudits == null || queryAudits.isEmpty()) {
+            return null;
+        }
+        int queriesSent = 0;
+        int totalResults = 0;
+        LinkedHashMap<String, Integer> rejectionReasons = new LinkedHashMap<>();
+        for (FieldEvidenceQueryExecutionAudit audit : queryAudits) {
+            if (audit == null) {
+                continue;
+            }
+            if (!"SKIPPED".equalsIgnoreCase(audit.getStatus())) {
+                queriesSent++;
+            }
+            totalResults += audit.getResultCount() == null ? 0 : audit.getResultCount();
+            if (StringUtils.hasText(audit.getFailureReason())) {
+                rejectionReasons.merge(audit.getFailureReason().trim(), 1, Integer::sum);
+            }
+            if (StringUtils.hasText(audit.getSkipReason())) {
+                rejectionReasons.merge(audit.getSkipReason().trim(), 1, Integer::sum);
+            }
+        }
+        return TavilyFastLaneAudit.builder()
+                .queryModes(List.of("FIELD_EVIDENCE"))
+                .queryOrigins(List.of("SUPPLEMENT"))
+                .queriesSent(queriesSent)
+                .totalResults(totalResults)
+                .fastLaneUsableCount(totalResults)
+                .fastLaneRejectedCount(Math.max(0, queryAudits.size() - totalResults))
+                .rejectionReasons(rejectionReasons.isEmpty() ? Map.of() : rejectionReasons)
+                .bootstrapTriggered(false)
+                .fallbackTriggered(false)
+                .tavilyRequestIds(requestIds == null ? List.of() : new ArrayList<>(requestIds))
+                .fieldEvidenceQueryExecutions(queryAudits)
+                .build();
+    }
+
+    private FieldEvidenceQueryExecutionAudit buildFieldEvidenceQueryAudit(FieldEvidenceQuery query,
+                                                                          String status,
+                                                                          long elapsedMillis,
+                                                                          int resultCount,
+                                                                          String requestId,
+                                                                          String skipReason,
+                                                                          String failureReason) {
+        return FieldEvidenceQueryExecutionAudit.builder()
+                .queryFingerprint(query == null ? null : query.getQueryFingerprint())
+                .fieldName(query == null ? null : query.getFieldName())
+                .evidencePathKey(query == null ? null : query.getEvidencePathKey())
+                .queryIntent(query == null ? null : query.getQueryIntent())
+                .query(query == null ? null : query.getQuery())
+                .status(status)
+                .elapsedMillis(elapsedMillis)
+                .resultCount(resultCount)
+                .tavilyRequestId(requestId)
+                .skipReason(skipReason)
+                .failureReason(failureReason)
+                .build();
+    }
+
+    /**
+     * 执行层预算闸门的职责是“没预算就别再启动下一条长请求”，
+     * 这里先实现最小兜底：只要 deadline 已经耗尽，或连 1 秒启动预算都不够，就直接停止后续 query。
+     */
+    private boolean shouldStopFieldEvidenceExecution(long remainingBudgetMillis) {
+        return remainingBudgetMillis != -1L && remainingBudgetMillis < FIELD_QUERY_MIN_START_BUDGET_MILLIS;
+    }
+
+    private long resolveRemainingFieldEvidenceBudgetMillis(SearchSourceRequest request) {
+        if (request == null || request.getFieldEvidenceExecutionDeadlineEpochMillis() == null) {
+            return -1L;
+        }
+        return request.getFieldEvidenceExecutionDeadlineEpochMillis() - System.currentTimeMillis();
     }
 
     /**

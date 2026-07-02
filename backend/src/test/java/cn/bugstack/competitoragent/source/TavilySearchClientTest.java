@@ -110,6 +110,29 @@ class TavilySearchClientTest {
         assertThat(searchResponse.getFailureReason()).contains("status=503");
     }
 
+    @Test
+    void shouldClampHttpRequestTimeoutByPerCallBudget() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(response.body()).thenReturn("""
+                {
+                  "query": "抖音 开放平台 API 官方文档",
+                  "request_id": "req-docs-3",
+                  "results": []
+                }
+                """);
+        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+
+        TavilySearchClient client = new TavilySearchClient(properties(), objectMapper, httpClient);
+
+        client.search(profile(), 2_000L);
+
+        HttpRequest request = client.getLastRequestForTest();
+        assertThat(request).isNotNull();
+        assertThat(request.timeout()).hasValue(java.time.Duration.ofSeconds(2));
+    }
+
     private TavilySearchProperties properties() {
         TavilySearchProperties properties = new TavilySearchProperties();
         properties.setEnabled(true);

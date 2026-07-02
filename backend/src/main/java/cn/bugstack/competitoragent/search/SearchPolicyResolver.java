@@ -178,6 +178,17 @@ public class SearchPolicyResolver {
     }
 
     /**
+     * 字段 query 的执行配额必须基于“放大前”的搜索预算来计算，
+     * 否则 18.3s 这类原始预算会先被抬高，再被反推成“全部都能跑”，回到当前问题。
+     */
+    public int resolveExecutableFieldEvidenceQueryQuota(long baseSearchTimeoutMillis) {
+        if (baseSearchTimeoutMillis <= 0L) {
+            return 0;
+        }
+        return (int) Math.max(0L, baseSearchTimeoutMillis / FIELD_QUERY_PER_QUERY_TIMEOUT_MILLIS);
+    }
+
+    /**
      * 搜索引擎解析也统一走这里，避免调用方自己拼默认值或绕过可用引擎校验。
      */
     public String resolveSearchEngineKey(String requestedEngineKey, SearchEngineProperties searchEngineProperties) {

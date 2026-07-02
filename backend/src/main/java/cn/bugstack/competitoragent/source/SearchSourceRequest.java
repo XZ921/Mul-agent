@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.source;
 
 import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
+import cn.bugstack.competitoragent.search.tavily.TavilyFastLaneAudit;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -50,6 +51,16 @@ public class SearchSourceRequest {
 
     @Builder.Default
     private List<FieldEvidenceQuery> fieldEvidenceQueries = new ArrayList<>();
+
+    /**
+     * 字段 query 的完整计划量与执行量由 coordinator 在进入 supplement 前统一计算，
+     * provider 只消费可执行子集，但仍需要拿到这份轻量预算快照用于审计回传和可观测输出。
+     */
+    private Integer fieldEvidenceQueryPlannedCount;
+    private Integer fieldEvidenceQueryExecutableCount;
+    private Integer fieldEvidenceQuerySkippedCount;
+    private Long fieldEvidenceExecutionDeadlineEpochMillis;
+    private TavilyFastLaneAudit tavilyFastLaneAudit;
 
     private String preferredProviderKey;
     private String preferredQueryMode;

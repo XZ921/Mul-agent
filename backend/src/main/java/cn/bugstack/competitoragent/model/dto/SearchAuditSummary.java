@@ -15,6 +15,7 @@ import lombok.NoArgsConstructor;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 搜索审计轻量摘要。
@@ -40,6 +41,10 @@ public class SearchAuditSummary {
     private String recoveryCheckpoint;
     private List<String> sourceUrls;
     private Integer fieldEvidenceQueryCount;
+    private Integer fieldEvidenceQueryPlannedCount;
+    private Integer fieldEvidenceQueryExecutedCount;
+    private Integer fieldEvidenceQuerySkippedCount;
+    private Map<String, Integer> fieldEvidenceQuerySkipReasons;
     private List<String> fieldEvidenceFields;
     private List<String> fieldEvidencePaths;
     private TavilyFastLaneAudit tavilyFastLaneAudit;
@@ -72,6 +77,10 @@ public class SearchAuditSummary {
                 .recoveryCheckpoint(text(traceNode, "recoveryCheckpoint"))
                 .sourceUrls(readStringList(traceNode.path("selectedUrls")))
                 .fieldEvidenceQueryCount(readInteger(traceNode, "fieldEvidenceQueryCount"))
+                .fieldEvidenceQueryPlannedCount(readInteger(traceNode, "fieldEvidenceQueryPlannedCount"))
+                .fieldEvidenceQueryExecutedCount(readInteger(traceNode, "fieldEvidenceQueryExecutedCount"))
+                .fieldEvidenceQuerySkippedCount(readInteger(traceNode, "fieldEvidenceQuerySkippedCount"))
+                .fieldEvidenceQuerySkipReasons(readIntegerMap(traceNode.path("fieldEvidenceQuerySkipReasons")))
                 .fieldEvidenceFields(readStringList(traceNode.path("fieldEvidenceFields")))
                 .fieldEvidencePaths(readStringList(traceNode.path("fieldEvidencePaths")))
                 .tavilyFastLaneAudit(readTavilyFastLaneAudit(objectMapper, traceNode, auditNode))
@@ -99,8 +108,12 @@ public class SearchAuditSummary {
         int discardedCount = 0;
         int attemptedCount = 0;
         int fieldEvidenceQueryCount = 0;
+        int fieldEvidenceQueryPlannedCount = 0;
+        int fieldEvidenceQueryExecutedCount = 0;
+        int fieldEvidenceQuerySkippedCount = 0;
         LinkedHashSet<String> fieldEvidenceFields = new LinkedHashSet<>();
         LinkedHashSet<String> fieldEvidencePaths = new LinkedHashSet<>();
+        java.util.LinkedHashMap<String, Integer> fieldEvidenceQuerySkipReasons = new java.util.LinkedHashMap<>();
         for (SearchAuditSummary summary : summaries) {
             if (summary == null) {
                 continue;
@@ -110,6 +123,9 @@ public class SearchAuditSummary {
             discardedCount += summary.getDiscardedCount() == null ? 0 : summary.getDiscardedCount();
             attemptedCount += summary.getAttemptedCount() == null ? 0 : summary.getAttemptedCount();
             fieldEvidenceQueryCount += summary.getFieldEvidenceQueryCount() == null ? 0 : summary.getFieldEvidenceQueryCount();
+            fieldEvidenceQueryPlannedCount += summary.getFieldEvidenceQueryPlannedCount() == null ? 0 : summary.getFieldEvidenceQueryPlannedCount();
+            fieldEvidenceQueryExecutedCount += summary.getFieldEvidenceQueryExecutedCount() == null ? 0 : summary.getFieldEvidenceQueryExecutedCount();
+            fieldEvidenceQuerySkippedCount += summary.getFieldEvidenceQuerySkippedCount() == null ? 0 : summary.getFieldEvidenceQuerySkippedCount();
             if (summary.getSourceUrls() != null) {
                 sourceUrls.addAll(summary.getSourceUrls());
             }
@@ -119,6 +135,7 @@ public class SearchAuditSummary {
             if (summary.getFieldEvidencePaths() != null) {
                 fieldEvidencePaths.addAll(summary.getFieldEvidencePaths());
             }
+            mergeIntegerCounters(fieldEvidenceQuerySkipReasons, summary.getFieldEvidenceQuerySkipReasons());
         }
         TavilyFastLaneAudit tavilyFastLaneAudit = TavilyFastLaneAudit.merge(
                 summaries.stream()
@@ -132,6 +149,10 @@ public class SearchAuditSummary {
                 .attemptedCount(attemptedCount)
                 .sourceUrls(new ArrayList<>(sourceUrls))
                 .fieldEvidenceQueryCount(fieldEvidenceQueryCount)
+                .fieldEvidenceQueryPlannedCount(fieldEvidenceQueryPlannedCount)
+                .fieldEvidenceQueryExecutedCount(fieldEvidenceQueryExecutedCount)
+                .fieldEvidenceQuerySkippedCount(fieldEvidenceQuerySkippedCount)
+                .fieldEvidenceQuerySkipReasons(fieldEvidenceQuerySkipReasons.isEmpty() ? Map.of() : fieldEvidenceQuerySkipReasons)
                 .fieldEvidenceFields(new ArrayList<>(fieldEvidenceFields))
                 .fieldEvidencePaths(new ArrayList<>(fieldEvidencePaths))
                 .tavilyFastLaneAudit(tavilyFastLaneAudit)
@@ -175,6 +196,15 @@ public class SearchAuditSummary {
                         : existing == null || existing.getSourceUrls() == null ? List.of() : existing.getSourceUrls())
                 .fieldEvidenceQueryCount(trace != null ? trace.getFieldEvidenceQueryCount()
                         : existing == null ? null : existing.getFieldEvidenceQueryCount())
+                .fieldEvidenceQueryPlannedCount(trace != null ? trace.getFieldEvidenceQueryPlannedCount()
+                        : existing == null ? null : existing.getFieldEvidenceQueryPlannedCount())
+                .fieldEvidenceQueryExecutedCount(trace != null ? trace.getFieldEvidenceQueryExecutedCount()
+                        : existing == null ? null : existing.getFieldEvidenceQueryExecutedCount())
+                .fieldEvidenceQuerySkippedCount(trace != null ? trace.getFieldEvidenceQuerySkippedCount()
+                        : existing == null ? null : existing.getFieldEvidenceQuerySkippedCount())
+                .fieldEvidenceQuerySkipReasons(trace != null && trace.getFieldEvidenceQuerySkipReasons() != null
+                        ? trace.getFieldEvidenceQuerySkipReasons()
+                        : existing == null || existing.getFieldEvidenceQuerySkipReasons() == null ? Map.of() : existing.getFieldEvidenceQuerySkipReasons())
                 .fieldEvidenceFields(trace != null && trace.getFieldEvidenceFields() != null
                         ? trace.getFieldEvidenceFields()
                         : existing == null || existing.getFieldEvidenceFields() == null ? List.of() : existing.getFieldEvidenceFields())
@@ -251,5 +281,29 @@ public class SearchAuditSummary {
             }
         }
         return values;
+    }
+
+    private static Map<String, Integer> readIntegerMap(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull() || !node.isObject()) {
+            return Map.of();
+        }
+        java.util.LinkedHashMap<String, Integer> values = new java.util.LinkedHashMap<>();
+        node.fields().forEachRemaining(entry -> {
+            if (entry != null && entry.getKey() != null && !entry.getKey().isBlank()) {
+                values.put(entry.getKey(), entry.getValue() == null ? 0 : entry.getValue().asInt(0));
+            }
+        });
+        return values;
+    }
+
+    private static void mergeIntegerCounters(Map<String, Integer> target, Map<String, Integer> additions) {
+        if (target == null || additions == null) {
+            return;
+        }
+        additions.forEach((key, value) -> {
+            if (key != null && !key.isBlank()) {
+                target.merge(key, value == null ? 0 : value, Integer::sum);
+            }
+        });
     }
 }

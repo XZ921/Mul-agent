@@ -67,6 +67,14 @@ public class TavilySearchClient {
      * 保证上层 Provider 可以平稳降级，而不是把异常继续抛到路由层之外。
      */
     public TavilySearchResponse search(TavilySearchProfile profile) {
+        return search(profile, -1L);
+    }
+
+    /**
+     * 字段 query 在执行预算紧张时允许按调用级别收紧超时，
+     * 避免“还有 20 秒预算，却启动一个仍按默认 45 秒 timeout 运行的请求”。
+     */
+    public TavilySearchResponse search(TavilySearchProfile profile, long queryBudgetMillis) {
         if (profile == null) {
             return emptyResponse(null, "tavily profile missing");
         }
@@ -88,7 +96,7 @@ public class TavilySearchClient {
         RuntimeException lastRuntimeError = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                HttpRequest request = buildRequest(requestBody);
+                HttpRequest request = buildRequest(requestBody, queryBudgetMillis);
                 lastRequestForTest = request;
                 lastRequestBodyForTest = requestBody;
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
@@ -123,9 +131,10 @@ public class TavilySearchClient {
         return lastRequestBodyForTest;
     }
 
-    private HttpRequest buildRequest(String requestBody) {
+    private HttpRequest buildRequest(String requestBody, long queryBudgetMillis) {
+        long effectiveTimeoutMillis = resolveEffectiveTimeoutMillis(queryBudgetMillis);
         return HttpRequest.newBuilder(URI.create(properties.getEndpoint()))
-                .timeout(Duration.ofSeconds(Math.max(1, properties.getTimeoutSeconds())))
+                .timeout(Duration.ofMillis(effectiveTimeoutMillis))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .header("Authorization", resolveAuthorizationHeader())
@@ -191,6 +200,14 @@ public class TavilySearchClient {
 
     private static int resolveTimeoutSeconds(TavilySearchProperties properties) {
         return Math.max(1, properties == null ? 45 : properties.getTimeoutSeconds());
+    }
+
+    private long resolveEffectiveTimeoutMillis(long queryBudgetMillis) {
+        long defaultTimeoutMillis = Math.max(1, properties.getTimeoutSeconds()) * 1000L;
+        if (queryBudgetMillis <= 0L) {
+            return defaultTimeoutMillis;
+        }
+        return Math.max(1_000L, Math.min(defaultTimeoutMillis, queryBudgetMillis));
     }
 
     private String defaultText(String value) {

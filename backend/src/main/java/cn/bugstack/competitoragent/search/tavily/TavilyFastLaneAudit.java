@@ -39,6 +39,7 @@ public class TavilyFastLaneAudit {
     private Boolean fallbackTriggered;
     private List<String> tavilyRequestIds;
     private Integer playwrightInvocationBaselineHint;
+    private List<FieldEvidenceQueryExecutionAudit> fieldEvidenceQueryExecutions;
 
     /**
      * 把多个 collector 节点上的 Tavily 审计聚合成一个统一摘要，
@@ -52,6 +53,7 @@ public class TavilyFastLaneAudit {
         LinkedHashSet<String> queryOrigins = new LinkedHashSet<>();
         LinkedHashSet<String> requestIds = new LinkedHashSet<>();
         LinkedHashMap<String, Integer> rejectionReasons = new LinkedHashMap<>();
+        List<FieldEvidenceQueryExecutionAudit> fieldEvidenceQueryExecutions = new ArrayList<>();
         int queriesSent = 0;
         int totalResults = 0;
         int usableCount = 0;
@@ -69,6 +71,9 @@ public class TavilyFastLaneAudit {
             appendDistinct(queryModes, audit.getQueryModes());
             appendDistinct(queryOrigins, audit.getQueryOrigins());
             appendDistinct(requestIds, audit.getTavilyRequestIds());
+            if (audit.getFieldEvidenceQueryExecutions() != null) {
+                fieldEvidenceQueryExecutions.addAll(audit.getFieldEvidenceQueryExecutions());
+            }
             mergeCounters(rejectionReasons, audit.getRejectionReasons());
             queriesSent += value(audit.getQueriesSent());
             totalResults += value(audit.getTotalResults());
@@ -94,6 +99,7 @@ public class TavilyFastLaneAudit {
                 .fallbackTriggered(fallbackTriggered)
                 .tavilyRequestIds(new ArrayList<>(requestIds))
                 .playwrightInvocationBaselineHint(playwrightHint)
+                .fieldEvidenceQueryExecutions(fieldEvidenceQueryExecutions.isEmpty() ? List.of() : fieldEvidenceQueryExecutions)
                 .build();
     }
 
