@@ -12,6 +12,30 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SearchProviderRoleContractTest {
 
     @Test
+    void shouldTreatOfficialPublicSearchProviderAsPrimaryVerticalByDefault() {
+        SearchPolicyResolver resolver = new SearchPolicyResolver();
+        SearchSourceCatalogProperties catalog = new SearchSourceCatalogProperties();
+
+        SearchSourceCatalogProperties.SourceFamilyProperties official = catalog.resolveFamily("official");
+
+        assertThat(official.getPrimaryTools()).containsExactly("PUBLIC_SEARCH");
+        assertThat(official.getAuxiliaryTools()).containsExactly("WEB_SCRAPER", "JINA_READER");
+        assertThat(official.getToolProviderKeys()).containsEntry("PUBLIC_SEARCH", "tavily");
+        assertThat(resolver.resolveProviderRole("tavily")).isEqualTo(SearchProviderRole.PRIMARY_VERTICAL);
+        assertThat(resolver.resolveSourceFamilyRole("official")).isEqualTo(SearchProviderRole.PRIMARY_VERTICAL);
+    }
+
+    @Test
+    void shouldResolveProviderRoleByRequestedScopeInsteadOfGlobalBindingOnly() {
+        SearchPolicyResolver resolver = new SearchPolicyResolver();
+
+        assertThat(resolver.resolveProviderRoleForRequestedScopes("tavily", java.util.List.of("DOCS")))
+                .isEqualTo(SearchProviderRole.PRIMARY_VERTICAL);
+        assertThat(resolver.resolveProviderRoleForRequestedScopes("tavily", java.util.List.of("GITHUB")))
+                .isEqualTo(SearchProviderRole.AUXILIARY_PUBLIC);
+    }
+
+    @Test
     void shouldTreatGithubProviderAsPrimaryVerticalWhenBoundBySourceFamilyCatalog() {
         SearchPolicyResolver resolver = new SearchPolicyResolver();
         SearchSourceCatalogProperties catalog = new SearchSourceCatalogProperties();

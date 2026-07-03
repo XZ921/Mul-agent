@@ -106,9 +106,31 @@ public class FieldEvidenceCoverageAggregator {
     private boolean canCountAsFieldEvidence(CollectionExecutionResult result) {
         EvidenceRepairPlan repairPlan = result.getEvidenceRepairPlan();
         return result.isSuccess()
+                && !hasUnusableEvidenceSignal(result)
                 && (repairPlan == null
                 || repairPlan.isComplete()
                 || repairPlan.getState() == EvidenceRepairState.REPAIR_NOT_REQUIRED);
+    }
+
+    private boolean hasUnusableEvidenceSignal(CollectionExecutionResult result) {
+        if (result == null || result.getQualitySignals() == null || result.getQualitySignals().isEmpty()) {
+            return false;
+        }
+        for (String signal : result.getQualitySignals()) {
+            if (!StringUtils.hasText(signal)) {
+                continue;
+            }
+            String normalized = signal.trim().toUpperCase(java.util.Locale.ROOT);
+            if (normalized.contains("NAVIGATION_SHELL")
+                    || normalized.contains("WEAK_MAIN_CONTENT")
+                    || normalized.contains("LINK_FARM_WITHOUT_BODY")
+                    || normalized.contains("AUTH_GATE")
+                    || normalized.contains("CAPTCHA")
+                    || normalized.contains("REPAIR_QUERY_PROPOSED")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private List<String> promotedUrls(EvidenceRepairPlan repairPlan) {

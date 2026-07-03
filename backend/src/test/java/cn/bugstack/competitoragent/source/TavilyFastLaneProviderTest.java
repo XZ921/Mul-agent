@@ -147,6 +147,49 @@ class TavilyFastLaneProviderTest {
     }
 
     @Test
+    void shouldUseSearchFirstTrustedExpansionForPrimaryOfficialScopeAndKeepQueryOverride() {
+        TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
+        StubTavilySearchClient client = new StubTavilySearchClient();
+        client.responses = List.of(TavilySearchClient.TavilySearchResponse.builder()
+                .query("custom docs analysis query")
+                .requestId("req-search-first-docs")
+                .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                        .title("Douyin open platform analysis")
+                        .url("https://example.com/douyin-open-platform-analysis")
+                        .content("third-party analysis")
+                        .rawContent("third-party analysis ".repeat(150))
+                        .score(0.86D)
+                        .build()))
+                .build());
+
+        TavilyFastLaneProvider provider = new TavilyFastLaneProvider(
+                properties(),
+                client,
+                new TavilySearchProfileResolver(properties()),
+                registry,
+                new ObjectMapper()
+        );
+
+        List<SourceCandidate> candidates = provider.search(SearchSourceRequest.builder()
+                .competitorName("Douyin")
+                .requestedScopes(List.of("DOCS"))
+                .searchQueries(List.of("custom docs analysis query"))
+                .includeDomains(List.of("open.douyin.com"))
+                .preferredProviderKey("tavily")
+                .build());
+
+        assertThat(client.executedProfiles).hasSize(1);
+        TavilySearchProfile primaryProfile = client.executedProfiles.get(0);
+        assertThat(primaryProfile.getQueryMode()).isEqualTo(TavilyQueryMode.TRUSTED_WEB_EXPANSION);
+        assertThat(primaryProfile.getQuery()).isEqualTo("custom docs analysis query");
+        assertThat(primaryProfile.getIncludeDomains()).isEmpty();
+        assertThat(primaryProfile.getOfficialDomains()).containsExactly("open.douyin.com");
+        assertThat(candidates).hasSize(1);
+        assertThat(candidates.get(0).getTavilyQueryMode()).isEqualTo("TRUSTED_WEB_EXPANSION");
+        assertThat(candidates.get(0).getFastLaneUsable()).isTrue();
+    }
+
+    @Test
     void shouldCarryFieldEvidenceMetadataFromRequestToCandidateAndPrefetchedContent() {
         TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
         StubTavilySearchClient client = new StubTavilySearchClient();
@@ -267,6 +310,72 @@ class TavilyFastLaneProviderTest {
                 .containsExactly("https://open.bilibili.com/doc/4/feb66f99", "https://open.bilibili.com/doc/4/authorization");
         assertThat(candidates).extracting(SourceCandidate::getFieldEvidenceQueryFingerprint)
                 .containsExactly("q1", "q2");
+    }
+
+    @Test
+    void shouldExecuteFieldEvidenceQueriesFromTheirOwnSourceTypesWhenOuterScopeIsOfficial() {
+        TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
+        StubTavilySearchClient client = new StubTavilySearchClient();
+        client.responses = List.of(
+                TavilySearchClient.TavilySearchResponse.builder()
+                        .query("bilibili api docs")
+                        .requestId("req-docs")
+                        .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                                .title("Bilibili API docs")
+                                .url("https://open.bilibili.com/doc/4/api")
+                                .rawContent("docs raw ".repeat(260))
+                                .score(0.86D)
+                                .build()))
+                        .build(),
+                TavilySearchClient.TavilySearchResponse.builder()
+                        .query("bilibili developer review")
+                        .requestId("req-open-web")
+                        .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                                .title("Bilibili developer review")
+                                .url("https://example.com/bilibili-open-platform-review")
+                                .rawContent("review raw ".repeat(260))
+                                .score(0.88D)
+                                .build()))
+                        .build());
+
+        TavilyFastLaneProvider provider = new TavilyFastLaneProvider(
+                properties(),
+                client,
+                new TavilySearchProfileResolver(properties()),
+                registry,
+                new ObjectMapper()
+        );
+
+        List<SourceCandidate> candidates = provider.search(SearchSourceRequest.builder()
+                .competitorName("哔哩哔哩")
+                .requestedScopes(List.of("OFFICIAL"))
+                .preferredProviderKey("tavily")
+                .fieldEvidenceQueries(List.of(
+                        FieldEvidenceQuery.builder()
+                                .fieldName("coreFeatures")
+                                .evidencePathKey("DOCS_API_GUIDE")
+                                .queryIntent("API_DOCS")
+                                .sourceType("DOCS")
+                                .query("bilibili api docs")
+                                .queryFingerprint("q-docs")
+                                .reason("docs query")
+                                .build(),
+                        FieldEvidenceQuery.builder()
+                                .fieldName("weaknesses")
+                                .evidencePathKey("PUBLIC_REVIEW_OR_NEWS")
+                                .queryIntent("THIRD_PARTY_REVIEW")
+                                .sourceType("OPEN_WEB")
+                                .query("bilibili developer review")
+                                .queryFingerprint("q-open-web")
+                                .reason("open web query")
+                                .build()))
+                .build());
+
+        assertThat(client.executedProfiles).hasSize(2);
+        assertThat(client.executedProfiles).extracting(TavilySearchProfile::getFamily)
+                .containsExactly("DOCS", "OPEN_WEB");
+        assertThat(candidates).extracting(SourceCandidate::getFieldEvidenceQueryFingerprint)
+                .containsExactly("q-docs", "q-open-web");
     }
 
     @Test

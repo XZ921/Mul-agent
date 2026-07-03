@@ -25,6 +25,7 @@ class RoutingSearchSourceProviderPrimaryAuxiliaryTest {
         TestProvider github = new TestProvider("github", List.of(SourceCandidate.builder()
                 .url("https://github.com/acme/rocket")
                 .providerKey("github")
+                .contentCompleteness("FULL_ENOUGH")
                 .sourceUrls(List.of("https://github.com/acme/rocket"))
                 .build()), invocations);
         TestProvider qianfan = new TestProvider("qianfan", List.of(), invocations);
@@ -38,6 +39,38 @@ class RoutingSearchSourceProviderPrimaryAuxiliaryTest {
         provider.search("Acme", List.of("GITHUB"));
 
         assertThat(invocations).containsExactly("github");
+    }
+
+    @Test
+    void shouldContinueAuxiliaryWhenPrimaryOnlyReturnsThinCandidates() {
+        SearchProviderProperties properties = new SearchProviderProperties();
+        properties.setProviderOrder(List.of("tavily", "http"));
+        properties.setPrimaryCandidateThreshold(1);
+        properties.setRunAuxiliaryWhenPrimarySatisfied(false);
+
+        List<String> invocations = new ArrayList<>();
+        TestProvider tavily = new TestProvider("tavily", List.of(SourceCandidate.builder()
+                .url("https://open.douyin.com/")
+                .providerKey("tavily")
+                .contentCompleteness("THIN")
+                .prefetchedRawContentLength(80)
+                .sourceUrls(List.of("https://open.douyin.com/"))
+                .build()), invocations);
+        TestProvider http = new TestProvider("http", List.of(SourceCandidate.builder()
+                .url("https://example.com/open-douyin-analysis")
+                .providerKey("http")
+                .sourceUrls(List.of("https://example.com/open-douyin-analysis"))
+                .build()), invocations);
+
+        RoutingSearchSourceProvider provider = new RoutingSearchSourceProvider(
+                properties,
+                List.of(tavily, http),
+                new SourceCandidateRanker()
+        );
+
+        provider.search("抖音", List.of("DOCS"));
+
+        assertThat(invocations).containsExactly("tavily", "http");
     }
 
     /**

@@ -50,8 +50,8 @@ public class SearchSourceCatalogProperties {
                 SearchProviderRole.PRIMARY_VERTICAL.name(),
                 List.of("OFFICIAL", "PRICING", "DOCS"),
                 List.of("PRODUCT_PAGE", "PRICING", "DOCUMENTATION"),
-                List.of("WEB_SCRAPER", "JINA_READER"),
                 List.of("PUBLIC_SEARCH"),
+                List.of("WEB_SCRAPER", "JINA_READER"),
                 new UpdatePolicyProperties("DAILY_INCREMENTAL", "PT24H"),
                 List.of(
                         "search-official",
@@ -70,6 +70,11 @@ public class SearchSourceCatalogProperties {
         family.setDirectSubdomainTemplates(List.of("docs.{domain}", "developer.{domain}", "open.{domain}", "help.{domain}"));
         family.setStableLocatorHosts(List.of());
         family.setStableLocatorSchemes(List.of("https"));
+        /*
+         * official 家族的主取证入口改为公网搜索 provider。
+         * 直连路径仍作为 seed/补抓入口保留，但不再决定是否跳过搜索补源。
+         */
+        family.getToolProviderKeys().put("PUBLIC_SEARCH", "tavily");
         return family;
     }
 

@@ -283,10 +283,12 @@ search:
           - /documentation
           - /help
         primary-tools:
+          - PUBLIC_SEARCH
+        auxiliary-tools:
           - WEB_SCRAPER
           - JINA_READER
-        auxiliary-tools:
-          - PUBLIC_SEARCH
+        tool-provider-keys:
+          PUBLIC_SEARCH: tavily
         update-policy:
           mode: DAILY_INCREMENTAL
           interval: PT24H

@@ -108,6 +108,44 @@ public class CandidateOwnershipPolicy {
                 || containsAny(text, UTILITY_GATE_TEXT_KEYWORDS);
     }
 
+    /**
+     * 候选级“有正文信号”判定。
+     * 这里不抓取正文，只使用 Tavily / 搜索阶段已经写入候选的轻量信号；
+     * 该结果只能说明候选不是完全空壳，不能直接用于停止补源。
+     */
+    public boolean hasAnyContentSignal(SourceCandidate candidate) {
+        if (isContentSignalRejected(candidate)) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(candidate.getFastLaneUsable())) {
+            return true;
+        }
+        if ("FULL_ENOUGH".equalsIgnoreCase(candidate.getContentCompleteness())) {
+            return true;
+        }
+        Integer rawContentLength = candidate.getPrefetchedRawContentLength();
+        return rawContentLength != null && rawContentLength >= ContentUsabilityScorer.MIN_USEFUL_BODY_LENGTH;
+    }
+
+    /**
+     * 候选级“足以满足短路”的正文判定。
+     * 只有强质量信号或更长的预取正文才允许阻止后续 public search，
+     * 避免 120 字左右的薄页被误当成已经满足采集丰富度。
+     */
+    public boolean hasSatisfyingContentSignal(SourceCandidate candidate) {
+        if (isContentSignalRejected(candidate)) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(candidate.getFastLaneUsable())) {
+            return true;
+        }
+        if ("FULL_ENOUGH".equalsIgnoreCase(candidate.getContentCompleteness())) {
+            return true;
+        }
+        Integer rawContentLength = candidate.getPrefetchedRawContentLength();
+        return rawContentLength != null && rawContentLength >= ContentUsabilityScorer.SATISFYING_BODY_LENGTH;
+    }
+
     public boolean isTrustedSearchRoot(String competitorName, SourceCandidate candidate) {
         return isTrustedSearchRoot(competitorName, List.of(), candidate);
     }
@@ -242,6 +280,16 @@ public class CandidateOwnershipPolicy {
         String normalizedMethod = discoveryMethod.trim().toUpperCase(Locale.ROOT);
         return normalizedMethod.endsWith("_SEARCH")
                 || normalizedMethod.startsWith("TAVILY_");
+    }
+
+    private boolean isContentSignalRejected(SourceCandidate candidate) {
+        if (candidate == null) {
+            return true;
+        }
+        if (isUtilityGatePage(candidate, null)) {
+            return true;
+        }
+        return "THIN".equalsIgnoreCase(candidate.getContentCompleteness());
     }
 
     private boolean equalsAny(String value, String... candidates) {

@@ -1,6 +1,8 @@
 package cn.bugstack.competitoragent.search.tavily;
 
+import cn.bugstack.competitoragent.search.SearchPolicyResolver;
 import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -20,17 +22,26 @@ public class TavilySearchProfileResolver {
     private static final double OFFICIAL_DOMAIN_CONFIDENCE_THRESHOLD = 0.60D;
 
     private final TavilySearchProperties properties;
+    private final SearchPolicyResolver searchPolicyResolver;
+
+    @Autowired
+    public TavilySearchProfileResolver(TavilySearchProperties properties,
+                                       SearchPolicyResolver searchPolicyResolver) {
+        this.properties = properties == null ? new TavilySearchProperties() : properties;
+        this.searchPolicyResolver = searchPolicyResolver == null ? new SearchPolicyResolver() : searchPolicyResolver;
+    }
 
     public TavilySearchProfileResolver(TavilySearchProperties properties) {
-        this.properties = properties == null ? new TavilySearchProperties() : properties;
+        this(properties, new SearchPolicyResolver());
     }
 
     /**
      * 解析常规查询 profile。
      * 规则分三层：
      * 1. 只要存在明确的 suggested query，就优先视为证据修复动作，不再走静态模板。
-     * 2. OFFICIAL / DOCS / PRICING 先走官方锚点模式，并带上可信域名。
-     * 3. NEWS / REVIEW / RESEARCH 走开放网络模式，不加 include_domains，保留发散性。
+     * 2. 是否搜索优先由 Source Family Catalog 决定；sourceType 只描述证据类型，不再决定检索范围。
+     * 3. 非搜索优先的官方类 family 才走严格官方锚点，并带上可信域名。
+     * 4. NEWS / REVIEW / RESEARCH 走开放网络模式，不加 include_domains，保留发散性。
      */
     public TavilySearchProfile resolve(String competitorName,
                                        String family,
@@ -44,22 +55,23 @@ public class TavilySearchProfileResolver {
                     .queryMode(TavilyQueryMode.EVIDENCE_REPAIR)
                     .query(repairQuery)
                     .includeDomains(List.of())
+                    .officialDomains(resolveHighConfidenceDomains(domainHintSet))
                     .searchDepth(properties.getSearchDepth())
                     .includeRawContent(properties.isIncludeRawContent())
                     .maxResults(properties.getMaxResults())
                     .build();
         }
 
-        if (requiresOfficialAnchor(normalizedFamily)) {
-            return TavilySearchProfile.builder()
-                    .family(normalizedFamily)
-                    .queryMode(TavilyQueryMode.OFFICIAL_DOCS)
-                    .query(buildQuery(competitorName, normalizedFamily, TavilyQueryMode.OFFICIAL_DOCS))
-                    .includeDomains(resolveHighConfidenceDomains(domainHintSet))
-                    .searchDepth(properties.getSearchDepth())
-                    .includeRawContent(properties.isIncludeRawContent())
-                    .maxResults(properties.getMaxResults())
-                    .build();
+        if (isOfficialEvidenceFamily(normalizedFamily)) {
+            if (searchPolicyResolver.isSearchFirstSourceFamilyForSourceType(normalizedFamily)) {
+                return resolveTrustedExpansion(
+                        competitorName,
+                        normalizedFamily,
+                        domainHintSet,
+                        "searchFirstPrimary=true"
+                );
+            }
+            return resolveOfficialDocsAnchor(competitorName, normalizedFamily, domainHintSet);
         }
 
         return TavilySearchProfile.builder()
@@ -67,6 +79,7 @@ public class TavilySearchProfileResolver {
                 .queryMode(TavilyQueryMode.OPEN_WEB)
                 .query(buildQuery(competitorName, normalizedFamily, TavilyQueryMode.OPEN_WEB))
                 .includeDomains(List.of())
+                .officialDomains(List.of())
                 .searchDepth(properties.getSearchDepth())
                 .includeRawContent(properties.isIncludeRawContent())
                 .maxResults(properties.getMaxResults())
@@ -84,16 +97,19 @@ public class TavilySearchProfileResolver {
                     .queryMode(TavilyQueryMode.OPEN_WEB)
                     .query("")
                     .includeDomains(List.of())
+                    .officialDomains(List.of())
                     .searchDepth(properties.getSearchDepth())
                     .includeRawContent(properties.isIncludeRawContent())
                     .maxResults(properties.getMaxResults())
                     .build();
         }
+        TavilyQueryMode queryMode = resolveFieldEvidenceMode(query);
         return TavilySearchProfile.builder()
                 .family(normalizeFamily(query.getSourceType()))
-                .queryMode(resolveFieldEvidenceMode(query))
+                .queryMode(queryMode)
                 .query(query.getQuery())
-                .includeDomains(query.getIncludeDomains() == null ? List.of() : query.getIncludeDomains())
+                .includeDomains(resolveFieldEvidenceIncludeDomains(query, queryMode))
+                .officialDomains(resolveFieldEvidenceOfficialDomains(query, queryMode))
                 .searchDepth(properties.getSearchDepth())
                 .includeRawContent(properties.isIncludeRawContent())
                 .maxResults(properties.getMaxResults())
@@ -107,16 +123,41 @@ public class TavilySearchProfileResolver {
 
     /**
      * 字段级 query 的查询模式按 sourceType 收口。
-     * 官方/文档/定价类路径仍优先走 OFFICIAL_DOCS，其余路径再退回 OPEN_WEB。
+     * 官方/文档/定价类只说明证据类型；是否扩展到全网仍由 search-first family 路由决定。
      */
     private TavilyQueryMode resolveFieldEvidenceMode(FieldEvidenceQuery query) {
         String sourceType = query == null ? null : query.getSourceType();
         if ("OFFICIAL".equalsIgnoreCase(sourceType)
                 || "DOCS".equalsIgnoreCase(sourceType)
                 || "PRICING".equalsIgnoreCase(sourceType)) {
+            // search-first 家族由 family 路由决定检索范围，sourceType 只描述证据类型，不能再强制官方锚点。
+            if (searchPolicyResolver.isSearchFirstSourceFamilyForSourceType(sourceType)) {
+                return TavilyQueryMode.TRUSTED_WEB_EXPANSION;
+            }
             return TavilyQueryMode.OFFICIAL_DOCS;
         }
         return TavilyQueryMode.OPEN_WEB;
+    }
+
+    private List<String> resolveFieldEvidenceIncludeDomains(FieldEvidenceQuery query, TavilyQueryMode queryMode) {
+        // TRUSTED_WEB_EXPANSION / OPEN_WEB 必须解除 include_domains，否则 Tavily API 仍被官方域名收窄。
+        if (queryMode == TavilyQueryMode.TRUSTED_WEB_EXPANSION || queryMode == TavilyQueryMode.OPEN_WEB) {
+            return List.of();
+        }
+        return query == null || query.getIncludeDomains() == null ? List.of() : query.getIncludeDomains();
+    }
+
+    private List<String> resolveFieldEvidenceOfficialDomains(FieldEvidenceQuery query, TavilyQueryMode queryMode) {
+        /*
+         * includeDomains 是 Tavily API 的范围约束；officialDomains 是 Gate 的质量判断提示。
+         * search-first 字段 query 会清空 includeDomains，但不能丢掉官方域名提示，否则官方短文会被当成普通薄内容。
+         */
+        if (queryMode != TavilyQueryMode.TRUSTED_WEB_EXPANSION
+                && queryMode != TavilyQueryMode.OFFICIAL_DOCS
+                && queryMode != TavilyQueryMode.EVIDENCE_REPAIR) {
+            return List.of();
+        }
+        return query == null || query.getIncludeDomains() == null ? List.of() : query.getIncludeDomains();
     }
 
     /**
@@ -133,6 +174,7 @@ public class TavilySearchProfileResolver {
                 .queryMode(TavilyQueryMode.TRUSTED_WEB_EXPANSION)
                 .query(buildQuery(competitorName, normalizedFamily, TavilyQueryMode.TRUSTED_WEB_EXPANSION))
                 .includeDomains(List.of())
+                .officialDomains(resolveHighConfidenceDomains(domainHintSet))
                 .searchDepth(properties.getSearchDepth())
                 .includeRawContent(properties.isIncludeRawContent())
                 .maxResults(properties.getMaxResults())
@@ -141,10 +183,31 @@ public class TavilySearchProfileResolver {
     }
 
     /**
-     * 判断当前 family 是否必须保留官方锚点。
-     * OFFICIAL / DOCS / PRICING 属于强事实或官方资料场景，首轮必须优先命中官方来源。
+     * 显式构造严格官方锚点 profile。
+     * 该模式只服务于调用方明确要求 OFFICIAL_DOCS 的路径，不能再作为官方类 sourceType 的默认主搜索策略。
      */
-    private boolean requiresOfficialAnchor(String family) {
+    public TavilySearchProfile resolveOfficialDocsAnchor(String competitorName,
+                                                         String family,
+                                                         DomainHintSet domainHintSet) {
+        String normalizedFamily = normalizeFamily(family);
+        List<String> officialDomains = resolveHighConfidenceDomains(domainHintSet);
+        return TavilySearchProfile.builder()
+                .family(normalizedFamily)
+                .queryMode(TavilyQueryMode.OFFICIAL_DOCS)
+                .query(buildQuery(competitorName, normalizedFamily, TavilyQueryMode.OFFICIAL_DOCS))
+                .includeDomains(officialDomains)
+                .officialDomains(officialDomains)
+                .searchDepth(properties.getSearchDepth())
+                .includeRawContent(properties.isIncludeRawContent())
+                .maxResults(properties.getMaxResults())
+                .build();
+    }
+
+    /**
+     * 判断当前 family 是否描述官方类证据。
+     * 这只回答“要找什么证据”，不回答“是否只能搜官方域名”；检索范围必须交给 family 策略路由决定。
+     */
+    private boolean isOfficialEvidenceFamily(String family) {
         return "OFFICIAL".equals(family) || "DOCS".equals(family) || "PRICING".equals(family);
     }
 

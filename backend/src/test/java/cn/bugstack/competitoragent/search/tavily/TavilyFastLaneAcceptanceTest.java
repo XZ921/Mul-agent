@@ -82,6 +82,10 @@ class TavilyFastLaneAcceptanceTest {
         AcceptanceScenario experiment = runScenario(officialDocsRequest,
                 List.of(loadFixture("tavily/official-docs-response.json")));
 
+        assertThat(experiment.executedProfiles).hasSize(1);
+        assertThat(experiment.executedProfiles.get(0).getQueryMode()).isEqualTo(TavilyQueryMode.TRUSTED_WEB_EXPANSION);
+        assertThat(experiment.executedProfiles.get(0).getIncludeDomains()).isEmpty();
+        assertThat(experiment.executedProfiles.get(0).getOfficialDomains()).containsExactly(OFFICIAL_DOMAIN);
         assertThat(experiment.metrics.traceableEvidenceRatio).isEqualTo(1.0D);
         assertThat(experiment.metrics.officialDocHitCount)
                 .isGreaterThan(baseline.metrics.officialDocHitCount);
@@ -98,6 +102,7 @@ class TavilyFastLaneAcceptanceTest {
                 .preferredDomains(List.of(OFFICIAL_DOMAIN))
                 .includeDomains(List.of(OFFICIAL_DOMAIN))
                 .preferredProviderKey("tavily")
+                .preferredQueryMode("OFFICIAL_DOCS")
                 .build();
 
         AcceptanceScenario includeDomainsOnly = runScenario(officialDocsRequest,

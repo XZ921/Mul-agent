@@ -28,9 +28,13 @@ import cn.bugstack.competitoragent.search.BrowserSearchRuntimeResult;
 import cn.bugstack.competitoragent.search.BrowserSearchRuntimeService;
 import cn.bugstack.competitoragent.search.CandidateVerifier;
 import cn.bugstack.competitoragent.search.CollectionTargetSelector;
+import cn.bugstack.competitoragent.search.SearchCollectionTarget;
+import cn.bugstack.competitoragent.search.SearchExecutionPlan;
 import cn.bugstack.competitoragent.search.SearchPolicyResolver;
 import cn.bugstack.competitoragent.search.SearchExecutionCoordinator;
+import cn.bugstack.competitoragent.search.SearchExecutionResult;
 import cn.bugstack.competitoragent.source.SearchSourceProvider;
+import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
 import cn.bugstack.competitoragent.source.SourceCollectRequest;
 import cn.bugstack.competitoragent.source.SourceCollector;
@@ -360,6 +364,127 @@ class CollectorAgentTest {
         assertEquals(2, output.path("collectionAudit").path("replayTimeline").size());
         assertTrue(output.toString().contains("https://example.com/docs/auth"));
         assertTrue(output.toString().contains("内部发现页面"));
+    }
+
+    @Test
+    void shouldDeduplicatePersistedEvidenceByCanonicalUrlWithinCollectorNode() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent agent = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchCoordinator,
+                collectionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper
+        );
+        when(searchCoordinator.execute(any(), any())).thenReturn(SearchExecutionResult.builder()
+                .executionPlan(SearchExecutionPlan.builder()
+                        .steps(List.of())
+                        .build())
+                .sourceCandidates(List.of())
+                .selectedTargets(List.of(SearchCollectionTarget.builder()
+                        .candidate(buildSourceCandidate("http://www.example.com/docs/?utm_source=dup"))
+                        .build()))
+                .build());
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
+                .status("SUCCESS")
+                .results(List.of(
+                        buildSuccessfulCollectionResult(
+                                "collect_sources_01_05#001",
+                                1,
+                                "http://www.example.com/docs/?utm_source=dup",
+                                "Docs primary"),
+                        buildSuccessfulCollectionResult(
+                                "collect_sources_01_05#002",
+                                2,
+                                "https://example.com/docs",
+                                "Docs duplicate")))
+                .build());
+        when(collectionCoordinator.summarize(any())).thenReturn(CollectionExecutionReport.builder()
+                .status("SUCCESS")
+                .results(List.of())
+                .build());
+
+        AgentResult result = agent.execute(buildSingleCandidateContext(
+                "http://www.example.com/docs/?utm_source=dup",
+                "Docs primary",
+                "DOCS"
+        ));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name(), result.getErrorMessage());
+        verify(evidenceRepository, times(1)).save(any(EvidenceSource.class));
+        assertEquals(2, output.path("documents").size());
+        assertEquals(1, output.path("successCollected").asInt());
+        assertTrue(output.path("documents").get(1).path("issueFlags").toString().contains("DUPLICATE_CANONICAL_URL"));
+        assertTrue(output.path("results").get(1).path("persisted").isBoolean());
+        assertEquals(false, output.path("results").get(1).path("persisted").asBoolean());
+    }
+
+    @Test
+    void shouldNotPromoteNavigationShellResultAsFormalEvidence() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent agent = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchCoordinator,
+                collectionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper
+        );
+        when(searchCoordinator.execute(any(), any())).thenReturn(SearchExecutionResult.builder()
+                .executionPlan(SearchExecutionPlan.builder()
+                        .steps(List.of())
+                        .build())
+                .sourceCandidates(List.of())
+                .selectedTargets(List.of(SearchCollectionTarget.builder()
+                        .candidate(buildSourceCandidate("https://example.com/docs"))
+                        .build()))
+                .build());
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
+                .status("SUCCESS")
+                .results(List.of(CollectionExecutionResult.builder()
+                        .taskPackageKey("collect_sources_01_03#001")
+                        .targetIndex(1)
+                        .executorType("WEB_PAGE")
+                        .success(true)
+                        .status("SUCCESS")
+                        .resourceLocator("https://example.com/docs")
+                        .title("Docs shell")
+                        .content("棣栭〉 鏂囨。涓績 甯姪涓績 鐧诲綍 娉ㄥ唽 鑱旂郴鎴戜滑")
+                        .sourceUrls(List.of("https://example.com/docs"))
+                        .discoveryDepth(0)
+                        .qualitySignals(List.of("NAVIGATION_SHELL_DETECTED", "WEAK_MAIN_CONTENT"))
+                        .qualityScore(0.12D)
+                        .build()
+                        .normalize()))
+                .build());
+        when(collectionCoordinator.summarize(any())).thenReturn(CollectionExecutionReport.builder()
+                .status("SUCCESS")
+                .results(List.of())
+                .build());
+
+        AgentResult result = agent.execute(buildSingleCandidateContext(
+                "https://example.com/docs",
+                "Docs shell",
+                "DOCS"
+        ));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("FAILED", result.getStatus().name());
+        verify(evidenceRepository, never()).save(any(EvidenceSource.class));
+        assertEquals(false, output.path("results").get(0).path("persisted").asBoolean());
+        assertTrue(output.path("downstreamEvidenceViews").isArray());
+        assertEquals(0, output.path("downstreamEvidenceViews").size());
+        assertEquals(0, output.path("documents").get(0).path("downstreamEvidenceViews").size());
     }
 
     @Test
@@ -1170,6 +1295,42 @@ class CollectorAgentTest {
                 .sourceType("DOCS")
                 .success(true)
                 .build();
+    }
+
+    private SourceCandidate buildSourceCandidate(String url) {
+        return SourceCandidate.builder()
+                .url(url)
+                .title("Docs")
+                .sourceType("DOCS")
+                .discoveryMethod("DIRECT_LOCATOR")
+                .providerKey("planned")
+                .reason("test")
+                .domain("example.com")
+                .sourceUrls(List.of(url))
+                .selectionStage("PLANNED")
+                .selectionReason("test")
+                .build();
+    }
+
+    private CollectionExecutionResult buildSuccessfulCollectionResult(String taskPackageKey,
+                                                                      int targetIndex,
+                                                                      String url,
+                                                                      String title) {
+        return CollectionExecutionResult.builder()
+                .taskPackageKey(taskPackageKey)
+                .targetIndex(targetIndex)
+                .executorType("WEB_PAGE")
+                .success(true)
+                .status("SUCCESS")
+                .resourceLocator(url)
+                .title(title)
+                .content("useful docs content with enough body for " + title)
+                .sourceUrls(List.of(url))
+                .discoveryDepth(targetIndex == 1 ? 0 : 1)
+                .qualitySignals(List.of("FULL_RENDER_READY"))
+                .qualityScore(0.80D)
+                .build()
+                .normalize();
     }
 
     private JsonNode findCollectionAuditResult(JsonNode output, String resourceLocator) {

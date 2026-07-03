@@ -302,10 +302,10 @@ public class CollectorAgent extends BaseAgent {
 
         int evidenceCounter = 0;
         int reusedTargetCount = (int) targets.stream()
-                .filter(target -> target != null && target.getCollectedPage() != null)
+                .filter(target -> target != null && isUsableCollectedPage(target.getCollectedPage()))
                 .count();
         List<SearchCollectionTarget> executableTargets = targets.stream()
-                .filter(this::requiresCoordinatorExecution)
+                .filter(this::shouldExecuteThroughCoordinatorInRecursiveMode)
                 .toList();
         CollectionExecutionReport collectionReport = collectionExecutionCoordinator.execute(
                 context.getTaskId(),
@@ -341,17 +341,19 @@ public class CollectorAgent extends BaseAgent {
                 continue;
             }
             SourceCollector.CollectedPage page;
+            CollectionExecutionResult collectionResult = null;
             if (target.getCollectedPage() != null) {
                 page = target.getCollectedPage();
-                auditResults.add(buildAuditResultFromPrefetchedPage(
+                collectionResult = buildAuditResultFromPrefetchedPage(
                         context,
                         config,
                         sourceType,
                         index + 1,
                         target,
-                        page));
+                        page);
+                auditResults.add(collectionResult);
             } else {
-                CollectionExecutionResult collectionResult = collectionResultIndex < collectionResults.size()
+                collectionResult = collectionResultIndex < collectionResults.size()
                         ? collectionResults.get(collectionResultIndex++)
                         : null;
                 if (collectionResult != null) {
@@ -368,12 +370,15 @@ public class CollectorAgent extends BaseAgent {
             evidenceCounter++;
             String evidenceId = generateEvidenceId(context.getTaskId(), context.getCurrentNodeName(), evidenceCounter);
             String pageMetadata = mergePageMetadata(page, matchedCandidate);
+            String evidenceCanonicalKey = resolveEvidenceCanonicalKey(effectiveUrl, collectedSourceUrls);
+            boolean duplicateCanonicalEvidence = hasPersistedCanonicalEvidence(results, evidenceCanonicalKey);
+            boolean promotableFormalEvidence = isPromotableFormalEvidence(page, collectionResult);
 
             TaskRetrievalIndexingResult retrievalIndexingResult = null;
             String knowledgeFailureReason = null;
             String persistenceFailureReason = null;
             boolean persisted = false;
-            if (isUsableCollectedPage(page)) {
+            if (promotableFormalEvidence && !duplicateCanonicalEvidence) {
                 EvidenceSource evidence = evidenceSourceSanitizer.sanitize(EvidenceSource.builder()
                         .taskId(context.getTaskId())
                         .competitorName(config.getCompetitorName())
@@ -412,7 +417,10 @@ public class CollectorAgent extends BaseAgent {
             }
 
             Map<String, Object> resultEntry = new LinkedHashMap<>();
-            List<String> collectionIssueFlags = new ArrayList<>(buildCollectionIssueFlags(page));
+            List<String> collectionIssueFlags = new ArrayList<>(buildCollectionIssueFlags(
+                    page,
+                    collectionResult,
+                    promotableFormalEvidence));
             if (retrievalIndexingResult != null && retrievalIndexingResult.issueFlags() != null) {
                 collectionIssueFlags = mergeIssueFlags(collectionIssueFlags, retrievalIndexingResult.issueFlags());
             }
@@ -422,10 +430,14 @@ public class CollectorAgent extends BaseAgent {
             if (persistenceFailureReason != null && !persistenceFailureReason.isBlank()) {
                 collectionIssueFlags = mergeIssueFlags(collectionIssueFlags, List.of("EVIDENCE_PERSIST_FAILED"));
             }
+            if (duplicateCanonicalEvidence) {
+                collectionIssueFlags = mergeIssueFlags(collectionIssueFlags, List.of("DUPLICATE_CANONICAL_URL"));
+            }
             resultEntry.put("competitor", config.getCompetitorName());
             resultEntry.put("sourceType", sourceType);
             resultEntry.put("sourceCategory", resolveSourceCategory(matchedCandidate));
             resultEntry.put("url", effectiveUrl);
+            resultEntry.put("canonicalUrl", evidenceCanonicalKey);
             resultEntry.put("evidenceId", evidenceId);
             resultEntry.put("success", page.isSuccess());
             resultEntry.put("title", page.getTitle());
@@ -449,10 +461,12 @@ public class CollectorAgent extends BaseAgent {
             resultEntry.put("selectionSummary", matchedCandidate == null ? null : matchedCandidate.getSelectionSummary());
             resultEntry.put("sourceUrls", collectedSourceUrls);
             resultEntry.put("issueFlags", collectionIssueFlags);
-            resultEntry.put("evidenceFragments", buildCollectedEvidenceFragments(
-                    config, sourceType, page, matchedCandidate, evidenceId, effectiveUrl));
-            resultEntry.put("downstreamEvidenceViews", buildDownstreamEvidenceViews(
-                    config, sourceType, page, evidenceId, effectiveUrl, pageMetadata));
+            resultEntry.put("evidenceFragments", promotableFormalEvidence
+                    ? buildCollectedEvidenceFragments(config, sourceType, page, matchedCandidate, evidenceId, effectiveUrl)
+                    : List.of());
+            resultEntry.put("downstreamEvidenceViews", promotableFormalEvidence
+                    ? buildDownstreamEvidenceViews(config, sourceType, page, evidenceId, effectiveUrl, pageMetadata)
+                    : List.of());
             if (retrievalIndexingResult != null) {
                 resultEntry.put("knowledgeDocument", toKnowledgeDocumentPayload(retrievalIndexingResult.knowledgeDocument()));
                 resultEntry.put("retrievalChunks", toRetrievalChunkPayloads(retrievalIndexingResult.retrievalChunks()));
@@ -686,10 +700,10 @@ public class CollectorAgent extends BaseAgent {
         }
 
         int reusedTargetCount = (int) targets.stream()
-                .filter(target -> target != null && target.getCollectedPage() != null)
+                .filter(target -> target != null && isUsableCollectedPage(target.getCollectedPage()))
                 .count();
         List<SearchCollectionTarget> executableTargets = targets.stream()
-                .filter(this::requiresCoordinatorExecution)
+                .filter(this::shouldExecuteThroughCoordinatorInRecursiveMode)
                 .toList();
         CollectionExecutionReport collectionReport = collectionExecutionCoordinator.execute(
                 context.getTaskId(),
@@ -703,7 +717,7 @@ public class CollectorAgent extends BaseAgent {
                 ? List.of()
                 : collectionReport.getResults();
         List<CollectionExecutionResult> auditResults = new ArrayList<>();
-        Map<String, SourceCandidate> executableCandidateIndex = indexExecutableCandidates(targets);
+        Map<String, SourceCandidate> executableCandidateIndex = indexCoordinatorRoutedCandidates(targets);
         Map<String, CollectionExecutionResult> entryResultByIdentity = new LinkedHashMap<>();
         List<CollectionExecutionResult> unmatchedEntryResults = new ArrayList<>();
         List<CollectionExecutionResult> discoveredChildResults = new ArrayList<>();
@@ -725,13 +739,7 @@ public class CollectorAgent extends BaseAgent {
             discoveredChildResults.add(collectionResult);
         }
 
-        int prefetchedTargetCount = (int) targets.stream()
-                .filter(target -> target != null
-                        && target.getCollectedPage() != null
-                        && target.getCandidate() != null
-                        && StringUtils.hasText(target.getCandidate().getUrl()))
-                .count();
-        int totalCollectedPages = prefetchedTargetCount + collectionResults.size();
+        int totalCollectedPages = targets.size() + unmatchedEntryResults.size() + discoveredChildResults.size();
         int[] evidenceCounterRef = new int[] {0};
         int[] processedPageCounterRef = new int[] {0};
 
@@ -755,14 +763,24 @@ public class CollectorAgent extends BaseAgent {
             if (!StringUtils.hasText(url)) {
                 continue;
             }
+            String stableIdentity = resolveStableCollectionIdentity(url,
+                    matchedCandidate == null ? null : matchedCandidate.getSourceUrls());
+            CollectionExecutionResult entryResult = StringUtils.hasText(stableIdentity)
+                    ? entryResultByIdentity.remove(stableIdentity)
+                    : null;
+            if (entryResult == null && !unmatchedEntryResults.isEmpty() && target.getCollectedPage() == null) {
+                entryResult = unmatchedEntryResults.remove(0);
+            }
             if (target.getCollectedPage() != null) {
-                CollectionExecutionResult prefetchedAuditResult = buildAuditResultFromPrefetchedPage(
+                CollectionExecutionResult prefetchedAuditResult = entryResult == null
+                        ? buildAuditResultFromPrefetchedPage(
                         context,
                         config,
                         sourceType,
                         index + 1,
                         target,
-                        target.getCollectedPage());
+                        target.getCollectedPage())
+                        : gateCollectionResult(config, matchedCandidate, entryResult);
                 auditResults.add(prefetchedAuditResult);
                 processedPageCounterRef[0]++;
                 appendCollectedResultEntry(context, config, sourceType, searchExecutionResult, executionPlan,
@@ -772,11 +790,6 @@ public class CollectorAgent extends BaseAgent {
                 continue;
             }
 
-            String stableIdentity = resolveStableCollectionIdentity(url,
-                    matchedCandidate == null ? null : matchedCandidate.getSourceUrls());
-            CollectionExecutionResult entryResult = StringUtils.hasText(stableIdentity)
-                    ? entryResultByIdentity.remove(stableIdentity)
-                    : null;
             if (entryResult == null && !unmatchedEntryResults.isEmpty()) {
                 entryResult = unmatchedEntryResults.remove(0);
             }
@@ -1113,6 +1126,28 @@ public class CollectorAgent extends BaseAgent {
     }
 
     /**
+     * 正式证据的准入比“页面抓取成功”更严格。
+     * 这里把质量门禁阶段已经识别出的薄壳/弱正文/repair 信号一起折叠成 issue flag，
+     * 这样 audit 可以保留原始页面，但 downstream 不会再把它误消费成正式证据。
+     */
+    private List<String> buildCollectionIssueFlags(SourceCollector.CollectedPage page,
+                                                   CollectionExecutionResult collectionResult,
+                                                   boolean promotableFormalEvidence) {
+        List<String> issueFlags = new ArrayList<>(buildCollectionIssueFlags(page));
+        if (collectionResult != null && collectionResult.getQualitySignals() != null) {
+            for (String qualitySignal : collectionResult.getQualitySignals()) {
+                if (StringUtils.hasText(qualitySignal)) {
+                    issueFlags = mergeIssueFlags(issueFlags, List.of(qualitySignal.trim()));
+                }
+            }
+        }
+        if (page != null && page.isSuccess() && !promotableFormalEvidence) {
+            issueFlags = mergeIssueFlags(issueFlags, List.of("FORMAL_EVIDENCE_DEGRADED"));
+        }
+        return issueFlags;
+    }
+
+    /**
      * 每个采集结果都至少生成一个 EvidenceFragment。
      * 即使页面抓取失败，也要把“失败发生在哪个 URL、对应哪个 evidenceId”传下去，避免后续链路只能看到一个抽象错误。
      */
@@ -1171,7 +1206,9 @@ public class CollectorAgent extends BaseAgent {
                                                                     List<EvidenceFragment> documentFragments) {
         String sourceType = firstNonBlank(toText(result.get("sourceType")), "COLLECT");
         LinkedHashSet<String> missingFields = new LinkedHashSet<>();
-        if (documentIssueFlags.contains("COLLECT_FAILED") || documentIssueFlags.contains("CONTENT_GAP")) {
+        if (documentIssueFlags.contains("COLLECT_FAILED")
+                || documentIssueFlags.contains("CONTENT_GAP")
+                || documentIssueFlags.contains("FORMAL_EVIDENCE_DEGRADED")) {
             missingFields.add(sourceType);
         }
         return SectionEvidenceBundle.builder()
@@ -1504,6 +1541,21 @@ public class CollectorAgent extends BaseAgent {
                 && StringUtils.hasText(target.getCandidate().getUrl());
     }
 
+    /**
+     * 递归采集模式下，成功的预抓取页也必须进入 coordinator，
+     * 这样才能统一触发内部链接发现并继续调度子页。
+     * 只有“预抓取已失败”的目标才保留在 Collector 本地做审计映射，避免重复抓取。
+     */
+    private boolean shouldExecuteThroughCoordinatorInRecursiveMode(SearchCollectionTarget target) {
+        if (target == null || target.getCandidate() == null || !StringUtils.hasText(target.getCandidate().getUrl())) {
+            return false;
+        }
+        if (target.getCollectedPage() == null) {
+            return true;
+        }
+        return isUsableCollectedPage(target.getCollectedPage());
+    }
+
     private Map<String, SourceCandidate> indexExecutableCandidates(List<SearchCollectionTarget> targets) {
         Map<String, SourceCandidate> indexedCandidates = new LinkedHashMap<>();
         if (targets == null || targets.isEmpty()) {
@@ -1511,6 +1563,26 @@ public class CollectorAgent extends BaseAgent {
         }
         for (SearchCollectionTarget target : targets) {
             if (!requiresCoordinatorExecution(target) || target.getCandidate() == null) {
+                continue;
+            }
+            String stableIdentity = resolveStableCollectionIdentity(
+                    target.getCandidate().getUrl(),
+                    target.getCandidate().getSourceUrls()
+            );
+            if (StringUtils.hasText(stableIdentity)) {
+                indexedCandidates.putIfAbsent(stableIdentity, target.getCandidate());
+            }
+        }
+        return indexedCandidates;
+    }
+
+    private Map<String, SourceCandidate> indexCoordinatorRoutedCandidates(List<SearchCollectionTarget> targets) {
+        Map<String, SourceCandidate> indexedCandidates = new LinkedHashMap<>();
+        if (targets == null || targets.isEmpty()) {
+            return indexedCandidates;
+        }
+        for (SearchCollectionTarget target : targets) {
+            if (!shouldExecuteThroughCoordinatorInRecursiveMode(target) || target.getCandidate() == null) {
                 continue;
             }
             String stableIdentity = resolveStableCollectionIdentity(
@@ -1561,12 +1633,15 @@ public class CollectorAgent extends BaseAgent {
         evidenceCounterRef[0]++;
         String evidenceId = generateEvidenceId(context.getTaskId(), context.getCurrentNodeName(), evidenceCounterRef[0]);
         String pageMetadata = mergePageMetadata(page, effectiveCandidate);
+        String evidenceCanonicalKey = resolveEvidenceCanonicalKey(effectiveUrl, collectedSourceUrls);
+        boolean duplicateCanonicalEvidence = hasPersistedCanonicalEvidence(results, evidenceCanonicalKey);
+        boolean promotableFormalEvidence = isPromotableFormalEvidence(page, collectionResult);
 
         TaskRetrievalIndexingResult retrievalIndexingResult = null;
         String knowledgeFailureReason = null;
         String persistenceFailureReason = null;
         boolean persisted = false;
-        if (isUsableCollectedPage(page)) {
+        if (promotableFormalEvidence && !duplicateCanonicalEvidence) {
             EvidenceSource evidence = evidenceSourceSanitizer.sanitize(EvidenceSource.builder()
                     .taskId(context.getTaskId())
                     .competitorName(config.getCompetitorName())
@@ -1604,7 +1679,10 @@ public class CollectorAgent extends BaseAgent {
         }
 
         Map<String, Object> resultEntry = new LinkedHashMap<>();
-        List<String> collectionIssueFlags = new ArrayList<>(buildCollectionIssueFlags(page));
+        List<String> collectionIssueFlags = new ArrayList<>(buildCollectionIssueFlags(
+                page,
+                collectionResult,
+                promotableFormalEvidence));
         if (retrievalIndexingResult != null && retrievalIndexingResult.issueFlags() != null) {
             collectionIssueFlags = mergeIssueFlags(collectionIssueFlags, retrievalIndexingResult.issueFlags());
         }
@@ -1614,10 +1692,14 @@ public class CollectorAgent extends BaseAgent {
         if (persistenceFailureReason != null && !persistenceFailureReason.isBlank()) {
             collectionIssueFlags = mergeIssueFlags(collectionIssueFlags, List.of("EVIDENCE_PERSIST_FAILED"));
         }
+        if (duplicateCanonicalEvidence) {
+            collectionIssueFlags = mergeIssueFlags(collectionIssueFlags, List.of("DUPLICATE_CANONICAL_URL"));
+        }
         resultEntry.put("competitor", config.getCompetitorName());
         resultEntry.put("sourceType", effectiveSourceType);
         resultEntry.put("sourceCategory", resolveSourceCategory(effectiveCandidate));
         resultEntry.put("url", effectiveUrl);
+        resultEntry.put("canonicalUrl", evidenceCanonicalKey);
         resultEntry.put("evidenceId", evidenceId);
         resultEntry.put("success", page.isSuccess());
         resultEntry.put("title", page.getTitle());
@@ -1641,10 +1723,12 @@ public class CollectorAgent extends BaseAgent {
         resultEntry.put("selectionSummary", effectiveCandidate == null ? null : effectiveCandidate.getSelectionSummary());
         resultEntry.put("sourceUrls", collectedSourceUrls);
         resultEntry.put("issueFlags", collectionIssueFlags);
-        resultEntry.put("evidenceFragments", buildCollectedEvidenceFragments(
-                config, effectiveSourceType, page, effectiveCandidate, evidenceId, effectiveUrl));
-        resultEntry.put("downstreamEvidenceViews", buildDownstreamEvidenceViews(
-                config, effectiveSourceType, page, evidenceId, effectiveUrl, pageMetadata));
+        resultEntry.put("evidenceFragments", promotableFormalEvidence
+                ? buildCollectedEvidenceFragments(config, effectiveSourceType, page, effectiveCandidate, evidenceId, effectiveUrl)
+                : List.of());
+        resultEntry.put("downstreamEvidenceViews", promotableFormalEvidence
+                ? buildDownstreamEvidenceViews(config, effectiveSourceType, page, evidenceId, effectiveUrl, pageMetadata)
+                : List.of());
         if (retrievalIndexingResult != null) {
             resultEntry.put("knowledgeDocument", toKnowledgeDocumentPayload(retrievalIndexingResult.knowledgeDocument()));
             resultEntry.put("retrievalChunks", toRetrievalChunkPayloads(retrievalIndexingResult.retrievalChunks()));
@@ -2117,6 +2201,44 @@ public class CollectorAgent extends BaseAgent {
         return null;
     }
 
+    private String resolveEvidenceCanonicalKey(String effectiveUrl, List<String> sourceUrls) {
+        String canonicalEffectiveUrl = canonicalUrlResolver.canonicalize(effectiveUrl);
+        if (StringUtils.hasText(canonicalEffectiveUrl)) {
+            return canonicalEffectiveUrl;
+        }
+        if (sourceUrls == null || sourceUrls.isEmpty()) {
+            return null;
+        }
+        for (String sourceUrl : sourceUrls) {
+            String canonicalSourceUrl = canonicalUrlResolver.canonicalize(sourceUrl);
+            if (StringUtils.hasText(canonicalSourceUrl)) {
+                return canonicalSourceUrl;
+            }
+        }
+        return null;
+    }
+
+    private boolean hasPersistedCanonicalEvidence(List<Map<String, Object>> results, String canonicalKey) {
+        if (!StringUtils.hasText(canonicalKey) || results == null || results.isEmpty()) {
+            return false;
+        }
+        for (Map<String, Object> result : results) {
+            if (result == null || !Boolean.TRUE.equals(result.get("persisted"))) {
+                continue;
+            }
+            Object existingCanonicalUrl = result.get("canonicalUrl");
+            if (canonicalKey.equals(existingCanonicalUrl)) {
+                return true;
+            }
+            String existingUrl = toText(result.get("url"));
+            String existingCanonicalKey = resolveEvidenceCanonicalKey(existingUrl, readStringList(result.get("sourceUrls")));
+            if (canonicalKey.equals(existingCanonicalKey)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * 结构化采集结果需要把 executor/sourceUrls/structuredPayload 一起固化到 metadata 中，
      * 这样即使下游仍消费旧的 CollectedPage，也不会丢掉 API 采集的关键信息。
@@ -2490,6 +2612,44 @@ public class CollectorAgent extends BaseAgent {
         boolean hasContent = page.getContent() != null && !page.getContent().isBlank();
         boolean hasSnippet = page.getSnippet() != null && !page.getSnippet().isBlank();
         return hasContent || hasSnippet || hasStructuredPayloadMetadata(page) || hasStructuredBlockMetadata(page);
+    }
+
+    /**
+     * 统一复用“页面是否可作为成功预抓取页”判定，避免调用点命名差异造成分支语义漂移。
+     */
+    /**
+     * 正式证据的准入要比“页面可读”更严格。
+     * 薄壳页、登录门页、验证码页以及仍处于 repair 待补采状态的结果，都只能保留在 audit，
+     * 不能再进入 evidence / RAG / downstream 视图，避免把壳页误当成有效事实来源。
+     */
+    private boolean isPromotableFormalEvidence(SourceCollector.CollectedPage page,
+                                               CollectionExecutionResult collectionResult) {
+        return isUsableCollectedPage(page) && !hasFormalEvidenceBlockingSignal(collectionResult);
+    }
+
+    /**
+     * 这里复用 coverage 聚合阶段的阻断口径，确保同一批质量信号在不同阶段不会语义漂移。
+     */
+    private boolean hasFormalEvidenceBlockingSignal(CollectionExecutionResult collectionResult) {
+        if (collectionResult == null) {
+            return false;
+        }
+        if (collectionResult.getQualitySignals() == null || collectionResult.getQualitySignals().isEmpty()) {
+            return false;
+        }
+        for (String signal : collectionResult.getQualitySignals()) {
+            if (!StringUtils.hasText(signal)) {
+                continue;
+            }
+            String normalized = signal.trim().toUpperCase(java.util.Locale.ROOT);
+            if (normalized.contains("NAVIGATION_SHELL")
+                    || normalized.contains("LINK_FARM_WITHOUT_BODY")
+                    || normalized.contains("AUTH_GATE")
+                    || normalized.contains("CAPTCHA")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void markCollectStep(SearchExecutionPlan executionPlan,

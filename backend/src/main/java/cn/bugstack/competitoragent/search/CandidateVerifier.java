@@ -154,6 +154,9 @@ public class CandidateVerifier {
                                                       String competitorName,
                                                       String sourceType,
                                                       DirectVerificationCounters directCounters) {
+        if (shouldDeferToStructuredExecutor(candidate)) {
+            return buildStructuredExecutorVerificationTarget(candidate);
+        }
         if (shouldSkipNetworkVerification(candidate)) {
             return buildTavilyFastLaneVerificationTarget(candidate);
         }
@@ -287,6 +290,26 @@ public class CandidateVerifier {
                 .qualitySignals(qualitySignals)
                 .selectionStage("VERIFIED")
                 .selectionReason("通过 Tavily Prefetched Content Gate，跳过网络重验")
+                .build();
+        return SearchCollectionTarget.builder()
+                .candidate(updatedCandidate)
+                .collectedPage(null)
+                .build();
+    }
+
+    private SearchCollectionTarget buildStructuredExecutorVerificationTarget(SourceCandidate candidate) {
+        List<String> qualitySignals = new ArrayList<>();
+        if (candidate != null && candidate.getQualitySignals() != null) {
+            qualitySignals.addAll(candidate.getQualitySignals());
+        }
+        qualitySignals.add("STRUCTURED_EXECUTOR_VERIFICATION_SKIPPED");
+
+        SourceCandidate updatedCandidate = candidate.toBuilder()
+                .verified(false)
+                .verificationReason("STRUCTURED_EXECUTOR_DEFERRED")
+                .qualitySignals(qualitySignals)
+                .selectionStage("PLANNED")
+                .selectionReason("结构化来源由专项 executor 采集，不执行网页结果页验证")
                 .build();
         return SearchCollectionTarget.builder()
                 .candidate(updatedCandidate)
@@ -552,6 +575,51 @@ public class CandidateVerifier {
      * Direct 验证计数会在后续并发化中被多个候选任务共享，
      * 因此从一开始就使用 AtomicInteger，避免并发改造时重新定义统计语义。
      */
+    private boolean shouldDeferToStructuredExecutor(SourceCandidate candidate) {
+        if (candidate == null) {
+            return false;
+        }
+        if ("github".equalsIgnoreCase(candidate.getSourceFamilyKey())
+                || "GITHUB".equalsIgnoreCase(candidate.getSourceType())) {
+            return true;
+        }
+        return isExplicitFeedUrl(candidate.getSourceFamilyKey(), candidate.getSourceType(), candidate.getUrl());
+    }
+
+    private boolean isExplicitFeedUrl(String sourceFamilyKey, String sourceType, String url) {
+        if (!StringUtils.hasText(url)) {
+            return false;
+        }
+        boolean newsFamily = "news".equalsIgnoreCase(sourceFamilyKey) || "NEWS".equalsIgnoreCase(sourceType);
+        if (!newsFamily) {
+            return false;
+        }
+        try {
+            URI uri = URI.create(url.trim());
+            String path = uri.getPath();
+            if (!StringUtils.hasText(path)) {
+                return false;
+            }
+            String normalizedPath = path.trim().toLowerCase(Locale.ROOT);
+            String[] segments = normalizedPath.split("/");
+            for (String segment : segments) {
+                if (!StringUtils.hasText(segment)) {
+                    continue;
+                }
+                if ("feed".equals(segment) || "rss".equals(segment) || "atom".equals(segment)) {
+                    return true;
+                }
+            }
+            int lastSlashIndex = normalizedPath.lastIndexOf('/');
+            String filename = lastSlashIndex >= 0 ? normalizedPath.substring(lastSlashIndex + 1) : normalizedPath;
+            return "feed.xml".equals(filename)
+                    || "rss.xml".equals(filename)
+                    || "atom.xml".equals(filename);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     private static class DirectVerificationCounters {
 
         private final AtomicInteger attemptCount = new AtomicInteger();

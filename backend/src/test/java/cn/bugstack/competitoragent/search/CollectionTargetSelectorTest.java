@@ -463,4 +463,44 @@ class CollectionTargetSelectorTest {
         assertEquals("未验证候选不能进入正式采集目标",
                 decision.getDiscardedCandidates().get(0).getSelectionReason());
     }
+    @Test
+    void shouldRetainExplicitAttemptedFailureAsSelectedAuditTarget() {
+        SourceCandidate explicitFailedCandidate = SourceCandidate.builder()
+                .url("https://example.com/help")
+                .title("Help")
+                .sourceType("DOCS")
+                .discoveryMethod("DIRECT_LOCATOR")
+                .providerKey("planned")
+                .selectionStage("DISCARDED")
+                .selectionReason("verification timeout")
+                .verified(Boolean.FALSE)
+                .sourceUrls(List.of("https://example.com/help"))
+                .totalScore(0.30)
+                .build();
+
+        Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
+        attemptedTargets.put(explicitFailedCandidate.getUrl(), SearchCollectionTarget.builder()
+                .candidate(explicitFailedCandidate)
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url("https://example.com/help")
+                        .title("Help")
+                        .success(false)
+                        .errorMessage("timeout")
+                        .build())
+                .build());
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                List.of(explicitFailedCandidate),
+                attemptedTargets,
+                1
+        );
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        assertEquals("https://example.com/help", decision.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertNotNull(decision.getSelectedTargets().get(0).getCollectedPage());
+        assertFalse(decision.getSelectedTargets().get(0).getCollectedPage().isSuccess());
+        assertTrue(decision.getUpdatedCandidates().stream()
+                .anyMatch(candidate -> "https://example.com/help".equals(candidate.getUrl())
+                        && "SELECTED".equals(candidate.getSelectionStage())));
+    }
 }

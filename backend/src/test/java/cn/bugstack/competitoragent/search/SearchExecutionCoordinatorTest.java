@@ -554,9 +554,24 @@ class SearchExecutionCoordinatorTest {
     }
 
     @Test
-    void shouldSkipPublicSearchSupplementWhenOfficialDirectCandidatesAlreadyVerified() {
-        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
-        when(searchSourceProvider.search(any(SearchSourceRequest.class))).thenReturn(List.of());
+    void shouldRunPublicSearchSupplementWhenOfficialDirectCandidatesAlreadyVerified() {
+        when(searchSourceProvider.search(argThat(request ->
+                request != null && request.getRequestPhase() == SearchRequestPhase.BOOTSTRAP)))
+                .thenReturn(List.of());
+        when(searchSourceProvider.search(argThat(request ->
+                request != null && request.getRequestPhase() == SearchRequestPhase.SUPPLEMENT)))
+                .thenReturn(List.of(SourceCandidate.builder()
+                        .url("https://www.acme.ai/changelog")
+                        .title("Acme AI Changelog")
+                        .sourceType("DOCS")
+                        .discoveryMethod("SEARCH")
+                        .reason("public search supplement")
+                        .domain("acme.ai")
+                        .providerKey("tavily")
+                        .relevanceScore(0.92)
+                        .freshnessScore(0.72)
+                        .qualityScore(0.88)
+                        .build()));
         when(sourceCollector.collect("https://www.acme.ai/docs", "Acme AI", "DOCS"))
                 .thenReturn(SourceCollector.CollectedPage.builder()
                         .url("https://www.acme.ai/docs")
@@ -579,9 +594,10 @@ class SearchExecutionCoordinatorTest {
                 .minVerifiedCandidates(1)
                 .build());
 
-        verify(searchSourceProvider, never()).search(any(), any());
-        assertEquals("SKIP_SUPPLEMENT_DIRECT_DISCOVERY_ENOUGH",
-                result.getExecutionTrace().getFallbackDecision());
+        verify(searchSourceProvider).search(argThat(request ->
+                request != null && request.getRequestPhase() == SearchRequestPhase.SUPPLEMENT));
+        assertEquals("BROWSER_DISABLED_USE_HTTP_FALLBACK", result.getExecutionTrace().getFallbackDecision());
+        assertEquals(1, result.getExecutionTrace().getSupplementedCandidateCount());
     }
 
     @Test

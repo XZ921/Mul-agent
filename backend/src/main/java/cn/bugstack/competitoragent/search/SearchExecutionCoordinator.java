@@ -9,6 +9,8 @@ import cn.bugstack.competitoragent.source.SearchSourceRequest;
 import cn.bugstack.competitoragent.source.SearchSourceProvider;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
+import cn.bugstack.competitoragent.workflow.coverage.DimensionEvidencePlan;
+import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceCoverage;
 import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -168,6 +170,7 @@ public class SearchExecutionCoordinator {
     public SearchExecutionResult execute(CollectorNodeConfig config) {
         return execute(config, null);
     }
+
 
     /**
      * 将 repair 生命周期投影为稳定审计字段。
@@ -782,7 +785,7 @@ public class SearchExecutionCoordinator {
      */
     private List<SourceCandidate> resolveInitialCandidates(CollectorNodeConfig config) {
         if (config.getSourceCandidates() != null && !config.getSourceCandidates().isEmpty()) {
-            return config.getSourceCandidates();
+            return mergeConfiguredCandidatesWithExplicitUrls(config);
         }
         if (config.getCompetitorUrls() == null || config.getCompetitorUrls().isEmpty()) {
             return List.of();
@@ -819,6 +822,48 @@ public class SearchExecutionCoordinator {
                     .build());
         }
         return fallbackCandidates;
+    }
+
+    private List<SourceCandidate> mergeConfiguredCandidatesWithExplicitUrls(CollectorNodeConfig config) {
+        List<SourceCandidate> mergedCandidates = new ArrayList<>(config.getSourceCandidates().stream()
+                .filter(Objects::nonNull)
+                .toList());
+        Set<String> seenCanonicalUrls = new LinkedHashSet<>();
+        for (SourceCandidate candidate : mergedCandidates) {
+            String canonicalUrl = canonicalUrlResolver.canonicalize(candidate.getUrl());
+            if (StringUtils.hasText(canonicalUrl)) {
+                seenCanonicalUrls.add(canonicalUrl);
+            }
+        }
+        for (String url : defaultList(config.getCompetitorUrls())) {
+            String canonicalUrl = canonicalUrlResolver.canonicalize(url);
+            if (!StringUtils.hasText(canonicalUrl) || !seenCanonicalUrls.add(canonicalUrl)) {
+                continue;
+            }
+            // 规划期 sourceCandidates 不能覆盖掉用户显式输入的 competitorUrls，否则失败页也无法进入 traceable audit。
+            mergedCandidates.add(buildExplicitConfiguredCandidate(config, url));
+        }
+        return mergedCandidates;
+    }
+
+    private SourceCandidate buildExplicitConfiguredCandidate(CollectorNodeConfig config, String url) {
+        return SourceCandidate.builder()
+                .url(url)
+                .title(config.getCompetitorName() + " - " + safeSourceType(config.getSourceType()) + "入口")
+                .sourceType(safeSourceType(config.getSourceType()))
+                .discoveryMethod("DIRECT_LOCATOR")
+                .providerKey("planned")
+                .reason(StringUtils.hasText(config.getDiscoveryNotes())
+                        ? config.getDiscoveryNotes()
+                        : "节点配置直接提供采集 URL")
+                .domain(extractDomain(url))
+                .sourceUrls(List.of(url))
+                .relevanceScore(0.82)
+                .freshnessScore(0.55)
+                .qualityScore(0.80)
+                .selectionStage("PLANNED")
+                .selectionReason("由节点配置中的 competitorUrls 直接生成")
+                .build();
     }
 
     private SearchExecutionPlan initializePlan(SearchExecutionPlan plan) {
@@ -1120,37 +1165,99 @@ public class SearchExecutionCoordinator {
         if (config == null || config.getDimensionEvidencePlan() == null) {
             return List.of();
         }
-        return config.getDimensionEvidencePlan().allPlannedQueries();
+        DimensionEvidencePlan plan = config.getDimensionEvidencePlan();
+        if (plan.getFieldCoverages() == null || plan.getFieldCoverages().isEmpty()) {
+            return List.of();
+        }
+        /*
+         * 只把仍未满足的字段 query 下发给 provider。
+         * 计划快照里可能保留历史 plannedQueries 用于审计，但字段已达标后不能再次执行，否则会把“已闭环字段”误当成待补采。
+         */
+        return plan.getFieldCoverages().stream()
+                .filter(Objects::nonNull)
+                .filter(field -> !isFieldCoverageSatisfied(field))
+                .flatMap(field -> field.getPlannedQueries() == null
+                        ? java.util.stream.Stream.empty()
+                        : field.getPlannedQueries().stream())
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private boolean isFieldCoverageSatisfied(FieldEvidenceCoverage field) {
+        if (field == null) {
+            return false;
+        }
+        int minimum = field.getMinimumAttemptedPaths() == null ? 1 : field.getMinimumAttemptedPaths();
+        int completed = field.getCompletedPaths() == null ? 0 : field.getCompletedPaths().size();
+        return completed >= minimum;
     }
 
     /**
-     * 字段 query 的完整计划要保留下来做审计，同时只把预算内、优先级更高的子集透传给 provider。
-     * 这里刻意用“放大前”的 budget 算 quota，避免 minimum timeout 反推回全量执行。
+     * 数量层只负责按照 priority 稳定排序并完整下发 field query。
+     * 真正的预算截断交给 provider 侧基于 deadline 的循环内熔断，
+     * 避免 coordinator 再次退化回固定 quota 魔数。
      */
     private ResolvedFieldEvidenceQueryPlan resolveExecutableFieldEvidenceQueries(CollectorNodeConfig config,
                                                                                  long baseSearchTimeoutMillis) {
-        List<FieldEvidenceQuery> planned = resolveFieldEvidenceQueries(config);
-        if (planned.isEmpty()) {
-            return ResolvedFieldEvidenceQueryPlan.empty();
-        }
-        int quota = searchPolicyResolver.resolveExecutableFieldEvidenceQueryQuota(baseSearchTimeoutMillis);
-        List<FieldEvidenceQuery> sorted = planned.stream()
+        List<FieldEvidenceQuery> planned = resolveFieldEvidenceQueries(config).stream()
                 .filter(Objects::nonNull)
                 .sorted(Comparator
                         .comparing(SearchExecutionCoordinator::resolveFieldEvidencePriority)
                         .thenComparing(SearchExecutionCoordinator::resolveFieldEvidenceFingerprint, Comparator.nullsLast(String::compareTo))
                         .thenComparing(FieldEvidenceQuery::getQuery, Comparator.nullsLast(String::compareTo)))
                 .toList();
+        if (planned.isEmpty()) {
+            return ResolvedFieldEvidenceQueryPlan.empty();
+        }
+        return new ResolvedFieldEvidenceQueryPlan(
+                planned,
+                new ArrayList<>(planned),
+                List.of(),
+                Map.of()
+        );
+    }
+
+
+    /**
+     * 字段 query 的完整计划要保留下来做审计，同时只把预算内、优先级更高的子集透传给 provider。
+     * 这里刻意用“放大前”的 budget 算 quota，避免 minimum timeout 反推回全量执行。
+     */
+    /*
+    private ResolvedFieldEvidenceQueryPlan resolveExecutableFieldEvidenceQueries(CollectorNodeConfig config,
+                                                                                 long baseSearchTimeoutMillis) {
+        List<FieldEvidenceQuery> planned = resolveFieldEvidenceQueries(config).stream()
+                .filter(Objects::nonNull)
+                .sorted(Comparator
+                        .comparing(SearchExecutionCoordinator::resolveFieldEvidencePriority)
+                        .thenComparing(SearchExecutionCoordinator::resolveFieldEvidenceFingerprint, Comparator.nullsLast(String::compareTo))
+                        .thenComparing(FieldEvidenceQuery::getQuery, Comparator.nullsLast(String::compareTo)))
+                .toList();
+        if (planned.isEmpty()) {
+            return ResolvedFieldEvidenceQueryPlan.empty();
+        }
+        List<FieldEvidenceQuery> allExecutable = new ArrayList<>(planned);
+        if (planned != null) {
+            return new ResolvedFieldEvidenceQueryPlan(
+                    planned,
+                    allExecutable,
+                    List.of(),
+                    Map.of()
+            );
+        }
+        if (false) {
+        // coordinator 这一层只负责把 field query 按优先级稳定排序后完整下发。
+        // 真正“还能跑几条”交给 provider 侧基于 deadline 的循环内熔断，
+        // 这样 query 预算就不会再次退化成固定 quota 的魔数截断。
+        int quota = Integer.MAX_VALUE;
+        int quota = Integer.MAX_VALUE;
+        List<FieldEvidenceQuery> sorted = planned;
+        // coordinator 这一层只负责把 field query 按优先级稳定排序后完整下发。
+        // 真正“还能跑几条”交给 provider 侧基于 deadline 的循环内熔断，
+        // 这样 query 预算就不会再次退化成固定 quota 的魔数截断。
+        List<FieldEvidenceQuery> executable = new ArrayList<>(planned);
         // 显式保留一条最低执行额度，避免 pending field query 在“总超时兜底被放行”的场景里被预算层再次完全饿死。
         // 这与后续档 B 的循环内熔断配合使用：先允许最高优先级 query 起跑，再由执行层决定是否继续。
         if (quota <= 0) {
-            return new ResolvedFieldEvidenceQueryPlan(
-                    planned,
-                    List.of(sorted.get(0)),
-                    sorted.size() <= 1 ? List.of() : new ArrayList<>(sorted.subList(1, sorted.size())),
-                    sorted.size() <= 1 ? Map.of() : Map.of("SKIPPED_OVER_BUDGET", sorted.size() - 1)
-            );
-        }
         List<FieldEvidenceQuery> executable = new ArrayList<>(sorted.stream().limit(quota).toList());
         List<FieldEvidenceQuery> skipped = new ArrayList<>(sorted.stream().skip(quota).toList());
         return new ResolvedFieldEvidenceQueryPlan(
@@ -1159,6 +1266,7 @@ public class SearchExecutionCoordinator {
                 skipped,
                 skipped.isEmpty() ? Map.of() : Map.of("SKIPPED_OVER_BUDGET", skipped.size())
         );
+        }
     }
 
     /**
@@ -1518,6 +1626,13 @@ public class SearchExecutionCoordinator {
         if (hasPendingFieldEvidenceQueries(config)) {
             return true;
         }
+        /*
+         * official 搜索优先后，competitorUrls 展开的直连候选只是 seed。
+         * 即使这些 seed 已经验证通过，也必须让 PUBLIC_SEARCH/Tavily 有机会补充第三方与正文更丰富的来源。
+         */
+        if (isSearchFirstDirectDiscoverySeedMode(config)) {
+            return true;
+        }
         if (shouldSkipSupplementForDirectDiscovery(config, verifiedCount, minVerifiedCount)) {
             return false;
         }
@@ -1527,6 +1642,14 @@ public class SearchExecutionCoordinator {
             return verifiedCount < minVerifiedCount;
         }
         return candidateCount < targetCount;
+    }
+
+    private boolean isSearchFirstDirectDiscoverySeedMode(CollectorNodeConfig config) {
+        return config != null
+                && searchPolicyResolver.isSearchFirstSourceFamilyForSourceType(config.getSourceType())
+                && (config.getSourceCandidates() == null || config.getSourceCandidates().isEmpty())
+                && config.getCompetitorUrls() != null
+                && !config.getCompetitorUrls().isEmpty();
     }
 
     private boolean hasPendingFieldEvidenceQueries(CollectorNodeConfig config) {
@@ -1543,6 +1666,13 @@ public class SearchExecutionCoordinator {
                                                            int verifiedCount,
                                                            int minVerifiedCount) {
         if (config == null) {
+            return false;
+        }
+        /*
+         * 搜索优先家族中，direct discovery 只是把用户给出的稳定入口扩展成候选 seed。
+         * 它不能再因为“验证数量达标”而阻断 PUBLIC_SEARCH/Tavily 补源，否则会回到官网壳页短路搜索的旧架构。
+         */
+        if (searchPolicyResolver.isSearchFirstSourceFamilyForSourceType(config.getSourceType())) {
             return false;
         }
         if (config.getSourceCandidates() != null && !config.getSourceCandidates().isEmpty()) {

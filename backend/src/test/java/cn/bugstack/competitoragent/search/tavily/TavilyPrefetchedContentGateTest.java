@@ -117,6 +117,32 @@ class TavilyPrefetchedContentGateTest {
         assertThat(gated.getFastLaneRejectReason()).isEqualTo("WEAK_CONTENT");
     }
 
+    @Test
+    void shouldNotTreatMissingQueryModeOfficialSourceTypeAsOfficialAnchoredForThirdPartyArticle() {
+        SourceCandidate candidate = baseCandidate(
+                "https://example.com/blog/douyin-open-platform-review",
+                "OFFICIAL",
+                null,
+                0.72D);
+        TavilyPrefetchedContent content = TavilyPrefetchedContent.builder()
+                .url(candidate.getUrl())
+                .title("Douyin open platform third-party review")
+                .content("third-party review")
+                .rawContent(repeat('a', 2200))
+                .cleanedContent(repeat('a', 2200))
+                .sourceUrls(List.of(candidate.getUrl()))
+                .build();
+
+        SourceCandidate gated = gate.apply(candidate, content, Set.of("open.douyin.com"));
+
+        assertThat(gated.getPageType()).isEqualTo("ARTICLE");
+        assertThat(gated.getQualityTier()).isEqualTo("STRONG");
+        assertThat(gated.getFastLaneUsable()).isTrue();
+        assertThat(gated.getSkipNetworkVerification()).isTrue();
+        assertThat(gated.getContentCompleteness()).isEqualTo("FULL_ENOUGH");
+        assertThat(gated.getFastLaneRejectReason()).isNull();
+    }
+
     private SourceCandidate baseCandidate(String url, String sourceType, String queryMode, double tavilyScore) {
         return SourceCandidate.builder()
                 .url(url)

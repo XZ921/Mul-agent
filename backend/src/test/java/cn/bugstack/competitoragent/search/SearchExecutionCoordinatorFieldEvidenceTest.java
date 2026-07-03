@@ -380,7 +380,7 @@ class SearchExecutionCoordinatorFieldEvidenceTest {
     }
 
     @Test
-    void shouldKeepSkippingSupplementForDirectDiscoveryWhenNoFieldQueriesPending() {
+    void shouldRunOfficialSupplementWithoutFieldQueriesWhenFieldCoverageAlreadySatisfied() {
         CapturingSearchSourceProvider provider = new CapturingSearchSourceProvider(
                 List.of(),
                 List.of(fieldEvidenceCandidate())
@@ -405,14 +405,54 @@ class SearchExecutionCoordinatorFieldEvidenceTest {
                 .dimensionEvidencePlan(completedFieldPlan())
                 .build());
 
-        assertThat(supplementRequests(provider)).isEmpty();
+        List<SearchSourceRequest> supplementRequests = supplementRequests(provider);
+        assertThat(supplementRequests).hasSize(1);
+        assertThat(supplementRequests.get(0).getFieldEvidenceQueries()).isEmpty();
         assertThat(result.getExecutionTrace().getFallbackDecision())
-                .isEqualTo("SKIP_SUPPLEMENT_DIRECT_DISCOVERY_ENOUGH");
+                .isNotEqualTo("SKIP_SUPPLEMENT_DIRECT_DISCOVERY_ENOUGH");
     }
 
     /**
      * 保持旧测试入口不变，让既有场景仍然可以通过布尔开关快速构造“弱入口已验证”的上下文。
      */
+    @Test
+    void shouldKeepVerifiedDirectDiscoveryCandidatesAsSeedWhileOfficialSearchFirstSupplementStillRuns() {
+        CapturingSearchSourceProvider provider = new CapturingSearchSourceProvider(
+                List.of(),
+                List.of(fieldEvidenceCandidate())
+        );
+        SearchExecutionCoordinator coordinator = newCoordinator(
+                provider,
+                emptyBrowserResult(),
+                Set.of("https://www.bilibili.com/docs")
+        );
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("鍝斿摡鍝斿摡")
+                .competitorUrls(List.of("https://www.bilibili.com"))
+                .sourceType("DOCS")
+                .verifyCandidates(true)
+                .searchMode("HTTP_ONLY")
+                .searchFallbackOrder(List.of("HTTP"))
+                .preferredSearchProvider("tavily")
+                .browserSearchEnabled(false)
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .dimensionEvidencePlan(completedFieldPlan())
+                .build());
+
+        List<SearchSourceRequest> supplementRequests = supplementRequests(provider);
+        assertThat(supplementRequests).hasSize(1);
+        assertThat(supplementRequests.get(0).getFieldEvidenceQueries()).isEmpty();
+        assertThat(supplementRequests.get(0).getSeedCandidates())
+                .anySatisfy(candidate -> {
+                    assertThat(candidate.getUrl()).isEqualTo("https://bilibili.com/docs");
+                    assertThat(candidate.getVerified()).isTrue();
+                });
+        assertThat(result.getExecutionTrace().getFallbackDecision())
+                .isNotEqualTo("SKIP_SUPPLEMENT_DIRECT_DISCOVERY_ENOUGH");
+    }
+
     private SearchExecutionCoordinator newCoordinator(CapturingSearchSourceProvider provider,
                                                       boolean shallowEntryVerifies) {
         return newCoordinator(

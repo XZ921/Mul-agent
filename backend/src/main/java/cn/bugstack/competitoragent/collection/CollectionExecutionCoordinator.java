@@ -33,6 +33,7 @@ public class CollectionExecutionCoordinator {
     private final CollectionTaskPackageBuilder packageBuilder;
     private final CollectionExecutorRegistry executorRegistry;
     private final CanonicalUrlResolver canonicalUrlResolver;
+    private final InternalLinkDiscoveryService internalLinkDiscoveryService;
     private final InternalLinkDiscoveryProperties internalLinkDiscoveryProperties;
     private final CollectionExecutionProperties collectionExecutionProperties;
 
@@ -47,9 +48,26 @@ public class CollectionExecutionCoordinator {
                                           CanonicalUrlResolver canonicalUrlResolver,
                                           InternalLinkDiscoveryProperties internalLinkDiscoveryProperties,
                                           CollectionExecutionProperties collectionExecutionProperties) {
+        this(packageBuilder,
+                executorRegistry,
+                canonicalUrlResolver,
+                new InternalLinkDiscoveryService(internalLinkDiscoveryProperties, canonicalUrlResolver),
+                internalLinkDiscoveryProperties,
+                collectionExecutionProperties);
+    }
+
+    public CollectionExecutionCoordinator(CollectionTaskPackageBuilder packageBuilder,
+                                          CollectionExecutorRegistry executorRegistry,
+                                          CanonicalUrlResolver canonicalUrlResolver,
+                                          InternalLinkDiscoveryService internalLinkDiscoveryService,
+                                          InternalLinkDiscoveryProperties internalLinkDiscoveryProperties,
+                                          CollectionExecutionProperties collectionExecutionProperties) {
         this.packageBuilder = packageBuilder;
         this.executorRegistry = executorRegistry;
         this.canonicalUrlResolver = canonicalUrlResolver == null ? new CanonicalUrlResolver() : canonicalUrlResolver;
+        this.internalLinkDiscoveryService = internalLinkDiscoveryService == null
+                ? new InternalLinkDiscoveryService(internalLinkDiscoveryProperties, canonicalUrlResolver)
+                : internalLinkDiscoveryService;
         this.internalLinkDiscoveryProperties = internalLinkDiscoveryProperties == null
                 ? new InternalLinkDiscoveryProperties()
                 : internalLinkDiscoveryProperties;
@@ -65,6 +83,7 @@ public class CollectionExecutionCoordinator {
         this(packageBuilder,
                 executorRegistry,
                 canonicalUrlResolver,
+                new InternalLinkDiscoveryService(internalLinkDiscoveryProperties, canonicalUrlResolver),
                 internalLinkDiscoveryProperties,
                 new CollectionExecutionProperties());
     }
@@ -428,7 +447,7 @@ public class CollectionExecutionCoordinator {
             CollectionExecutionResult prefetchedResult = buildPrefetchedResult(taskPackage, queuedTask.prefetchedPage());
             if (prefetchedResult != null) {
                 counters.incrementPrefetchedReuse();
-                return prefetchedResult;
+                return attachInternalDiscovery(taskPackage, prefetchedResult);
             }
         }
         counters.incrementExecutorCall();
@@ -527,6 +546,34 @@ public class CollectionExecutionCoordinator {
                 .durationMillis(0L)
                 .checkpointSource("searchVerification")
                 .reusedFromCheckpoint(false)
+                .build()
+                .normalize();
+    }
+
+    /**
+     * 预抓取成功页也必须走与 executor 结果一致的站内链接发现，
+     * 否则 prefetched 快路径会绕过 discoveredCandidates 生成，导致子页永远无法入队。
+     */
+    private CollectionExecutionResult attachInternalDiscovery(CollectionTaskPackage taskPackage,
+                                                              CollectionExecutionResult result) {
+        CollectionExecutionResult normalizedResult = result == null ? null : result.normalize();
+        if (normalizedResult == null
+                || !internalLinkDiscoveryProperties.isEnabled()
+                || !normalizedResult.isSuccess()) {
+            return normalizedResult;
+        }
+        List<SourceCandidate> discoveredCandidates = internalLinkDiscoveryService.discover(
+                taskPackage,
+                normalizedResult,
+                taskPackage == null || taskPackage.getDiscoveryDepth() == null
+                        ? 0
+                        : taskPackage.getDiscoveryDepth()
+        );
+        return normalizedResult.toBuilder()
+                .discoveredCandidates(discoveredCandidates)
+                .discoveryDepth(taskPackage == null || taskPackage.getDiscoveryDepth() == null
+                        ? 0
+                        : taskPackage.getDiscoveryDepth())
                 .build()
                 .normalize();
     }

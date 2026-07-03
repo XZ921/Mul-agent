@@ -15,6 +15,18 @@ import java.util.Locale;
 @Component
 public class ContentUsabilityScorer {
 
+    /**
+     * 候选或正文至少要达到这个长度，才认为“存在正文信号”。
+     * 该阈值只用于排除极薄壳页，不能直接作为搜索短路满足条件。
+     */
+    public static final int MIN_USEFUL_BODY_LENGTH = 120;
+
+    /**
+     * 候选级短路满足阈值。
+     * 只有达到这个长度，或有 fast-lane / FULL_ENOUGH 等更强信号，才允许认为候选足以支撑停止补源。
+     */
+    public static final int SATISFYING_BODY_LENGTH = 500;
+
     private static final List<String> NAVIGATION_TERMS = List.of(
             "首页", "下载", "安卓", "iOS", "TV", "PC", "车机", "扫码下载",
             "登录", "注册", "帮助中心", "联系我们", "友情链接"
@@ -43,7 +55,7 @@ public class ContentUsabilityScorer {
         int usefulLength = normalizeBody(bodyText).length();
         int navigationHits = countContains(bodyText, NAVIGATION_TERMS);
         int realContentHits = countContains(bodyText, REAL_CONTENT_TERMS);
-        boolean navShell = navigationHits >= 5 && realContentHits <= 1 && usefulLength < 120;
+        boolean navShell = navigationHits >= 5 && realContentHits <= 1 && usefulLength < MIN_USEFUL_BODY_LENGTH;
         if (navShell) {
             reasons.add("NAV_SHELL_DETECTED");
             score = Math.min(score, 0.30D);

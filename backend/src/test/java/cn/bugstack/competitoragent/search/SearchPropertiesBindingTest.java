@@ -54,8 +54,10 @@ class SearchPropertiesBindingTest {
                     "search.source-catalog.families.official.direct-path-templates[2]=/docs",
                     "search.source-catalog.families.official.direct-path-templates[3]=/documentation",
                     "search.source-catalog.families.official.direct-path-templates[4]=/help",
-                    "search.source-catalog.families.official.primary-tools[0]=WEB_SCRAPER",
-                    "search.source-catalog.families.official.primary-tools[1]=JINA_READER",
+                    "search.source-catalog.families.official.primary-tools[0]=PUBLIC_SEARCH",
+                    "search.source-catalog.families.official.auxiliary-tools[0]=WEB_SCRAPER",
+                    "search.source-catalog.families.official.auxiliary-tools[1]=JINA_READER",
+                    "search.source-catalog.families.official.tool-provider-keys.PUBLIC_SEARCH=tavily",
                     "search.source-catalog.families.news.update-policy.mode=REALTIME_RSS_AND_SCHEDULED_SWEEP",
                     "search.source-catalog.families.news.preferred-web-render-hint=LIGHTWEIGHT",
                     "search.source-catalog.families.news.expected-block-types[0]=ARTICLE_BODY",
@@ -192,7 +194,11 @@ class SearchPropertiesBindingTest {
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getDirectPathTemplates())
                     .containsExactly("/", "/pricing", "/docs", "/documentation", "/help");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getPrimaryTools())
+                    .containsExactly("PUBLIC_SEARCH");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getAuxiliaryTools())
                     .containsExactly("WEB_SCRAPER", "JINA_READER");
+            assertThat(searchProperties.getSourceCatalog().getFamilies().get("official").getToolProviderKeys())
+                    .containsEntry("PUBLIC_SEARCH", "tavily");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("news").getPreferredWebRenderHint())
                     .isEqualTo("LIGHTWEIGHT");
             assertThat(searchProperties.getSourceCatalog().getFamilies().get("news").getExpectedBlockTypes())

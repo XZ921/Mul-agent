@@ -51,9 +51,36 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
         assertThat(request.getRequestPhase()).isEqualTo(SearchRequestPhase.SUPPLEMENT);
         assertThat(request.getFieldEvidenceQueries())
                 .extracting(FieldEvidenceQuery::getQueryFingerprint)
-                .containsExactly("q-priority-10", "q-priority-20", "q-priority-30");
+                .containsExactly("q-priority-10", "q-priority-20", "q-priority-30", "q-priority-40");
+        assertThat(request.getFieldEvidenceQuerySkippedCount()).isZero();
         // 这里特意同时断言最终 trace 仍会看到被放大的总超时，证明 query 配额不是拿放大后的值倒推出来的。
         assertThat(result.getExecutionTrace().getSearchTimeoutMillis()).isGreaterThan(18_300L);
+    }
+
+    @Test
+    void shouldNotCollapseHighPriorityFieldQueriesToOneWhenBaseBudgetIsShort() {
+        RecordingBudgetAwareSearchSourceProvider provider = new RecordingBudgetAwareSearchSourceProvider();
+        SearchExecutionCoordinator coordinator = newCoordinator(provider);
+
+        coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("鍝斿摡鍝斿摡")
+                .sourceType("DOCS")
+                .verifyCandidates(false)
+                .searchMode("HTTP_ONLY")
+                .searchFallbackOrder(List.of("HTTP"))
+                .preferredSearchProvider("tavily")
+                .browserSearchEnabled(false)
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .searchTimeoutMillis(6_000L)
+                .dimensionEvidencePlan(prioritizedFieldPlan())
+                .build());
+
+        assertThat(provider.requests).hasSize(1);
+        assertThat(provider.requests.get(0).getFieldEvidenceQueries())
+                .extracting(FieldEvidenceQuery::getQueryFingerprint)
+                .containsExactly("q-priority-10", "q-priority-20", "q-priority-30", "q-priority-40");
+        assertThat(provider.requests.get(0).getFieldEvidenceQuerySkippedCount()).isZero();
     }
 
     @Test
@@ -77,15 +104,13 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
 
         assertThat(result.getExecutionTrace().getFieldEvidenceQueryCount()).isEqualTo(4);
         assertThat(result.getExecutionTrace().getFieldEvidenceQueryPlannedCount()).isEqualTo(4);
-        assertThat(result.getExecutionTrace().getFieldEvidenceQueryExecutedCount()).isEqualTo(3);
-        assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkippedCount()).isEqualTo(1);
-        assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkipReasons())
-                .containsEntry("SKIPPED_OVER_BUDGET", 1);
+        assertThat(result.getExecutionTrace().getFieldEvidenceQueryExecutedCount()).isEqualTo(4);
+        assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkippedCount()).isZero();
+        assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkipReasons()).isEmpty();
         assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQueryPlannedCount()).isEqualTo(4);
-        assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQueryExecutedCount()).isEqualTo(3);
-        assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQuerySkippedCount()).isEqualTo(1);
-        assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQuerySkipReasons())
-                .containsEntry("SKIPPED_OVER_BUDGET", 1);
+        assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQueryExecutedCount()).isEqualTo(4);
+        assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQuerySkippedCount()).isZero();
+        assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQuerySkipReasons()).isEmpty();
     }
 
     @Test
@@ -112,8 +137,7 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
         assertThat(result.getExecutionTrace().getFieldEvidenceQueryExecutedCount()).isEqualTo(2);
         assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkippedCount()).isEqualTo(2);
         assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkipReasons())
-                .containsEntry("SKIPPED_OVER_BUDGET", 1)
-                .containsEntry("SKIPPED_BUDGET_EXHAUSTED", 1);
+                .containsEntry("SKIPPED_BUDGET_EXHAUSTED", 2);
 
         TavilyFastLaneAudit traceAudit = result.getExecutionTrace().getTavilyFastLaneAudit();
         assertThat(traceAudit).isNotNull();
@@ -123,11 +147,12 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple("q-priority-10", "SUCCESS", 1, null, null),
                         org.assertj.core.groups.Tuple.tuple("q-priority-20", "FAILED", 0, null, "HTTP 429"),
-                        org.assertj.core.groups.Tuple.tuple("q-priority-30", "SKIPPED", 0, "SKIPPED_BUDGET_EXHAUSTED", null)
+                        org.assertj.core.groups.Tuple.tuple("q-priority-30", "SKIPPED", 0, "SKIPPED_BUDGET_EXHAUSTED", null),
+                        org.assertj.core.groups.Tuple.tuple("q-priority-40", "SKIPPED", 0, "SKIPPED_BUDGET_EXHAUSTED", null)
                 );
 
         assertThat(result.getAuditSnapshot().getSummary().getTavilyFastLaneAudit().getFieldEvidenceQueryExecutions())
-                .hasSize(3);
+                .hasSize(4);
         SearchExecutionStep supplementStep = result.getExecutionPlan().getSteps().stream()
                 .filter(step -> "BROWSER_SUPPLEMENT_SEARCH".equals(step.getStepCode()))
                 .findFirst()
@@ -136,7 +161,6 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                 .contains("field query 计划 4 条")
                 .contains("实际执行 2 条")
                 .contains("跳过 2 条")
-                .contains("SKIPPED_OVER_BUDGET")
                 .contains("SKIPPED_BUDGET_EXHAUSTED");
     }
 
@@ -246,10 +270,10 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                         .queriesSent(2)
                         .totalResults(1)
                         .fastLaneUsableCount(1)
-                        .fastLaneRejectedCount(2)
+                        .fastLaneRejectedCount(3)
                         .rejectionReasons(java.util.Map.of(
                                 "HTTP 429", 1,
-                                "SKIPPED_BUDGET_EXHAUSTED", 1
+                                "SKIPPED_BUDGET_EXHAUSTED", 2
                         ))
                         .fieldEvidenceQueryExecutions(List.of(
                                 FieldEvidenceQueryExecutionAudit.builder()
@@ -280,6 +304,17 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                                         .evidencePathKey("DOCS_API_GUIDE")
                                         .queryIntent("API_DOCS")
                                         .query("哔哩哔哩 开放平台 站内 SDK 文档")
+                                        .status("SKIPPED")
+                                        .elapsedMillis(0L)
+                                        .resultCount(0)
+                                        .skipReason("SKIPPED_BUDGET_EXHAUSTED")
+                                        .build(),
+                                FieldEvidenceQueryExecutionAudit.builder()
+                                        .queryFingerprint("q-priority-40")
+                                        .fieldName("coreFeatures")
+                                        .evidencePathKey("DOCS_API_GUIDE")
+                                        .queryIntent("API_DOCS")
+                                        .query("鍝斿摡鍝斿摡 寮€鏀惧钩鍙?琛ュ厖 FAQ 鏂囨。")
                                         .status("SKIPPED")
                                         .elapsedMillis(0L)
                                         .resultCount(0)

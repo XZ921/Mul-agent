@@ -55,6 +55,7 @@ class RoutingSearchSourceProviderTest {
                 .url("https://github.com/example/repo")
                 .title("GitHub Repo")
                 .sourceType("GITHUB")
+                .fastLaneUsable(true)
                 .build());
         ThrowingRequestProvider tavily = new ThrowingRequestProvider("tavily");
 
@@ -74,6 +75,47 @@ class RoutingSearchSourceProviderTest {
         assertThat(result).hasSize(1);
         assertThat(github.lastRequest).isNotNull();
         assertThat(tavily.invocationCount).isZero();
+    }
+
+    @Test
+    void shouldContinueToAuxiliaryProvidersWhenPrimaryOnlyHasWeakContentSignal() {
+        SearchProviderProperties properties = new SearchProviderProperties();
+        properties.setProviderOrder(List.of("tavily", "qianfan"));
+        properties.setRunAuxiliaryWhenPrimarySatisfied(false);
+        properties.setPrimaryCandidateThreshold(1);
+
+        RecordingRequestProvider tavily = new RecordingRequestProvider("tavily");
+        tavily.response = List.of(SourceCandidate.builder()
+                .url("https://open.example.com")
+                .title("Open Example")
+                .sourceType("DOCS")
+                .prefetchedRawContentLength(180)
+                .build());
+        RecordingRequestProvider qianfan = new RecordingRequestProvider("qianfan");
+        qianfan.response = List.of(SourceCandidate.builder()
+                .url("https://blog.example.com/api-guide")
+                .title("API Guide")
+                .sourceType("DOCS")
+                .build());
+
+        RoutingSearchSourceProvider provider = new RoutingSearchSourceProvider(
+                properties,
+                List.of(tavily, qianfan),
+                new SourceCandidateRanker(),
+                new SearchPolicyResolver()
+        );
+
+        List<SourceCandidate> result = provider.search(SearchSourceRequest.builder()
+                .competitorName("Acme")
+                .requestedScopes(List.of("DOCS"))
+                .requestPhase(SearchRequestPhase.SUPPLEMENT)
+                .build());
+
+        assertThat(tavily.lastRequest).isNotNull();
+        assertThat(qianfan.lastRequest).isNotNull();
+        assertThat(result)
+                .extracting(SourceCandidate::getUrl)
+                .contains("https://open.example.com", "https://blog.example.com/api-guide");
     }
 
     @Test

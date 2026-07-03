@@ -134,6 +134,7 @@ public class CollectionTargetSelector {
         SearchCollectionTarget attemptedTarget = attemptedTargets.get(normalizeUrl(candidate.getUrl()));
         SourceCollector.CollectedPage attemptedPage = attemptedTarget == null ? null : attemptedTarget.getCollectedPage();
         boolean explicitCandidate = isExplicitCandidate(candidate);
+        boolean structuredExecutorCandidate = isStructuredExecutorCandidate(candidate);
         boolean usableCollectedPage = hasUsableCollectedPage(attemptedTarget);
         boolean publicShellSignal = hasPublicShellSignal(candidate, attemptedTarget);
 
@@ -144,7 +145,9 @@ public class CollectionTargetSelector {
          * 因此这里不能一看到 DISCARDED 就提前短路，而要先判断是否满足显式候选兜底条件。
          */
         if ("DISCARDED".equalsIgnoreCase(candidate.getSelectionStage())
-                && !(explicitCandidate && usableCollectedPage)) {
+                && !(explicitCandidate && usableCollectedPage)
+                && !(explicitCandidate && structuredExecutorCandidate)
+                && !(explicitCandidate && attemptedTarget != null)) {
             return new SelectionEligibility(false,
                     firstNonBlank(candidate.getSelectionReason(), "候选已在验证或排序阶段被丢弃"),
                     "候选已被丢弃");
@@ -183,6 +186,23 @@ public class CollectionTargetSelector {
             return new SelectionEligibility(true,
                     "运行期验证通过后被选为正式采集目标",
                     "运行期验证通过后被选为正式采集目标");
+        }
+
+        if (explicitCandidate && structuredExecutorCandidate) {
+            // 结构化 owner 的可用性由 GitHub/RSS executor 判定，不能被网页验证失败提前短路。
+            return new SelectionEligibility(true,
+                    "显式结构化来源候选跳过网页验证短路，交由专项 executor 采集",
+                    "显式结构化来源候选已进入专项 executor 采集");
+        }
+
+        if (explicitCandidate && attemptedTarget != null) {
+            /**
+             * 显式 URL 即使在验证阶段抓取失败，也要继续进入正式 collection 结果，
+             * 这样 documents / audit 才能保留“这个 URL 已被尝试且失败”的可追溯事实。
+             */
+            return new SelectionEligibility(true,
+                    "显式候选已在验证阶段尝试抓取，保留为正式采集审计目标",
+                    "显式候选已尝试抓取，保留失败审计事实");
         }
 
         if (explicitCandidate && usableCollectedPage) {
@@ -334,6 +354,9 @@ public class CollectionTargetSelector {
         if (Boolean.TRUE.equals(candidate.getVerified())) {
             return 0;
         }
+        if (isExplicitCandidate(candidate) && isStructuredExecutorCandidate(candidate)) {
+            return 1;
+        }
         if ("DISCARDED".equalsIgnoreCase(candidate.getSelectionStage())) {
             return 3;
         }
@@ -386,6 +409,23 @@ public class CollectionTargetSelector {
                     .selectionStage("SELECTED")
                     .selectionReason(TAVILY_PREFETCH_SELECTED_REASON)
                     .selectionSummary(TAVILY_PREFETCH_SELECTED_REASON)
+                    .build();
+        }
+        if (!Boolean.TRUE.equals(candidate.getVerified()) && isStructuredExecutorCandidate(candidate)) {
+            return candidate.toBuilder()
+                    .selectionStage("SELECTED")
+                    .selectionReason("显式结构化来源候选跳过网页验证短路，交由专项 executor 采集")
+                    .selectionSummary("显式结构化来源候选已进入专项 executor 采集")
+                    .build();
+        }
+        if (!Boolean.TRUE.equals(candidate.getVerified())
+                && isExplicitCandidate(candidate)
+                && attemptedTarget != null
+                && !hasUsableCollectedPage(attemptedTarget)) {
+            return candidate.toBuilder()
+                    .selectionStage("SELECTED")
+                    .selectionReason("显式候选已在验证阶段尝试抓取，保留为正式采集审计目标")
+                    .selectionSummary("显式候选已尝试抓取，保留失败审计事实")
                     .build();
         }
         boolean publicShellSelected = !Boolean.TRUE.equals(candidate.getVerified())
@@ -489,6 +529,51 @@ public class CollectionTargetSelector {
             }
         }
         return false;
+    }
+
+    private boolean isStructuredExecutorCandidate(SourceCandidate candidate) {
+        if (candidate == null) {
+            return false;
+        }
+        if ("github".equalsIgnoreCase(candidate.getSourceFamilyKey())
+                || "GITHUB".equalsIgnoreCase(candidate.getSourceType())) {
+            return true;
+        }
+        return isExplicitFeedUrl(candidate.getSourceFamilyKey(), candidate.getSourceType(), candidate.getUrl());
+    }
+
+    private boolean isExplicitFeedUrl(String sourceFamilyKey, String sourceType, String url) {
+        if (!StringUtils.hasText(url)) {
+            return false;
+        }
+        boolean newsFamily = "news".equalsIgnoreCase(sourceFamilyKey) || "NEWS".equalsIgnoreCase(sourceType);
+        if (!newsFamily) {
+            return false;
+        }
+        try {
+            java.net.URI uri = java.net.URI.create(url.trim());
+            String path = uri.getPath();
+            if (!StringUtils.hasText(path)) {
+                return false;
+            }
+            String normalizedPath = path.trim().toLowerCase(Locale.ROOT);
+            String[] segments = normalizedPath.split("/");
+            for (String segment : segments) {
+                if (!StringUtils.hasText(segment)) {
+                    continue;
+                }
+                if ("feed".equals(segment) || "rss".equals(segment) || "atom".equals(segment)) {
+                    return true;
+                }
+            }
+            int lastSlashIndex = normalizedPath.lastIndexOf('/');
+            String filename = lastSlashIndex >= 0 ? normalizedPath.substring(lastSlashIndex + 1) : normalizedPath;
+            return "feed.xml".equals(filename)
+                    || "rss.xml".equals(filename)
+                    || "atom.xml".equals(filename);
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private String firstNonBlank(String primary, String fallback) {

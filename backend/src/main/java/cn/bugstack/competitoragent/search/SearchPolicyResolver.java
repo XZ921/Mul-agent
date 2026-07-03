@@ -26,6 +26,7 @@ public class SearchPolicyResolver {
     private static final long MIN_TIMEOUT_MILLIS = 1000L;
     private static final long FIELD_QUERY_BASE_TIMEOUT_MILLIS = 12000L;
     private static final long FIELD_QUERY_PER_QUERY_TIMEOUT_MILLIS = 6000L;
+    private static final int DEFAULT_FIELD_QUERY_EXECUTABLE_QUOTA = 3;
 
     /**
      * resolver 既会被 Spring 注入，也会在测试里直接 new。
@@ -106,14 +107,12 @@ public class SearchPolicyResolver {
                                   List<String> plannedUrls,
                                   int candidateCount) {
         int plannedUrlCount = plannedUrls == null ? 0 : plannedUrls.size();
-        if (configuredMaxSearchResults != null && configuredMaxSearchResults > 0) {
-            if (plannedUrlCount > 0) {
-                return Math.min(configuredMaxSearchResults, plannedUrlCount);
-            }
-            return Math.max(1, configuredMaxSearchResults);
-        }
         if (plannedUrlCount > 0) {
+            // competitorUrls 是用户显式输入的采集目标，maxSearchResults 只限制补源/搜索结果，不能裁掉显式 URL。
             return plannedUrlCount;
+        }
+        if (configuredMaxSearchResults != null && configuredMaxSearchResults > 0) {
+            return Math.max(1, configuredMaxSearchResults);
         }
         return Math.max(1, candidateCount);
     }
@@ -178,14 +177,13 @@ public class SearchPolicyResolver {
     }
 
     /**
-     * 字段 query 的执行配额必须基于“放大前”的搜索预算来计算，
-     * 否则 18.3s 这类原始预算会先被抬高，再被反推成“全部都能跑”，回到当前问题。
+     * @deprecated 字段 query 配额已不再由 coordinator 做数量截断。
+     * 实际执行截断完全交给 provider 的 per-query deadline 熔断负责，
+     * 调用方应直接透传全量 planned queries，不再需要此方法。
      */
+    @Deprecated
     public int resolveExecutableFieldEvidenceQueryQuota(long baseSearchTimeoutMillis) {
-        if (baseSearchTimeoutMillis <= 0L) {
-            return 0;
-        }
-        return (int) Math.max(0L, baseSearchTimeoutMillis / FIELD_QUERY_PER_QUERY_TIMEOUT_MILLIS);
+        return DEFAULT_FIELD_QUERY_EXECUTABLE_QUOTA;
     }
 
     /**
@@ -225,6 +223,28 @@ public class SearchPolicyResolver {
     }
 
     /**
+     * 按当前请求的 source family 判断 provider 角色。
+     * 同一个 provider 可能在 official 家族是主取证入口，但在 GitHub/News 请求里只是公网补源，不能用全局角色误导路由短路。
+     */
+    public SearchProviderRole resolveProviderRoleForRequestedScopes(String providerKey, List<String> requestedScopes) {
+        if (!StringUtils.hasText(providerKey) || requestedScopes == null || requestedScopes.isEmpty()) {
+            return resolveProviderRole(providerKey);
+        }
+        String normalized = providerKey.trim().toLowerCase(Locale.ROOT);
+        for (String requestedScope : requestedScopes) {
+            SearchSourceCatalogProperties.SourceFamilyProperties family = resolveSourceFamilyForSourceType(requestedScope);
+            if (family == null) {
+                continue;
+            }
+            if (family.resolveProviderKeys(SearchProviderRole.PRIMARY_VERTICAL).stream()
+                    .anyMatch(bound -> normalized.equalsIgnoreCase(bound))) {
+                return SearchProviderRole.PRIMARY_VERTICAL;
+            }
+        }
+        return SearchProviderRole.AUXILIARY_PUBLIC;
+    }
+
+    /**
      * 根据业务 sourceType 反查数据源家族 key。
      * preview、runtime、replay 都依赖这套解释，避免同一 sourceType 在不同阶段被打上不同家族语义。
      */
@@ -250,6 +270,17 @@ public class SearchPolicyResolver {
      */
     public SearchSourceCatalogProperties.SourceFamilyProperties resolveSourceFamilyForSourceType(String sourceType) {
         return resolveSourceCatalog().resolveFamily(resolveSourceFamilyKeyForSourceType(sourceType));
+    }
+
+    /**
+     * 判断业务来源家族是否已经切换为“搜索优先”。
+     * 搜索优先时，直连 discovery 只能作为 seed/ranking 信号，不能再短路公网搜索补源。
+     */
+    public boolean isSearchFirstSourceFamilyForSourceType(String sourceType) {
+        SearchSourceCatalogProperties.SourceFamilyProperties family = resolveSourceFamilyForSourceType(sourceType);
+        return family != null
+                && family.getPrimaryTools() != null
+                && family.getPrimaryTools().stream().anyMatch("PUBLIC_SEARCH"::equalsIgnoreCase);
     }
 
     /**

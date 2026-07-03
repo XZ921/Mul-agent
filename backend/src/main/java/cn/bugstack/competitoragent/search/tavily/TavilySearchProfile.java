@@ -25,6 +25,14 @@ public class TavilySearchProfile {
     @Builder.Default
     private List<String> includeDomains = new ArrayList<>();
 
+    /**
+     * Gate 使用的官方域名提示。
+     * includeDomains 只表示 Tavily API 的检索范围约束；搜索优先模式会清空 includeDomains，
+     * 但仍需要保留这些域名给页面类型识别与官方命中质量判断使用。
+     */
+    @Builder.Default
+    private List<String> officialDomains = new ArrayList<>();
+
     private String searchDepth;
     private boolean includeRawContent;
     private int maxResults;

@@ -21,8 +21,8 @@ class SearchPolicyResolverTest {
     }
 
     @Test
-    void shouldCapTargetAndMinVerifiedCountByPlannedUrls() {
-        int targetCount = resolver.resolveTargetCount(5, List.of("https://a.com", "https://b.com"), 4);
+    void shouldKeepExplicitPlannedUrlsAsTargetFloor() {
+        int targetCount = resolver.resolveTargetCount(1, List.of("https://a.com", "https://b.com"), 4);
 
         assertEquals(2, targetCount);
         assertEquals(2, resolver.resolveMinVerifiedCandidates(null, 2, targetCount));

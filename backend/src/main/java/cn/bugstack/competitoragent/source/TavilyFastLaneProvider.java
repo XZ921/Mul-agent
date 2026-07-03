@@ -100,9 +100,7 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
         }
 
         DomainHintSet domainHintSet = domainHintResolver.resolve(request, List.of());
-        List<String> scopes = request.getRequestedScopes() == null || request.getRequestedScopes().isEmpty()
-                ? DEFAULT_SCOPES
-                : request.getRequestedScopes();
+        List<String> scopes = resolveEffectiveScopes(request);
         Map<String, SourceCandidate> merged = new LinkedHashMap<>();
         for (String scope : scopes) {
             for (SourceCandidate candidate : searchScope(request, scope, domainHintSet)) {
@@ -112,6 +110,32 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
             }
         }
         return new ArrayList<>(merged.values());
+    }
+
+    private List<String> resolveEffectiveScopes(SearchSourceRequest request) {
+        LinkedHashSet<String> scopes = new LinkedHashSet<>();
+        List<String> requestedScopes = request == null ? null : request.getRequestedScopes();
+        if (requestedScopes == null || requestedScopes.isEmpty()) {
+            scopes.addAll(DEFAULT_SCOPES);
+        } else {
+            for (String scope : requestedScopes) {
+                if (StringUtils.hasText(scope)) {
+                    scopes.add(normalizeScope(scope));
+                }
+            }
+        }
+        /*
+         * 字段级 query 本身已经声明了要找的证据类型，外层节点 scope 不能把它过滤掉。
+         * 例如 OFFICIAL 节点里规划出的 DOCS / OPEN_WEB 变体，必须进入 Tavily 执行队列。
+         */
+        if (request != null && request.getFieldEvidenceQueries() != null) {
+            for (FieldEvidenceQuery query : request.getFieldEvidenceQueries()) {
+                if (query != null && StringUtils.hasText(query.getSourceType())) {
+                    scopes.add(normalizeScope(query.getSourceType()));
+                }
+            }
+        }
+        return scopes.isEmpty() ? DEFAULT_SCOPES : new ArrayList<>(scopes);
     }
 
     @Override
@@ -319,7 +343,8 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
     /**
      * 统一解释 request.searchQueries 与 preferredQueryMode 的关系：
      * 1. 只有显式 EVIDENCE_REPAIR 才把 searchQueries 当作 suggestedQueries 交给 resolver。
-     * 2. 其它模式下 searchQueries 只作为 query override，避免普通搜索被误判成 evidence repair。
+     * 2. 显式 OFFICIAL_DOCS 才进入严格官方锚点，默认官方类主搜索仍交给 search-first family 路由。
+     * 3. 其它模式下 searchQueries 只作为 query override，避免普通搜索被误判成 evidence repair。
      */
     private TavilySearchProfile buildPrimaryProfile(SearchSourceRequest request,
                                                     String scope,
@@ -340,6 +365,12 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
                     domainHintSet,
                     "preferredQueryMode=TRUSTED_WEB_EXPANSION"
             );
+        } else if (preferredMode == TavilyQueryMode.OFFICIAL_DOCS) {
+            profile = profileResolver.resolveOfficialDocsAnchor(
+                    request.getCompetitorName(),
+                    scope,
+                    domainHintSet
+            );
         } else if (preferredMode == TavilyQueryMode.OPEN_WEB) {
             profile = buildOpenWebProfile(request, scope);
         } else {
@@ -353,8 +384,7 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
 
         String overrideQuery = firstNonBlank(request.getSearchQueries());
         if (StringUtils.hasText(overrideQuery)
-                && profile.getQueryMode() != TavilyQueryMode.EVIDENCE_REPAIR
-                && profile.getQueryMode() != TavilyQueryMode.TRUSTED_WEB_EXPANSION) {
+                && profile.getQueryMode() != TavilyQueryMode.EVIDENCE_REPAIR) {
             profile = profile.toBuilder().query(overrideQuery).build();
         }
         return profile;
@@ -536,10 +566,21 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
     }
 
     private Set<String> resolveOfficialDomains(TavilySearchProfile profile) {
-        if (profile == null || profile.getIncludeDomains() == null || profile.getIncludeDomains().isEmpty()) {
+        if (profile == null) {
             return Set.of();
         }
-        return new LinkedHashSet<>(profile.getIncludeDomains());
+        LinkedHashSet<String> officialDomains = new LinkedHashSet<>();
+        /*
+         * officialDomains 是 Gate 的质量锚点，includeDomains 是 Tavily API 的检索范围。
+         * 搜索优先模式会主动清空 includeDomains，但 Gate 仍需要知道哪些域名可视为官方命中。
+         */
+        if (profile.getOfficialDomains() != null) {
+            officialDomains.addAll(profile.getOfficialDomains());
+        }
+        if (profile.getIncludeDomains() != null) {
+            officialDomains.addAll(profile.getIncludeDomains());
+        }
+        return officialDomains;
     }
 
     private String firstNonBlank(List<String> values) {

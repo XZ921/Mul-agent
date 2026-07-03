@@ -173,7 +173,6 @@ public class TavilyPrefetchedContentGate {
      */
     private boolean isOfficialAnchoredCandidate(SourceCandidate candidate, boolean officialDomainMatched) {
         String queryMode = normalize(candidate == null ? null : candidate.getTavilyQueryMode());
-        String sourceType = normalize(candidate == null ? null : candidate.getSourceType());
         if ("official_docs".equals(queryMode)) {
             return true;
         }
@@ -189,7 +188,11 @@ public class TavilyPrefetchedContentGate {
         if ("evidence_repair".equals(queryMode) && officialDomainMatched) {
             return true;
         }
-        return officialDomainMatched || Set.of("official", "docs", "pricing").contains(sourceType);
+        /*
+         * sourceType 只说明“要找什么证据”，不能兜底决定“只按官方锚点判质量”。
+         * 如果未来入口漏传 queryMode，第三方长文仍按普通开放网络规则评估；只有真实命中官方域名时才走官方锚点。
+         */
+        return officialDomainMatched;
     }
 
     private List<String> mergeSourceUrls(SourceCandidate candidate, TavilyPrefetchedContent content, String url) {

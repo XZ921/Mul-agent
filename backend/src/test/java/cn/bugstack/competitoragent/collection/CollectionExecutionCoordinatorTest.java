@@ -148,6 +148,96 @@ class CollectionExecutionCoordinatorTest {
     }
 
     @Test
+    void shouldDiscoverChildPagesFromReusedPrefetchedPage() {
+        CollectionExecutor executor = mock(CollectionExecutor.class);
+        when(executor.supports(any())).thenReturn(true);
+        CollectionExecutionProperties properties = new CollectionExecutionProperties();
+        properties.setReusePrefetchedPage(true);
+
+        CollectionExecutionCoordinator coordinator = new CollectionExecutionCoordinator(
+                new CollectionTaskPackageBuilder(),
+                new CollectionExecutorRegistry(List.of(executor)),
+                new cn.bugstack.competitoragent.search.CanonicalUrlResolver(),
+                new InternalLinkDiscoveryProperties(),
+                properties
+        );
+
+        SearchCollectionTarget target = SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://example.com/docs")
+                        .title("Docs Home")
+                        .sourceType("DOCS")
+                        .sourceFamilyKey("official")
+                        .sourceUrls(List.of("https://example.com/docs"))
+                        .build())
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url("https://example.com/docs")
+                        .title("Docs Home")
+                        .content("[账户授权](https://example.com/docs/auth)")
+                        .success(true)
+                        .build())
+                .build();
+
+        CollectionExecutionReport report = coordinator.execute(41L, "collect_sources_docs", 9L, "Acme AI", List.of(target));
+
+        assertThat(report.getResults()).hasSize(2);
+        assertThat(report.getResults().get(0).getDiscoveredCandidates()).hasSize(1);
+        assertThat(report.getResults().get(1).getResourceLocator()).isEqualTo("https://example.com/docs/auth");
+        assertThat(report.getResults().get(1).getDiscoveryDepth()).isEqualTo(1);
+        verify(executor, times(1)).execute(argThat(pkg ->
+                "collect_sources_docs#002".equals(readStringAccessor(pkg, "packageKey"))));
+    }
+
+    @Test
+    void shouldDiscoverChildPagesFromReusedPrefetchedPageWithRealWebExecutor() {
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(sourceCollector.collect(argThat((cn.bugstack.competitoragent.source.SourceCollectRequest request) ->
+                request != null
+                        && "https://example.com/docs/auth".equals(request.getUrl())
+                        && "Acme AI".equals(request.getCompetitorName())
+                        && "DOCS".equals(request.getSourceType()))))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://example.com/docs/auth")
+                        .title("Auth")
+                        .content("auth details")
+                        .snippet("auth details")
+                        .competitorName("Acme AI")
+                        .sourceType("DOCS")
+                        .success(true)
+                        .build());
+
+        CollectionExecutionCoordinator coordinator = new CollectionExecutionCoordinator(
+                new CollectionTaskPackageBuilder(),
+                new CollectionExecutorRegistry(List.of(new WebPageCollectionExecutor(sourceCollector)))
+        );
+
+        SearchCollectionTarget target = SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://example.com/docs")
+                        .title("Docs Home")
+                        .sourceType("DOCS")
+                        .sourceFamilyKey("official")
+                        .sourceUrls(List.of("https://example.com/docs"))
+                        .build())
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url("https://example.com/docs")
+                        .title("Docs Home")
+                        .content("[账户授权](https://example.com/docs/auth)")
+                        .snippet("docs home")
+                        .competitorName("Acme AI")
+                        .sourceType("DOCS")
+                        .success(true)
+                        .build())
+                .build();
+
+        CollectionExecutionReport report = coordinator.execute(41L, "collect_sources_docs", 9L, "Acme AI", List.of(target));
+
+        assertThat(report.getResults()).hasSize(2);
+        assertThat(report.getResults()).extracting(CollectionExecutionResult::getResourceLocator)
+                .containsExactly("https://example.com/docs", "https://example.com/docs/auth");
+    }
+
+    @Test
     void shouldCallExecutorWhenPrefetchedReuseDisabled() {
         CollectionExecutor executor = mock(CollectionExecutor.class);
         when(executor.supports(any())).thenReturn(true);

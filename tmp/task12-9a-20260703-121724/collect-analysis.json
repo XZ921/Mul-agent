@@ -1,0 +1,445 @@
+{
+  "taskId": 80,
+  "nodes": [
+    {
+      "nodeName": "collect_sources_01_01",
+      "competitor": "抖音开放平台",
+      "collectionStatus": "SUCCESS",
+      "totalCollected": 2,
+      "successCollected": 1,
+      "fieldEvidenceFinalStatus": "NO_PUBLIC_EVIDENCE_AFTER_SEARCH",
+      "fieldEvidenceLoopRounds": 2,
+      "fieldEvidenceCoverageStatus": {
+        "totalFields": 7,
+        "sufficientFields": 0,
+        "fieldsNeedingRecollection": [
+          "summary",
+          "positioning",
+          "targetUsers",
+          "coreFeatures",
+          "strengths",
+          "pricing",
+          "weaknesses"
+        ]
+      },
+      "issueFlags": [
+        "TAVILY_RAW_CONTENT_READY",
+        "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+        "TAVILY_STRUCTURED_BLOCK_COUNT=2",
+        "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+        "DUPLICATE_CANONICAL_URL",
+        "PARTIAL_COLLECTION_FAILURE"
+      ],
+      "sourceUrls": [
+        "https://developer.open-douyin.com/docs/resource/zh-CN/dop/develop/openapi/list"
+      ],
+      "candidateCount": 108,
+      "candidateDomains": [
+        "api.aliyun.com",
+        "content.douyin.com",
+        "developer.open-douyin.com",
+        "docs.qq.com",
+        "douyin.com",
+        "music.douyin.com",
+        "open.douyin.com",
+        "open.feishu.cn"
+      ],
+      "candidateDiscoveryMethodCounts": {
+        "SEARCH_ROOT_TEMPLATE": 2,
+        "SITEMAP_DISCOVERY": 79,
+        "TAVILY_FIELD_EVIDENCE_QUERY": 4,
+        "DIRECT_LOCATOR": 1,
+        "TAVILY_PHASE1_BOOTSTRAP": 3,
+        "PUBLIC_EVIDENCE_RECOVERY": 19
+      },
+      "candidateTavilyModeCounts": {
+        "NONE": 101,
+        "TRUSTED_WEB_EXPANSION": 7
+      },
+      "selectedCount": 1,
+      "selectedDiscoveryMethodCounts": {
+        "NONE": 1
+      },
+      "selectedTavilyModeCounts": {
+        "NONE": 1
+      },
+      "selected": [
+        {
+          "url": "https://developer.open-douyin.com/docs/resource/zh-CN/dop/develop/openapi/list",
+          "domain": null,
+          "sourceType": null,
+          "discoveryMethod": null,
+          "tavilyQueryMode": null,
+          "fastLaneUsable": null,
+          "qualityTier": null,
+          "pageType": null,
+          "prefetchedRawContentLength": null,
+          "selectionReason": "Tavily prefetch 正文可用"
+        }
+      ],
+      "resultCount": 2,
+      "documentCount": 2,
+      "tavilyAudit": {
+        "queryModes": [
+          "FIELD_EVIDENCE"
+        ],
+        "queryOrigins": [
+          "SUPPLEMENT"
+        ],
+        "queriesSent": 1,
+        "totalResults": 5,
+        "fastLaneUsableCount": 5,
+        "fastLaneRejectedCount": 0,
+        "rejectionReasons": {
+          "SKIPPED_BUDGET_EXHAUSTED": 1
+        },
+        "bootstrapTriggered": false,
+        "fallbackTriggered": false,
+        "tavilyRequestIds": [
+          "05c5c89a-169e-4710-8fa2-866c3b947212"
+        ],
+        "playwrightInvocationBaselineHint": 1,
+        "fieldEvidenceQueryExecutions": [
+          {
+            "queryFingerprint": "1ba98df5bb4bfbb9e53220fcebbd0e2e",
+            "fieldName": "strengths",
+            "evidencePathKey": "PUBLIC_REVIEW_OR_NEWS",
+            "queryIntent": "THIRD_PARTY_REVIEW",
+            "query": "抖音开放平台 优势 第三方评测 功能 能力 行业分析 媒体报道 解读",
+            "status": "SUCCESS",
+            "elapsedMillis": 6135,
+            "resultCount": 5,
+            "tavilyRequestId": "05c5c89a-169e-4710-8fa2-866c3b947212"
+          },
+          {
+            "queryFingerprint": "9440fdfc9513178ef3512fad6b341815",
+            "fieldName": "coreFeatures",
+            "evidencePathKey": "PUBLIC_REVIEW_OR_NEWS",
+            "queryIntent": "THIRD_PARTY_REVIEW",
+            "query": "抖音开放平台 开放平台 核心功能 第三方评测 功能 能力 行业分析 媒体报道 解读",
+            "status": "SKIPPED",
+            "elapsedMillis": 0,
+            "resultCount": 0,
+            "skipReason": "SKIPPED_BUDGET_EXHAUSTED"
+          }
+        ]
+      },
+      "fieldEvidenceQueryExecutionCount": 2,
+      "fieldEvidenceQueryExecutions": [
+        {
+          "queryFingerprint": "1ba98df5bb4bfbb9e53220fcebbd0e2e",
+          "fieldName": "strengths",
+          "evidencePathKey": "PUBLIC_REVIEW_OR_NEWS",
+          "queryIntent": "THIRD_PARTY_REVIEW",
+          "query": "抖音开放平台 优势 第三方评测 功能 能力 行业分析 媒体报道 解读",
+          "status": "SUCCESS",
+          "elapsedMillis": 6135,
+          "resultCount": 5,
+          "tavilyRequestId": "05c5c89a-169e-4710-8fa2-866c3b947212"
+        },
+        {
+          "queryFingerprint": "9440fdfc9513178ef3512fad6b341815",
+          "fieldName": "coreFeatures",
+          "evidencePathKey": "PUBLIC_REVIEW_OR_NEWS",
+          "queryIntent": "THIRD_PARTY_REVIEW",
+          "query": "抖音开放平台 开放平台 核心功能 第三方评测 功能 能力 行业分析 媒体报道 解读",
+          "status": "SKIPPED",
+          "elapsedMillis": 0,
+          "resultCount": 0,
+          "skipReason": "SKIPPED_BUDGET_EXHAUSTED"
+        }
+      ],
+      "searchAuditKeys": [
+        "attemptedTargets",
+        "discardedCandidates",
+        "evidenceRepairPlan",
+        "executionPlan",
+        "executionTrace",
+        "latestProgress",
+        "progressHistory",
+        "replayTimeline",
+        "selectedTargets",
+        "sourceCandidates",
+        "sourceUrls",
+        "summary",
+        "tavilyFastLaneAudit"
+      ],
+      "searchExecutionTraceKeys": [
+        "attemptedCandidateCount",
+        "browserBlockedCount",
+        "browserExecutedQueries",
+        "browserMatchedSignals",
+        "browserSearchSummary",
+        "candidateVerificationConcurrency",
+        "candidateVerificationDirectAttemptCount",
+        "candidateVerificationDirectShortcutCount",
+        "candidateVerificationDirectUsableCount",
+        "candidateVerificationElapsedMillis",
+        "candidateVerificationInputCount",
+        "candidateVerificationReusedPageCount",
+        "candidateVerificationUniqueCount",
+        "circuitBroken",
+        "degraded",
+        "discardedCandidateCount",
+        "evidenceRepairPlan",
+        "fallbackDecision",
+        "fallbackOrder",
+        "fieldEvidenceFields",
+        "fieldEvidencePaths",
+        "fieldEvidenceQueryCount",
+        "fieldEvidenceQueryExecutedCount",
+        "fieldEvidenceQueryPlannedCount",
+        "fieldEvidenceQuerySkipReasons",
+        "fieldEvidenceQuerySkippedCount",
+        "generatedAt",
+        "plannedCandidateCount",
+        "providerFallbackUsed",
+        "publicEvidenceAttemptedEvidencePaths",
+        "publicEvidenceAttemptedUrls",
+        "publicEvidenceRecoveryCandidateCount",
+        "publicEvidenceRecoveryQueryIntents",
+        "publicEvidenceRecoveryStatus",
+        "publicEvidenceRecoveryTriggered",
+        "publicEvidenceRecoveryVerifiedCount",
+        "recoveryAdvice",
+        "recoveryCheckpoint",
+        "resumedFromCheckpoint",
+        "runtimePolicy",
+        "searchElapsedMillis",
+        "searchMode",
+        "searchQueries",
+        "searchTimeoutMillis",
+        "selectedCandidateCount",
+        "selectedUrls",
+        "supplementMethod",
+        "supplementedCandidateCount",
+        "tavilyFastLaneAudit",
+        "traceVersion",
+        "verifiedCandidateCount"
+      ]
+    },
+    {
+      "nodeName": "collect_sources_02_01",
+      "competitor": "哔哩哔哩开放平台",
+      "collectionStatus": "PARTIAL_SUCCESS",
+      "totalCollected": 2,
+      "successCollected": 1,
+      "fieldEvidenceFinalStatus": "EVIDENCE_PATH_COVERAGE_NOT_MET",
+      "fieldEvidenceLoopRounds": 2,
+      "fieldEvidenceCoverageStatus": {
+        "totalFields": 7,
+        "sufficientFields": 0,
+        "fieldsNeedingRecollection": [
+          "summary",
+          "positioning",
+          "targetUsers",
+          "coreFeatures",
+          "strengths",
+          "pricing",
+          "weaknesses"
+        ]
+      },
+      "issueFlags": [
+        "SEARCH_VERIFICATION_PAGE_REUSED",
+        "WEAK_MAIN_CONTENT",
+        "EVIDENCE_REPAIR_REQUIRED",
+        "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+        "FIELD_RELEVANCE_PARTIAL",
+        "REPAIR_QUERY_PROPOSED",
+        "COLLECT_FAILED",
+        "CONTENT_GAP",
+        "COLLECTION_RESULT_MISSING",
+        "FIELD_RELEVANCE_WEAK",
+        "DUPLICATE_CANONICAL_URL",
+        "PARTIAL_COLLECTION_FAILURE"
+      ],
+      "sourceUrls": [
+        "https://bilibili.apifox.cn",
+        "https://bilibili.apifox.cn/docs",
+        "https://bilibili.apifox.cn/about"
+      ],
+      "candidateCount": 30,
+      "candidateDomains": [
+        "bilibili.apifox.cn",
+        "bilibili.com",
+        "github.com",
+        "open-live.bilibili.com",
+        "open.bilibili.com",
+        "open.biligame.com",
+        "openhome.bilibili.com"
+      ],
+      "candidateDiscoveryMethodCounts": {
+        "SEARCH_ROOT_TEMPLATE": 3,
+        "TAVILY_FIELD_EVIDENCE_QUERY": 3,
+        "TAVILY_PHASE1_BOOTSTRAP": 4,
+        "PUBLIC_EVIDENCE_RECOVERY": 20
+      },
+      "candidateTavilyModeCounts": {
+        "NONE": 23,
+        "TRUSTED_WEB_EXPANSION": 5,
+        "OPEN_WEB": 2
+      },
+      "selectedCount": 1,
+      "selectedDiscoveryMethodCounts": {
+        "NONE": 1
+      },
+      "selectedTavilyModeCounts": {
+        "NONE": 1
+      },
+      "selected": [
+        {
+          "url": "https://bilibili.apifox.cn/about",
+          "domain": null,
+          "sourceType": null,
+          "discoveryMethod": null,
+          "tavilyQueryMode": null,
+          "fastLaneUsable": null,
+          "qualityTier": null,
+          "pageType": null,
+          "prefetchedRawContentLength": null,
+          "selectionReason": "运行期验证通过后被选为正式采集目标"
+        }
+      ],
+      "resultCount": 2,
+      "documentCount": 2,
+      "tavilyAudit": {
+        "queryModes": [
+          "FIELD_EVIDENCE"
+        ],
+        "queryOrigins": [
+          "SUPPLEMENT"
+        ],
+        "queriesSent": 1,
+        "totalResults": 5,
+        "fastLaneUsableCount": 5,
+        "fastLaneRejectedCount": 0,
+        "rejectionReasons": {
+          "SKIPPED_BUDGET_EXHAUSTED": 1
+        },
+        "bootstrapTriggered": false,
+        "fallbackTriggered": false,
+        "tavilyRequestIds": [
+          "e4f1be77-37a8-4f7e-ba6d-7bfd13015c0c"
+        ],
+        "playwrightInvocationBaselineHint": 0,
+        "fieldEvidenceQueryExecutions": [
+          {
+            "queryFingerprint": "48a7cc76e1fe260af3afe76fccb9ec50",
+            "fieldName": "strengths",
+            "evidencePathKey": "PUBLIC_REVIEW_OR_NEWS",
+            "queryIntent": "THIRD_PARTY_REVIEW",
+            "query": "哔哩哔哩开放平台 优势 第三方评测 功能 能力 行业分析 媒体报道 解读",
+            "status": "SUCCESS",
+            "elapsedMillis": 17399,
+            "resultCount": 5,
+            "tavilyRequestId": "e4f1be77-37a8-4f7e-ba6d-7bfd13015c0c"
+          },
+          {
+            "queryFingerprint": "f2a9d67ab65e2314208d00a2bf632c5a",
+            "fieldName": "coreFeatures",
+            "evidencePathKey": "PUBLIC_REVIEW_OR_NEWS",
+            "queryIntent": "THIRD_PARTY_REVIEW",
+            "query": "哔哩哔哩开放平台 开放平台 核心功能 第三方评测 功能 能力 行业分析 媒体报道 解读",
+            "status": "SKIPPED",
+            "elapsedMillis": 0,
+            "resultCount": 0,
+            "skipReason": "SKIPPED_BUDGET_EXHAUSTED"
+          }
+        ]
+      },
+      "fieldEvidenceQueryExecutionCount": 2,
+      "fieldEvidenceQueryExecutions": [
+        {
+          "queryFingerprint": "48a7cc76e1fe260af3afe76fccb9ec50",
+          "fieldName": "strengths",
+          "evidencePathKey": "PUBLIC_REVIEW_OR_NEWS",
+          "queryIntent": "THIRD_PARTY_REVIEW",
+          "query": "哔哩哔哩开放平台 优势 第三方评测 功能 能力 行业分析 媒体报道 解读",
+          "status": "SUCCESS",
+          "elapsedMillis": 17399,
+          "resultCount": 5,
+          "tavilyRequestId": "e4f1be77-37a8-4f7e-ba6d-7bfd13015c0c"
+        },
+        {
+          "queryFingerprint": "f2a9d67ab65e2314208d00a2bf632c5a",
+          "fieldName": "coreFeatures",
+          "evidencePathKey": "PUBLIC_REVIEW_OR_NEWS",
+          "queryIntent": "THIRD_PARTY_REVIEW",
+          "query": "哔哩哔哩开放平台 开放平台 核心功能 第三方评测 功能 能力 行业分析 媒体报道 解读",
+          "status": "SKIPPED",
+          "elapsedMillis": 0,
+          "resultCount": 0,
+          "skipReason": "SKIPPED_BUDGET_EXHAUSTED"
+        }
+      ],
+      "searchAuditKeys": [
+        "attemptedTargets",
+        "discardedCandidates",
+        "evidenceRepairPlan",
+        "executionPlan",
+        "executionTrace",
+        "latestProgress",
+        "progressHistory",
+        "replayTimeline",
+        "selectedTargets",
+        "sourceCandidates",
+        "sourceUrls",
+        "summary",
+        "tavilyFastLaneAudit"
+      ],
+      "searchExecutionTraceKeys": [
+        "attemptedCandidateCount",
+        "browserBlockedCount",
+        "browserExecutedQueries",
+        "browserMatchedSignals",
+        "browserSearchSummary",
+        "candidateVerificationConcurrency",
+        "candidateVerificationDirectAttemptCount",
+        "candidateVerificationDirectShortcutCount",
+        "candidateVerificationDirectUsableCount",
+        "candidateVerificationElapsedMillis",
+        "candidateVerificationInputCount",
+        "candidateVerificationReusedPageCount",
+        "candidateVerificationUniqueCount",
+        "circuitBroken",
+        "degraded",
+        "discardedCandidateCount",
+        "evidenceRepairPlan",
+        "fallbackDecision",
+        "fallbackOrder",
+        "fieldEvidenceFields",
+        "fieldEvidencePaths",
+        "fieldEvidenceQueryCount",
+        "fieldEvidenceQueryExecutedCount",
+        "fieldEvidenceQueryPlannedCount",
+        "fieldEvidenceQuerySkipReasons",
+        "fieldEvidenceQuerySkippedCount",
+        "generatedAt",
+        "plannedCandidateCount",
+        "providerFallbackUsed",
+        "publicEvidenceAttemptedEvidencePaths",
+        "publicEvidenceAttemptedUrls",
+        "publicEvidenceRecoveryCandidateCount",
+        "publicEvidenceRecoveryQueryIntents",
+        "publicEvidenceRecoveryStatus",
+        "publicEvidenceRecoveryTriggered",
+        "publicEvidenceRecoveryVerifiedCount",
+        "recoveryAdvice",
+        "recoveryCheckpoint",
+        "resumedFromCheckpoint",
+        "runtimePolicy",
+        "searchElapsedMillis",
+        "searchMode",
+        "searchQueries",
+        "searchTimeoutMillis",
+        "selectedCandidateCount",
+        "selectedUrls",
+        "supplementMethod",
+        "supplementedCandidateCount",
+        "tavilyFastLaneAudit",
+        "traceVersion",
+        "verifiedCandidateCount"
+      ]
+    }
+  ]
+}

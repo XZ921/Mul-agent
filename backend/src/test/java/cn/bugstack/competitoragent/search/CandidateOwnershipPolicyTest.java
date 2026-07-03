@@ -116,4 +116,60 @@ class CandidateOwnershipPolicyTest {
 
         assertFalse(policy.isTrustedSearchRoot("抖音", List.of("https://open.douyin.com"), candidate));
     }
+
+    @Test
+    void shouldSeparateAnyContentSignalFromSatisfyingContentSignal() {
+        SourceCandidate emptyShell = SourceCandidate.builder()
+                .url("https://open.example.com/")
+                .title("Example Open Platform")
+                .sourceType("OFFICIAL")
+                .build();
+        SourceCandidate mediumPrefetch = SourceCandidate.builder()
+                .url("https://open.example.com/docs")
+                .prefetchedRawContentLength(150)
+                .build();
+        SourceCandidate satisfyingPrefetch = SourceCandidate.builder()
+                .url("https://open.example.com/docs/api")
+                .prefetchedRawContentLength(500)
+                .build();
+        SourceCandidate fullEnough = SourceCandidate.builder()
+                .url("https://open.example.com/docs/full")
+                .contentCompleteness("FULL_ENOUGH")
+                .build();
+        SourceCandidate fastLaneUsable = SourceCandidate.builder()
+                .url("https://open.example.com/docs/fast-lane")
+                .fastLaneUsable(true)
+                .build();
+
+        assertFalse(policy.hasAnyContentSignal(emptyShell));
+        assertFalse(policy.hasSatisfyingContentSignal(emptyShell));
+        assertTrue(policy.hasAnyContentSignal(mediumPrefetch));
+        assertFalse(policy.hasSatisfyingContentSignal(mediumPrefetch));
+        assertTrue(policy.hasAnyContentSignal(satisfyingPrefetch));
+        assertTrue(policy.hasSatisfyingContentSignal(satisfyingPrefetch));
+        assertTrue(policy.hasAnyContentSignal(fullEnough));
+        assertTrue(policy.hasSatisfyingContentSignal(fullEnough));
+        assertTrue(policy.hasAnyContentSignal(fastLaneUsable));
+        assertTrue(policy.hasSatisfyingContentSignal(fastLaneUsable));
+    }
+
+    @Test
+    void shouldRejectThinAndUtilityGateCandidatesForContentSignals() {
+        SourceCandidate thinContent = SourceCandidate.builder()
+                .url("https://open.example.com/docs/thin")
+                .prefetchedRawContentLength(2_000)
+                .contentCompleteness("THIN")
+                .build();
+        SourceCandidate loginShell = SourceCandidate.builder()
+                .url("https://open.example.com/login")
+                .title("Login")
+                .prefetchedRawContentLength(2_000)
+                .fastLaneUsable(true)
+                .build();
+
+        assertFalse(policy.hasAnyContentSignal(thinContent));
+        assertFalse(policy.hasSatisfyingContentSignal(thinContent));
+        assertFalse(policy.hasAnyContentSignal(loginShell));
+        assertFalse(policy.hasSatisfyingContentSignal(loginShell));
+    }
 }

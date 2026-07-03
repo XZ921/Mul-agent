@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.search.tavily;
 
+import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -9,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TavilySearchProfileResolverTest {
 
     @Test
-    void shouldUseOfficialDocsAsAnchorAndKeepOpenWebUnrestricted() {
+    void shouldRouteOfficialDocsPrimaryThroughSearchFirstAndKeepOpenWebUnrestricted() {
         DomainHintSet hints = DomainHintSet.builder()
                 .competitorName("抖音")
                 .domains(List.of(DomainHint.builder()
@@ -27,8 +28,9 @@ class TavilySearchProfileResolverTest {
         TavilySearchProfile docsProfile = resolver.resolve("抖音", "DOCS", hints, List.of());
         TavilySearchProfile newsProfile = resolver.resolve("抖音", "NEWS", hints, List.of());
 
-        assertThat(docsProfile.getQueryMode()).isEqualTo(TavilyQueryMode.OFFICIAL_DOCS);
-        assertThat(docsProfile.getIncludeDomains()).containsExactly("open.douyin.com");
+        assertThat(docsProfile.getQueryMode()).isEqualTo(TavilyQueryMode.TRUSTED_WEB_EXPANSION);
+        assertThat(docsProfile.getIncludeDomains()).isEmpty();
+        assertThat(docsProfile.getOfficialDomains()).containsExactly("open.douyin.com");
         assertThat(newsProfile.getQueryMode()).isEqualTo(TavilyQueryMode.OPEN_WEB);
         assertThat(newsProfile.getIncludeDomains()).isEmpty();
     }
@@ -59,6 +61,65 @@ class TavilySearchProfileResolverTest {
         assertThat(expansionProfile.getIncludeDomains()).isEmpty();
         assertThat(expansionProfile.getExpansionReason()).contains("officialDocHitCount=0");
         assertThat(expansionProfile.getQuery()).contains("抖音");
+    }
+
+    @Test
+    void shouldRouteSearchFirstOfficialFieldEvidenceToTrustedWebExpansion() {
+        TavilySearchProfileResolver resolver = new TavilySearchProfileResolver(new TavilySearchProperties());
+
+        for (String sourceType : List.of("OFFICIAL", "DOCS", "PRICING")) {
+            FieldEvidenceQuery query = FieldEvidenceQuery.builder()
+                    .fieldName("summary")
+                    .evidencePathKey("OFFICIAL_PUBLIC_PROFILE")
+                    .queryIntent("OFFICIAL_DOCS")
+                    .sourceType(sourceType)
+                    .query("douyin open platform official profile")
+                    .includeDomains(List.of("open.douyin.com"))
+                    .build();
+
+            TavilySearchProfile profile = resolver.resolveFieldEvidence(query);
+
+            assertThat(profile.getQueryMode())
+                    .as("sourceType=%s", sourceType)
+                    .isEqualTo(TavilyQueryMode.TRUSTED_WEB_EXPANSION);
+            assertThat(profile.getIncludeDomains())
+                    .as("trusted expansion must not keep official include_domains for sourceType=%s", sourceType)
+                    .isEmpty();
+            assertThat(profile.getOfficialDomains())
+                    .as("trusted expansion must keep official domain hints for Gate sourceType=%s", sourceType)
+                    .containsExactly("open.douyin.com");
+        }
+    }
+
+    @Test
+    void shouldRouteSearchFirstOfficialPrimarySearchToTrustedWebExpansion() {
+        DomainHintSet hints = DomainHintSet.builder()
+                .competitorName("Douyin")
+                .domains(List.of(DomainHint.builder()
+                        .domain("open.douyin.com")
+                        .sourceFamily("docs")
+                        .confidence(0.88D)
+                        .source("INFERRED")
+                        .reason("docs domain")
+                        .sourceUrls(List.of("https://open.douyin.com"))
+                        .build()))
+                .build();
+
+        TavilySearchProfileResolver resolver = new TavilySearchProfileResolver(new TavilySearchProperties());
+
+        for (String family : List.of("OFFICIAL", "DOCS", "PRICING")) {
+            TavilySearchProfile profile = resolver.resolve("Douyin", family, hints, List.of());
+
+            assertThat(profile.getQueryMode())
+                    .as("family=%s", family)
+                    .isEqualTo(TavilyQueryMode.TRUSTED_WEB_EXPANSION);
+            assertThat(profile.getIncludeDomains())
+                    .as("primary search-first query must not be constrained by include_domains for family=%s", family)
+                    .isEmpty();
+            assertThat(profile.getOfficialDomains())
+                    .as("primary search-first query must keep official domain hints for Gate family=%s", family)
+                    .containsExactly("open.douyin.com");
+        }
     }
 
     @Test
@@ -119,8 +180,10 @@ class TavilySearchProfileResolverTest {
                 .build();
 
         TavilySearchProfileResolver resolver = new TavilySearchProfileResolver(new TavilySearchProperties());
-        TavilySearchProfile docsProfile = resolver.resolve("抖音", "DOCS", hints, List.of());
+        TavilySearchProfile docsProfile = resolver.resolveOfficialDocsAnchor("抖音", "DOCS", hints);
 
+        assertThat(docsProfile.getQueryMode()).isEqualTo(TavilyQueryMode.OFFICIAL_DOCS);
         assertThat(docsProfile.getIncludeDomains()).containsExactly("open.douyin.com");
+        assertThat(docsProfile.getOfficialDomains()).containsExactly("open.douyin.com");
     }
 }

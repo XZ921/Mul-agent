@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.search.CandidateOwnershipPolicy;
 import cn.bugstack.competitoragent.search.SearchPolicyResolver;
 import cn.bugstack.competitoragent.search.SearchProviderRole;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +31,7 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
     private final List<SearchSourceProvider> delegateProviders;
     private final SourceCandidateRanker sourceCandidateRanker;
     private final SearchPolicyResolver searchPolicyResolver;
+    private final CandidateOwnershipPolicy candidateOwnershipPolicy;
 
     /**
      * Spring 运行时统一走显式装配构造器。
@@ -44,7 +46,8 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
                                        BrowserPreviewSearchSourceProvider browserPreviewProvider,
                                        HttpSearchSourceProvider httpSearchSourceProvider,
                                        SourceCandidateRanker sourceCandidateRanker,
-                                       SearchPolicyResolver searchPolicyResolver) {
+                                       SearchPolicyResolver searchPolicyResolver,
+                                       CandidateOwnershipPolicy candidateOwnershipPolicy) {
         this(properties,
                 List.of(tavilyFastLaneProvider,
                         qianfanSearchSourceProvider,
@@ -52,7 +55,8 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
                         browserPreviewProvider,
                         httpSearchSourceProvider),
                 sourceCandidateRanker,
-                searchPolicyResolver);
+                searchPolicyResolver,
+                candidateOwnershipPolicy);
     }
 
     public RoutingSearchSourceProvider(SearchProviderProperties properties,
@@ -65,10 +69,21 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
                                        List<? extends SearchSourceProvider> delegateProviders,
                                        SourceCandidateRanker sourceCandidateRanker,
                                        SearchPolicyResolver searchPolicyResolver) {
+        this(properties, delegateProviders, sourceCandidateRanker, searchPolicyResolver, new CandidateOwnershipPolicy());
+    }
+
+    public RoutingSearchSourceProvider(SearchProviderProperties properties,
+                                       List<? extends SearchSourceProvider> delegateProviders,
+                                       SourceCandidateRanker sourceCandidateRanker,
+                                       SearchPolicyResolver searchPolicyResolver,
+                                       CandidateOwnershipPolicy candidateOwnershipPolicy) {
         this.properties = properties;
         this.delegateProviders = List.copyOf(delegateProviders);
         this.sourceCandidateRanker = sourceCandidateRanker;
         this.searchPolicyResolver = searchPolicyResolver;
+        this.candidateOwnershipPolicy = candidateOwnershipPolicy == null
+                ? new CandidateOwnershipPolicy()
+                : candidateOwnershipPolicy;
     }
 
     @Override
@@ -79,7 +94,8 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
         return searchAcrossProviders(
                 provider -> provider.search(request),
                 normalizedProviderKey -> !StringUtils.hasText(request.getPreferredProviderKey())
-                        || normalizeProviderKey(request.getPreferredProviderKey()).equals(normalizedProviderKey)
+                        || normalizeProviderKey(request.getPreferredProviderKey()).equals(normalizedProviderKey),
+                request.getRequestedScopes()
         );
     }
 
@@ -87,7 +103,8 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
     public List<SourceCandidate> search(String competitorName, List<String> requestedScopes) {
         return searchAcrossProviders(
                 provider -> provider.search(competitorName, requestedScopes),
-                normalizedProviderKey -> true
+                normalizedProviderKey -> true,
+                requestedScopes
         );
     }
 
@@ -96,7 +113,8 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
      * 否则 primarySatisfied、fail-open 和 provider role 语义会在新入口上悄悄失真。
      */
     private List<SourceCandidate> searchAcrossProviders(Function<SearchSourceProvider, List<SourceCandidate>> invoker,
-                                                        Predicate<String> providerFilter) {
+                                                        Predicate<String> providerFilter,
+                                                        List<String> requestedScopes) {
         List<SourceCandidate> mergedCandidates = new ArrayList<>();
         Map<String, SearchSourceProvider> providersByKey = indexProvidersByKey();
         int primaryCandidateCount = 0;
@@ -109,7 +127,10 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
                 continue;
             }
             SearchSourceProviderDescriptor descriptor = provider.descriptor();
-            SearchProviderRole providerRole = searchPolicyResolver.resolveProviderRole(descriptor.getProviderKey());
+            SearchProviderRole providerRole = searchPolicyResolver.resolveProviderRoleForRequestedScopes(
+                    descriptor.getProviderKey(),
+                    requestedScopes
+            );
             if (primarySatisfied
                     && !properties.isRunAuxiliaryWhenPrimarySatisfied()
                     && providerRole != SearchProviderRole.PRIMARY_VERTICAL) {
@@ -133,7 +154,13 @@ public class RoutingSearchSourceProvider implements SearchSourceProvider {
                 if (!providerCandidates.isEmpty()) {
                     mergedCandidates.addAll(providerCandidates);
                     if (providerRole == SearchProviderRole.PRIMARY_VERTICAL) {
-                        primaryCandidateCount += providerCandidates.size();
+                        /*
+                         * primary satisfied 只能由“满足级正文信号”推进。
+                         * 只搜到官网入口/薄壳页不代表主取证已足够，否则会再次跳过 auxiliary public search。
+                         */
+                        primaryCandidateCount += (int) providerCandidates.stream()
+                                .filter(candidateOwnershipPolicy::hasSatisfyingContentSignal)
+                                .count();
                         primarySatisfied = primaryCandidateCount >= Math.max(1, properties.getPrimaryCandidateThreshold());
                     }
                 }
