@@ -75,4 +75,36 @@ class SearchObjectSlimmingContractTest {
 
         assertThat(SearchSharedProjection.supportsCollectorOutput(objectMapper, extractorLikeOutput)).isFalse();
     }
+
+    @Test
+    void shouldPreserveSelectedTargetSearchFirstAuditFieldsInSharedProjection() {
+        String rawOutput = """
+                {
+                  "sourceUrls": ["https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/develop/server/open-capacity"],
+                  "selectedTargets": [
+                    {
+                      "url": "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/develop/server/open-capacity",
+                      "title": "开放能力文档",
+                      "discoveryMethod": "TAVILY_PHASE1_BOOTSTRAP",
+                      "tavilyQueryMode": "TRUSTED_WEB_EXPANSION",
+                      "qualityTier": "STRONG",
+                      "fastLaneUsable": true,
+                      "prefetchedRawContentLength": 19555,
+                      "skipNetworkVerification": true
+                    }
+                  ]
+                }
+                """;
+
+        SearchSharedProjection projection = SearchSharedProjection.fromCollectorOutput(objectMapper, rawOutput);
+
+        assertThat(projection.getSelectedTargets()).singleElement().satisfies(target -> {
+            assertThat(target.getDiscoveryMethod()).isEqualTo("TAVILY_PHASE1_BOOTSTRAP");
+            assertThat(target.getTavilyQueryMode()).isEqualTo("TRUSTED_WEB_EXPANSION");
+            assertThat(target.getQualityTier()).isEqualTo("STRONG");
+            assertThat(target.getFastLaneUsable()).isTrue();
+            assertThat(target.getPrefetchedRawContentLength()).isEqualTo(19555);
+            assertThat(target.getSkipNetworkVerification()).isTrue();
+        });
+    }
 }

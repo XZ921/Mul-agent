@@ -127,12 +127,18 @@ public class SearchSharedProjection {
             }
             summaries.add(SearchSelectedTargetSummary.builder()
                     .url(url)
-                    .title(textOrNull(targetNode, "title") == null ? textOrNull(candidateNode, "title") : textOrNull(targetNode, "title"))
-                    .sourceType(textOrNull(candidateNode, "sourceType"))
-                    .sourceFamilyKey(textOrNull(candidateNode, "sourceFamilyKey"))
-                    .providerKey(textOrNull(candidateNode, "providerKey"))
-                    .selectionStage(textOrNull(candidateNode, "selectionStage"))
-                    .selectionReason(textOrNull(candidateNode, "selectionReason"))
+                    .title(preferText(targetNode, "title", candidateNode))
+                    .sourceType(preferText(targetNode, "sourceType", candidateNode))
+                    .sourceFamilyKey(preferText(targetNode, "sourceFamilyKey", candidateNode))
+                    .providerKey(preferText(targetNode, "providerKey", candidateNode))
+                    .selectionStage(preferText(targetNode, "selectionStage", candidateNode))
+                    .selectionReason(preferText(targetNode, "selectionReason", candidateNode))
+                    .discoveryMethod(preferText(targetNode, "discoveryMethod", candidateNode))
+                    .tavilyQueryMode(preferText(targetNode, "tavilyQueryMode", candidateNode))
+                    .qualityTier(preferText(targetNode, "qualityTier", candidateNode))
+                    .fastLaneUsable(preferBoolean(targetNode, "fastLaneUsable", candidateNode))
+                    .prefetchedRawContentLength(preferInteger(targetNode, "prefetchedRawContentLength", candidateNode))
+                    .skipNetworkVerification(preferBoolean(targetNode, "skipNetworkVerification", candidateNode))
                     .reusedCollectedPage(targetNode.has("collectedPage") && !targetNode.path("collectedPage").isMissingNode())
                     .sourceUrls(fallbackSourceUrls == null ? List.of() : fallbackSourceUrls)
                     .build());
@@ -185,6 +191,47 @@ public class SearchSharedProjection {
         }
         String value = valueNode.asText(null);
         return value == null || value.isBlank() ? null : value;
+    }
+
+    /**
+     * selectedTargets 既要兼容 Collector 输出的轻量 summary，也要兼容 searchAudit 里保留的 candidate 快照。
+     * 因此这里统一采用“先读顶层 target，再回退 candidate”的策略，避免 search-first 新增元数据在任一投影层被裁掉。
+     */
+    private static String preferText(JsonNode targetNode, String fieldName, JsonNode candidateNode) {
+        String value = textOrNull(targetNode, fieldName);
+        return value != null ? value : textOrNull(candidateNode, fieldName);
+    }
+
+    private static Boolean preferBoolean(JsonNode targetNode, String fieldName, JsonNode candidateNode) {
+        Boolean value = booleanOrNull(targetNode, fieldName);
+        return value != null ? value : booleanOrNull(candidateNode, fieldName);
+    }
+
+    private static Integer preferInteger(JsonNode targetNode, String fieldName, JsonNode candidateNode) {
+        Integer value = integerOrNull(targetNode, fieldName);
+        return value != null ? value : integerOrNull(candidateNode, fieldName);
+    }
+
+    private static Boolean booleanOrNull(JsonNode node, String fieldName) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        JsonNode valueNode = node.path(fieldName);
+        if (valueNode.isMissingNode() || valueNode.isNull()) {
+            return null;
+        }
+        return valueNode.isBoolean() ? valueNode.asBoolean() : null;
+    }
+
+    private static Integer integerOrNull(JsonNode node, String fieldName) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        JsonNode valueNode = node.path(fieldName);
+        if (valueNode.isMissingNode() || valueNode.isNull()) {
+            return null;
+        }
+        return valueNode.canConvertToInt() ? valueNode.intValue() : null;
     }
 
     private static TavilyFastLaneAudit readTavilyFastLaneAudit(ObjectMapper objectMapper,

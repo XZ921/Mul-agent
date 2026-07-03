@@ -120,6 +120,58 @@ class TaskNodeViewAssemblerTest {
         assertThat(response.getConfigSummaryData().getQualityPolicy()).isEqualTo("official-first");
     }
 
+    @Test
+    void shouldExposeSelectedTargetSearchFirstAuditFieldsInCollectorInsight() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(59L)
+                .status(AnalysisTaskStatus.SUCCESS)
+                .build();
+        TaskNode node = node("collect_sources_01", AgentType.COLLECTOR, TaskNodeStatus.SUCCESS, 1);
+        node.setNodeConfig("""
+                {
+                  "competitorName": "抖音开放平台",
+                  "sourceType": "OFFICIAL"
+                }
+                """);
+        node.setOutputData("""
+                {
+                  "selectedTargets": [
+                    {
+                      "url": "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/develop/server/open-capacity",
+                      "title": "开放能力文档",
+                      "selectionReason": "fusion picked strong tavily candidate",
+                      "discoveryMethod": "TAVILY_PHASE1_BOOTSTRAP",
+                      "tavilyQueryMode": "TRUSTED_WEB_EXPANSION",
+                      "qualityTier": "STRONG",
+                      "fastLaneUsable": true,
+                      "prefetchedRawContentLength": 19555,
+                      "skipNetworkVerification": true
+                    }
+                  ]
+                }
+                """);
+
+        TaskNodeResponse response = assembler.toNodeResponse(task, node, List.of(node));
+
+        assertThat(response.getCollectorInsight()).isNotNull();
+        assertThat(response.getCollectorInsight().getSelectedTargets()).singleElement().satisfies(target -> {
+            assertThat(target.getDiscoveryMethod()).isEqualTo("TAVILY_PHASE1_BOOTSTRAP");
+            assertThat(target.getTavilyQueryMode()).isEqualTo("TRUSTED_WEB_EXPANSION");
+            assertThat(target.getQualityTier()).isEqualTo("STRONG");
+            assertThat(target.getFastLaneUsable()).isTrue();
+            assertThat(target.getPrefetchedRawContentLength()).isEqualTo(19555);
+            assertThat(target.getSkipNetworkVerification()).isTrue();
+        });
+        assertThat(response.getCollectorInsight().getSelectedTargetSummaries()).singleElement().satisfies(target -> {
+            assertThat(target.getDiscoveryMethod()).isEqualTo("TAVILY_PHASE1_BOOTSTRAP");
+            assertThat(target.getTavilyQueryMode()).isEqualTo("TRUSTED_WEB_EXPANSION");
+            assertThat(target.getQualityTier()).isEqualTo("STRONG");
+            assertThat(target.getFastLaneUsable()).isTrue();
+            assertThat(target.getPrefetchedRawContentLength()).isEqualTo(19555);
+            assertThat(target.getSkipNetworkVerification()).isTrue();
+        });
+    }
+
     private TaskNode node(String nodeName, AgentType agentType, TaskNodeStatus status, int executionOrder) {
         return TaskNode.builder()
                 .taskId(56L)

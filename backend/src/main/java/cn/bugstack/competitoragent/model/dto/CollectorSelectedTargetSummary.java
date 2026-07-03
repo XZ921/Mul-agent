@@ -31,6 +31,24 @@ public class CollectorSelectedTargetSummary {
     @Schema(description = "Selection reason")
     private String selectionReason;
 
+    @Schema(description = "Discovery method")
+    private String discoveryMethod;
+
+    @Schema(description = "Tavily query mode")
+    private String tavilyQueryMode;
+
+    @Schema(description = "Candidate quality tier")
+    private String qualityTier;
+
+    @Schema(description = "Whether fast lane content is directly usable")
+    private Boolean fastLaneUsable;
+
+    @Schema(description = "Length of prefetched raw content")
+    private Integer prefetchedRawContentLength;
+
+    @Schema(description = "Whether network verification can be skipped")
+    private Boolean skipNetworkVerification;
+
     /**
      * 兼容旧字段名的选中摘要。
      * 该字段历史上直接面向前端渲染，因此这里继续保留，

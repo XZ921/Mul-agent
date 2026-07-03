@@ -53,6 +53,22 @@ public class SearchRuntimePolicy {
      * 通过 per-domain 裁剪做“软平衡”，避免单个域名把整个候选池挤满。
      */
     private Integer maxCandidatesPerDomain;
+    /**
+     * search-first 家族的证据目标下限。
+     * 这个字段不是 maxSearchResults 的替代品，而是用于避免“用户只给 1 个官网 URL，
+     * 最终证据也只能选 1 条”的结构性塌缩。
+     */
+    private Integer searchFirstEvidenceTargetFloor;
+    /**
+     * search-first 家族的证据目标上限。
+     * 防止 Tavily 主搜索一次返回过多高质量页面时，把正式采集目标膨胀到不可控规模。
+     */
+    private Integer searchFirstEvidenceTargetCeiling;
+    /**
+     * 候选融合后允许进入浏览器验证的候选数量。
+     * fast lane 可用正文不占用这个预算。
+     */
+    private Integer preSelectionVerificationLimit;
     private Double competitorCoverageSoftGapRatio;
     private List<String> userAgents;
     private List<String> blockedSignals;

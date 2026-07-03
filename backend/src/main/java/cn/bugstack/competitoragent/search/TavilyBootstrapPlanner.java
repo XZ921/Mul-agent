@@ -21,35 +21,59 @@ import java.util.Set;
 @Component
 public class TavilyBootstrapPlanner {
 
+    private final SearchPolicyResolver searchPolicyResolver;
+
+    public TavilyBootstrapPlanner() {
+        this(new SearchPolicyResolver());
+    }
+
+    public TavilyBootstrapPlanner(SearchPolicyResolver searchPolicyResolver) {
+        this.searchPolicyResolver = searchPolicyResolver == null
+                ? new SearchPolicyResolver()
+                : searchPolicyResolver;
+    }
+
     public TavilyBootstrapDecision plan(CollectorNodeConfig config, List<SourceCandidate> plannedCandidates) {
+        boolean searchFirstFamily = searchPolicyResolver.shouldApplySearchFirstExpansionPolicy(config);
         List<SourceCandidate> weakSeeds = plannedCandidates == null
                 ? List.of()
                 : plannedCandidates.stream()
                 .filter(candidate -> isWeakEntryCandidate(candidate, config))
                 .toList();
-        if (weakSeeds.isEmpty()) {
+        List<SourceCandidate> seedCandidates = weakSeeds.isEmpty()
+                ? (plannedCandidates == null ? List.of() : plannedCandidates)
+                : weakSeeds;
+        if (!searchFirstFamily && weakSeeds.isEmpty()) {
             return TavilyBootstrapDecision.builder()
                     .shouldExecute(false)
                     .reason("规划期候选已是强直达页面，无需在 Phase 1 走 Tavily bootstrap")
                     .seedCandidates(List.of())
                     .build();
         }
+        List<String> preferredDomains = resolveOfficialDomains(config, seedCandidates);
+        String preferredQueryMode = searchFirstFamily
+                ? "TRUSTED_WEB_EXPANSION"
+                : config == null ? null : config.getTavilyQueryMode();
         return TavilyBootstrapDecision.builder()
                 .shouldExecute(true)
-                .reason("存在根域/入口候选，先用 Tavily 做 Phase 1 候选增强")
-                .seedCandidates(weakSeeds)
+                .reason(searchFirstFamily
+                        ? "search-first official family 在验证前执行 Tavily 主搜索"
+                        : "存在根域/入口候选，先用 Tavily 做 Phase 1 候选增强")
+                .seedCandidates(seedCandidates)
                 .request(SearchSourceRequest.builder()
                         .competitorName(config == null ? null : config.getCompetitorName())
                         .requestedScopes(config == null || !StringUtils.hasText(config.getSourceType())
                                 ? List.of()
                                 : List.of(config.getSourceType()))
                         .searchQueries(config == null || config.getSearchQueries() == null ? List.of() : config.getSearchQueries())
-                        .preferredDomains(config == null || config.getPreferredDomains() == null ? List.of() : config.getPreferredDomains())
-                        .includeDomains(config == null || config.getIncludeDomains() == null ? List.of() : config.getIncludeDomains())
+                        .preferredDomains(preferredDomains)
+                        .includeDomains(searchFirstFamily
+                                ? List.of()
+                                : config == null || config.getIncludeDomains() == null ? List.of() : config.getIncludeDomains())
                         .blockedDomains(config == null || config.getBlockedDomains() == null ? List.of() : config.getBlockedDomains())
-                        .seedCandidates(weakSeeds)
+                        .seedCandidates(seedCandidates)
                         .preferredProviderKey("tavily")
-                        .preferredQueryMode(config == null ? null : config.getTavilyQueryMode())
+                        .preferredQueryMode(preferredQueryMode)
                         .requestPhase(SearchRequestPhase.BOOTSTRAP)
                         .build())
                 .build();
@@ -95,6 +119,35 @@ public class TavilyBootstrapPlanner {
                 hosts.add(candidate.trim().toLowerCase(Locale.ROOT));
             }
         }
+    }
+
+    /**
+     * search-first 模式下官方域名只保留为 preferred/anchor，
+     * 不能再继续写进 includeDomains 把 Tavily 收窄回“只搜官方站”。
+     */
+    private List<String> resolveOfficialDomains(CollectorNodeConfig config, List<SourceCandidate> seedCandidates) {
+        LinkedHashSet<String> domains = new LinkedHashSet<>();
+        if (config != null) {
+            addAllHosts(domains, config.getPreferredDomains());
+            addAllHosts(domains, config.getIncludeDomains());
+            addAllHostsFromUrls(domains, config.getCompetitorUrls());
+        }
+        if (seedCandidates != null) {
+            for (SourceCandidate seedCandidate : seedCandidates) {
+                if (seedCandidate == null) {
+                    continue;
+                }
+                if (StringUtils.hasText(seedCandidate.getDomain())) {
+                    domains.add(seedCandidate.getDomain().trim().toLowerCase(Locale.ROOT));
+                    continue;
+                }
+                String host = extractHost(seedCandidate.getUrl());
+                if (StringUtils.hasText(host)) {
+                    domains.add(host);
+                }
+            }
+        }
+        return new java.util.ArrayList<>(domains);
     }
 
     private void addAllHostsFromUrls(Set<String> hosts, List<String> urls) {

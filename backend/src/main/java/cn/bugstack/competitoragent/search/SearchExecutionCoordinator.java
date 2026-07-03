@@ -46,6 +46,7 @@ public class SearchExecutionCoordinator {
     private final SitemapDiscoveryService sitemapDiscoveryService;
     private final CandidateOwnershipPolicy candidateOwnershipPolicy;
     private final TavilyBootstrapPlanner tavilyBootstrapPlanner;
+    private final SearchCandidateFusionPlanner searchCandidateFusionPlanner;
     private final PublicEvidenceRecoveryService publicEvidenceRecoveryService;
 
     public SearchExecutionCoordinator(CandidateVerifier candidateVerifier,
@@ -160,8 +161,9 @@ public class SearchExecutionCoordinator {
                 ? new CandidateOwnershipPolicy()
                 : candidateOwnershipPolicy;
         this.tavilyBootstrapPlanner = tavilyBootstrapPlanner == null
-                ? new TavilyBootstrapPlanner()
+                ? new TavilyBootstrapPlanner(this.searchPolicyResolver)
                 : tavilyBootstrapPlanner;
+        this.searchCandidateFusionPlanner = new SearchCandidateFusionPlanner(this.searchPolicyResolver, this.sourceCandidateRanker);
         this.publicEvidenceRecoveryService = publicEvidenceRecoveryService == null
                 ? new PublicEvidenceRecoveryService()
                 : publicEvidenceRecoveryService;
@@ -213,6 +215,10 @@ public class SearchExecutionCoordinator {
         searchTimeoutMillis = searchPolicyResolver.ensureMinimumTimeoutForFieldEvidenceQueries(
                 searchTimeoutMillis,
                 fieldEvidenceQueryPlan.getPlanned()
+        );
+        Long fieldEvidenceExecutionDeadlineEpochMillis = resolveFieldEvidenceExecutionDeadlineEpochMillis(
+                searchTimeoutMillis,
+                fieldEvidenceQueryPlan
         );
         List<SearchProgressSnapshot> progressSnapshots = new ArrayList<>();
         Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
@@ -297,6 +303,23 @@ public class SearchExecutionCoordinator {
                     bootstrapDecision.getReason(), false, null, progressListener, allCandidates, List.of(), null);
         }
 
+        markStepRunning(executionPlan, "CANDIDATE_FUSION_RANK", "正在融合 search-first 候选并规划验证范围");
+        appendSnapshotAndPublish(progressSnapshots, executionPlan, "CANDIDATE_FUSION_RANK",
+                "正在融合 search-first 候选并规划验证范围", false, null, progressListener, allCandidates, List.of(), null);
+        SearchCandidateFusionDecision fusionDecision = searchCandidateFusionPlanner.plan(
+                config,
+                allCandidates,
+                targetCount,
+                maxCandidatesPerDomain
+        );
+        if (fusionDecision.getRankedCandidates() != null && !fusionDecision.getRankedCandidates().isEmpty()) {
+            allCandidates = fusionDecision.getRankedCandidates();
+        }
+        int effectiveTargetCount = fusionDecision.getEffectiveTargetCount();
+        markStepSuccess(executionPlan, "CANDIDATE_FUSION_RANK", fusionDecision.getReason());
+        appendSnapshotAndPublish(progressSnapshots, executionPlan, "CANDIDATE_FUSION_RANK",
+                fusionDecision.getReason(), false, null, progressListener, allCandidates, List.of(), null);
+
         int verifiedCount = 0;
         int supplementedCount = 0;
         boolean publicEvidenceRecoveryTriggered = false;
@@ -344,10 +367,9 @@ public class SearchExecutionCoordinator {
             markStepRunning(executionPlan, "VERIFY_TOP_CANDIDATES", "正在验证高优先级候选来源");
             appendSnapshotAndPublish(progressSnapshots, executionPlan, "VERIFY_TOP_CANDIDATES",
                     "正在验证高优先级候选来源", false, null, progressListener, allCandidates, List.of(), null);
-            List<SourceCandidate> verifyCandidates = allCandidates.stream()
-                    .sorted(Comparator.comparingDouble(SourceCandidate::getTotalScore).reversed())
-                    .limit(resolveVerificationCandidateLimit(config, allCandidates, targetCount, minVerifiedCount))
-                    .toList();
+            List<SourceCandidate> verifyCandidates = fusionDecision.getVerificationCandidates() == null
+                    ? List.of()
+                    : fusionDecision.getVerificationCandidates();
             CandidateVerificationResult verificationResult = candidateVerifier.verify(
                     config.getCompetitorName(),
                     config.getSourceType(),
@@ -367,7 +389,7 @@ public class SearchExecutionCoordinator {
         }
 
         // 职责边界 2：补源只负责在“验证不足”或“候选池不足”时扩充候选，补不到也必须保留规划期候选作为兜底。
-        if (shouldSupplement(config, verifiedCount, minVerifiedCount, allCandidates.size(), targetCount, resultPageVerificationEnabled)) {
+        if (shouldSupplement(config, verifiedCount, minVerifiedCount, allCandidates.size(), effectiveTargetCount, resultPageVerificationEnabled)) {
             boolean pendingFieldEvidenceQueries = hasPendingFieldEvidenceQueries(config);
             if (isTimedOut(searchStartedAt, searchTimeoutMillis) && !pendingFieldEvidenceQueries) {
                 circuitBroken = true;
@@ -392,13 +414,14 @@ public class SearchExecutionCoordinator {
                         allCandidates.size(),
                         verifiedCount,
                         minVerifiedCount,
-                        targetCount
+                        effectiveTargetCount
                 );
                 SupplementExecutionOutcome supplementOutcome = executeSupplementByFallbackOrder(
                         config,
                         allCandidates,
                         supplementTargetPoolSize,
-                        fieldEvidenceQueryPlan
+                        fieldEvidenceQueryPlan,
+                        fieldEvidenceExecutionDeadlineEpochMillis
                 );
                 List<SourceCandidate> supplementedCandidates = sourceCandidateRanker.rankDeduplicateAndLimit(
                         supplementOutcome.getSupplementedCandidates(),
@@ -606,7 +629,7 @@ public class SearchExecutionCoordinator {
         SearchSelectionDecision selectionDecision = collectionTargetSelector.selectTargets(
                 allCandidates,
                 attemptedTargets,
-                targetCount
+                effectiveTargetCount
         );
         List<SearchCollectionTarget> selectedTargets = selectionDecision.getSelectedTargets() == null
                 ? List.of()
@@ -641,6 +664,14 @@ public class SearchExecutionCoordinator {
                 .searchQueries(executionPlan.getSearchQueries() == null ? List.of() : executionPlan.getSearchQueries())
                 .fallbackOrder(executionPlan.getFallbackOrder() == null ? List.of() : executionPlan.getFallbackOrder())
                 .plannedCandidateCount(config.getSourceCandidates() == null ? 0 : config.getSourceCandidates().size())
+                .baseTargetCount(targetCount)
+                .effectiveSearchFirstTargetCount(effectiveTargetCount)
+                .fusionRankedCandidateCount(fusionDecision.getRankedCandidates() == null ? 0 : fusionDecision.getRankedCandidates().size())
+                .fusionPreselectedCandidateCount(fusionDecision.getPreselectedCandidates() == null ? 0 : fusionDecision.getPreselectedCandidates().size())
+                .fusionFastLaneCandidateCount(fusionDecision.getFastLaneCandidateCount())
+                .fusionVerificationCandidateCount(fusionDecision.getVerificationCandidateCount())
+                .fusionThirdPartyCandidateCount(fusionDecision.getThirdPartyCandidateCount())
+                .directSeedCandidateCount(fusionDecision.getDirectSeedCandidateCount())
                 .attemptedCandidateCount(attemptedTargetList.size())
                 .discardedCandidateCount(discardedCandidates.size())
                 .verifiedCandidateCount(verifiedCount)
@@ -917,6 +948,13 @@ public class SearchExecutionCoordinator {
                         .status(SearchExecutionStep.StepStatus.PENDING)
                         .build(),
                 SearchExecutionStep.builder()
+                        .stepCode("CANDIDATE_FUSION_RANK")
+                        .goal("融合 search-first 候选并规划验证范围")
+                        .expectedDurationMs(800L)
+                        .dependency("ranker")
+                        .status(SearchExecutionStep.StepStatus.PENDING)
+                        .build(),
+                SearchExecutionStep.builder()
                         .stepCode("VERIFY_TOP_CANDIDATES")
                         .goal("验证高优先级候选来源是否可用")
                         .expectedDurationMs(5000L)
@@ -961,7 +999,8 @@ public class SearchExecutionCoordinator {
     private SupplementExecutionOutcome executeSupplementByFallbackOrder(CollectorNodeConfig config,
                                                                         List<SourceCandidate> existingCandidates,
                                                                         int targetPoolSize,
-                                                                        ResolvedFieldEvidenceQueryPlan fieldEvidenceQueryPlan) {
+                                                                        ResolvedFieldEvidenceQueryPlan fieldEvidenceQueryPlan,
+                                                                        Long fieldEvidenceExecutionDeadlineEpochMillis) {
         BrowserSearchRuntimeResult browserSearchResult = defaultBrowserSupplementResult(config);
         List<SourceCandidate> supplementedCandidates = new ArrayList<>();
         boolean providerFallbackUsed = false;
@@ -1007,7 +1046,12 @@ public class SearchExecutionCoordinator {
             }
 
             if ("HTTP".equals(stage) && httpModeEnabled && !httpExecuted) {
-                sourceRequest = buildSearchSourceRequest(config, existingCandidates, fieldEvidenceQueryPlan);
+                sourceRequest = buildSearchSourceRequest(
+                        config,
+                        existingCandidates,
+                        fieldEvidenceQueryPlan,
+                        fieldEvidenceExecutionDeadlineEpochMillis
+                );
                 List<SourceCandidate> httpSearchCandidates = searchSourceProvider.search(sourceRequest);
                 if (httpSearchCandidates == null || httpSearchCandidates.isEmpty()) {
                     httpSearchCandidates = searchSourceProvider.search(
@@ -1123,7 +1167,8 @@ public class SearchExecutionCoordinator {
      */
     private SearchSourceRequest buildSearchSourceRequest(CollectorNodeConfig config,
                                                          List<SourceCandidate> allCandidates,
-                                                         ResolvedFieldEvidenceQueryPlan fieldEvidenceQueryPlan) {
+                                                         ResolvedFieldEvidenceQueryPlan fieldEvidenceQueryPlan,
+                                                         Long fieldEvidenceExecutionDeadlineEpochMillis) {
         return SearchSourceRequest.builder()
                 .competitorName(config.getCompetitorName())
                 .requestedScopes(List.of(config.getSourceType()))
@@ -1132,7 +1177,7 @@ public class SearchExecutionCoordinator {
                 .fieldEvidenceQueryPlannedCount(fieldEvidenceQueryPlan == null ? 0 : fieldEvidenceQueryPlan.getPlanned().size())
                 .fieldEvidenceQueryExecutableCount(fieldEvidenceQueryPlan == null ? 0 : fieldEvidenceQueryPlan.getExecutable().size())
                 .fieldEvidenceQuerySkippedCount(fieldEvidenceQueryPlan == null ? 0 : fieldEvidenceQueryPlan.getSkipped().size())
-                .fieldEvidenceExecutionDeadlineEpochMillis(resolveFieldEvidenceExecutionDeadlineEpochMillis(config))
+                .fieldEvidenceExecutionDeadlineEpochMillis(fieldEvidenceExecutionDeadlineEpochMillis)
                 .preferredDomains(defaultList(config.getPreferredDomains()))
                 .includeDomains(defaultList(config.getIncludeDomains()))
                 .blockedDomains(defaultList(config.getBlockedDomains()))
@@ -1273,19 +1318,17 @@ public class SearchExecutionCoordinator {
      * 档 A 的 quota 是基于放大前预算计算的；档 B 的执行 deadline 也必须沿用同一口径，
      * 避免 request 侧拿到另一个被放大后的 budget，导致“挑出来的 executable 很少，但单条又能跑很久”。
      */
-    private Long resolveFieldEvidenceExecutionDeadlineEpochMillis(CollectorNodeConfig config) {
-        if (config == null) {
+    private Long resolveFieldEvidenceExecutionDeadlineEpochMillis(long searchTimeoutMillis,
+                                                                  ResolvedFieldEvidenceQueryPlan fieldEvidenceQueryPlan) {
+        if (fieldEvidenceQueryPlan == null
+                || fieldEvidenceQueryPlan.getExecutable() == null
+                || fieldEvidenceQueryPlan.getExecutable().isEmpty()) {
             return null;
         }
-        SearchExecutionPlan executionPlan = initializePlan(config.getSearchExecutionPlan());
-        long baseSearchTimeoutMillis = searchPolicyResolver.resolveSearchTimeoutMillis(
-                config.getSearchTimeoutMillis(),
-                executionPlan
-        );
-        if (baseSearchTimeoutMillis < 0L) {
+        if (searchTimeoutMillis < 0L) {
             return null;
         }
-        return System.currentTimeMillis() + baseSearchTimeoutMillis;
+        return System.currentTimeMillis() + searchTimeoutMillis;
     }
 
     /**

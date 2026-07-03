@@ -168,6 +168,37 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
      * 这里复用一个最小 coordinator 上下文，只保留“能进入 HTTP supplement”所需的依赖，
      * 这样失败测试只盯住 field query 预算分层，不会被浏览器或页面验证噪声干扰。
      */
+    @Test
+    void shouldUseBumpedSearchTimeoutWhenBuildingFieldEvidenceDeadline() {
+        RecordingBudgetAwareSearchSourceProvider provider = new RecordingBudgetAwareSearchSourceProvider();
+        SearchExecutionCoordinator coordinator = newCoordinator(provider);
+        long startedAt = System.currentTimeMillis();
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩")
+                .sourceType("DOCS")
+                .verifyCandidates(false)
+                .searchMode("HTTP_ONLY")
+                .searchFallbackOrder(List.of("HTTP"))
+                .preferredSearchProvider("tavily")
+                .browserSearchEnabled(false)
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .searchTimeoutMillis(15_000L)
+                .dimensionEvidencePlan(deadlineFieldPlan())
+                .build());
+
+        assertThat(provider.requests).hasSize(1);
+        SearchSourceRequest request = provider.requests.get(0);
+        assertThat(request.getFieldEvidenceQueries())
+                .extracting(FieldEvidenceQuery::getQueryFingerprint)
+                .containsExactly("q-deadline-1", "q-deadline-2");
+        assertThat(request.getFieldEvidenceExecutionDeadlineEpochMillis()).isNotNull();
+        assertThat(request.getFieldEvidenceExecutionDeadlineEpochMillis() - startedAt)
+                .isGreaterThanOrEqualTo(23_000L);
+        assertThat(result.getExecutionTrace().getSearchTimeoutMillis()).isGreaterThanOrEqualTo(24_000L);
+    }
+
     private SearchExecutionCoordinator newCoordinator(RecordingBudgetAwareSearchSourceProvider provider) {
         BrowserSearchRuntimeService browserSearchRuntimeService = mock(BrowserSearchRuntimeService.class);
         when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
@@ -233,6 +264,23 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                 .queryFingerprint(fingerprint)
                 .priority(priority)
                 .reason("预算红测-" + suffix)
+                .build();
+    }
+
+    private DimensionEvidencePlan deadlineFieldPlan() {
+        return DimensionEvidencePlan.builder()
+                .competitorName("哔哩哔哩")
+                .maxCollectionRounds(2)
+                .fieldCoverages(List.of(FieldEvidenceCoverage.builder()
+                        .fieldName("coreFeatures")
+                        .status(FieldEvidenceCoverageStatus.NOT_STARTED)
+                        .minimumAttemptedPaths(1)
+                        .completedPaths(List.of())
+                        .plannedQueries(List.of(
+                                fieldQuery("q-deadline-1", 10, "官方 API 文档"),
+                                fieldQuery("q-deadline-2", 20, "第三方接入分析")
+                        ))
+                        .build()))
                 .build();
     }
 

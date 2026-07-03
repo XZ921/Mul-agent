@@ -348,7 +348,7 @@ public class CollectionTargetSelector {
         if (isUsablePrefetchedCandidate(candidate)) {
             return 0;
         }
-        if (Boolean.TRUE.equals(candidate.getVerified()) && isVerifiedRootShellCandidate(candidate, attemptedTarget)) {
+        if (Boolean.TRUE.equals(candidate.getVerified()) && hasThinAttemptedPage(candidate, attemptedTarget)) {
             return 1;
         }
         if (Boolean.TRUE.equals(candidate.getVerified())) {
@@ -361,6 +361,29 @@ public class CollectionTargetSelector {
             return 3;
         }
         return 2;
+    }
+
+    /**
+     * verified 候选不能只看“是否验证过”，还要看抓回来的正文是否真的足够承载正式证据。
+     * 对 about、产品壳页、站点外壳这类薄内容，只做降档，不直接当作不可选。
+     */
+    private boolean hasThinAttemptedPage(SourceCandidate candidate, SearchCollectionTarget attemptedTarget) {
+        if (attemptedTarget == null || attemptedTarget.getCollectedPage() == null) {
+            return false;
+        }
+        String content = attemptedTarget.getCollectedPage().getContent();
+        if (content != null && content.trim().length() >= 800) {
+            return false;
+        }
+        if (hasPublicShellSignal(candidate, attemptedTarget)) {
+            return true;
+        }
+        String normalizedUrl = normalizeUrl(candidate == null ? null : candidate.getUrl());
+        return normalizedUrl.endsWith("/about")
+                || normalizedUrl.endsWith("/about/")
+                || normalizedUrl.endsWith("/overview")
+                || normalizedUrl.endsWith("/overview/")
+                || normalizedUrl.endsWith("/");
     }
 
     /**
@@ -448,8 +471,8 @@ public class CollectionTargetSelector {
     }
 
     /**
-     * 这里识别的是“verified 但只有根域公开壳价值”的候选。
-     * 只有这类壳页才需要给 prefetch 真文让位；verified 的真内容文档仍保持正常优先级竞争。
+     * 这个方法仍保留给既有公开壳诊断逻辑复用。
+     * search-first 选源排序已经升级成“薄正文降档”，不再只靠根路径判断壳页。
      */
     private boolean isVerifiedRootShellCandidate(SourceCandidate candidate,
                                                  SearchCollectionTarget attemptedTarget) {

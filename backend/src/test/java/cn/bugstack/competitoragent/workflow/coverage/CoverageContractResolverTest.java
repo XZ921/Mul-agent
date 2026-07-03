@@ -46,8 +46,8 @@ class CoverageContractResolverTest {
 
         CoverageContract contract = resolver.resolve(
                 null,
-                List.of("开放平台", "开发者生态", "产品功能"),
-                List.of("官网", "产品文档"),
+                List.of("\u5f00\u653e\u5e73\u53f0", "\u5f00\u53d1\u8005\u751f\u6001", "\u4ea7\u54c1\u529f\u80fd"),
+                List.of("\u5b98\u7f51", "\u4ea7\u54c1\u6587\u6863"),
                 null);
 
         assertThat(contract.getTaskMode()).isEqualTo("CAPABILITY_INTRO");
@@ -65,18 +65,21 @@ class CoverageContractResolverTest {
 
         CoverageContract contract = resolver.resolve(
                 null,
-                List.of("定价策略"),
-                List.of("官网"),
+                List.of("\u5b9a\u4ef7"),
+                List.of("\u5b98\u7f51"),
                 null);
 
         CoverageFieldContract pricing = contract.findField("pricing").orElseThrow();
         assertThat(pricing.getStatus()).isEqualTo(CoverageFieldStatus.REQUIRED);
         assertThat(pricing.getBlockingLevel()).isEqualTo(CoverageBlockingLevel.BLOCKER);
         assertThat(pricing.getQueryIntents()).contains("OFFICIAL_PRICING");
-        assertThat(pricing.getMinimumAttemptedPaths()).isGreaterThanOrEqualTo(2);
+        assertThat(pricing.getMinimumAttemptedPaths()).isEqualTo(1);
         assertThat(pricing.getEvidencePaths()).extracting(CoverageEvidencePath::getPathKey)
-                .contains("OFFICIAL_PRICING_PAGE", "DOCS_BILLING_OR_LIMITS");
-        assertThat(pricing.getOverrideReason()).contains("显式维度");
+                .contains("OFFICIAL_PRICING_PAGE", "DOCS_BILLING_OR_LIMITS", "PUBLIC_REVIEW_OR_NEWS");
+        assertThat(pathByKey(pricing, "OFFICIAL_PRICING_PAGE").getSourceTypes()).contains("REVIEW", "NEWS");
+        assertThat(pathByKey(pricing, "DOCS_BILLING_OR_LIMITS").getSourceTypes()).contains("REVIEW", "NEWS");
+        assertThat(pathByKey(pricing, "PUBLIC_REVIEW_OR_NEWS").isRequired()).isTrue();
+        assertThat(pricing.getOverrideReason()).contains("\u663e\u5f0f\u7ef4\u5ea6");
     }
 
     @Test
@@ -84,13 +87,55 @@ class CoverageContractResolverTest {
         CoverageContractResolver resolver = new CoverageContractResolver(new AnalysisDimensionMappingCatalog());
 
         CoverageContract contract = resolver.resolve(
-                "标准版",
-                List.of("开放平台"),
-                List.of("官网", "产品文档"),
+                "standard_competitor_report",
+                List.of("\u5f00\u653e\u5e73\u53f0"),
+                List.of("\u5b98\u7f51", "\u4ea7\u54c1\u6587\u6863"),
                 null);
 
         assertThat(contract.getTaskMode()).isEqualTo("STANDARD_COMPETITOR_REPORT");
         assertThat(contract.findField("pricing").orElseThrow().getStatus()).isEqualTo(CoverageFieldStatus.REQUIRED);
         assertThat(contract.findField("weaknesses").orElseThrow().getStatus()).isEqualTo(CoverageFieldStatus.REQUIRED);
+    }
+
+    @Test
+    void standardTemplateShouldRequireThirdPartyEvidenceForPricingStrengthsAndWeaknesses() {
+        CoverageContractResolver resolver = new CoverageContractResolver(new AnalysisDimensionMappingCatalog());
+
+        CoverageContract contract = resolver.resolve(
+                "standard_competitor_report",
+                List.of("\u4ea7\u54c1\u529f\u80fd"),
+                List.of("\u5b98\u7f51", "\u4ea7\u54c1\u6587\u6863"),
+                null);
+
+        CoverageFieldContract pricing = contract.findField("pricing").orElseThrow();
+        CoverageFieldContract strengths = contract.findField("strengths").orElseThrow();
+        CoverageFieldContract weaknesses = contract.findField("weaknesses").orElseThrow();
+        CoverageFieldContract summary = contract.findField("summary").orElseThrow();
+        CoverageFieldContract coreFeatures = contract.findField("coreFeatures").orElseThrow();
+
+        assertThat(pricing.getMinimumAttemptedPaths()).isEqualTo(1);
+        assertThat(pathByKey(pricing, "OFFICIAL_PRICING_PAGE").getSourceTypes()).contains("REVIEW", "NEWS");
+        assertThat(pathByKey(pricing, "DOCS_BILLING_OR_LIMITS").getSourceTypes()).contains("REVIEW", "NEWS");
+        assertThat(pathByKey(pricing, "PUBLIC_REVIEW_OR_NEWS").isRequired()).isTrue();
+
+        assertThat(strengths.getMinimumAttemptedPaths()).isEqualTo(1);
+        assertThat(pathByKey(strengths, "OFFICIAL_PUBLIC_PROFILE").getSourceTypes()).contains("REVIEW", "NEWS");
+        assertThat(pathByKey(strengths, "PUBLIC_REVIEW_OR_NEWS").isRequired()).isTrue();
+
+        assertThat(weaknesses.getMinimumAttemptedPaths()).isEqualTo(1);
+        assertThat(pathByKey(weaknesses, "TERMS_OR_SERVICE_AGREEMENT").getSourceTypes()).contains("REVIEW", "NEWS");
+        assertThat(pathByKey(weaknesses, "PUBLIC_REVIEW_OR_NEWS").isRequired()).isTrue();
+
+        assertThat(pathByKey(summary, "OFFICIAL_PUBLIC_PROFILE").getSourceTypes())
+                .containsExactly("OFFICIAL", "DOCS");
+        assertThat(pathByKey(coreFeatures, "DOCS_API_GUIDE").getSourceTypes())
+                .containsExactly("DOCS", "OFFICIAL");
+    }
+
+    private CoverageEvidencePath pathByKey(CoverageFieldContract field, String pathKey) {
+        return field.getEvidencePaths().stream()
+                .filter(path -> pathKey.equals(path.getPathKey()))
+                .findFirst()
+                .orElseThrow();
     }
 }

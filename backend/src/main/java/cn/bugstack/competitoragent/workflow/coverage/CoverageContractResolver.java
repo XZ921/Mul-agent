@@ -173,7 +173,7 @@ public class CoverageContractResolver {
                 .targetEvidenceTypes(new ArrayList<>(defaultIfNull(mapping.getEvidencePathKeys())))
                 .queryIntents(new ArrayList<>(defaultIfNull(mapping.getQueryIntents())))
                 .evidencePaths(evidencePaths)
-                .minimumAttemptedPaths(Math.max(1, evidencePaths.size()))
+                .minimumAttemptedPaths(resolveMinimumAttemptedPaths(fieldName, evidencePaths))
                 .minDistinctEvidenceCount(Math.min(2, Math.max(1, evidencePaths.size())))
                 .allowOfficialOnly(!"weaknesses".equalsIgnoreCase(fieldName))
                 .overrideReason("显式维度命中 " + mapping.getDimensionKey() + "，覆盖默认 taskMode=" + taskMode + " 契约")
@@ -189,21 +189,21 @@ public class CoverageContractResolver {
                 .field("pricing")
                 .status(CoverageFieldStatus.REQUIRED)
                 .blockingLevel(CoverageBlockingLevel.BLOCKER)
-                .targetEvidenceTypes(List.of("OFFICIAL_PRICING_PAGE", "DOCS_BILLING_OR_LIMITS"))
+                .targetEvidenceTypes(List.of("OFFICIAL_PRICING_PAGE", "DOCS_BILLING_OR_LIMITS", "PUBLIC_REVIEW_OR_NEWS"))
                 .queryIntents(List.of("OFFICIAL_PRICING", "DOCS_BILLING"))
                 .evidencePaths(List.of(
                         evidencePath("OFFICIAL_PRICING_PAGE",
-                                List.of("PRICING", "OFFICIAL"),
+                                unlockOfficialPathSourceTypes("PRICING", "OFFICIAL"),
                                 List.of("OFFICIAL_PRICING"),
                                 List.of("PRICING_BLOCK"),
                                 true),
                         evidencePath("DOCS_BILLING_OR_LIMITS",
-                                List.of("DOCS", "OFFICIAL"),
+                                unlockOfficialPathSourceTypes("DOCS", "OFFICIAL"),
                                 List.of("DOCS_BILLING"),
                                 List.of("PRICING_BLOCK", "LIMITATION_OR_POLICY_BLOCK"),
                                 true),
-                        thirdPartyPath("PRICING_BLOCK")))
-                .minimumAttemptedPaths(2)
+                        thirdPartyPath(true, "PRICING_BLOCK")))
+                .minimumAttemptedPaths(1)
                 .minDistinctEvidenceCount(2)
                 .allowOfficialOnly(true)
                 .overrideReason("显式模板要求标准版报告必须覆盖定价字段")
@@ -216,11 +216,11 @@ public class CoverageContractResolver {
                 .queryIntents(List.of("OFFICIAL_DOCS"))
                 .evidencePaths(List.of(
                         evidencePath("OFFICIAL_PUBLIC_PROFILE",
-                                List.of("OFFICIAL", "DOCS"),
+                                unlockOfficialPathSourceTypes("OFFICIAL", "DOCS"),
                                 List.of("OFFICIAL_DOCS"),
                                 List.of("FEATURE_BLOCK", "ECOSYSTEM_BLOCK"),
                                 true),
-                        thirdPartyPath("FEATURE_BLOCK", "ECOSYSTEM_BLOCK")))
+                        thirdPartyPath(true, "FEATURE_BLOCK", "ECOSYSTEM_BLOCK")))
                 .minimumAttemptedPaths(1)
                 .minDistinctEvidenceCount(1)
                 .allowOfficialOnly(true)
@@ -234,7 +234,7 @@ public class CoverageContractResolver {
                 .queryIntents(List.of("POLICY", "RISK", "THIRD_PARTY_REVIEW"))
                 .evidencePaths(List.of(
                         evidencePath("TERMS_OR_SERVICE_AGREEMENT",
-                                List.of("TERMS", "POLICY"),
+                                unlockOfficialPathSourceTypes("TERMS", "POLICY"),
                                 List.of("POLICY"),
                                 List.of("LIMITATION_OR_POLICY_BLOCK"),
                                 true),
@@ -242,8 +242,8 @@ public class CoverageContractResolver {
                                 List.of("REVIEW", "NEWS"),
                                 List.of("THIRD_PARTY_REVIEW", "RISK"),
                                 List.of("PUBLIC_RISK_BLOCK"),
-                                false)))
-                .minimumAttemptedPaths(2)
+                                true)))
+                .minimumAttemptedPaths(1)
                 .minDistinctEvidenceCount(2)
                 .allowOfficialOnly(false)
                 .overrideReason("显式模板要求标准版报告必须覆盖短板字段")
@@ -258,21 +258,21 @@ public class CoverageContractResolver {
         if ("pricing".equalsIgnoreCase(fieldName)) {
             return List.of(
                     evidencePath("OFFICIAL_PRICING_PAGE",
-                            List.of("PRICING", "OFFICIAL"),
+                            unlockOfficialPathSourceTypes("PRICING", "OFFICIAL"),
                             List.of("OFFICIAL_PRICING"),
                             List.of("PRICING_BLOCK"),
                             true),
                     evidencePath("DOCS_BILLING_OR_LIMITS",
-                            List.of("DOCS", "OFFICIAL"),
+                            unlockOfficialPathSourceTypes("DOCS", "OFFICIAL"),
                             List.of("DOCS_BILLING"),
                             List.of("PRICING_BLOCK", "LIMITATION_OR_POLICY_BLOCK"),
                             true),
-                    thirdPartyPath("PRICING_BLOCK"));
+                    thirdPartyPath(true, "PRICING_BLOCK"));
         }
         if ("weaknesses".equalsIgnoreCase(fieldName)) {
             return List.of(
                     evidencePath("TERMS_OR_SERVICE_AGREEMENT",
-                            List.of("TERMS", "POLICY"),
+                            unlockOfficialPathSourceTypes("TERMS", "POLICY"),
                             List.of("POLICY"),
                             List.of("LIMITATION_OR_POLICY_BLOCK"),
                             true),
@@ -280,7 +280,7 @@ public class CoverageContractResolver {
                             List.of("REVIEW", "NEWS"),
                             List.of("THIRD_PARTY_REVIEW", "RISK"),
                             List.of("PUBLIC_RISK_BLOCK"),
-                            false));
+                            true));
         }
         if ("coreFeatures".equalsIgnoreCase(fieldName)) {
             return List.of(
@@ -325,11 +325,15 @@ public class CoverageContractResolver {
      * 该路径不阻断交付，但允许测评、新闻、教程等高质量第三方材料进入字段证据候选。
      */
     private CoverageEvidencePath thirdPartyPath(String... expectedSignals) {
+        return thirdPartyPath(false, expectedSignals);
+    }
+
+    private CoverageEvidencePath thirdPartyPath(boolean required, String... expectedSignals) {
         return evidencePath("PUBLIC_REVIEW_OR_NEWS",
                 List.of("REVIEW", "NEWS", "OPEN_WEB"),
                 List.of("THIRD_PARTY_REVIEW"),
                 expectedSignals == null ? List.of("FEATURE_BLOCK") : List.of(expectedSignals),
-                false);
+                required);
     }
 
     /**
@@ -401,6 +405,33 @@ public class CoverageContractResolver {
             }
         }
         return new ArrayList<>(normalized);
+    }
+
+    /**
+     * pricing / strengths / weaknesses 这类字段虽然会保留官方语义，
+     * 但 path 级 contract 必须显式声明允许第三方视角，
+     * 这样 IncludeDomainPlanner 才能在同一路径上放开官方域名锁。
+     */
+    private List<String> unlockOfficialPathSourceTypes(String... officialSourceTypes) {
+        LinkedHashSet<String> sourceTypes = new LinkedHashSet<>(defaultIfNull(officialSourceTypes == null
+                ? null
+                : List.of(officialSourceTypes)));
+        sourceTypes.add("REVIEW");
+        sourceTypes.add("NEWS");
+        sourceTypes.add("OPEN_WEB");
+        return new ArrayList<>(sourceTypes);
+    }
+
+    /**
+     * 对 pricing / weaknesses 这类必须执行第三方取证的字段，
+     * minimumAttemptedPaths 只要求至少跑通一个路径，
+     * 剩余的官方/第三方路径是否继续执行交给 required path 与 runtime deadline 共同裁剪。
+     */
+    private int resolveMinimumAttemptedPaths(String fieldName, List<CoverageEvidencePath> evidencePaths) {
+        if ("pricing".equalsIgnoreCase(fieldName) || "weaknesses".equalsIgnoreCase(fieldName)) {
+            return 1;
+        }
+        return Math.max(1, evidencePaths == null ? 0 : evidencePaths.size());
     }
 
     private List<String> officialSourceTypes(List<String> sourceTypes) {

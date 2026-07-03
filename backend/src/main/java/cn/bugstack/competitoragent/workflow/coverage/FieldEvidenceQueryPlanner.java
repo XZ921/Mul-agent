@@ -78,6 +78,7 @@ public class FieldEvidenceQueryPlanner {
                 FieldEvidenceQuery planned = buildQuery(
                         competitorName,
                         field.getField(),
+                        path,
                         path.getPathKey(),
                         variant,
                         preferredDomains,
@@ -119,6 +120,7 @@ public class FieldEvidenceQueryPlanner {
      */
     private FieldEvidenceQuery buildQuery(String competitorName,
                                           String fieldName,
+                                          CoverageEvidencePath path,
                                           String pathKey,
                                           FieldQueryComposition.QueryVariant variant,
                                           List<String> preferredDomains,
@@ -139,8 +141,23 @@ public class FieldEvidenceQueryPlanner {
                 .includeDomains(includeDomainPlanner.planIncludeDomains(
                         competitorName,
                         preferredDomains,
-                        List.of(sourceType),
+                        resolveIncludeDomainSourceTypes(path, sourceType),
                         pathKey))
                 .build();
+    }
+
+    /**
+     * includeDomains 的决策要看整条 evidence path，而不是某一个 query variant。
+     * 否则 OFFICIAL_PRICING_PAGE 这类被 contract 显式放开到 REVIEW/NEWS 的路径，
+     * 只要展开出 OFFICIAL / PRICING variant，仍然会被重新锁回官方域名。
+     */
+    private List<String> resolveIncludeDomainSourceTypes(CoverageEvidencePath path, String variantSourceType) {
+        if (path == null || path.getSourceTypes() == null || path.getSourceTypes().isEmpty()) {
+            return List.of(variantSourceType);
+        }
+        if (path.getSourceTypes().stream().anyMatch(this::containsThirdPartyToken)) {
+            return path.getSourceTypes();
+        }
+        return List.of(variantSourceType);
     }
 }

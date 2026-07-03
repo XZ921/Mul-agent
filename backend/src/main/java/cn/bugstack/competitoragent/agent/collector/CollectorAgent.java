@@ -2747,6 +2747,12 @@ public class CollectorAgent extends BaseAgent {
             item.put("browserTraceId", target.getCandidate().getBrowserTraceId());
             item.put("selectionStage", target.getCandidate().getSelectionStage());
             item.put("selectionReason", target.getCandidate().getSelectionReason());
+            item.put("discoveryMethod", target.getCandidate().getDiscoveryMethod());
+            item.put("tavilyQueryMode", target.getCandidate().getTavilyQueryMode());
+            item.put("qualityTier", target.getCandidate().getQualityTier());
+            item.put("fastLaneUsable", target.getCandidate().getFastLaneUsable());
+            item.put("prefetchedRawContentLength", target.getCandidate().getPrefetchedRawContentLength());
+            item.put("skipNetworkVerification", target.getCandidate().getSkipNetworkVerification());
             item.put("targetSelectionSummary", target.getCandidate().getSelectionSummary());
             item.put("selectionSummary", target.getCandidate().getSelectionSummary());
             item.put("trustTier", target.getCandidate().getTrustTier() == null

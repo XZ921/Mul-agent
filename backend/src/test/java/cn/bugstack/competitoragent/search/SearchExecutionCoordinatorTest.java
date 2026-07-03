@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -346,6 +347,124 @@ class SearchExecutionCoordinatorTest {
                 .containsSubsequence("LOAD_CANDIDATES", "TAVILY_BOOTSTRAP_ENRICH", "VERIFY_TOP_CANDIDATES");
         verify(provider, times(1)).search(argThat(request ->
                 request != null && request.getRequestPhase() == SearchRequestPhase.BOOTSTRAP));
+    }
+
+    @Test
+    void shouldSelectMultipleSearchFirstEvidenceTargetsEvenWhenDirectSeedCountIsOne() {
+        SearchSourceProvider provider = mock(SearchSourceProvider.class);
+        List<SourceCandidate> bootstrapCandidates = List.of(
+                        SourceCandidate.builder()
+                                .url("https://developer.open-douyin.com/docs/resource/zh-CN/openapi/introduction")
+                                .title("抖音开放平台介绍")
+                                .sourceType("OFFICIAL")
+                                .providerKey("tavily")
+                                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                                .domain("developer.open-douyin.com")
+                                .tavilyQueryMode("TRUSTED_WEB_EXPANSION")
+                                .qualityTier("STRONG")
+                                .fastLaneUsable(true)
+                                .hasPrefetchedContent(true)
+                                .skipNetworkVerification(true)
+                                .prefetchedContentRef("prefetch-douyin-official")
+                                .prefetchedRawContentLength(19_555)
+                                .pageType("ARTICLE")
+                                .sourceUrls(List.of("https://developer.open-douyin.com/docs/resource/zh-CN/openapi/introduction"))
+                                .relevanceScore(0.95)
+                                .freshnessScore(0.78)
+                                .qualityScore(0.96)
+                                .totalScore(0.94)
+                                .build(),
+                        SourceCandidate.builder()
+                                .url("https://www.woshipm.com/pd/6100000.html")
+                                .title("抖音开放平台接入分析")
+                                .sourceType("OFFICIAL")
+                                .providerKey("tavily")
+                                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                                .domain("www.woshipm.com")
+                                .tavilyQueryMode("TRUSTED_WEB_EXPANSION")
+                                .qualityTier("STRONG")
+                                .fastLaneUsable(true)
+                                .hasPrefetchedContent(true)
+                                .skipNetworkVerification(true)
+                                .prefetchedContentRef("prefetch-douyin-third-party")
+                                .prefetchedRawContentLength(3_109)
+                                .pageType("ARTICLE")
+                                .sourceUrls(List.of("https://www.woshipm.com/pd/6100000.html"))
+                                .relevanceScore(0.91)
+                                .freshnessScore(0.74)
+                                .qualityScore(0.90)
+                                .totalScore(0.89)
+                                .build(),
+                        SourceCandidate.builder()
+                                .url("https://www.sohu.com/a/880000000_121124363")
+                                .title("抖音开放生态行业观察")
+                                .sourceType("OFFICIAL")
+                                .providerKey("tavily")
+                                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                                .domain("www.sohu.com")
+                                .tavilyQueryMode("TRUSTED_WEB_EXPANSION")
+                                .qualityTier("STRONG")
+                                .fastLaneUsable(true)
+                                .hasPrefetchedContent(true)
+                                .skipNetworkVerification(true)
+                                .prefetchedContentRef("prefetch-douyin-industry")
+                                .prefetchedRawContentLength(5_442)
+                                .pageType("ARTICLE")
+                                .sourceUrls(List.of("https://www.sohu.com/a/880000000_121124363"))
+                                .relevanceScore(0.88)
+                                .freshnessScore(0.71)
+                                .qualityScore(0.89)
+                                .totalScore(0.87)
+                                .build()
+                );
+        when(provider.search(any(SearchSourceRequest.class))).thenAnswer(invocation -> {
+            SearchSourceRequest request = invocation.getArgument(0);
+            if (request != null && request.getRequestPhase() == SearchRequestPhase.BOOTSTRAP) {
+                return bootstrapCandidates;
+            }
+            return List.of();
+        });
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of())
+                .summary("browser disabled")
+                .fallbackSuggested(false)
+                .build());
+        when(sourceCollector.collect(anyString(), anyString(), anyString()))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .success(false)
+                        .errorMessage("planned seed unavailable")
+                        .build());
+
+        SearchExecutionResult result = new SearchExecutionCoordinator(
+                new CandidateVerifier(sourceCollector),
+                browserSearchRuntimeService,
+                provider,
+                new SourceCandidateRanker(),
+                new CollectionTargetSelector(),
+                new SearchPolicyResolver()
+        ).execute(CollectorNodeConfig.builder()
+                .competitorName("抖音")
+                .sourceType("OFFICIAL")
+                .competitorUrls(List.of("https://open.douyin.com"))
+                .verifyCandidates(Boolean.TRUE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .preferredSearchProvider("tavily")
+                .maxSearchResults(1)
+                .searchRuntimePolicy(SearchRuntimePolicy.builder()
+                        .searchFirstEvidenceTargetFloor(3)
+                        .searchFirstEvidenceTargetCeiling(3)
+                        .build())
+                .build());
+
+        assertEquals(3, result.getSelectedTargets().size());
+        assertTrue(result.getSelectedTargets().stream()
+                .anyMatch(target -> target.getCandidate() != null
+                        && target.getCandidate().getDomain() != null
+                        && !target.getCandidate().getDomain().endsWith("open.douyin.com")));
+        assertEquals(3, result.getExecutionTrace().getEffectiveSearchFirstTargetCount());
+        assertEquals(0, result.getExecutionTrace().getCandidateVerificationDirectAttemptCount());
     }
 
     @Test

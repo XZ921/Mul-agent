@@ -29,6 +29,12 @@ public class SearchSelectedTargetSummary {
     private String providerKey;
     private String selectionStage;
     private String selectionReason;
+    private String discoveryMethod;
+    private String tavilyQueryMode;
+    private String qualityTier;
+    private Boolean fastLaneUsable;
+    private Integer prefetchedRawContentLength;
+    private Boolean skipNetworkVerification;
     private Boolean reusedCollectedPage;
     private List<String> sourceUrls;
 }

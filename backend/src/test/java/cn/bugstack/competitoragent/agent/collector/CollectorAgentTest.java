@@ -488,6 +488,77 @@ class CollectorAgentTest {
     }
 
     @Test
+    void shouldIncludeSelectedTargetSearchFirstAuditFieldsInOutput() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent agent = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchCoordinator,
+                collectionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper
+        );
+        when(searchCoordinator.execute(any(), any())).thenReturn(SearchExecutionResult.builder()
+                .executionPlan(SearchExecutionPlan.builder()
+                        .steps(List.of())
+                        .build())
+                .sourceCandidates(List.of())
+                .selectedTargets(List.of(SearchCollectionTarget.builder()
+                        .candidate(SourceCandidate.builder()
+                                .url("https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/develop/server/open-capacity")
+                                .title("开放能力文档")
+                                .sourceType("OFFICIAL")
+                                .providerKey("tavily")
+                                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                                .reason("test")
+                                .domain("developer.open-douyin.com")
+                                .sourceUrls(List.of("https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/develop/server/open-capacity"))
+                                .selectionStage("SELECTED")
+                                .selectionReason("fusion picked strong tavily candidate")
+                                .tavilyQueryMode("TRUSTED_WEB_EXPANSION")
+                                .qualityTier("STRONG")
+                                .fastLaneUsable(Boolean.TRUE)
+                                .prefetchedRawContentLength(19_555)
+                                .skipNetworkVerification(Boolean.TRUE)
+                                .build())
+                        .build()))
+                .build());
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
+                .status("SUCCESS")
+                .results(List.of(buildSuccessfulCollectionResult(
+                        "collect_sources_01_03#001",
+                        1,
+                        "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/develop/server/open-capacity",
+                        "开放能力文档"
+                )))
+                .build());
+        when(collectionCoordinator.summarize(any())).thenReturn(CollectionExecutionReport.builder()
+                .status("SUCCESS")
+                .results(List.of())
+                .build());
+
+        AgentResult result = agent.execute(buildSingleCandidateContext(
+                "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/develop/server/open-capacity",
+                "开放能力文档",
+                "OFFICIAL"
+        ));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        JsonNode selectedTarget = output.path("selectedTargets").get(0);
+
+        assertEquals("SUCCESS", result.getStatus().name(), result.getErrorMessage());
+        assertEquals("TAVILY_PHASE1_BOOTSTRAP", selectedTarget.path("discoveryMethod").asText());
+        assertEquals("TRUSTED_WEB_EXPANSION", selectedTarget.path("tavilyQueryMode").asText());
+        assertEquals("STRONG", selectedTarget.path("qualityTier").asText());
+        assertTrue(selectedTarget.path("fastLaneUsable").asBoolean());
+        assertEquals(19_555, selectedTarget.path("prefetchedRawContentLength").asInt());
+        assertTrue(selectedTarget.path("skipNetworkVerification").asBoolean());
+    }
+
+    @Test
     void shouldExposeTaskKnowledgeDocumentsAndRetrievalChunksAfterSuccessfulCollection() throws Exception {
         when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
                 .candidates(List.of())

@@ -503,4 +503,50 @@ class CollectionTargetSelectorTest {
                 .anyMatch(candidate -> "https://example.com/help".equals(candidate.getUrl())
                         && "SELECTED".equals(candidate.getSelectionStage())));
     }
+
+    @Test
+    void shouldPreferStrongPrefetchedContentOverThinVerifiedShell() {
+        SourceCandidate verifiedShell = SourceCandidate.builder()
+                .url("https://bilibili.apifox.cn/about")
+                .title("Apifox About")
+                .verified(Boolean.TRUE)
+                .selectionStage("VERIFIED")
+                .totalScore(0.99)
+                .build();
+        SourceCandidate tavilyStrong = SourceCandidate.builder()
+                .url("https://open-live.bilibili.com/document/doc/guide")
+                .title("哔哩哔哩直播开放平台文档")
+                .providerKey("tavily")
+                .tavilyQueryMode("TRUSTED_WEB_EXPANSION")
+                .qualityTier("STRONG")
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("prefetch-bilibili-live")
+                .prefetchedRawContentLength(7_444)
+                .skipNetworkVerification(Boolean.TRUE)
+                .totalScore(0.86)
+                .build();
+
+        Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
+        attemptedTargets.put(verifiedShell.getUrl(), SearchCollectionTarget.builder()
+                .candidate(verifiedShell)
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url(verifiedShell.getUrl())
+                        .title("Apifox About")
+                        .content("Bilibili API platform about page with a very thin shell.")
+                        .snippet("thin shell")
+                        .success(true)
+                        .build())
+                .build());
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                List.of(verifiedShell, tavilyStrong),
+                attemptedTargets,
+                1
+        );
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        assertEquals("https://open-live.bilibili.com/document/doc/guide",
+                decision.getSelectedTargets().get(0).getCandidate().getUrl());
+    }
 }

@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.search;
 
+import cn.bugstack.competitoragent.agent.collector.CollectorNodeConfig;
 import cn.bugstack.competitoragent.collection.WebPageRenderHint;
 import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -143,6 +144,67 @@ public class SearchPolicyResolver {
             return policy.getMaxCandidatesPerDomain();
         }
         return 2;
+    }
+
+    /**
+     * search-first 场景下，正式采集目标数不能再直接等于用户显式 URL 数量。
+     * 这里显式拆开“用户给了几个锚点”和“系统最终要保留几条正式证据”两个概念。
+     */
+    public int resolveEffectiveTargetCountForSearchFirst(CollectorNodeConfig config,
+                                                         int baseTargetCount,
+                                                         int fusedCandidateCount) {
+        if (!shouldApplySearchFirstExpansionPolicy(config)) {
+            return Math.max(0, baseTargetCount);
+        }
+        if (fusedCandidateCount <= 0) {
+            return 0;
+        }
+        SearchRuntimePolicy runtimePolicy = config.getSearchRuntimePolicy();
+        int floor = runtimePolicy != null
+                && runtimePolicy.getSearchFirstEvidenceTargetFloor() != null
+                && runtimePolicy.getSearchFirstEvidenceTargetFloor() > 0
+                ? runtimePolicy.getSearchFirstEvidenceTargetFloor()
+                : 3;
+        int ceiling = runtimePolicy != null
+                && runtimePolicy.getSearchFirstEvidenceTargetCeiling() != null
+                && runtimePolicy.getSearchFirstEvidenceTargetCeiling() > 0
+                ? runtimePolicy.getSearchFirstEvidenceTargetCeiling()
+                : 5;
+        ceiling = Math.max(floor, ceiling);
+        int candidateBound = Math.max(baseTargetCount, Math.min(fusedCandidateCount, ceiling));
+        int resolved = Math.max(baseTargetCount, Math.min(ceiling, Math.max(floor, candidateBound)));
+        return Math.min(fusedCandidateCount, resolved);
+    }
+
+    /**
+     * 预选验证预算只控制“还需要网页验证的候选数”，
+     * 已通过 fast lane gate 的正文候选不会再占用这份预算。
+     */
+    public int resolvePreSelectionVerificationLimit(CollectorNodeConfig config,
+                                                    int effectiveTargetCount) {
+        SearchRuntimePolicy runtimePolicy = config == null ? null : config.getSearchRuntimePolicy();
+        if (runtimePolicy != null
+                && runtimePolicy.getPreSelectionVerificationLimit() != null
+                && runtimePolicy.getPreSelectionVerificationLimit() > 0) {
+            return runtimePolicy.getPreSelectionVerificationLimit();
+        }
+        if (shouldApplySearchFirstExpansionPolicy(config)) {
+            return Math.max(effectiveTargetCount, 3);
+        }
+        return Math.max(1, effectiveTargetCount);
+    }
+
+    /**
+     * search-first 的扩目标数与预验证预算只应该作用在“仅提供 competitorUrls、由系统展开 seed”的新主路径。
+     * 如果节点已经显式给出 sourceCandidates，说明它走的是旧的规划/回放语义，此时不能再把 target floor
+     * 和强制搜索优先策略叠加上去，否则会把本来只需要一个正式目标的显式链路意外放大。
+     */
+    public boolean shouldApplySearchFirstExpansionPolicy(CollectorNodeConfig config) {
+        return config != null
+                && isSearchFirstSourceFamilyForSourceType(config.getSourceType())
+                && config.getCompetitorUrls() != null
+                && !config.getCompetitorUrls().isEmpty()
+                && (config.getSourceCandidates() == null || config.getSourceCandidates().isEmpty());
     }
 
     /**
