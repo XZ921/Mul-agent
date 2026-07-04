@@ -99,10 +99,18 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
             return List.of();
         }
 
-        DomainHintSet domainHintSet = domainHintResolver.resolve(request, List.of());
         ScopeResolution scopeResolution = resolveScopeResolution(request);
+        if (hasFieldEvidenceQueries(request)) {
+            ScopeSearchResult fieldEvidenceSearchResult = searchFieldEvidenceQueries(request, scopeResolution);
+            request.setTavilyFastLaneAudit(buildMergedFieldEvidenceAudit(
+                    scopeResolution,
+                    fieldEvidenceSearchResult.audit() == null ? List.of() : List.of(fieldEvidenceSearchResult.audit())
+            ));
+            return fieldEvidenceSearchResult.candidates();
+        }
+
+        DomainHintSet domainHintSet = domainHintResolver.resolve(request, List.of());
         Map<String, SourceCandidate> merged = new LinkedHashMap<>();
-        List<TavilyFastLaneAudit> scopeAudits = new ArrayList<>();
         for (String scope : scopeResolution.effectiveScopes()) {
             ScopeSearchResult scopeSearchResult = searchScope(request, scope, domainHintSet);
             for (SourceCandidate candidate : scopeSearchResult.candidates()) {
@@ -110,12 +118,6 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
                     merged.putIfAbsent(candidate.getUrl(), candidate);
                 }
             }
-            if (shouldMergeFieldEvidenceAudit(scopeSearchResult.audit())) {
-                scopeAudits.add(scopeSearchResult.audit());
-            }
-        }
-        if (hasFieldEvidenceQueries(request)) {
-            request.setTavilyFastLaneAudit(buildMergedFieldEvidenceAudit(scopeResolution, scopeAudits));
         }
         return new ArrayList<>(merged.values());
     }
@@ -175,9 +177,6 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
     private ScopeSearchResult searchScope(SearchSourceRequest request,
                                           String scope,
                                           DomainHintSet domainHintSet) {
-        if (hasFieldEvidenceQueries(request)) {
-            return searchFieldEvidenceQueries(request, scope);
-        }
         TavilySearchProfile primaryProfile = buildPrimaryProfile(request, scope, domainHintSet);
         TavilySearchClient.TavilySearchResponse primaryResponse = client.search(primaryProfile);
         List<SourceCandidate> primaryCandidates = mapResponse(request, primaryResponse, primaryProfile, scope);
@@ -201,16 +200,30 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
      * 字段级证据 query 必须逐条执行，不能退化成只消费第一条 searchQueries。
      * 这里按当前 scope 过滤匹配的字段 query，并对单条 Tavily 调用做 fail-open。
      */
-    private ScopeSearchResult searchFieldEvidenceQueries(SearchSourceRequest request, String scope) {
+    private ScopeSearchResult searchFieldEvidenceQueries(SearchSourceRequest request, ScopeResolution scopeResolution) {
         List<SourceCandidate> candidates = new ArrayList<>();
         List<FieldEvidenceQueryExecutionAudit> queryAudits = new ArrayList<>();
         LinkedHashSet<String> requestIds = new LinkedHashSet<>();
+        Map<String, List<SourceCandidate>> discoveredCandidatesByField = new LinkedHashMap<>();
+        LinkedHashSet<String> effectiveScopes = new LinkedHashSet<>();
+        if (scopeResolution != null && scopeResolution.effectiveScopes() != null) {
+            for (String effectiveScope : scopeResolution.effectiveScopes()) {
+                effectiveScopes.add(normalizeScope(effectiveScope));
+            }
+        }
         for (FieldEvidenceQuery query : request.getFieldEvidenceQueries()) {
             if (query == null || !StringUtils.hasText(query.getQuery())) {
                 continue;
             }
-            String queryScope = resolveScopeForQuery(scope, query);
-            if (!normalizeScope(queryScope).equals(normalizeScope(scope))) {
+            String queryScope = resolveScopeForQuery(query);
+            if (!effectiveScopes.isEmpty() && !effectiveScopes.contains(normalizeScope(queryScope))) {
+                continue;
+            }
+            TavilySearchProfile profile = profileResolver.resolveFieldEvidence(query);
+            String fieldCoverageKey = resolveFieldCoverageKey(query);
+            if (isFieldCandidateCoverageMet(discoveredCandidatesByField.get(fieldCoverageKey))) {
+                queryAudits.add(buildFieldEvidenceQueryAudit(query, profile, "SKIPPED", 0L, 0,
+                        null, "SKIPPED_FIELD_CANDIDATE_COVERAGE_MET", null));
                 continue;
             }
             Long remainingBudgetMillis = resolveRemainingFieldEvidenceBudgetMillis(request);
@@ -220,11 +233,10 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
              * 不再继续构造 profile，更不能继续发 Tavily 请求。
              */
             if (shouldStopFieldEvidenceExecution(remainingBudgetMillis)) {
-                queryAudits.add(buildFieldEvidenceQueryAudit(query, "SKIPPED", 0L, 0,
+                queryAudits.add(buildFieldEvidenceQueryAudit(query, profile, "SKIPPED", 0L, 0,
                         null, "SKIPPED_BUDGET_EXHAUSTED", null));
                 continue;
             }
-            TavilySearchProfile profile = profileResolver.resolveFieldEvidence(query);
             long startedAt = System.currentTimeMillis();
             try {
                 TavilySearchClient.TavilySearchResponse response = remainingBudgetMillis == null
@@ -236,36 +248,55 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
                     requestIds.add(requestId.trim());
                 }
                 if (response != null && StringUtils.hasText(response.getFailureReason())) {
-                    queryAudits.add(buildFieldEvidenceQueryAudit(query, "FAILED",
+                    queryAudits.add(buildFieldEvidenceQueryAudit(query, profile, "FAILED",
                             System.currentTimeMillis() - startedAt, resultCount, requestId,
                             null, response.getFailureReason()));
                 } else {
-                    queryAudits.add(buildFieldEvidenceQueryAudit(query, "SUCCESS",
+                    queryAudits.add(buildFieldEvidenceQueryAudit(query, profile, "SUCCESS",
                             System.currentTimeMillis() - startedAt, resultCount, requestId,
                             null, null));
                 }
-                candidates.addAll(mapResponse(request, response, profile, queryScope));
+                List<SourceCandidate> mappedCandidates = mapResponse(request, response, profile, queryScope);
+                candidates.addAll(mappedCandidates);
+                if (!mappedCandidates.isEmpty()) {
+                    discoveredCandidatesByField
+                            .computeIfAbsent(fieldCoverageKey, ignored -> new ArrayList<>())
+                            .addAll(mappedCandidates);
+                }
             } catch (RuntimeException exception) {
-                queryAudits.add(buildFieldEvidenceQueryAudit(query, "FAILED",
+                queryAudits.add(buildFieldEvidenceQueryAudit(query, profile, "FAILED",
                         System.currentTimeMillis() - startedAt, 0, null,
                         null, exception.getMessage()));
                 candidates.add(buildFailedFieldEvidenceCandidate(query, queryScope, exception.getMessage()));
             }
         }
+        List<SourceCandidate> deduplicatedCandidates = deduplicateByUrl(candidates);
         return new ScopeSearchResult(
-                deduplicateByUrl(candidates),
-                buildFieldEvidenceFastLaneAudit(queryAudits, requestIds)
+                deduplicatedCandidates,
+                buildFieldEvidenceFastLaneAudit(queryAudits, requestIds, deduplicatedCandidates)
         );
     }
 
     private TavilyFastLaneAudit buildFieldEvidenceFastLaneAudit(List<FieldEvidenceQueryExecutionAudit> queryAudits,
-                                                               Set<String> requestIds) {
+                                                               Set<String> requestIds,
+                                                               List<SourceCandidate> candidates) {
         if (queryAudits == null || queryAudits.isEmpty()) {
             return null;
         }
         int queriesSent = 0;
         int totalResults = 0;
+        int fastLaneUsableCount = 0;
         LinkedHashMap<String, Integer> rejectionReasons = new LinkedHashMap<>();
+        LinkedHashSet<String> queryModes = new LinkedHashSet<>();
+        LinkedHashMap<String, Integer> fieldDistribution = new LinkedHashMap<>();
+        LinkedHashMap<String, Integer> sourceTypeDistribution = new LinkedHashMap<>();
+        if (candidates != null) {
+            for (SourceCandidate candidate : candidates) {
+                if (candidate != null && Boolean.TRUE.equals(candidate.getFastLaneUsable())) {
+                    fastLaneUsableCount++;
+                }
+            }
+        }
         for (FieldEvidenceQueryExecutionAudit audit : queryAudits) {
             if (audit == null) {
                 continue;
@@ -274,6 +305,15 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
                 queriesSent++;
             }
             totalResults += audit.getResultCount() == null ? 0 : audit.getResultCount();
+            if (StringUtils.hasText(audit.getQueryMode())) {
+                queryModes.add(audit.getQueryMode().trim());
+            }
+            if (StringUtils.hasText(audit.getFieldName())) {
+                fieldDistribution.merge(audit.getFieldName().trim(), 1, Integer::sum);
+            }
+            if (StringUtils.hasText(audit.getSourceType())) {
+                sourceTypeDistribution.merge(audit.getSourceType().trim(), 1, Integer::sum);
+            }
             if (StringUtils.hasText(audit.getFailureReason())) {
                 rejectionReasons.merge(audit.getFailureReason().trim(), 1, Integer::sum);
             }
@@ -282,17 +322,20 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
             }
         }
         return TavilyFastLaneAudit.builder()
-                .queryModes(List.of("FIELD_EVIDENCE"))
+                .queryModes(queryModes.isEmpty() ? List.of("FIELD_EVIDENCE") : new ArrayList<>(queryModes))
                 .queryOrigins(List.of("SUPPLEMENT"))
                 .queriesSent(queriesSent)
                 .totalResults(totalResults)
-                .fastLaneUsableCount(totalResults)
-                .fastLaneRejectedCount(Math.max(0, queryAudits.size() - totalResults))
+                .fastLaneUsableCount(fastLaneUsableCount)
+                .fastLaneRejectedCount(Math.max(0, totalResults - fastLaneUsableCount))
                 .rejectionReasons(rejectionReasons.isEmpty() ? Map.of() : rejectionReasons)
                 .bootstrapTriggered(false)
                 .fallbackTriggered(false)
                 .tavilyRequestIds(requestIds == null ? List.of() : new ArrayList<>(requestIds))
+                .winnerRawFetchCount(0)
                 .fieldEvidenceQueryExecutions(queryAudits)
+                .fieldDistribution(fieldDistribution.isEmpty() ? Map.of() : fieldDistribution)
+                .sourceTypeDistribution(sourceTypeDistribution.isEmpty() ? Map.of() : sourceTypeDistribution)
                 .build();
     }
 
@@ -314,6 +357,7 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
     }
 
     private FieldEvidenceQueryExecutionAudit buildFieldEvidenceQueryAudit(FieldEvidenceQuery query,
+                                                                          TavilySearchProfile profile,
                                                                           String status,
                                                                           long elapsedMillis,
                                                                           int resultCount,
@@ -323,9 +367,14 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
         return FieldEvidenceQueryExecutionAudit.builder()
                 .queryFingerprint(query == null ? null : query.getQueryFingerprint())
                 .fieldName(query == null ? null : query.getFieldName())
+                .sourceType(normalizeScope(query == null ? null : query.getSourceType()))
                 .evidencePathKey(query == null ? null : query.getEvidencePathKey())
                 .queryIntent(query == null ? null : query.getQueryIntent())
                 .query(query == null ? null : query.getQuery())
+                .queryMode(profile == null || profile.getQueryMode() == null ? null : profile.getQueryMode().name())
+                .profileStage(profile == null ? null : profile.getProfileStage())
+                .searchDepth(profile == null ? null : profile.getSearchDepth())
+                .includeRawContent(profile == null ? null : profile.isIncludeRawContent())
                 .status(status)
                 .elapsedMillis(elapsedMillis)
                 .resultCount(resultCount)
@@ -366,11 +415,72 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
      * 字段 query 的 sourceType 就是它希望命中的证据范围。
      * 若规划层没有显式给出 sourceType，则回退到当前外层 scope，兼容旧调用方。
      */
-    private String resolveScopeForQuery(String scope, FieldEvidenceQuery query) {
+    /**
+     * 字段覆盖即停只关心“这个字段是否已经拿到足够多的发现候选”，
+     * 因此这里按字段维度累计 discovery candidate，而不是按 raw 正文是否齐全来判断。
+     */
+    private String resolveFieldCoverageKey(FieldEvidenceQuery query) {
+        if (query != null && StringUtils.hasText(query.getFieldName())) {
+            return query.getFieldName().trim();
+        }
+        if (query != null && StringUtils.hasText(query.getEvidencePathKey())) {
+            return query.getEvidencePathKey().trim();
+        }
+        return "unknown";
+    }
+
+    private boolean isFieldCandidateCoverageMet(List<SourceCandidate> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return false;
+        }
+        LinkedHashMap<String, SourceCandidate> distinctCandidates = new LinkedHashMap<>();
+        for (SourceCandidate candidate : candidates) {
+            if (!isDiscoveryCoverageCandidate(candidate)) {
+                continue;
+            }
+            distinctCandidates.putIfAbsent(candidate.getUrl(), candidate);
+        }
+        if (distinctCandidates.size() < 2) {
+            return false;
+        }
+        boolean hasOfficialOrDocs = distinctCandidates.values().stream()
+                .anyMatch(this::isOfficialOrDocsDiscoveryCandidate);
+        boolean hasThirdParty = distinctCandidates.values().stream()
+                .anyMatch(this::isThirdPartyDiscoveryCandidate);
+        return hasOfficialOrDocs && hasThirdParty;
+    }
+
+    private boolean isDiscoveryCoverageCandidate(SourceCandidate candidate) {
+        if (candidate == null || !StringUtils.hasText(candidate.getUrl())) {
+            return false;
+        }
+        if (!Boolean.TRUE.equals(candidate.getCandidateDiscoveryUsable())) {
+            return false;
+        }
+        String pageType = defaultText(candidate.getPageType()).trim().toUpperCase(Locale.ROOT);
+        return !"SEARCH_PAGE".equals(pageType) && !"VIDEO_LIST".equals(pageType);
+    }
+
+    private boolean isOfficialOrDocsDiscoveryCandidate(SourceCandidate candidate) {
+        String sourceType = normalizeScope(candidate == null ? null : candidate.getSourceType());
+        return "OFFICIAL".equals(sourceType)
+                || "DOCS".equals(sourceType)
+                || "PRICING".equals(sourceType)
+                || "TERMS".equals(sourceType);
+    }
+
+    private boolean isThirdPartyDiscoveryCandidate(SourceCandidate candidate) {
+        String sourceType = normalizeScope(candidate == null ? null : candidate.getSourceType());
+        return "REVIEW".equals(sourceType)
+                || "NEWS".equals(sourceType)
+                || "OPEN_WEB".equals(sourceType);
+    }
+
+    private String resolveScopeForQuery(FieldEvidenceQuery query) {
         if (query != null && StringUtils.hasText(query.getSourceType())) {
             return normalizeScope(query.getSourceType());
         }
-        return normalizeScope(scope);
+        return "OPEN_WEB";
     }
 
     /**
@@ -383,7 +493,7 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
         return SourceCandidate.builder()
                 .url(\u0022field-evidence-query://\u0022 + fingerprint)
                 .title(\u0022字段证据 query 执行失败\u0022)
-                .sourceType(resolveScopeForQuery(scope, query))
+                .sourceType(resolveScopeForQuery(query))
                 .providerKey(\u0022tavily\u0022)
                 .discoveryMethod(\u0022TAVILY_FIELD_EVIDENCE_QUERY\u0022)
                 .reason(query == null ? \u0022字段证据 query 执行失败\u0022 : query.getReason())
@@ -520,7 +630,11 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
             }
             rank++;
 
-            String rawContent = defaultText(result.getRawContent());
+            /*
+             * FIELD_EVIDENCE_DISCOVERY 阶段显式禁止消费 raw_content。
+             * 即使测试桩或上游意外回了 raw，也只能按“发现候选”处理，避免误判成可直接落库的 fast lane evidence。
+             */
+            String rawContent = shouldConsumeRawContent(profile) ? defaultText(result.getRawContent()) : "";
             boolean hasPrefetchedContent = StringUtils.hasText(rawContent);
             double tavilyScore = result.getScore() == null ? 0.0D : result.getScore();
             TavilyPrefetchedContent prefetchedContent = TavilyPrefetchedContent.builder()
@@ -528,7 +642,7 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
                     .title(result.getTitle())
                     .content(result.getContent())
                     .rawContent(rawContent)
-                    .cleanedContent(rawContent)
+                    .cleanedContent(StringUtils.hasText(rawContent) ? rawContent : defaultText(result.getContent()))
                     .sourceUrls(List.of(result.getUrl()))
                     .requestId(response.getRequestId())
                     .query(profile == null ? null : profile.getQuery())
@@ -578,13 +692,45 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
                     .fieldEvidenceQueryReason(profile == null ? null : profile.getFieldEvidenceQueryReason())
                     .build();
 
-            candidates.add(prefetchedContentGate.apply(
+            SourceCandidate gatedCandidate = prefetchedContentGate.apply(
                     baseCandidate,
                     hasPrefetchedContent ? prefetchedContent : null,
                     resolveOfficialDomains(profile)
-            ));
+            );
+            candidates.add(applyFieldEvidenceDiscoverySemantics(gatedCandidate, profile));
         }
         return deduplicateByUrl(candidates);
+    }
+
+    private boolean shouldConsumeRawContent(TavilySearchProfile profile) {
+        return profile == null || profile.isIncludeRawContent();
+    }
+
+    /**
+     * discovery 阶段的候选只承担“后续是否值得继续抓正文”的语义，
+     * 因此这里单独打上 candidateDiscoveryUsable，和 fastLaneUsable 明确区分。
+     */
+    private SourceCandidate applyFieldEvidenceDiscoverySemantics(SourceCandidate candidate, TavilySearchProfile profile) {
+        if (candidate == null) {
+            return null;
+        }
+        if (profile == null || !"FIELD_EVIDENCE_DISCOVERY".equalsIgnoreCase(profile.getProfileStage())) {
+            return candidate;
+        }
+        return candidate.toBuilder()
+                .candidateDiscoveryUsable(resolveCandidateDiscoveryUsable(candidate))
+                .build();
+    }
+
+    private boolean resolveCandidateDiscoveryUsable(SourceCandidate candidate) {
+        if (candidate == null || !StringUtils.hasText(candidate.getUrl())) {
+            return false;
+        }
+        if (candidate.getSourceUrls() == null || candidate.getSourceUrls().isEmpty()) {
+            return false;
+        }
+        String pageType = defaultText(candidate.getPageType()).trim().toUpperCase(Locale.ROOT);
+        return !"SEARCH_PAGE".equals(pageType) && !"VIDEO_LIST".equals(pageType);
     }
 
     private String buildReason(TavilySearchProfile profile, TavilySearchClient.TavilySearchResult result) {

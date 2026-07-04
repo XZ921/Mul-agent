@@ -12,15 +12,20 @@ import cn.bugstack.competitoragent.collection.quality.EvidenceQualityGate;
 import cn.bugstack.competitoragent.collection.quality.EvidenceQualityGateProperties;
 import cn.bugstack.competitoragent.collection.quality.EvidenceQualityVerdict;
 import cn.bugstack.competitoragent.context.AgentContextAssembler;
+import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.model.entity.KnowledgeDocument;
 import cn.bugstack.competitoragent.model.entity.RetrievalChunk;
 import cn.bugstack.competitoragent.model.entity.RetrievalIndex;
+import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AgentType;
+import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
+import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.rag.TaskRetrievalIndexService;
 import cn.bugstack.competitoragent.rag.TaskRetrievalIndexingResult;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
+import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.search.SearchCollectionTarget;
@@ -71,9 +76,12 @@ import java.util.Optional;
 @Component
 public class CollectorAgent extends BaseAgent {
 
+    private static final String DISCARDED_AFTER_STOP = "DISCARDED_AFTER_STOP";
+
     private final SourceCollector sourceCollector;
     private final EvidenceSourceRepository evidenceRepository;
     private final TaskNodeRepository nodeRepository;
+    private final AnalysisTaskRepository taskRepository;
     private final SearchExecutionCoordinator searchExecutionCoordinator;
     private final CollectionExecutionCoordinator collectionExecutionCoordinator;
     private final TaskRetrievalIndexService taskRetrievalIndexService;
@@ -102,6 +110,7 @@ public class CollectorAgent extends BaseAgent {
                 searchExecutionCoordinator,
                 collectionExecutionCoordinator,
                 taskRetrievalIndexService,
+                null,
                 objectMapper,
                 new DownstreamEvidenceViewAssembler(objectMapper),
                 new EvidenceQualityGate(new EvidenceQualityGateProperties()),
@@ -119,6 +128,7 @@ public class CollectorAgent extends BaseAgent {
                           SearchExecutionCoordinator searchExecutionCoordinator,
                           CollectionExecutionCoordinator collectionExecutionCoordinator,
                           TaskRetrievalIndexService taskRetrievalIndexService,
+                          AnalysisTaskRepository taskRepository,
                           ObjectMapper objectMapper,
                           DownstreamEvidenceViewAssembler downstreamEvidenceViewAssembler,
                           EvidenceQualityGate evidenceQualityGate,
@@ -131,6 +141,7 @@ public class CollectorAgent extends BaseAgent {
                 searchExecutionCoordinator,
                 collectionExecutionCoordinator,
                 taskRetrievalIndexService,
+                taskRepository,
                 objectMapper,
                 downstreamEvidenceViewAssembler,
                 evidenceQualityGate,
@@ -160,6 +171,7 @@ public class CollectorAgent extends BaseAgent {
                 searchExecutionCoordinator,
                 collectionExecutionCoordinator,
                 taskRetrievalIndexService,
+                null,
                 objectMapper,
                 downstreamEvidenceViewAssembler,
                 evidenceQualityGate,
@@ -176,6 +188,7 @@ public class CollectorAgent extends BaseAgent {
                           SearchExecutionCoordinator searchExecutionCoordinator,
                           CollectionExecutionCoordinator collectionExecutionCoordinator,
                           TaskRetrievalIndexService taskRetrievalIndexService,
+                          AnalysisTaskRepository taskRepository,
                           ObjectMapper objectMapper,
                           DownstreamEvidenceViewAssembler downstreamEvidenceViewAssembler,
                           EvidenceQualityGate evidenceQualityGate,
@@ -188,6 +201,7 @@ public class CollectorAgent extends BaseAgent {
         this.sourceCollector = sourceCollector;
         this.evidenceRepository = evidenceRepository;
         this.nodeRepository = nodeRepository;
+        this.taskRepository = taskRepository;
         this.searchExecutionCoordinator = searchExecutionCoordinator;
         this.collectionExecutionCoordinator = collectionExecutionCoordinator;
         this.taskRetrievalIndexService = taskRetrievalIndexService;
@@ -378,41 +392,46 @@ public class CollectorAgent extends BaseAgent {
             String knowledgeFailureReason = null;
             String persistenceFailureReason = null;
             boolean persisted = false;
+            RuntimePersistenceDecision runtimePersistenceDecision = resolveRuntimePersistenceDecision(context);
             if (promotableFormalEvidence && !duplicateCanonicalEvidence) {
-                EvidenceSource evidence = evidenceSourceSanitizer.sanitize(EvidenceSource.builder()
-                        .taskId(context.getTaskId())
-                        .competitorName(config.getCompetitorName())
-                        .evidenceId(evidenceId)
-                        .title(page.getTitle() != null ? page.getTitle() : effectiveUrl)
-                        .url(effectiveUrl)
-                        .contentSnippet(page.getSnippet())
-                        .fullContent(page.getContent())
-                        .pageMetadata(pageMetadata)
-                        .sourceType(sourceType)
-                        .discoveryMethod(matchedCandidate == null ? null : matchedCandidate.getDiscoveryMethod())
-                        .sourceCategory(resolveSourceCategory(matchedCandidate))
-                        .sourceDomain(matchedCandidate == null ? null : matchedCandidate.getDomain())
-                        .discoveryReason(matchedCandidate == null ? config.getDiscoveryNotes() : matchedCandidate.getReason())
-                        .publishedAt(matchedCandidate == null ? null : matchedCandidate.getPublishedAt())
-                        .sourceScore(matchedCandidate == null ? null : matchedCandidate.getTotalScore())
-                        .collectedAt(LocalDateTime.now())
-                        .build());
-                try {
-                    evidenceRepository.save(evidence);
-                    persisted = true;
-                    successCounterRef[0]++;
-
+                if (!runtimePersistenceDecision.allowPersist()) {
+                    persistenceFailureReason = runtimePersistenceDecision.discardReason();
+                } else {
+                    EvidenceSource evidence = evidenceSourceSanitizer.sanitize(EvidenceSource.builder()
+                            .taskId(context.getTaskId())
+                            .competitorName(config.getCompetitorName())
+                            .evidenceId(evidenceId)
+                            .title(page.getTitle() != null ? page.getTitle() : effectiveUrl)
+                            .url(effectiveUrl)
+                            .contentSnippet(page.getSnippet())
+                            .fullContent(page.getContent())
+                            .pageMetadata(pageMetadata)
+                            .sourceType(sourceType)
+                            .discoveryMethod(matchedCandidate == null ? null : matchedCandidate.getDiscoveryMethod())
+                            .sourceCategory(resolveSourceCategory(matchedCandidate))
+                            .sourceDomain(matchedCandidate == null ? null : matchedCandidate.getDomain())
+                            .discoveryReason(matchedCandidate == null ? config.getDiscoveryNotes() : matchedCandidate.getReason())
+                            .publishedAt(matchedCandidate == null ? null : matchedCandidate.getPublishedAt())
+                            .sourceScore(matchedCandidate == null ? null : matchedCandidate.getTotalScore())
+                            .collectedAt(LocalDateTime.now())
+                            .build());
                     try {
-                        retrievalIndexingResult = taskRetrievalIndexService.indexEvidence(evidence);
+                        evidenceRepository.save(evidence);
+                        persisted = true;
+                        successCounterRef[0]++;
+
+                        try {
+                            retrievalIndexingResult = taskRetrievalIndexService.indexEvidence(evidence);
+                        } catch (Exception e) {
+                            knowledgeFailureReason = e.getMessage();
+                            log.warn("index collected evidence failed, taskId={}, evidenceId={}",
+                                    context.getTaskId(), evidenceId, e);
+                        }
                     } catch (Exception e) {
-                        knowledgeFailureReason = e.getMessage();
-                        log.warn("index collected evidence failed, taskId={}, evidenceId={}",
+                        persistenceFailureReason = e.getMessage();
+                        log.warn("persist collected evidence failed, taskId={}, evidenceId={}",
                                 context.getTaskId(), evidenceId, e);
                     }
-                } catch (Exception e) {
-                    persistenceFailureReason = e.getMessage();
-                    log.warn("persist collected evidence failed, taskId={}, evidenceId={}",
-                            context.getTaskId(), evidenceId, e);
                 }
             }
 
@@ -914,6 +933,10 @@ public class CollectorAgent extends BaseAgent {
             return;
         }
         try {
+            RuntimePersistenceDecision runtimePersistenceDecision = resolveRuntimePersistenceDecision(context);
+            if (!runtimePersistenceDecision.allowPersist()) {
+                return;
+            }
             String outputJson = buildCollectorOutput(
                     config,
                     sourceType,
@@ -1641,40 +1664,45 @@ public class CollectorAgent extends BaseAgent {
         String knowledgeFailureReason = null;
         String persistenceFailureReason = null;
         boolean persisted = false;
+        RuntimePersistenceDecision runtimePersistenceDecision = resolveRuntimePersistenceDecision(context);
         if (promotableFormalEvidence && !duplicateCanonicalEvidence) {
-            EvidenceSource evidence = evidenceSourceSanitizer.sanitize(EvidenceSource.builder()
-                    .taskId(context.getTaskId())
-                    .competitorName(config.getCompetitorName())
-                    .evidenceId(evidenceId)
-                    .title(page.getTitle() != null ? page.getTitle() : effectiveUrl)
-                    .url(effectiveUrl)
-                    .contentSnippet(page.getSnippet())
-                    .fullContent(page.getContent())
-                    .pageMetadata(pageMetadata)
-                    .sourceType(effectiveSourceType)
-                    .discoveryMethod(effectiveCandidate == null ? null : effectiveCandidate.getDiscoveryMethod())
-                    .sourceCategory(resolveSourceCategory(effectiveCandidate))
-                    .sourceDomain(effectiveCandidate == null ? null : effectiveCandidate.getDomain())
-                    .discoveryReason(effectiveCandidate == null ? config.getDiscoveryNotes() : effectiveCandidate.getReason())
-                    .publishedAt(effectiveCandidate == null ? null : effectiveCandidate.getPublishedAt())
-                    .sourceScore(effectiveCandidate == null ? null : effectiveCandidate.getTotalScore())
-                    .collectedAt(LocalDateTime.now())
-                    .build());
-            try {
-                evidenceRepository.save(evidence);
-                persisted = true;
-                successCounterRef[0]++;
+            if (!runtimePersistenceDecision.allowPersist()) {
+                persistenceFailureReason = runtimePersistenceDecision.discardReason();
+            } else {
+                EvidenceSource evidence = evidenceSourceSanitizer.sanitize(EvidenceSource.builder()
+                        .taskId(context.getTaskId())
+                        .competitorName(config.getCompetitorName())
+                        .evidenceId(evidenceId)
+                        .title(page.getTitle() != null ? page.getTitle() : effectiveUrl)
+                        .url(effectiveUrl)
+                        .contentSnippet(page.getSnippet())
+                        .fullContent(page.getContent())
+                        .pageMetadata(pageMetadata)
+                        .sourceType(effectiveSourceType)
+                        .discoveryMethod(effectiveCandidate == null ? null : effectiveCandidate.getDiscoveryMethod())
+                        .sourceCategory(resolveSourceCategory(effectiveCandidate))
+                        .sourceDomain(effectiveCandidate == null ? null : effectiveCandidate.getDomain())
+                        .discoveryReason(effectiveCandidate == null ? config.getDiscoveryNotes() : effectiveCandidate.getReason())
+                        .publishedAt(effectiveCandidate == null ? null : effectiveCandidate.getPublishedAt())
+                        .sourceScore(effectiveCandidate == null ? null : effectiveCandidate.getTotalScore())
+                        .collectedAt(LocalDateTime.now())
+                        .build());
                 try {
-                    retrievalIndexingResult = taskRetrievalIndexService.indexEvidence(evidence);
+                    evidenceRepository.save(evidence);
+                    persisted = true;
+                    successCounterRef[0]++;
+                    try {
+                        retrievalIndexingResult = taskRetrievalIndexService.indexEvidence(evidence);
+                    } catch (Exception e) {
+                        knowledgeFailureReason = e.getMessage();
+                        log.warn("index collected evidence failed, taskId={}, evidenceId={}",
+                                context.getTaskId(), evidenceId, e);
+                    }
                 } catch (Exception e) {
-                    knowledgeFailureReason = e.getMessage();
-                    log.warn("index collected evidence failed, taskId={}, evidenceId={}",
+                    persistenceFailureReason = e.getMessage();
+                    log.warn("persist collected evidence failed, taskId={}, evidenceId={}",
                             context.getTaskId(), evidenceId, e);
                 }
-            } catch (Exception e) {
-                persistenceFailureReason = e.getMessage();
-                log.warn("persist collected evidence failed, taskId={}, evidenceId={}",
-                        context.getTaskId(), evidenceId, e);
             }
         }
 
@@ -2663,6 +2691,38 @@ public class CollectorAgent extends BaseAgent {
     }
 
     /**
+     * stop/terminate 语义必须以数据库里的 task/node 权威状态为准，
+     * 不能只相信当前线程还在继续执行。
+     * 因此每次准备写 evidence、索引结果或 running output 前，都要重新查一次状态，
+     * 这样才能把“用户已经停止，但迟到结果还在 collector 内部继续写库”的路径挡住。
+     */
+    private RuntimePersistenceDecision resolveRuntimePersistenceDecision(AgentContext context) {
+        if (context == null || context.getTaskId() == null || !StringUtils.hasText(context.getCurrentNodeName())) {
+            return RuntimePersistenceDecision.allow();
+        }
+        if (Thread.currentThread().isInterrupted()) {
+            return RuntimePersistenceDecision.discard(DISCARDED_AFTER_STOP);
+        }
+        if (taskRepository != null) {
+            AnalysisTask task = taskRepository.findById(context.getTaskId()).orElse(null);
+            if (task == null || task.getStatus() == AnalysisTaskStatus.STOPPED) {
+                return RuntimePersistenceDecision.discard(DISCARDED_AFTER_STOP);
+            }
+        }
+        TaskNode runtimeNode = nodeRepository.findByTaskIdAndNodeName(context.getTaskId(), context.getCurrentNodeName())
+                .orElse(null);
+        if (runtimeNode == null) {
+            return RuntimePersistenceDecision.allow();
+        }
+        if (runtimeNode.getControlState() == TaskNodeControlState.TERMINATE_REQUESTED) {
+            return RuntimePersistenceDecision.discard(DISCARDED_AFTER_STOP);
+        }
+        return runtimeNode.getStatus() == TaskNodeStatus.RUNNING
+                ? RuntimePersistenceDecision.allow()
+                : RuntimePersistenceDecision.discard(DISCARDED_AFTER_STOP);
+    }
+
+    /**
      * 只有采集成功且正文/摘要至少有一项可用时，才作为有效证据进入后续抽取链路。
      */
     private boolean isUsableCollectedPage(SourceCollector.CollectedPage page) {
@@ -2792,6 +2852,17 @@ public class CollectorAgent extends BaseAgent {
             return null;
         }
         return getter.apply(trace);
+    }
+
+    private record RuntimePersistenceDecision(boolean allowPersist, String discardReason) {
+
+        private static RuntimePersistenceDecision allow() {
+            return new RuntimePersistenceDecision(true, null);
+        }
+
+        private static RuntimePersistenceDecision discard(String discardReason) {
+            return new RuntimePersistenceDecision(false, discardReason);
+        }
     }
 
     private List<Map<String, Object>> buildSelectedTargetSummaries(List<SearchCollectionTarget> targets) {

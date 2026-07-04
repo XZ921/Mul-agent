@@ -182,6 +182,15 @@ public class CollectionTargetSelector {
                     TAVILY_PREFETCH_SELECTED_REASON);
         }
 
+        if (isDiscoveryOnlyCandidate(candidate) && attemptedTarget == null) {
+            /*
+             * basic/no-raw 阶段只是在告诉下游“这个 URL 值得继续抓”，
+             * 不能把它包装成“正文已可直接落库”的已完成证据。
+             */
+            return new SelectionEligibility(true,
+                    "字段发现候选已入选，仍需后续正文采集",
+                    "字段发现候选可继续进入正文采集链路");
+        }
         if (Boolean.TRUE.equals(candidate.getVerified())) {
             return new SelectionEligibility(true,
                     "运行期验证通过后被选为正式采集目标",
@@ -302,6 +311,12 @@ public class CollectionTargetSelector {
                 && StringUtils.hasText(candidate.getPrefetchedContentRef());
     }
 
+    private boolean isDiscoveryOnlyCandidate(SourceCandidate candidate) {
+        return candidate != null
+                && Boolean.TRUE.equals(candidate.getCandidateDiscoveryUsable())
+                && !Boolean.TRUE.equals(candidate.getFastLaneUsable());
+    }
+
     private SourceCandidate mergeSelectionResult(SourceCandidate candidate,
                                                  Set<String> selectedUrls,
                                                  Map<String, SearchCollectionTarget> attemptedTargets,
@@ -353,6 +368,9 @@ public class CollectionTargetSelector {
         }
         if (Boolean.TRUE.equals(candidate.getVerified())) {
             return 0;
+        }
+        if (isDiscoveryOnlyCandidate(candidate)) {
+            return 1;
         }
         if (isExplicitCandidate(candidate) && isStructuredExecutorCandidate(candidate)) {
             return 1;
@@ -432,6 +450,13 @@ public class CollectionTargetSelector {
                     .selectionStage("SELECTED")
                     .selectionReason(TAVILY_PREFETCH_SELECTED_REASON)
                     .selectionSummary(TAVILY_PREFETCH_SELECTED_REASON)
+                    .build();
+        }
+        if (isDiscoveryOnlyCandidate(candidate)) {
+            return candidate.toBuilder()
+                    .selectionStage("SELECTED")
+                    .selectionReason("字段发现候选已入选，仍需后续正文采集")
+                    .selectionSummary("字段发现候选可继续进入正文采集链路")
                     .build();
         }
         if (!Boolean.TRUE.equals(candidate.getVerified()) && isStructuredExecutorCandidate(candidate)) {

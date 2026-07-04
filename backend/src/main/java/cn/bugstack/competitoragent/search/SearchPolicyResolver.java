@@ -25,9 +25,11 @@ public class SearchPolicyResolver {
 
     private static final long DEFAULT_SEARCH_TIMEOUT_MILLIS = 15000L;
     private static final long MIN_TIMEOUT_MILLIS = 1000L;
-    private static final long FIELD_QUERY_BASE_TIMEOUT_MILLIS = 12000L;
-    private static final long FIELD_QUERY_PER_QUERY_TIMEOUT_MILLIS = 6000L;
-    private static final int DEFAULT_FIELD_QUERY_EXECUTABLE_QUOTA = 3;
+    private static final long FIELD_QUERY_BASE_TIMEOUT_MILLIS = 15000L;
+    private static final long FIELD_QUERY_PER_QUERY_TIMEOUT_MILLIS = 3000L;
+    private static final int DEFAULT_FIELD_EVIDENCE_MAX_QUERIES_PER_FIELD = 3;
+    private static final int DEFAULT_FIELD_EVIDENCE_MIN_THIRD_PARTY_QUERIES_PER_FIELD = 1;
+    private static final int DEFAULT_FIELD_EVIDENCE_MAX_QUERIES_PER_NODE = 24;
 
     /**
      * resolver 既会被 Spring 注入，也会在测试里直接 new。
@@ -180,6 +182,43 @@ public class SearchPolicyResolver {
      * 预选验证预算只控制“还需要网页验证的候选数”，
      * 已通过 fast lane gate 的正文候选不会再占用这份预算。
      */
+    /**
+     * search-first 的最小保留目标数需要单独落到 trace，避免回放时只能看到最终值，
+     * 却看不出“是用户就想要这么多”还是“系统为了保住官方/文档/第三方多样性主动扩容”。
+     */
+    public int resolveSearchFirstMinimumTargetCount(CollectorNodeConfig config) {
+        if (!shouldApplySearchFirstExpansionPolicy(config)) {
+            return 0;
+        }
+        SearchRuntimePolicy runtimePolicy = config.getSearchRuntimePolicy();
+        if (runtimePolicy != null
+                && runtimePolicy.getSearchFirstEvidenceTargetFloor() != null
+                && runtimePolicy.getSearchFirstEvidenceTargetFloor() > 0) {
+            return runtimePolicy.getSearchFirstEvidenceTargetFloor();
+        }
+        return 3;
+    }
+
+    /**
+     * target count reason 统一由 resolver 生成，保证审计、回放和测试读取到的是同一套稳定口径。
+     */
+    public String resolveTargetCountReason(CollectorNodeConfig config,
+                                           int requestedTargetCount,
+                                           int effectiveTargetCount) {
+        int normalizedRequestedTargetCount = Math.max(0, requestedTargetCount);
+        int normalizedEffectiveTargetCount = Math.max(0, effectiveTargetCount);
+        int searchFirstMinimumTargetCount = resolveSearchFirstMinimumTargetCount(config);
+        if (shouldApplySearchFirstExpansionPolicy(config)
+                && (normalizedEffectiveTargetCount > normalizedRequestedTargetCount
+                || searchFirstMinimumTargetCount > normalizedRequestedTargetCount)) {
+            return "search-first minimum targets keep official/docs/third-party evidence diversity";
+        }
+        if (shouldApplySearchFirstExpansionPolicy(config)) {
+            return "search-first target count stays within requested budget";
+        }
+        return "requested target count follows explicit URLs/maxSearchResults";
+    }
+
     public int resolvePreSelectionVerificationLimit(CollectorNodeConfig config,
                                                     int effectiveTargetCount) {
         SearchRuntimePolicy runtimePolicy = config == null ? null : config.getSearchRuntimePolicy();
@@ -228,24 +267,56 @@ public class SearchPolicyResolver {
      * 会在进入 HTTP stage 之前就被 Playwright 壳页或前置验证耗光。
      * 这里为 pending field query 场景提供一个最小预算兜底，避免 query 根本发不出去。
      */
-    public long ensureMinimumTimeoutForFieldEvidenceQueries(long baseTimeoutMillis,
-                                                            List<FieldEvidenceQuery> fieldEvidenceQueries) {
-        if (fieldEvidenceQueries == null || fieldEvidenceQueries.isEmpty()) {
+    public long ensureMinimumTimeoutForExecutableFieldEvidenceQueries(long baseTimeoutMillis,
+                                                                      List<FieldEvidenceQuery> executableQueries) {
+        if (executableQueries == null || executableQueries.isEmpty()) {
             return baseTimeoutMillis;
         }
         long minimumTimeoutMillis = FIELD_QUERY_BASE_TIMEOUT_MILLIS
-                + (long) fieldEvidenceQueries.size() * FIELD_QUERY_PER_QUERY_TIMEOUT_MILLIS;
+                + (long) executableQueries.size() * FIELD_QUERY_PER_QUERY_TIMEOUT_MILLIS;
         return Math.max(baseTimeoutMillis, minimumTimeoutMillis);
     }
 
     /**
-     * @deprecated 字段 query 配额已不再由 coordinator 做数量截断。
-     * 实际执行截断完全交给 provider 的 per-query deadline 熔断负责，
-     * 调用方应直接透传全量 planned queries，不再需要此方法。
+     * 兼容旧调用入口。
+     * 新语义下预算必须基于 executable query 计算，避免 planned query 膨胀把超时预算放大到不可控。
+     */
+    public long ensureMinimumTimeoutForFieldEvidenceQueries(long baseTimeoutMillis,
+                                                            List<FieldEvidenceQuery> fieldEvidenceQueries) {
+        return ensureMinimumTimeoutForExecutableFieldEvidenceQueries(baseTimeoutMillis, fieldEvidenceQueries);
+    }
+
+    /**
+     * 每个字段最多允许执行 3 条 query。
+     * 这个上限是 task84 的核心收敛条件，用来防止单字段 planned query 直接原样放大到 provider。
+     */
+    public int resolveFieldEvidenceMaxQueriesPerField() {
+        return DEFAULT_FIELD_EVIDENCE_MAX_QUERIES_PER_FIELD;
+    }
+
+    /**
+     * 当字段计划里存在第三方 query 时，至少保留 1 条第三方入口。
+     * 这样 OFFICIAL / DOCS 的高优先级不会把 REVIEW / NEWS / OPEN_WEB 全部饿死。
+     */
+    public int resolveFieldEvidenceMinThirdPartyQueriesPerField() {
+        return DEFAULT_FIELD_EVIDENCE_MIN_THIRD_PARTY_QUERIES_PER_FIELD;
+    }
+
+    /**
+     * 节点级 24 条上限只作为 fail-safe。
+     * 真正的主约束仍然是字段内收敛，避免再退化成简单的全局 top-N。
+     */
+    public int resolveFieldEvidenceMaxQueriesPerNode() {
+        return DEFAULT_FIELD_EVIDENCE_MAX_QUERIES_PER_NODE;
+    }
+
+    /**
+     * @deprecated 字段 query 配额已迁移为“每字段 + 每节点”的结构化闸门。
+     * 保留该方法仅用于兼容旧测试和旧代码路径，新代码请改用显式的字段 / 节点配额接口。
      */
     @Deprecated
     public int resolveExecutableFieldEvidenceQueryQuota(long baseSearchTimeoutMillis) {
-        return DEFAULT_FIELD_QUERY_EXECUTABLE_QUOTA;
+        return resolveFieldEvidenceMaxQueriesPerField();
     }
 
     /**

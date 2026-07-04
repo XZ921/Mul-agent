@@ -37,6 +37,7 @@ public class TavilySearchProfile {
     private boolean includeRawContent;
     private int maxResults;
     private String expansionReason;
+    private String profileStage;
 
     /**
      * 字段级 query 元数据。

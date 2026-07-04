@@ -219,6 +219,7 @@ public class SourceCandidateRanker {
                 .tavilyQueryMode(candidate.getTavilyQueryMode())
                 .pageType(candidate.getPageType())
                 .qualityTier(candidate.getQualityTier())
+                .candidateDiscoveryUsable(candidate.getCandidateDiscoveryUsable())
                 .fastLaneUsable(candidate.getFastLaneUsable())
                 .fastLaneRejectReason(candidate.getFastLaneRejectReason())
                 .contentCompleteness(candidate.getContentCompleteness())
@@ -302,6 +303,7 @@ public class SourceCandidateRanker {
                 .tavilyRequestId(firstText(winner.getTavilyRequestId(), loser.getTavilyRequestId()))
                 .tavilyQuery(firstText(winner.getTavilyQuery(), loser.getTavilyQuery()))
                 .tavilyQueryMode(firstText(winner.getTavilyQueryMode(), loser.getTavilyQueryMode()))
+                .candidateDiscoveryUsable(orTrue(winner.getCandidateDiscoveryUsable(), loser.getCandidateDiscoveryUsable()))
                 .fastLaneUsable(orTrue(winner.getFastLaneUsable(), loser.getFastLaneUsable()))
                 .skipNetworkVerification(orTrue(winner.getSkipNetworkVerification(), loser.getSkipNetworkVerification()))
                 .build();

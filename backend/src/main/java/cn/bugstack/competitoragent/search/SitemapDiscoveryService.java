@@ -18,7 +18,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayDeque;
@@ -29,6 +28,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Sitemap/robots 发现服务。
@@ -61,8 +64,16 @@ public class SitemapDiscoveryService {
 
     @Autowired
     public SitemapDiscoveryService(SitemapDiscoveryProperties properties) {
+        this(properties, null);
+    }
+
+    SitemapDiscoveryService(SitemapDiscoveryProperties properties, HttpClient httpClient) {
         this.properties = properties == null ? new SitemapDiscoveryProperties() : properties;
-        this.httpClient = HttpClient.newBuilder()
+        this.httpClient = httpClient == null ? buildHttpClient() : httpClient;
+    }
+
+    private HttpClient buildHttpClient() {
+        return HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .connectTimeout(Duration.ofMillis(resolveTimeoutMillis()))
                 .build();
@@ -307,27 +318,36 @@ public class SitemapDiscoveryService {
 
         int attempts = properties.getMaxRetries() + 1;
         for (int attempt = 1; attempt <= attempts; attempt++) {
+            CompletableFuture<HttpResponse<String>> responseFuture = null;
             try {
+                long effectiveTimeoutMillis = resolveTimeoutMillis();
                 HttpRequest request = HttpRequest.newBuilder(URI.create(normalizedUrl))
-                        .timeout(Duration.ofMillis(resolveTimeoutMillis()))
+                        .timeout(Duration.ofMillis(effectiveTimeoutMillis))
                         .header("Accept", "text/plain, application/xml, text/xml;q=0.9, */*;q=0.1")
                         .GET()
                         .build();
-                HttpResponse<String> response = httpClient.send(request,
-                        HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                // HttpClient.send() 在当前 JDK 内部使用无超时的 cf.get()；这里用调用方硬超时保护采集线程。
+                responseFuture = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                HttpResponse<String> response = responseFuture.get(effectiveTimeoutMillis, TimeUnit.MILLISECONDS);
                 if (response.statusCode() >= 200 && response.statusCode() < 400) {
                     return response.body();
                 }
                 if (attempt >= attempts) {
                     return null;
                 }
-            } catch (HttpTimeoutException exception) {
+            } catch (InterruptedException exception) {
+                cancelFuture(responseFuture);
+                Thread.currentThread().interrupt();
+                return null;
+            } catch (TimeoutException exception) {
+                cancelFuture(responseFuture);
                 if (attempt >= attempts) {
                     return null;
                 }
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-                return null;
+            } catch (ExecutionException exception) {
+                if (attempt >= attempts) {
+                    return null;
+                }
             } catch (Exception exception) {
                 if (attempt >= attempts) {
                     return null;
@@ -335,6 +355,12 @@ public class SitemapDiscoveryService {
             }
         }
         return null;
+    }
+
+    private void cancelFuture(CompletableFuture<?> responseFuture) {
+        if (responseFuture != null) {
+            responseFuture.cancel(true);
+        }
     }
 
     private boolean hasInvalidConfiguration() {

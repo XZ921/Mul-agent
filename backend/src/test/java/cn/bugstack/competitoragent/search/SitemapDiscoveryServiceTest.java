@@ -9,12 +9,27 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.Authenticator;
+import java.net.CookieHandler;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ProxySelector;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 class SitemapDiscoveryServiceTest {
 
@@ -148,6 +163,21 @@ class SitemapDiscoveryServiceTest {
         assertThat(candidates.get(0).getQualitySignals()).contains("SITEMAP_URL_LIMIT_TRUNCATED");
     }
 
+    @Test
+    void shouldFailOpenAndCancelSitemapFetchWhenHttpFutureNeverCompletes() {
+        SitemapDiscoveryProperties properties = enabledProperties();
+        properties.setTimeoutMillis(100);
+        NeverCompletingHttpClient httpClient = new NeverCompletingHttpClient();
+        SitemapDiscoveryService service = new SitemapDiscoveryService(properties, httpClient);
+
+        List<SourceCandidate> candidates = assertTimeoutPreemptively(Duration.ofSeconds(1),
+                () -> service.discover("Acme AI", "DOCS", List.of("https://example.com")));
+
+        assertThat(candidates).isEmpty();
+        assertThat(httpClient.asyncAttemptCount).isEqualTo(2);
+        assertThat(httpClient.cancelled.get()).isTrue();
+    }
+
     private SitemapDiscoveryProperties enabledProperties() {
         SitemapDiscoveryProperties properties = new SitemapDiscoveryProperties();
         properties.setEnabled(true);
@@ -181,6 +211,87 @@ class SitemapDiscoveryServiceTest {
             try (OutputStream outputStream = exchange.getResponseBody()) {
                 outputStream.write(body);
             }
+        }
+    }
+
+    private static final class NeverCompletingHttpClient extends HttpClient {
+
+        private final AtomicBoolean cancelled = new AtomicBoolean(false);
+        private int asyncAttemptCount;
+
+        @Override
+        public Optional<CookieHandler> cookieHandler() {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<Duration> connectTimeout() {
+            return Optional.empty();
+        }
+
+        @Override
+        public Redirect followRedirects() {
+            return Redirect.NEVER;
+        }
+
+        @Override
+        public Optional<ProxySelector> proxy() {
+            return Optional.empty();
+        }
+
+        @Override
+        public SSLContext sslContext() {
+            return null;
+        }
+
+        @Override
+        public SSLParameters sslParameters() {
+            return null;
+        }
+
+        @Override
+        public Optional<Authenticator> authenticator() {
+            return Optional.empty();
+        }
+
+        @Override
+        public Version version() {
+            return Version.HTTP_1_1;
+        }
+
+        @Override
+        public Optional<Executor> executor() {
+            return Optional.empty();
+        }
+
+        @Override
+        public <T> HttpResponse<T> send(HttpRequest request,
+                                        HttpResponse.BodyHandler<T> responseBodyHandler) {
+            throw new AssertionError("sitemap discovery must use sendAsync with a hard timeout");
+        }
+
+        @Override
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
+                                                                HttpResponse.BodyHandler<T> responseBodyHandler) {
+            asyncAttemptCount++;
+            return neverCompletingFuture();
+        }
+
+        @Override
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
+                                                                HttpResponse.BodyHandler<T> responseBodyHandler,
+                                                                HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+            return sendAsync(request, responseBodyHandler);
+        }
+
+        private <T> CompletableFuture<HttpResponse<T>> neverCompletingFuture() {
+            return new CompletableFuture<>() {
+                @Override
+                public boolean cancel(boolean mayInterruptIfRunning) {
+                    cancelled.set(true);
+                    return super.cancel(mayInterruptIfRunning);
+                }
+            };
         }
     }
 }

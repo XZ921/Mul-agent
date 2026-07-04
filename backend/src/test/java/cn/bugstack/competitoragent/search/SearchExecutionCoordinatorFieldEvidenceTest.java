@@ -244,7 +244,7 @@ class SearchExecutionCoordinatorFieldEvidenceTest {
                 .dimensionEvidencePlan(fieldPlanWithTwoQueries())
                 .build());
 
-        assertThat(result.getExecutionTrace().getSearchTimeoutMillis()).isEqualTo(24000L);
+        assertThat(result.getExecutionTrace().getSearchTimeoutMillis()).isEqualTo(21000L);
     }
 
     @Test

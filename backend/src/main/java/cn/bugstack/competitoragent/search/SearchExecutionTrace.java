@@ -30,6 +30,10 @@ public class SearchExecutionTrace {
     private List<String> searchQueries;
     private List<String> fallbackOrder;
     private Integer plannedCandidateCount;
+    private Integer requestedTargetCount;
+    private Integer effectiveTargetCount;
+    private Integer searchFirstMinimumTargetCount;
+    private String targetCountReason;
     private Integer baseTargetCount;
     private Integer preSupplementEffectiveSearchFirstTargetCount;
     private Integer preSupplementFusionRankedCandidateCount;

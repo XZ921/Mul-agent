@@ -46,6 +46,43 @@ class CollectorAgentEvidenceQualityGateTest {
     }
 
     @Test
+    void shouldKeepLongOfficialTavilyContentWhenAuthGateSignalIsWeak() {
+        EvidenceQualityGate gate = new EvidenceQualityGate(new EvidenceQualityGateProperties());
+        CollectorNodeConfig config = CollectorNodeConfig.builder()
+                .competitorName("开放平台")
+                .competitorUrls(List.of("https://open.example.com"))
+                .requiredCoverageFields(List.of("coreFeatures"))
+                .blockingCoverageFields(List.of("coreFeatures"))
+                .coverageQueryIntents(List.of("OFFICIAL_DOCS", "API_DOCS"))
+                .build();
+        SourceCandidate candidate = SourceCandidate.builder()
+                .url("https://open.example.com/protocol")
+                .sourceType("OFFICIAL")
+                .sourceUrls(List.of("https://open.example.com/protocol"))
+                .totalScore(0.94D)
+                .build();
+        CollectionExecutionResult result = CollectionExecutionResult.builder()
+                .executorType("WEB_SCRAPER")
+                .success(true)
+                .status("SUCCESS")
+                .resourceLocator("https://open.example.com/protocol")
+                .sourceUrls(List.of("https://open.example.com/protocol"))
+                .content(("开放平台 验证码 检测中 由极验提供技术支持 API developer 协议 接口能力 商家权益 接入说明 ").repeat(220))
+                .qualitySignals(List.of("OFFICIAL_DOMAIN_MATCHED"))
+                .qualityScore(0.88D)
+                .build();
+
+        CollectionExecutionResult gated = CollectorAgent.applyEvidenceQualityGateForTest(gate, config, candidate, result);
+
+        assertThat(gated.getEvidenceQualityVerdict()).isNotNull();
+        assertThat(gated.getQualitySignals()).contains("AUTH_GATE_WEAK_SIGNAL");
+        assertThat(gated.getQualitySignals()).doesNotContain("AUTH_GATE_DETECTED", "EVIDENCE_REPAIR_REQUIRED");
+        assertThat(gated.getEvidenceQualityVerdict().isRepairRequired()).isFalse();
+        assertThat(gated.getQualityScore()).isGreaterThan(0.20D);
+        assertThat(gated.getSourceUrls()).contains("https://open.example.com/protocol");
+    }
+
+    @Test
     void shouldAttachRepairPlanMetadataWhenWeakEvidenceRequiresRepair() {
         EvidenceQualityGate gate = new EvidenceQualityGate(new EvidenceQualityGateProperties());
         CollectorNodeConfig config = CollectorNodeConfig.builder()

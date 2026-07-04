@@ -212,8 +212,12 @@ public class OpenAiCompatibleClient implements ModelProvider {
                 .maxTokens(aiProps.getMaxTokens())
                 .temperature(aiProps.getTemperature())
                 .timeout(Duration.ofSeconds(aiProps.getTimeoutSeconds()))
-                .logRequests(true)
-                .logResponses(true)
+                // LangChain4j 的响应日志会通过 peekBody() 复制完整响应体。
+                // 对 DeepSeek 这类长 JSON / HTTP2 响应，thread dump 已证明这里可能卡在
+                // ResponseLoggingInterceptor，进而把 extractor 主链路拖成长期 RUNNING。
+                // 因此这里显式关闭请求/响应体日志，只保留业务层自己的异常与重试语义。
+                .logRequests(false)
+                .logResponses(false)
                 .build());
     }
 

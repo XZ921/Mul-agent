@@ -21,9 +21,14 @@ public class FieldEvidenceQueryExecutionAudit {
 
     private String queryFingerprint;
     private String fieldName;
+    private String sourceType;
     private String evidencePathKey;
     private String queryIntent;
     private String query;
+    private String queryMode;
+    private String profileStage;
+    private String searchDepth;
+    private Boolean includeRawContent;
     private String status;
     private Long elapsedMillis;
     private Integer resultCount;

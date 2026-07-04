@@ -7,9 +7,12 @@ import cn.bugstack.competitoragent.source.SearchSourceProvider;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
 import cn.bugstack.competitoragent.source.SourceCollector;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
+import java.util.Map;
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -350,7 +353,7 @@ class SearchExecutionCoordinatorTest {
     }
 
     @Test
-    void shouldSelectMultipleSearchFirstEvidenceTargetsEvenWhenDirectSeedCountIsOne() {
+    void shouldSelectMultipleSearchFirstEvidenceTargetsEvenWhenDirectSeedCountIsOne() throws Exception {
         SearchSourceProvider provider = mock(SearchSourceProvider.class);
         List<SourceCandidate> bootstrapCandidates = List.of(
                         SourceCandidate.builder()
@@ -465,6 +468,17 @@ class SearchExecutionCoordinatorTest {
                         && !target.getCandidate().getDomain().endsWith("open.douyin.com")));
         assertEquals(3, result.getExecutionTrace().getEffectiveSearchFirstTargetCount());
         assertEquals(0, result.getExecutionTrace().getCandidateVerificationDirectAttemptCount());
+        Map<String, Object> traceProjection = new ObjectMapper().findAndRegisterModules().readValue(
+                new ObjectMapper().findAndRegisterModules().writeValueAsString(result.getExecutionTrace()),
+                new TypeReference<>() {
+                }
+        );
+        assertThat(traceProjection)
+                .containsEntry("requestedTargetCount", 1)
+                .containsEntry("effectiveTargetCount", 3)
+                .containsEntry("searchFirstMinimumTargetCount", 3)
+                .containsEntry("targetCountReason",
+                        "search-first minimum targets keep official/docs/third-party evidence diversity");
     }
 
     @Test

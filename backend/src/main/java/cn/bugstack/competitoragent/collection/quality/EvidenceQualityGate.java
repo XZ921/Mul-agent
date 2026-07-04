@@ -59,11 +59,22 @@ public class EvidenceQualityGate {
         double contentScore = contentUsabilityScore.getUsability();
         double taskScore = taskRelevanceScore(context, safeContent, issues, signals);
 
-        if (isAuthGateContent(safeContent)) {
+        boolean authGateContent = isAuthGateContent(safeContent);
+        /*
+         * auth gate 不能再“一票否决”所有命中字样的正文。
+         * 对官方/文档来源的长正文，只要还能命中当前字段的主题信号，就说明它更像“正文里提到登录/授权能力”，
+         * 而不是纯粹的登录壳页，此时只保留弱信号审计，不再直接打入 repairRequired。
+         */
+        boolean longUsefulOfficialContent = safeContent.length() >= properties.getLongOfficialContentChars()
+                && isOfficialOrDocsSource(context)
+                && hasTopicSignals(safeContent, context);
+        if (authGateContent && !longUsefulOfficialContent) {
             issues.add(EvidenceQualityIssue.AUTH_OR_CAPTCHA_GATE);
             signals.add("AUTH_GATE_DETECTED");
             signals.add("EVIDENCE_REPAIR_REQUIRED");
             contentScore = Math.min(contentScore, properties.getAuthGateScoreCap());
+        } else if (authGateContent) {
+            signals.add("AUTH_GATE_WEAK_SIGNAL");
         }
 
         if (isRootEntry(context == null ? null : context.getUrl())) {
@@ -341,6 +352,39 @@ public class EvidenceQualityGate {
                 .replace("|", "")
                 .replace("[", "")
                 .replace("]", "");
+    }
+
+    /**
+     * Task84 的误杀场景集中在 Tavily 拉到的官方大正文和开发文档页，
+     * 因此这里要用比 `isOfficial(...)` 更严格的口径，只放行明确标注为 OFFICIAL/DOCS 的来源。
+     */
+    private boolean isOfficialOrDocsSource(EvidenceQualityContext context) {
+        String sourceType = context == null || context.getSourceType() == null
+                ? ""
+                : context.getSourceType().toUpperCase(Locale.ROOT);
+        return sourceType.contains("OFFICIAL") || sourceType.contains("DOCS");
+    }
+
+    /**
+     * “长正文但带 auth 词”只有在仍然覆盖当前字段主题时，才应该被降级为弱信号。
+     * 否则它依然更可能只是登录门、授权墙或验证页。
+     */
+    private boolean hasTopicSignals(String content, EvidenceQualityContext context) {
+        if (!StringUtils.hasText(content) || context == null) {
+            return false;
+        }
+        List<String> expectedSignals = resolveExpectedSignals(context, new ArrayList<>());
+        if (expectedSignals.isEmpty()) {
+            return false;
+        }
+        String normalized = content.toLowerCase(Locale.ROOT);
+        for (String expectedSignal : expectedSignals) {
+            if (StringUtils.hasText(expectedSignal)
+                    && normalized.contains(expectedSignal.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isRootEntry(String url) {

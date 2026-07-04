@@ -67,6 +67,7 @@ public class SourceCandidate {
     private String tavilyQueryMode;
     private String pageType;
     private String qualityTier;
+    private Boolean candidateDiscoveryUsable;
     private Boolean fastLaneUsable;
     private String fastLaneRejectReason;
     private String contentCompleteness;

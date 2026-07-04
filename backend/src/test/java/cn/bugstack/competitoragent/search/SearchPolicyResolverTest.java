@@ -52,7 +52,7 @@ class SearchPolicyResolverTest {
                 )
         );
 
-        assertEquals(24000L, resolved);
+        assertEquals(21000L, resolved);
         assertEquals(30000L, resolver.ensureMinimumTimeoutForFieldEvidenceQueries(
                 30000L,
                 List.of(FieldEvidenceQuery.builder().query("q1").build())

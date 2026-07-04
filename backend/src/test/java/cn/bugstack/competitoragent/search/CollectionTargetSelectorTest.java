@@ -549,4 +549,98 @@ class CollectionTargetSelectorTest {
         assertEquals("https://open-live.bilibili.com/document/doc/guide",
                 decision.getSelectedTargets().get(0).getCandidate().getUrl());
     }
+
+    @Test
+    void shouldKeepDiscoveryOnlyCandidateSelectableWithoutPretendingPrefetchedEvidenceIsReady() {
+        SourceCandidate discoveryCandidate = SourceCandidate.builder()
+                .url("https://open.example.com/docs")
+                .title("开放平台文档")
+                .sourceType("DOCS")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_FIELD_EVIDENCE_QUERY")
+                .candidateDiscoveryUsable(Boolean.TRUE)
+                .fastLaneUsable(Boolean.FALSE)
+                .hasPrefetchedContent(Boolean.FALSE)
+                .prefetchedRawContentLength(0)
+                .sourceUrls(List.of("https://open.example.com/docs"))
+                .totalScore(0.72)
+                .build();
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                List.of(discoveryCandidate),
+                Map.of(),
+                1
+        );
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        SourceCandidate selectedCandidate = decision.getSelectedTargets().get(0).getCandidate();
+        assertEquals("https://open.example.com/docs", selectedCandidate.getUrl());
+        assertEquals("SELECTED", selectedCandidate.getSelectionStage());
+        assertEquals(Boolean.FALSE, selectedCandidate.getFastLaneUsable());
+        assertEquals(Boolean.FALSE, selectedCandidate.getHasPrefetchedContent());
+        assertEquals("字段发现候选已入选，仍需后续正文采集", selectedCandidate.getSelectionReason());
+        assertEquals("字段发现候选可继续进入正文采集链路", selectedCandidate.getSelectionSummary());
+    }
+
+    @Test
+    void shouldKeepMultipleHighValueTargetsForSearchFirstFamilyEvenWhenInputUrlCountIsOne() {
+        SourceCandidate officialCandidate = SourceCandidate.builder()
+                .url("https://open.example.com/protocol")
+                .title("开放平台协议")
+                .sourceType("OFFICIAL")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .domain("open.example.com")
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("prefetch-official")
+                .prefetchedRawContentLength(9_000)
+                .sourceUrls(List.of("https://open.example.com/protocol"))
+                .totalScore(0.95)
+                .build();
+        SourceCandidate docsCandidate = SourceCandidate.builder()
+                .url("https://developer.example.com/docs")
+                .title("开发者文档")
+                .sourceType("DOCS")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .domain("developer.example.com")
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("prefetch-docs")
+                .prefetchedRawContentLength(12_000)
+                .sourceUrls(List.of("https://developer.example.com/docs"))
+                .totalScore(0.92)
+                .build();
+        SourceCandidate thirdPartyCandidate = SourceCandidate.builder()
+                .url("https://news.example.com/platform-review")
+                .title("平台行业观察")
+                .sourceType("NEWS")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .domain("news.example.com")
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("prefetch-news")
+                .prefetchedRawContentLength(2_000)
+                .sourceUrls(List.of("https://news.example.com/platform-review"))
+                .totalScore(0.87)
+                .build();
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                List.of(officialCandidate, docsCandidate, thirdPartyCandidate),
+                Map.of(),
+                3
+        );
+
+        assertEquals(3, decision.getSelectedTargets().size());
+        assertEquals(List.of(
+                        "https://open.example.com/protocol",
+                        "https://developer.example.com/docs",
+                        "https://news.example.com/platform-review"
+                ),
+                decision.getSelectedTargets().stream()
+                        .map(target -> target.getCandidate().getUrl())
+                        .toList());
+    }
 }

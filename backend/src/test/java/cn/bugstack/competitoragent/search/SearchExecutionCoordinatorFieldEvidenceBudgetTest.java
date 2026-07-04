@@ -28,7 +28,7 @@ import static org.mockito.Mockito.when;
 class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
 
     @Test
-    void shouldSendOnlyExecutableQueriesWithinPreInflationBudget() {
+    void shouldApplyFieldExecutionGateBeforeBuildingBudget() {
         RecordingBudgetAwareSearchSourceProvider provider = new RecordingBudgetAwareSearchSourceProvider();
         SearchExecutionCoordinator coordinator = newCoordinator(provider);
 
@@ -43,18 +43,22 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                 .maxSearchResults(1)
                 .minVerifiedCandidates(1)
                 .searchTimeoutMillis(18_300L)
-                .dimensionEvidencePlan(prioritizedFieldPlan())
+                .dimensionEvidencePlan(task84ScaledFieldPlan())
                 .build());
 
         assertThat(provider.requests).hasSize(1);
         SearchSourceRequest request = provider.requests.get(0);
         assertThat(request.getRequestPhase()).isEqualTo(SearchRequestPhase.SUPPLEMENT);
-        assertThat(request.getFieldEvidenceQueries())
-                .extracting(FieldEvidenceQuery::getQueryFingerprint)
-                .containsExactly("q-priority-10", "q-priority-20", "q-priority-30", "q-priority-40");
-        assertThat(request.getFieldEvidenceQuerySkippedCount()).isZero();
-        // 这里特意同时断言最终 trace 仍会看到被放大的总超时，证明 query 配额不是拿放大后的值倒推出来的。
-        assertThat(result.getExecutionTrace().getSearchTimeoutMillis()).isGreaterThan(18_300L);
+        assertThat(request.getFieldEvidenceQueries()).hasSize(21);
+        assertThat(request.getFieldEvidenceQueryPlannedCount()).isEqualTo(71);
+        assertThat(request.getFieldEvidenceQueryExecutableCount()).isEqualTo(21);
+        assertThat(request.getFieldEvidenceQuerySkippedCount()).isEqualTo(50);
+        assertThat(result.getExecutionTrace().getFieldEvidenceQueryPlannedCount()).isEqualTo(71);
+        assertThat(result.getExecutionTrace().getFieldEvidenceQueryExecutedCount()).isEqualTo(21);
+        assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkippedCount()).isEqualTo(50);
+        assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkipReasons())
+                .containsEntry("SKIPPED_FIELD_SOURCE_QUOTA_EXHAUSTED", 50);
+        assertThat(result.getExecutionTrace().getSearchTimeoutMillis()).isEqualTo(78_000L);
     }
 
     @Test
@@ -79,8 +83,8 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
         assertThat(provider.requests).hasSize(1);
         assertThat(provider.requests.get(0).getFieldEvidenceQueries())
                 .extracting(FieldEvidenceQuery::getQueryFingerprint)
-                .containsExactly("q-priority-10", "q-priority-20", "q-priority-30", "q-priority-40");
-        assertThat(provider.requests.get(0).getFieldEvidenceQuerySkippedCount()).isZero();
+                .containsExactly("q-priority-10", "q-priority-20", "q-priority-30");
+        assertThat(provider.requests.get(0).getFieldEvidenceQuerySkippedCount()).isEqualTo(1);
     }
 
     @Test
@@ -104,13 +108,15 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
 
         assertThat(result.getExecutionTrace().getFieldEvidenceQueryCount()).isEqualTo(4);
         assertThat(result.getExecutionTrace().getFieldEvidenceQueryPlannedCount()).isEqualTo(4);
-        assertThat(result.getExecutionTrace().getFieldEvidenceQueryExecutedCount()).isEqualTo(4);
-        assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkippedCount()).isZero();
-        assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkipReasons()).isEmpty();
+        assertThat(result.getExecutionTrace().getFieldEvidenceQueryExecutedCount()).isEqualTo(3);
+        assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkippedCount()).isEqualTo(1);
+        assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkipReasons())
+                .containsEntry("SKIPPED_FIELD_SOURCE_QUOTA_EXHAUSTED", 1);
         assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQueryPlannedCount()).isEqualTo(4);
-        assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQueryExecutedCount()).isEqualTo(4);
-        assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQuerySkippedCount()).isZero();
-        assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQuerySkipReasons()).isEmpty();
+        assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQueryExecutedCount()).isEqualTo(3);
+        assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQuerySkippedCount()).isEqualTo(1);
+        assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQuerySkipReasons())
+                .containsEntry("SKIPPED_FIELD_SOURCE_QUOTA_EXHAUSTED", 1);
     }
 
     @Test
@@ -137,7 +143,8 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
         assertThat(result.getExecutionTrace().getFieldEvidenceQueryExecutedCount()).isEqualTo(2);
         assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkippedCount()).isEqualTo(2);
         assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkipReasons())
-                .containsEntry("SKIPPED_BUDGET_EXHAUSTED", 2);
+                .containsEntry("SKIPPED_FIELD_SOURCE_QUOTA_EXHAUSTED", 1)
+                .containsEntry("SKIPPED_BUDGET_EXHAUSTED", 1);
 
         TavilyFastLaneAudit traceAudit = result.getExecutionTrace().getTavilyFastLaneAudit();
         assertThat(traceAudit).isNotNull();
@@ -147,12 +154,11 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple("q-priority-10", "SUCCESS", 1, null, null),
                         org.assertj.core.groups.Tuple.tuple("q-priority-20", "FAILED", 0, null, "HTTP 429"),
-                        org.assertj.core.groups.Tuple.tuple("q-priority-30", "SKIPPED", 0, "SKIPPED_BUDGET_EXHAUSTED", null),
-                        org.assertj.core.groups.Tuple.tuple("q-priority-40", "SKIPPED", 0, "SKIPPED_BUDGET_EXHAUSTED", null)
+                        org.assertj.core.groups.Tuple.tuple("q-priority-30", "SKIPPED", 0, "SKIPPED_BUDGET_EXHAUSTED", null)
                 );
-        assertThat(result.getAuditSnapshot().getSummary().getTavilyFastLaneAudit().getFieldEvidenceQueryExecutions()).hasSize(4);
+        assertThat(result.getAuditSnapshot().getSummary().getTavilyFastLaneAudit().getFieldEvidenceQueryExecutions()).hasSize(3);
         assertThat(result.getAuditSnapshot().getSummary().getTavilyFastLaneAudit().getFieldEvidenceQueryExecutions())
-                .hasSize(4);
+                .hasSize(3);
         SearchExecutionStep supplementStep = result.getExecutionPlan().getSteps().stream()
                 .filter(step -> "BROWSER_SUPPLEMENT_SEARCH".equals(step.getStepCode()))
                 .findFirst()
@@ -161,6 +167,7 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                 .contains("field query plan 4")
                 .contains("executed 2")
                 .contains("skipped 2")
+                .contains("SKIPPED_FIELD_SOURCE_QUOTA_EXHAUSTED")
                 .contains("SKIPPED_BUDGET_EXHAUSTED");
     }
 
@@ -195,8 +202,8 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                 .containsExactly("q-deadline-1", "q-deadline-2");
         assertThat(request.getFieldEvidenceExecutionDeadlineEpochMillis()).isNotNull();
         assertThat(request.getFieldEvidenceExecutionDeadlineEpochMillis() - startedAt)
-                .isGreaterThanOrEqualTo(23_000L);
-        assertThat(result.getExecutionTrace().getSearchTimeoutMillis()).isGreaterThanOrEqualTo(24_000L);
+                .isGreaterThanOrEqualTo(20_000L);
+        assertThat(result.getExecutionTrace().getSearchTimeoutMillis()).isGreaterThanOrEqualTo(21_000L);
     }
 
     private SearchExecutionCoordinator newCoordinator(RecordingBudgetAwareSearchSourceProvider provider) {
@@ -254,6 +261,43 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                 .build();
     }
 
+    /**
+     * 这个计划专门复刻 task84 的量级特征：
+     * planned query 很多，但经过字段闸门后每个字段只能留下 3 条，总执行量应稳定收敛到 21。
+     */
+    private DimensionEvidencePlan task84ScaledFieldPlan() {
+        List<FieldEvidenceCoverage> fieldCoverages = new ArrayList<>();
+        for (int fieldIndex = 0; fieldIndex < 7; fieldIndex++) {
+            String fieldName = "field-" + fieldIndex;
+            List<FieldEvidenceQuery> plannedQueries = new ArrayList<>();
+            plannedQueries.add(task84FieldQuery(fieldName, "OFFICIAL", 0, fieldName + "-official-1"));
+            plannedQueries.add(task84FieldQuery(fieldName, "DOCS", 1, fieldName + "-docs-1"));
+            plannedQueries.add(task84FieldQuery(fieldName, "PRICING", 2, fieldName + "-pricing-1"));
+            plannedQueries.add(task84FieldQuery(fieldName, "TERMS", 3, fieldName + "-terms-1"));
+            plannedQueries.add(task84FieldQuery(fieldName, "REVIEW", 4, fieldName + "-review-1"));
+            plannedQueries.add(task84FieldQuery(fieldName, "NEWS", 5, fieldName + "-news-1"));
+            plannedQueries.add(task84FieldQuery(fieldName, "OPEN_WEB", 6, fieldName + "-open-web-1"));
+            plannedQueries.add(task84FieldQuery(fieldName, "DOCS", 7, fieldName + "-docs-2"));
+            plannedQueries.add(task84FieldQuery(fieldName, "OFFICIAL", 8, fieldName + "-official-2"));
+            plannedQueries.add(task84FieldQuery(fieldName, "TERMS", 9, fieldName + "-terms-2"));
+            if (fieldIndex == 0) {
+                plannedQueries.add(task84FieldQuery(fieldName, "DOCS", 10, fieldName + "-docs-3"));
+            }
+            fieldCoverages.add(FieldEvidenceCoverage.builder()
+                    .fieldName(fieldName)
+                    .status(FieldEvidenceCoverageStatus.NOT_STARTED)
+                    .minimumAttemptedPaths(1)
+                    .completedPaths(List.of())
+                    .plannedQueries(plannedQueries)
+                    .build());
+        }
+        return DimensionEvidencePlan.builder()
+                .competitorName("哔哩哔哩")
+                .maxCollectionRounds(2)
+                .fieldCoverages(fieldCoverages)
+                .build();
+    }
+
     private FieldEvidenceQuery fieldQuery(String fingerprint, Integer priority, String suffix) {
         return FieldEvidenceQuery.builder()
                 .fieldName("coreFeatures")
@@ -264,6 +308,22 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                 .queryFingerprint(fingerprint)
                 .priority(priority)
                 .reason("预算红测-" + suffix)
+                .build();
+    }
+
+    private FieldEvidenceQuery task84FieldQuery(String fieldName,
+                                                String sourceType,
+                                                Integer priority,
+                                                String fingerprint) {
+        return FieldEvidenceQuery.builder()
+                .fieldName(fieldName)
+                .evidencePathKey(fieldName.toUpperCase() + "_PATH")
+                .queryIntent("FIELD_TEST")
+                .sourceType(sourceType)
+                .query("哔哩哔哩 " + fieldName + " " + sourceType + " 证据")
+                .queryFingerprint(fingerprint)
+                .priority(priority)
+                .reason("task84 字段配额回归")
                 .build();
     }
 
@@ -352,17 +412,6 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                                         .evidencePathKey("DOCS_API_GUIDE")
                                         .queryIntent("API_DOCS")
                                         .query("哔哩哔哩 开放平台 站内 SDK 文档")
-                                        .status("SKIPPED")
-                                        .elapsedMillis(0L)
-                                        .resultCount(0)
-                                        .skipReason("SKIPPED_BUDGET_EXHAUSTED")
-                                        .build(),
-                                FieldEvidenceQueryExecutionAudit.builder()
-                                        .queryFingerprint("q-priority-40")
-                                        .fieldName("coreFeatures")
-                                        .evidencePathKey("DOCS_API_GUIDE")
-                                        .queryIntent("API_DOCS")
-                                        .query("鍝斿摡鍝斿摡 寮€鏀惧钩鍙?琛ュ厖 FAQ 鏂囨。")
                                         .status("SKIPPED")
                                         .elapsedMillis(0L)
                                         .resultCount(0)

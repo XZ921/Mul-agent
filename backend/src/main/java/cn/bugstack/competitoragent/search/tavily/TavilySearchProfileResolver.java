@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -98,26 +99,62 @@ public class TavilySearchProfileResolver {
                     .query("")
                     .includeDomains(List.of())
                     .officialDomains(List.of())
-                    .searchDepth(properties.getSearchDepth())
-                    .includeRawContent(properties.isIncludeRawContent())
+                    .searchDepth("basic")
+                    .includeRawContent(false)
                     .maxResults(properties.getMaxResults())
+                    .profileStage("FIELD_EVIDENCE_DISCOVERY")
                     .build();
         }
         TavilyQueryMode queryMode = resolveFieldEvidenceMode(query);
+        /*
+         * field evidence 的第一阶段只负责低成本候选发现。
+         * 这里显式固定为 basic/no raw，避免 planned query 一多就把整批 Tavily 请求放大成 advanced+raw。
+         */
         return TavilySearchProfile.builder()
                 .family(normalizeFamily(query.getSourceType()))
                 .queryMode(queryMode)
                 .query(query.getQuery())
                 .includeDomains(resolveFieldEvidenceIncludeDomains(query, queryMode))
                 .officialDomains(resolveFieldEvidenceOfficialDomains(query, queryMode))
-                .searchDepth(properties.getSearchDepth())
-                .includeRawContent(properties.isIncludeRawContent())
+                .searchDepth("basic")
+                .includeRawContent(false)
                 .maxResults(properties.getMaxResults())
+                .profileStage("FIELD_EVIDENCE_DISCOVERY")
                 .fieldName(query.getFieldName())
                 .evidencePathKey(query.getEvidencePathKey())
                 .queryIntent(query.getQueryIntent())
                 .fieldEvidenceQueryFingerprint(query.getQueryFingerprint())
                 .fieldEvidenceQueryReason(query.getReason())
+                .build();
+    }
+
+    /**
+     * winner raw fetch 只允许围绕胜出 URL 回拉正文，不能重新退化成全网散搜。
+     * 因此这里会优先抽取 winner host，拼出 site:host 查询，并把 includeDomains 锁到该 host。
+     */
+    public TavilySearchProfile resolveFieldEvidenceWinnerRawFetch(FieldEvidenceQuery query, String winnerUrl) {
+        String winnerHost = resolveWinnerHost(winnerUrl);
+        String originalQuery = StringUtils.hasText(query == null ? null : query.getQuery())
+                ? query.getQuery().trim()
+                : "";
+        String winnerQuery = StringUtils.hasText(winnerHost)
+                ? "site:" + winnerHost + " " + originalQuery
+                : originalQuery;
+        return TavilySearchProfile.builder()
+                .family(normalizeFamily(query == null ? null : query.getSourceType()))
+                .queryMode(TavilyQueryMode.TRUSTED_WEB_EXPANSION)
+                .query(winnerQuery)
+                .includeDomains(StringUtils.hasText(winnerHost) ? List.of(winnerHost) : List.of())
+                .officialDomains(resolveFieldEvidenceOfficialDomains(query, TavilyQueryMode.TRUSTED_WEB_EXPANSION))
+                .searchDepth("advanced")
+                .includeRawContent(true)
+                .maxResults(1)
+                .profileStage("FIELD_EVIDENCE_WINNER_RAW_FETCH")
+                .fieldName(query == null ? null : query.getFieldName())
+                .evidencePathKey(query == null ? null : query.getEvidencePathKey())
+                .queryIntent(query == null ? null : query.getQueryIntent())
+                .fieldEvidenceQueryFingerprint(query == null ? null : query.getQueryFingerprint())
+                .fieldEvidenceQueryReason(query == null ? null : query.getReason())
                 .build();
     }
 
@@ -287,6 +324,18 @@ public class TavilySearchProfileResolver {
             return "OPEN_WEB";
         }
         return family.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String resolveWinnerHost(String winnerUrl) {
+        if (!StringUtils.hasText(winnerUrl)) {
+            return null;
+        }
+        try {
+            URI uri = URI.create(winnerUrl.trim());
+            return uri.getHost() == null ? null : uri.getHost().trim();
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private String firstNonBlank(List<String> values) {

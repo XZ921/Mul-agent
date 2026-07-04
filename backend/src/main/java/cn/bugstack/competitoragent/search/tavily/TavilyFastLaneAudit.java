@@ -41,7 +41,10 @@ public class TavilyFastLaneAudit {
     private Boolean fallbackTriggered;
     private List<String> tavilyRequestIds;
     private Integer playwrightInvocationBaselineHint;
+    private Integer winnerRawFetchCount;
     private List<FieldEvidenceQueryExecutionAudit> fieldEvidenceQueryExecutions;
+    private Map<String, Integer> fieldDistribution;
+    private Map<String, Integer> sourceTypeDistribution;
     private Map<String, List<String>> scopeExpansionSources;
 
     /**
@@ -65,9 +68,12 @@ public class TavilyFastLaneAudit {
         int usableCount = 0;
         int rejectedCount = 0;
         int playwrightHint = 0;
+        int winnerRawFetchCount = 0;
         boolean bootstrapTriggered = false;
         boolean fallbackTriggered = false;
         boolean hasValue = false;
+        LinkedHashMap<String, Integer> fieldDistribution = new LinkedHashMap<>();
+        LinkedHashMap<String, Integer> sourceTypeDistribution = new LinkedHashMap<>();
 
         for (TavilyFastLaneAudit audit : audits) {
             if (audit == null) {
@@ -89,8 +95,11 @@ public class TavilyFastLaneAudit {
             usableCount += value(audit.getFastLaneUsableCount());
             rejectedCount += value(audit.getFastLaneRejectedCount());
             playwrightHint += value(audit.getPlaywrightInvocationBaselineHint());
+            winnerRawFetchCount += value(audit.getWinnerRawFetchCount());
             bootstrapTriggered = bootstrapTriggered || Boolean.TRUE.equals(audit.getBootstrapTriggered());
             fallbackTriggered = fallbackTriggered || Boolean.TRUE.equals(audit.getFallbackTriggered());
+            mergeCounters(fieldDistribution, audit.getFieldDistribution());
+            mergeCounters(sourceTypeDistribution, audit.getSourceTypeDistribution());
         }
 
         if (!hasValue) {
@@ -110,7 +119,10 @@ public class TavilyFastLaneAudit {
                 .fallbackTriggered(fallbackTriggered)
                 .tavilyRequestIds(new ArrayList<>(requestIds))
                 .playwrightInvocationBaselineHint(playwrightHint)
+                .winnerRawFetchCount(winnerRawFetchCount)
                 .fieldEvidenceQueryExecutions(fieldEvidenceQueryExecutions.isEmpty() ? List.of() : fieldEvidenceQueryExecutions)
+                .fieldDistribution(fieldDistribution.isEmpty() ? Map.of() : fieldDistribution)
+                .sourceTypeDistribution(sourceTypeDistribution.isEmpty() ? Map.of() : sourceTypeDistribution)
                 .scopeExpansionSources(copyDistinctStringLists(scopeExpansionSources))
                 .build();
     }

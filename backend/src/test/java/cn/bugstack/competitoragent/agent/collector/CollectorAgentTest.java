@@ -15,13 +15,21 @@ import cn.bugstack.competitoragent.collection.CollectionTaskPackage;
 import cn.bugstack.competitoragent.collection.CollectionTaskPackageBuilder;
 import cn.bugstack.competitoragent.collection.WebPageCollectionExecutor;
 import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
+import cn.bugstack.competitoragent.collection.quality.EvidenceQualityGate;
+import cn.bugstack.competitoragent.collection.quality.EvidenceQualityGateProperties;
+import cn.bugstack.competitoragent.model.entity.TaskNode;
+import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.model.entity.KnowledgeDocument;
 import cn.bugstack.competitoragent.model.entity.RetrievalChunk;
 import cn.bugstack.competitoragent.model.entity.RetrievalIndex;
+import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
+import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
+import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.rag.TaskRetrievalIndexService;
 import cn.bugstack.competitoragent.rag.TaskRetrievalIndexingResult;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
+import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.search.BrowserSearchRuntimeResult;
@@ -38,6 +46,7 @@ import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
 import cn.bugstack.competitoragent.source.SourceCollectRequest;
 import cn.bugstack.competitoragent.source.SourceCollector;
+import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceViewAssembler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
@@ -45,6 +54,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -66,6 +76,7 @@ class CollectorAgentTest {
     private final SourceCollector sourceCollector = mock(SourceCollector.class);
     private final EvidenceSourceRepository evidenceRepository = mock(EvidenceSourceRepository.class);
     private final TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+    private final AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
     private final AgentContextAssembler agentContextAssembler = mock(AgentContextAssembler.class);
     private final BrowserSearchRuntimeService browserSearchRuntimeService = mock(BrowserSearchRuntimeService.class);
     private final SearchSourceProvider searchSourceProvider = mock(SearchSourceProvider.class);
@@ -276,6 +287,93 @@ class CollectorAgentTest {
                 .contains("value too long for column discovery_reason"));
         assertTrue(output.path("issueFlags").toString().contains("EVIDENCE_PERSIST_FAILED"));
         assertEquals("FAILED", output.path("collectionAudit").path("summary").path("status").asText());
+    }
+
+    @Test
+    void shouldDiscardLatePersistenceWhenNodeTerminateRequested() {
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of())
+                .summary("mock browser search disabled")
+                .fallbackSuggested(true)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        mockCollectedPage("https://example.com/docs", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/docs")
+                .title("Docs")
+                .content("useful docs content with api reference")
+                .snippet("api reference")
+                .metadata("{\"sourceUrls\":[\"https://example.com/docs\"]}")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(true)
+                .build());
+        when(nodeRepository.findByTaskIdAndNodeName(2L, "collect_sources_01_01")).thenReturn(Optional.of(TaskNode.builder()
+                .id(201L)
+                .taskId(2L)
+                .nodeName("collect_sources_01_01")
+                .status(TaskNodeStatus.RUNNING)
+                .controlState(TaskNodeControlState.TERMINATE_REQUESTED)
+                .build()));
+
+        collectorAgent.execute(buildContextWithVerification("[\"https://example.com/docs\"]"));
+
+        verify(evidenceRepository, never()).save(any());
+        verify(taskRetrievalIndexService, never()).indexEvidence(any());
+        verify(nodeRepository, never()).save(any(TaskNode.class));
+    }
+
+    @Test
+    void shouldDiscardLatePersistenceWhenTaskAlreadyStopped() {
+        CollectorAgent collectorAgentWithTaskRepository = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchExecutionCoordinator,
+                collectionExecutionCoordinator,
+                taskRetrievalIndexService,
+                taskRepository,
+                objectMapper,
+                new DownstreamEvidenceViewAssembler(objectMapper),
+                new EvidenceQualityGate(new EvidenceQualityGateProperties()),
+                new EvidenceSourceSanitizer()
+        );
+        when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
+                .candidates(List.of())
+                .executedQueries(List.of())
+                .summary("mock browser search disabled")
+                .fallbackSuggested(true)
+                .build());
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of());
+        mockCollectedPage("https://example.com/docs", "Feishu", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://example.com/docs")
+                .title("Docs")
+                .content("useful docs content with api reference")
+                .snippet("api reference")
+                .metadata("{\"sourceUrls\":[\"https://example.com/docs\"]}")
+                .competitorName("Feishu")
+                .sourceType("DOCS")
+                .success(true)
+                .build());
+        when(taskRepository.findById(2L)).thenReturn(Optional.of(AnalysisTask.builder()
+                .id(2L)
+                .status(AnalysisTaskStatus.STOPPED)
+                .build()));
+        when(nodeRepository.findByTaskIdAndNodeName(2L, "collect_sources_01_01")).thenReturn(Optional.of(TaskNode.builder()
+                .id(202L)
+                .taskId(2L)
+                .nodeName("collect_sources_01_01")
+                .status(TaskNodeStatus.RUNNING)
+                .controlState(TaskNodeControlState.NONE)
+                .build()));
+
+        collectorAgentWithTaskRepository.execute(buildContextWithVerification("[\"https://example.com/docs\"]"));
+
+        verify(evidenceRepository, never()).save(any());
+        verify(taskRetrievalIndexService, never()).indexEvidence(any());
+        verify(nodeRepository, never()).save(any(TaskNode.class));
     }
 
     @Test

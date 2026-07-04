@@ -17,6 +17,7 @@ public class EvidenceQualityGateProperties {
 
     private boolean enabled = true;
     private int minUsefulParagraphLength = 80;
+    private int longOfficialContentChars = 2000;
     private double navigationShellLinkRatioThreshold = 0.55D;
     private double authGateScoreCap = 0.20D;
     private double navigationShellScoreCap = 0.30D;
