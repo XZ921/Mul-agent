@@ -6,6 +6,7 @@ import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.entity.TaskPlan;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
+import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
@@ -25,6 +26,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -168,6 +170,41 @@ class TaskRecoveryServiceTest {
         assertTrue(task.getErrorMessage().contains("暂停"));
         verify(taskRunner, never()).runTask(9L);
         verify(taskRepository).save(task);
+    }
+
+    @Test
+    void shouldMarkRunningNodesAsStoppedWhenTaskIsManuallyStopped() {
+        Long taskId = 91L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.STOPPED)
+                .errorMessage("任务已被用户主动停止")
+                .build();
+        TaskNode runningNode = TaskNode.builder()
+                .taskId(taskId)
+                .nodeName("collect_sources_web")
+                .status(TaskNodeStatus.RUNNING)
+                .controlState(TaskNodeControlState.NONE)
+                .build();
+        TaskNode pendingNode = TaskNode.builder()
+                .taskId(taskId)
+                .nodeName("extract_schema")
+                .status(TaskNodeStatus.PENDING)
+                .build();
+
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(runningNode, pendingNode));
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+
+        recoveryService.markStoppedNodes(taskId);
+
+        assertEquals(TaskNodeStatus.SKIPPED, runningNode.getStatus());
+        assertEquals(TaskNodeControlState.TERMINATE_REQUESTED, runningNode.getControlState());
+        assertEquals("任务已被用户主动停止", runningNode.getErrorMessage());
+        assertNotNull(runningNode.getCompletedAt());
+        assertEquals(TaskNodeStatus.SKIPPED, pendingNode.getStatus());
+        assertEquals(TaskNodeControlState.NONE, pendingNode.getControlState());
+        verify(nodeRepository).saveAll(List.of(runningNode, pendingNode));
+        verify(taskSnapshotCacheService).saveTaskSnapshot(any(TaskProgressSnapshot.class));
     }
 
     @Test

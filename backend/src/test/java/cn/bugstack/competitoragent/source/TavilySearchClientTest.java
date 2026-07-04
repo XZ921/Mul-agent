@@ -8,12 +8,26 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.net.CookieHandler;
+import java.net.ProxySelector;
+import java.net.URI;
+import java.net.http.HttpHeaders;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.security.cert.Certificate;
+import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSession;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -36,7 +50,8 @@ class TavilySearchClientTest {
                   "results": []
                 }
                 """);
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+        when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.completedFuture(response));
 
         TavilySearchClient client = new TavilySearchClient(properties(), objectMapper, httpClient);
 
@@ -79,9 +94,9 @@ class TavilySearchClientTest {
                   ]
                 }
                 """);
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
-                .thenThrow(new IOException("temporary tavily network failure"))
-                .thenReturn(response);
+        when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.failedFuture(new IOException("temporary tavily network failure")))
+                .thenReturn(CompletableFuture.completedFuture(response));
 
         TavilySearchClient client = new TavilySearchClient(properties(), objectMapper, httpClient);
 
@@ -91,7 +106,7 @@ class TavilySearchClientTest {
         assertThat(searchResponse.getResults()).hasSize(1);
         assertThat(searchResponse.getResults().get(0).getUrl())
                 .isEqualTo("https://open.douyin.com/platform/resource/docs/accession-guide/platform-introduction");
-        verify(httpClient, times(2)).send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class));
+        verify(httpClient, times(2)).sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class));
     }
 
     @Test
@@ -100,7 +115,9 @@ class TavilySearchClientTest {
         HttpResponse<String> response = mock(HttpResponse.class);
         when(response.statusCode()).thenReturn(503);
         when(response.body()).thenReturn("{\"error\":\"temporarily unavailable\"}");
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+        when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.completedFuture(response))
+                .thenReturn(CompletableFuture.completedFuture(response));
 
         TavilySearchClient client = new TavilySearchClient(properties(), objectMapper, httpClient);
 
@@ -122,7 +139,8 @@ class TavilySearchClientTest {
                   "results": []
                 }
                 """);
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+        when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.completedFuture(response));
 
         TavilySearchClient client = new TavilySearchClient(properties(), objectMapper, httpClient);
 
@@ -130,7 +148,67 @@ class TavilySearchClientTest {
 
         HttpRequest request = client.getLastRequestForTest();
         assertThat(request).isNotNull();
-        assertThat(request.timeout()).hasValue(java.time.Duration.ofSeconds(2));
+        assertThat(request.timeout()).isPresent();
+        assertThat(request.timeout().orElseThrow().toMillis()).isBetween(1_000L, 2_000L);
+    }
+
+    @Test
+    void shouldFailOpenWithinPerCallBudgetWhenHttpFutureNeverCompletes() {
+        NeverCompletingHttpClient httpClient = new NeverCompletingHttpClient();
+        TavilySearchClient client = new TavilySearchClient(properties(), objectMapper, httpClient);
+
+        TavilySearchClient.TavilySearchResponse response = assertTimeoutPreemptively(Duration.ofSeconds(2),
+                () -> client.search(profile(), 1_000L));
+
+        assertThat(response.getResults()).isEmpty();
+        assertThat(response.getFailureReason()).isEqualTo("tavily timeout after 1000ms");
+        assertThat(httpClient.cancelled.get()).isTrue();
+        assertThat(httpClient.attemptCount).isEqualTo(1);
+    }
+
+    @Test
+    void shouldClampExpiredBudgetToShortFailOpenTimeoutInsteadOfFullDefaultTimeout() {
+        ImmediateFailingHttpClient httpClient = new ImmediateFailingHttpClient(new IOException("expired budget"));
+        TavilySearchClient client = new TavilySearchClient(properties(), objectMapper, httpClient);
+
+        TavilySearchClient.TavilySearchResponse response = client.search(profile(), -1L);
+
+        assertThat(response.getResults()).isEmpty();
+        assertThat(client.getLastRequestForTest()).isNotNull();
+        assertThat(client.getLastRequestForTest().timeout()).hasValue(Duration.ofSeconds(5));
+        assertThat(httpClient.attemptCount).isEqualTo(1);
+    }
+
+    @Test
+    void shouldCancelFutureAndPreserveInterruptFlagWhenSearchThreadIsInterrupted() {
+        NeverCompletingHttpClient httpClient = new NeverCompletingHttpClient();
+        TavilySearchClient client = new TavilySearchClient(properties(), objectMapper, httpClient);
+
+        try {
+            Thread.currentThread().interrupt();
+
+            TavilySearchClient.TavilySearchResponse response = client.search(profile(), 1_000L);
+
+            assertThat(response.getResults()).isEmpty();
+            assertThat(response.getFailureReason()).isEqualTo("tavily interrupted");
+            assertThat(httpClient.cancelled.get()).isTrue();
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void shouldNotRetryWhenBudgetIsAlreadyExpired() {
+        ImmediateFailingHttpClient httpClient = new ImmediateFailingHttpClient(new IOException("expired budget"));
+        TavilySearchProperties properties = properties();
+        properties.setMaxRetries(3);
+        TavilySearchClient client = new TavilySearchClient(properties, objectMapper, httpClient);
+
+        TavilySearchClient.TavilySearchResponse response = client.search(profile(), -1L);
+
+        assertThat(response.getResults()).isEmpty();
+        assertThat(httpClient.attemptCount).isEqualTo(1);
     }
 
     private TavilySearchProperties properties() {
@@ -156,5 +234,169 @@ class TavilySearchClientTest {
                 .includeRawContent(true)
                 .maxResults(5)
                 .build();
+    }
+
+    private static final class NeverCompletingHttpClient extends HttpClient {
+
+        private final TrackingFuture future = new TrackingFuture();
+        private int attemptCount;
+        private final AtomicBoolean cancelled = new AtomicBoolean(false);
+
+        @Override
+        public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler)
+                throws IOException, InterruptedException {
+            attemptCount++;
+            try {
+                future.get();
+                throw new IOException("unexpected completion");
+            } catch (java.util.concurrent.ExecutionException e) {
+                throw new IOException(e.getCause() == null ? e.getMessage() : e.getCause().getMessage(), e);
+            }
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
+                                                                HttpResponse.BodyHandler<T> responseBodyHandler) {
+            attemptCount++;
+            return (CompletableFuture<HttpResponse<T>>) (CompletableFuture<?>) future;
+        }
+
+        @Override
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
+                                                                HttpResponse.BodyHandler<T> responseBodyHandler,
+                                                                HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+            return sendAsync(request, responseBodyHandler);
+        }
+
+        @Override
+        public Optional<CookieHandler> cookieHandler() {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<Duration> connectTimeout() {
+            return Optional.of(Duration.ofSeconds(1));
+        }
+
+        @Override
+        public Redirect followRedirects() {
+            return Redirect.NORMAL;
+        }
+
+        @Override
+        public Optional<ProxySelector> proxy() {
+            return Optional.empty();
+        }
+
+        @Override
+        public SSLContext sslContext() {
+            return null;
+        }
+
+        @Override
+        public SSLParameters sslParameters() {
+            return new SSLParameters();
+        }
+
+        @Override
+        public Optional<java.net.Authenticator> authenticator() {
+            return Optional.empty();
+        }
+
+        @Override
+        public Version version() {
+            return Version.HTTP_1_1;
+        }
+
+        @Override
+        public Optional<Executor> executor() {
+            return Optional.empty();
+        }
+
+        private final class TrackingFuture extends CompletableFuture<HttpResponse<String>> {
+
+            @Override
+            public boolean cancel(boolean mayInterruptIfRunning) {
+                cancelled.set(true);
+                return super.cancel(mayInterruptIfRunning);
+            }
+        }
+    }
+
+    private static final class ImmediateFailingHttpClient extends HttpClient {
+
+        private final IOException exception;
+        private int attemptCount;
+
+        private ImmediateFailingHttpClient(IOException exception) {
+            this.exception = exception;
+        }
+
+        @Override
+        public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler)
+                throws IOException {
+            attemptCount++;
+            throw exception;
+        }
+
+        @Override
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
+                                                                HttpResponse.BodyHandler<T> responseBodyHandler) {
+            attemptCount++;
+            return CompletableFuture.failedFuture(exception);
+        }
+
+        @Override
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
+                                                                HttpResponse.BodyHandler<T> responseBodyHandler,
+                                                                HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+            return sendAsync(request, responseBodyHandler);
+        }
+
+        @Override
+        public Optional<CookieHandler> cookieHandler() {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<Duration> connectTimeout() {
+            return Optional.of(Duration.ofSeconds(1));
+        }
+
+        @Override
+        public Redirect followRedirects() {
+            return Redirect.NORMAL;
+        }
+
+        @Override
+        public Optional<ProxySelector> proxy() {
+            return Optional.empty();
+        }
+
+        @Override
+        public SSLContext sslContext() {
+            return null;
+        }
+
+        @Override
+        public SSLParameters sslParameters() {
+            return new SSLParameters();
+        }
+
+        @Override
+        public Optional<java.net.Authenticator> authenticator() {
+            return Optional.empty();
+        }
+
+        @Override
+        public Version version() {
+            return Version.HTTP_1_1;
+        }
+
+        @Override
+        public Optional<Executor> executor() {
+            return Optional.empty();
+        }
     }
 }

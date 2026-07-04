@@ -1,17 +1,20 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.search.tavily.TavilyFastLaneAudit;
 import cn.bugstack.competitoragent.search.tavily.TavilyPrefetchedContent;
 import cn.bugstack.competitoragent.search.tavily.TavilyPrefetchedContentRegistry;
 import cn.bugstack.competitoragent.search.tavily.TavilyQueryMode;
-import cn.bugstack.competitoragent.search.tavily.TavilySearchProperties;
 import cn.bugstack.competitoragent.search.tavily.TavilySearchProfile;
 import cn.bugstack.competitoragent.search.tavily.TavilySearchProfileResolver;
+import cn.bugstack.competitoragent.search.tavily.TavilySearchProperties;
 import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -306,6 +309,7 @@ class TavilyFastLaneProviderTest {
         assertThat(client.executedProfiles).hasSize(2);
         assertThat(client.executedProfiles).extracting(TavilySearchProfile::getQuery)
                 .containsExactly("哔哩哔哩 开放平台 API 官方文档", "site:open.bilibili.com API SDK 文档");
+        assertThat(client.queryBudgetMillisOverrides).isEmpty();
         assertThat(candidates).extracting(SourceCandidate::getUrl)
                 .containsExactly("https://open.bilibili.com/doc/4/feb66f99", "https://open.bilibili.com/doc/4/authorization");
         assertThat(candidates).extracting(SourceCandidate::getFieldEvidenceQueryFingerprint)
@@ -379,6 +383,202 @@ class TavilyFastLaneProviderTest {
     }
 
     @Test
+    void shouldMergeFieldEvidenceAuditAcrossExpandedScopes() {
+        TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
+        StubTavilySearchClient client = new StubTavilySearchClient();
+        client.responses = List.of(
+                TavilySearchClient.TavilySearchResponse.builder()
+                        .query("bilibili api docs")
+                        .requestId("req-docs")
+                        .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                                .title("Bilibili API docs")
+                                .url("https://open.bilibili.com/doc/4/api")
+                                .rawContent("docs raw ".repeat(260))
+                                .score(0.86D)
+                                .build()))
+                        .build(),
+                TavilySearchClient.TavilySearchResponse.builder()
+                        .query("bilibili developer review")
+                        .requestId("req-open-web")
+                        .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                                .title("Bilibili developer review")
+                                .url("https://example.com/bilibili-open-platform-review")
+                                .rawContent("review raw ".repeat(260))
+                                .score(0.88D)
+                                .build()))
+                        .build());
+
+        TavilyFastLaneProvider provider = new TavilyFastLaneProvider(
+                properties(),
+                client,
+                new TavilySearchProfileResolver(properties()),
+                registry,
+                new ObjectMapper()
+        );
+        SearchSourceRequest request = SearchSourceRequest.builder()
+                .competitorName("哔哩哔哩")
+                .requestedScopes(List.of("OFFICIAL"))
+                .preferredProviderKey("tavily")
+                .fieldEvidenceQueries(List.of(
+                        FieldEvidenceQuery.builder()
+                                .fieldName("coreFeatures")
+                                .evidencePathKey("DOCS_API_GUIDE")
+                                .queryIntent("API_DOCS")
+                                .sourceType("DOCS")
+                                .query("bilibili api docs")
+                                .queryFingerprint("q-docs")
+                                .reason("docs query")
+                                .build(),
+                        FieldEvidenceQuery.builder()
+                                .fieldName("weaknesses")
+                                .evidencePathKey("PUBLIC_REVIEW_OR_NEWS")
+                                .queryIntent("THIRD_PARTY_REVIEW")
+                                .sourceType("OPEN_WEB")
+                                .query("bilibili developer review")
+                                .queryFingerprint("q-open-web")
+                                .reason("open web query")
+                                .build()))
+                .build();
+
+        provider.search(request);
+
+        assertThat(client.executedProfiles).extracting(TavilySearchProfile::getFamily)
+                .containsExactly("DOCS", "OPEN_WEB");
+        assertThat(request.getTavilyFastLaneAudit()).isNotNull();
+        assertThat(request.getTavilyFastLaneAudit().getQueriesSent()).isEqualTo(2);
+        assertThat(request.getTavilyFastLaneAudit().getTavilyRequestIds())
+                .containsExactly("req-docs", "req-open-web");
+        assertThat(request.getTavilyFastLaneAudit().getFieldEvidenceQueryExecutions())
+                .extracting("queryFingerprint", "queryIntent", "tavilyRequestId")
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("q-docs", "API_DOCS", "req-docs"),
+                        org.assertj.core.groups.Tuple.tuple("q-open-web", "THIRD_PARTY_REVIEW", "req-open-web")
+                );
+    }
+
+    @Test
+    void shouldNotOverwriteExistingFieldEvidenceAuditWithLaterEmptyScopeAudit() {
+        TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
+        StubTavilySearchClient client = new StubTavilySearchClient();
+        client.responses = List.of(TavilySearchClient.TavilySearchResponse.builder()
+                .query("bilibili api docs")
+                .requestId("req-docs-only")
+                .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                        .title("Bilibili API docs")
+                        .url("https://open.bilibili.com/doc/4/api")
+                        .rawContent("docs raw ".repeat(260))
+                        .score(0.86D)
+                        .build()))
+                .build());
+
+        TavilyFastLaneProvider provider = new TavilyFastLaneProvider(
+                properties(),
+                client,
+                new TavilySearchProfileResolver(properties()),
+                registry,
+                new ObjectMapper()
+        );
+        SearchSourceRequest request = SearchSourceRequest.builder()
+                .competitorName("哔哩哔哩")
+                .requestedScopes(List.of("DOCS", "OFFICIAL"))
+                .preferredProviderKey("tavily")
+                .fieldEvidenceQueries(List.of(FieldEvidenceQuery.builder()
+                        .fieldName("coreFeatures")
+                        .evidencePathKey("DOCS_API_GUIDE")
+                        .queryIntent("API_DOCS")
+                        .sourceType("DOCS")
+                        .query("bilibili api docs")
+                        .queryFingerprint("q-docs")
+                        .reason("docs query")
+                        .build()))
+                .build();
+
+        provider.search(request);
+
+        assertThat(client.executedProfiles).extracting(TavilySearchProfile::getFamily)
+                .containsExactly("DOCS");
+        assertThat(request.getTavilyFastLaneAudit()).isNotNull();
+        assertThat(request.getTavilyFastLaneAudit().getFieldEvidenceQueryExecutions())
+                .extracting("queryFingerprint", "tavilyRequestId")
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("q-docs", "req-docs-only"));
+    }
+
+    @Test
+    void shouldRecordScopeExpansionSourcesInsideTavilyAudit() {
+        TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
+        StubTavilySearchClient client = new StubTavilySearchClient();
+        client.responses = List.of(
+                TavilySearchClient.TavilySearchResponse.builder()
+                        .query("bilibili api docs")
+                        .requestId("req-docs")
+                        .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                                .title("Bilibili API docs")
+                                .url("https://open.bilibili.com/doc/4/api")
+                                .rawContent("docs raw ".repeat(260))
+                                .score(0.86D)
+                                .build()))
+                        .build(),
+                TavilySearchClient.TavilySearchResponse.builder()
+                        .query("bilibili developer review")
+                        .requestId("req-open-web")
+                        .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                                .title("Bilibili developer review")
+                                .url("https://example.com/bilibili-open-platform-review")
+                                .rawContent("review raw ".repeat(260))
+                                .score(0.88D)
+                                .build()))
+                        .build());
+
+        TavilyFastLaneProvider provider = new TavilyFastLaneProvider(
+                properties(),
+                client,
+                new TavilySearchProfileResolver(properties()),
+                registry,
+                new ObjectMapper()
+        );
+        SearchSourceRequest request = SearchSourceRequest.builder()
+                .competitorName("哔哩哔哩")
+                .requestedScopes(List.of("OFFICIAL"))
+                .preferredProviderKey("tavily")
+                .fieldEvidenceQueries(List.of(
+                        FieldEvidenceQuery.builder()
+                                .fieldName("coreFeatures")
+                                .evidencePathKey("DOCS_API_GUIDE")
+                                .queryIntent("API_DOCS")
+                                .sourceType("DOCS")
+                                .query("bilibili api docs")
+                                .queryFingerprint("q-docs")
+                                .reason("docs query")
+                                .build(),
+                        FieldEvidenceQuery.builder()
+                                .fieldName("weaknesses")
+                                .evidencePathKey("PUBLIC_REVIEW_OR_NEWS")
+                                .queryIntent("THIRD_PARTY_REVIEW")
+                                .sourceType("OPEN_WEB")
+                                .query("bilibili developer review")
+                                .queryFingerprint("q-open-web")
+                                .reason("open web query")
+                                .build()))
+                .build();
+
+        provider.search(request);
+
+        TavilyFastLaneAudit audit = request.getTavilyFastLaneAudit();
+        assertThat(audit).isNotNull();
+        Map<String, Object> auditView = new ObjectMapper().convertValue(
+                audit,
+                new TypeReference<Map<String, Object>>() {
+                }
+        );
+        assertThat(auditView.get("requestedScopes")).isEqualTo(List.of("OFFICIAL"));
+        assertThat(auditView.get("effectiveScopes")).isEqualTo(List.of("OFFICIAL", "DOCS", "OPEN_WEB"));
+        assertThat(auditView.get("scopeExpansionSources")).isEqualTo(Map.of(
+                "DOCS", List.of("fieldQuery:q-docs|field=coreFeatures|path=DOCS_API_GUIDE|intent=API_DOCS"),
+                "OPEN_WEB", List.of("fieldQuery:q-open-web|field=weaknesses|path=PUBLIC_REVIEW_OR_NEWS|intent=THIRD_PARTY_REVIEW")
+        ));
+    }
+
+    @Test
     void shouldStopLaunchingLaterFieldEvidenceQueriesAfterDeadlineExceeded() {
         TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
         StubTavilySearchClient client = new StubTavilySearchClient();
@@ -442,6 +642,51 @@ class TavilyFastLaneProviderTest {
         assertThat(client.executedProfiles).hasSize(1);
         assertThat(candidates).extracting(SourceCandidate::getFieldEvidenceQueryFingerprint)
                 .containsExactly("q1");
+    }
+
+    @Test
+    void shouldSkipFirstFieldEvidenceQueryWhenDeadlineAlreadyExpired() {
+        TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
+        StubTavilySearchClient client = new StubTavilySearchClient();
+        client.responses = List.of(TavilySearchClient.TavilySearchResponse.builder()
+                .query("expired budget should not execute")
+                .requestId("req-expired-first")
+                .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                        .title("unexpected")
+                        .url("https://open.bilibili.com/doc/unexpected")
+                        .rawContent("unexpected raw")
+                        .score(0.2D)
+                        .build()))
+                .build());
+
+        TavilyFastLaneProvider provider = new TavilyFastLaneProvider(
+                properties(),
+                client,
+                new TavilySearchProfileResolver(properties()),
+                registry,
+                new ObjectMapper()
+        );
+        SearchSourceRequest request = SearchSourceRequest.builder()
+                .competitorName("哔哩哔哩")
+                .requestedScopes(List.of("DOCS"))
+                .preferredProviderKey("tavily")
+                .fieldEvidenceExecutionDeadlineEpochMillis(System.currentTimeMillis() - 1L)
+                .fieldEvidenceQueries(List.of(fieldQuery("q-expired-first", "哔哩哔哩 开放平台 API 官方文档")))
+                .build();
+
+        List<SourceCandidate> candidates = provider.search(request);
+
+        assertThat(candidates).isEmpty();
+        assertThat(client.executedProfiles).isEmpty();
+        assertThat(client.queryBudgetMillisOverrides).isEmpty();
+        assertThat(request.getTavilyFastLaneAudit()).isNotNull();
+        assertThat(request.getTavilyFastLaneAudit().getQueriesSent()).isZero();
+        assertThat(request.getTavilyFastLaneAudit().getFieldEvidenceQueryExecutions())
+                .extracting("queryFingerprint", "status", "resultCount", "skipReason", "failureReason")
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(
+                                "q-expired-first", "SKIPPED", 0, "SKIPPED_BUDGET_EXHAUSTED", null)
+                );
     }
 
     @Test

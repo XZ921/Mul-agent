@@ -137,6 +137,24 @@ public class TaskRecoveryService {
                 node.setCompletedAt(LocalDateTime.now());
             }
         }
+        for (TaskNode node : nodes) {
+            if (node == null || isTerminalNodeStatus(node.getStatus())) {
+                continue;
+            }
+            TaskNodeStatus originalStatus = node.getStatus();
+            /*
+             * stopTask 之后，数据库里的节点权威状态不能继续残留 RUNNING/READY/DISPATCHED/PENDING。
+             * 对仍在执行中的节点额外写入 TERMINATE_REQUESTED，给执行线程的迟到写回提供第二道护栏；
+             * 对尚未真正执行的节点直接收口为 SKIPPED 即可。
+             */
+            node.setStatus(TaskNodeStatus.SKIPPED);
+            node.setControlState(originalStatus == TaskNodeStatus.RUNNING
+                    ? TaskNodeControlState.TERMINATE_REQUESTED
+                    : TaskNodeControlState.NONE);
+            node.setErrorMessage("任务已被用户主动停止");
+            node.setInterventionReason(null);
+            node.setCompletedAt(LocalDateTime.now());
+        }
         nodeRepository.saveAll(nodes);
         taskRepository.findById(taskId).ifPresent(task -> taskSnapshotCacheService.saveTaskSnapshot(
                 TaskProgressSnapshot.fromTask(task, task.getStatus(), task.getErrorMessage(), resolveRecoveryScopeNodes(task, nodes))));
@@ -145,6 +163,13 @@ public class TaskRecoveryService {
     /**
      * 只回滚中断时仍停留在 RUNNING/PENDING 的节点，保留 SUCCESS 检查点供执行器续跑。
      */
+    private boolean isTerminalNodeStatus(TaskNodeStatus status) {
+        return status == TaskNodeStatus.SUCCESS
+                || status == TaskNodeStatus.FAILED
+                || status == TaskNodeStatus.SKIPPED
+                || status == TaskNodeStatus.COMPENSATED;
+    }
+
     @Transactional
     public boolean resetInterruptedNodes(Long taskId) {
         List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);

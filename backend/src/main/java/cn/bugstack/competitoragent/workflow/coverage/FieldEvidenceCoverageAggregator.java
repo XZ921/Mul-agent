@@ -17,6 +17,9 @@ import java.util.List;
 @Component
 public class FieldEvidenceCoverageAggregator {
 
+    private static final int MIN_SUBSTANTIVE_CONTENT_CHARS = 200;
+    private static final int MIN_SUBSTANTIVE_STRUCTURED_BLOCKS = 2;
+
     /**
      * 根据本轮采集审计结果更新字段覆盖计划。
      * 采集结果必须携带 fieldName / evidencePathKey / sourceUrls，才能被计入对应字段路径。
@@ -109,7 +112,24 @@ public class FieldEvidenceCoverageAggregator {
                 && !hasUnusableEvidenceSignal(result)
                 && (repairPlan == null
                 || repairPlan.isComplete()
-                || repairPlan.getState() == EvidenceRepairState.REPAIR_NOT_REQUIRED);
+                || repairPlan.getState() == EvidenceRepairState.REPAIR_NOT_REQUIRED)
+                && hasSubstantiveFieldEvidenceContent(result, repairPlan);
+    }
+
+    /**
+     * 字段覆盖的“可计数证据”不能只看 success/sourceUrl/pathKey。
+     * 如果正文只有一句简介，或者结构化块几乎为空，它更像“找到了入口”而不是“拿到了字段证据”，
+     * 这类结果不能关闭整个字段，否则后续 planned query 会被过早截断。
+     */
+    private boolean hasSubstantiveFieldEvidenceContent(CollectionExecutionResult result,
+                                                       EvidenceRepairPlan repairPlan) {
+        if (repairPlan != null && !promotedUrls(repairPlan).isEmpty()) {
+            return true;
+        }
+        if (countStructuredEvidenceBlocks(result) >= MIN_SUBSTANTIVE_STRUCTURED_BLOCKS) {
+            return true;
+        }
+        return contentLength(result) >= MIN_SUBSTANTIVE_CONTENT_CHARS;
     }
 
     private boolean hasUnusableEvidenceSignal(CollectionExecutionResult result) {
@@ -135,6 +155,17 @@ public class FieldEvidenceCoverageAggregator {
 
     private List<String> promotedUrls(EvidenceRepairPlan repairPlan) {
         return repairPlan == null ? List.of() : safeList(repairPlan.getPromotedUrls());
+    }
+
+    private int countStructuredEvidenceBlocks(CollectionExecutionResult result) {
+        return result == null || result.getStructuredBlocks() == null ? 0 : result.getStructuredBlocks().size();
+    }
+
+    private int contentLength(CollectionExecutionResult result) {
+        if (result == null || !StringUtils.hasText(result.getContent())) {
+            return 0;
+        }
+        return result.getContent().trim().length();
     }
 
     private int minimumOrZero(Integer value) {

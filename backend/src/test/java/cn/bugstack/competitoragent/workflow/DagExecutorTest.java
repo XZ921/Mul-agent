@@ -244,6 +244,59 @@ class DagExecutorTest {
     }
 
     @Test
+    void shouldStampLastAttemptAtWhenNodeStartsRunning() {
+        Long taskId = 203L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode runnableCollector = TaskNode.builder()
+                .id(14L)
+                .taskId(taskId)
+                .nodeName("collect_probe")
+                .displayName("collect_probe")
+                .agentType(AgentType.COLLECTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .maxRetries(0)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        java.util.concurrent.atomic.AtomicReference<java.time.LocalDateTime> runningStartedAt = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<java.time.LocalDateTime> runningLastAttemptAt = new java.util.concurrent.atomic.AtomicReference<>();
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId))
+                .thenReturn(List.of(runnableCollector));
+        when(nodeRepository.save(any())).thenAnswer(invocation -> {
+            TaskNode savedNode = invocation.getArgument(0);
+            if (savedNode.getStatus() == TaskNodeStatus.RUNNING && runningStartedAt.get() == null) {
+                runningStartedAt.set(savedNode.getStartedAt());
+                runningLastAttemptAt.set(savedNode.getLastAttemptAt());
+            }
+            return savedNode;
+        });
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new TestCollectorAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("last-attempt-test").build());
+
+        assertNotNull(runningStartedAt.get());
+        assertEquals(runningStartedAt.get(), runningLastAttemptAt.get());
+    }
+
+    @Test
     void shouldStopWorkflowWhenPausedNodeBlocksExecution() {
         Long taskId = 303L;
         AnalysisTask task = AnalysisTask.builder()
@@ -365,6 +418,53 @@ class DagExecutorTest {
         assertEquals(TaskNodeControlState.NONE, runnableCollector.getControlState());
         assertTrue(runnableCollector.getErrorMessage().contains("终止请求"));
         assertEquals(AnalysisTaskStatus.FAILED, task.getStatus());
+    }
+
+    @Test
+    void shouldDiscardLateSuccessResultAfterTaskStopsDuringExecution() {
+        Long taskId = 405L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode runnableCollector = TaskNode.builder()
+                .id(32L)
+                .taskId(taskId)
+                .nodeName("collect_stop_sensitive")
+                .displayName("collect_stop_sensitive")
+                .agentType(AgentType.COLLECTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .maxRetries(0)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId))
+                .thenReturn(List.of(runnableCollector));
+        when(nodeRepository.findById(32L)).thenReturn(Optional.of(runnableCollector));
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new StopTaskDuringExecutionCollectorAgent(task)),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("stop-late-result-test").build());
+
+        assertEquals(TaskNodeStatus.SKIPPED, runnableCollector.getStatus());
+        assertEquals(TaskNodeControlState.NONE, runnableCollector.getControlState());
+        assertTrue(runnableCollector.getErrorMessage().contains("当前轮执行结果已丢弃"));
+        assertEquals(AnalysisTaskStatus.STOPPED, task.getStatus());
     }
 
     @Test
@@ -1973,6 +2073,36 @@ class DagExecutorTest {
      */
     private static AgentCapabilityRegistry registryOf(List<Agent> agents) {
         return new SpringAgentCapabilityRegistry(agents);
+    }
+
+    private static final class StopTaskDuringExecutionCollectorAgent implements Agent {
+
+        private final AnalysisTask task;
+
+        private StopTaskDuringExecutionCollectorAgent(AnalysisTask task) {
+            this.task = task;
+        }
+
+        @Override
+        public AgentType getType() {
+            return AgentType.COLLECTOR;
+        }
+
+        @Override
+        public String getName() {
+            return "stop-task-collector";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            task.setStatus(AnalysisTaskStatus.STOPPED);
+            task.setErrorMessage("任务已被用户主动停止");
+            task.setCompletedAt(java.time.LocalDateTime.now());
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("{\"node\":\"collect_stop_sensitive\"}")
+                    .build();
+        }
     }
 
     private static final class TestCollectorAgent implements Agent {

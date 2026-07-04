@@ -93,7 +93,7 @@ class SearchExecutionCoordinatorTest {
         assertFalse(result.getExecutionPlan().getSteps().isEmpty());
         assertNotNull(result.getProgressSnapshot());
         assertFalse(result.getProgressSnapshots().isEmpty());
-        assertTrue(result.getReasoningSummary().contains("最终选中 1 条"));
+        assertTrue(result.getReasoningSummary().contains("selectedTargets=1"));
         assertNotNull(result.getExecutionTrace());
         assertEquals("v1", result.getExecutionTrace().getTraceVersion());
         assertNotNull(result.getExecutionTrace().getCandidateVerificationElapsedMillis());
@@ -904,7 +904,7 @@ class SearchExecutionCoordinatorTest {
                 .findFirst()
                 .orElseThrow();
         assertEquals(SearchExecutionStep.StepStatus.SUCCESS, supplementStep.getStatus());
-        assertTrue(supplementStep.getMessage().contains("回退到规划期候选"));
+        assertTrue(supplementStep.getMessage().contains("supplement produced no new candidates"));
         assertEquals(1, result.getSelectedTargets().size());
         assertEquals("https://planned.example.com/docs", result.getSelectedTargets().get(0).getCandidate().getUrl());
         assertEquals("NO_NEW_CANDIDATES_KEEP_PLANNED", result.getExecutionTrace().getFallbackDecision());
@@ -1299,7 +1299,7 @@ class SearchExecutionCoordinatorTest {
 
         assertEquals("captcha", result.getExecutionTrace().getBrowserBlockedReason());
         assertEquals(1, result.getExecutionTrace().getBrowserBlockedCount());
-        assertTrue(result.getExecutionTrace().getRecoveryAdvice().contains("反爬"));
+        assertTrue(result.getExecutionTrace().getRecoveryAdvice().contains("blocked"));
     }
 
     @Test
@@ -1436,7 +1436,7 @@ class SearchExecutionCoordinatorTest {
                 .findFirst()
                 .orElseThrow();
         assertEquals(SearchExecutionStep.StepStatus.SKIPPED, verifyStep.getStatus());
-        assertTrue(verifyStep.getMessage().contains("关闭结果页验证"));
+        assertTrue(verifyStep.getMessage().contains("result page verification is disabled"));
         assertEquals(0, result.getExecutionTrace().getVerifiedCandidateCount());
         assertEquals("HTTP_FALLBACK", result.getExecutionTrace().getSupplementMethod());
         assertEquals(2, result.getSelectedTargets().size());

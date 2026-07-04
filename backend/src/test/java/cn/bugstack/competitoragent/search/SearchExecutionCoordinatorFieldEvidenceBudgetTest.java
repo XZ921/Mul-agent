@@ -150,7 +150,7 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                         org.assertj.core.groups.Tuple.tuple("q-priority-30", "SKIPPED", 0, "SKIPPED_BUDGET_EXHAUSTED", null),
                         org.assertj.core.groups.Tuple.tuple("q-priority-40", "SKIPPED", 0, "SKIPPED_BUDGET_EXHAUSTED", null)
                 );
-
+        assertThat(result.getAuditSnapshot().getSummary().getTavilyFastLaneAudit().getFieldEvidenceQueryExecutions()).hasSize(4);
         assertThat(result.getAuditSnapshot().getSummary().getTavilyFastLaneAudit().getFieldEvidenceQueryExecutions())
                 .hasSize(4);
         SearchExecutionStep supplementStep = result.getExecutionPlan().getSteps().stream()
@@ -158,9 +158,9 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                 .findFirst()
                 .orElseThrow();
         assertThat(supplementStep.getMessage())
-                .contains("field query 计划 4 条")
-                .contains("实际执行 2 条")
-                .contains("跳过 2 条")
+                .contains("field query plan 4")
+                .contains("executed 2")
+                .contains("skipped 2")
                 .contains("SKIPPED_BUDGET_EXHAUSTED");
     }
 

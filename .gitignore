@@ -4,8 +4,10 @@ target/
 !**/src/test/**/target/
 
 # ==================== 后端 ====================
-backend/data/           # H2 数据库文件
-backend/logs/           # 应用日志
+# H2 数据库文件
+backend/data/
+# 应用日志
+backend/logs/
 
 # ==================== 前端 ====================
 frontend/node_modules/

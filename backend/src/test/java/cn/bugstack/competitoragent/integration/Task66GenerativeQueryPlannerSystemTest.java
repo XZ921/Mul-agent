@@ -35,8 +35,12 @@ class Task66GenerativeQueryPlannerSystemTest {
         // 07 天花板验收：非 coreFeatures/pricing 的正向字段也进入多 query，并且包含第三方补充视角。
         assertThat(queries).hasSizeGreaterThanOrEqualTo(2);
         assertThat(queries)
-                .filteredOn(query -> !"OPEN_WEB".equals(query.getSourceType()))
+                .filteredOn(query -> "OFFICIAL_PUBLIC_PROFILE".equals(query.getEvidencePathKey())
+                        && ("OFFICIAL".equals(query.getSourceType()) || "DOCS".equals(query.getSourceType())))
                 .allSatisfy(query -> assertThat(query.getIncludeDomains()).contains("open.bilibili.com"));
+        assertThat(queries)
+                .filteredOn(query -> "PUBLIC_REVIEW_OR_NEWS".equals(query.getEvidencePathKey()))
+                .allSatisfy(query -> assertThat(query.getIncludeDomains()).isEmpty());
         assertThat(queries)
                 .anySatisfy(query -> {
                     assertThat(query.getSourceType()).isIn("OPEN_WEB", "REVIEW", "NEWS");

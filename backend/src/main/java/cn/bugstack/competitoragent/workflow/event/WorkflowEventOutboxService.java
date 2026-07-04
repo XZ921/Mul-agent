@@ -39,10 +39,14 @@ public class WorkflowEventOutboxService {
     private final ObjectProvider<RocketMQTemplate> rocketMQTemplateProvider;
 
     @Transactional
-    public void stage(WorkflowEvent workflowEvent) {
+    public TaskWorkflowEvent stage(WorkflowEvent workflowEvent) {
         if (workflowEvent == null || workflowEvent.getTaskId() == null || workflowEvent.getEventType() == null) {
-            return;
+            return null;
         }
+        String workflowTopic = WorkflowEventTopicPolicy.validateRequiredTopic(
+                "rocketmq.workflow.topic",
+                rocketMqProperties.getWorkflow().getTopic()
+        );
         TaskWorkflowEvent entity = TaskWorkflowEvent.builder()
                 .eventId(workflowEvent.getEventId())
                 .taskId(workflowEvent.getTaskId())
@@ -51,7 +55,7 @@ public class WorkflowEventOutboxService {
                 .branchKey(workflowEvent.getBranchKey())
                 .eventType(workflowEvent.getEventType())
                 .deliveryStatus(TaskWorkflowEvent.STATUS_PENDING)
-                .topic(rocketMqProperties.getWorkflow().getTopic())
+                .topic(workflowTopic)
                 .tag(resolveTag(workflowEvent.getEventType()))
                 .payload(writeJsonSafely(workflowEvent.getPayload() == null ? Map.of() : workflowEvent.getPayload()))
                 .sourceUrls(writeJsonSafely(workflowEvent.getSourceUrls() == null ? List.of() : workflowEvent.getSourceUrls()))
@@ -64,6 +68,7 @@ public class WorkflowEventOutboxService {
                 workflowEvent.getEventType(),
                 workflowEvent.getTaskId(),
                 savedEntity.getId());
+        return savedEntity;
     }
 
     public void assertWorkflowIngressReady() {
@@ -115,6 +120,10 @@ public class WorkflowEventOutboxService {
     }
 
     private void publishCandidate(TaskWorkflowEvent candidate) {
+        if (!WorkflowEventTopicPolicy.isValid(candidate.getTopic())) {
+            moveInvalidTopicCandidateToDeadLetter(candidate);
+            return;
+        }
         try {
             assertWorkflowIngressReady();
             RocketMQTemplate template = rocketMQTemplateProvider.getIfAvailable();
@@ -130,6 +139,21 @@ public class WorkflowEventOutboxService {
         } catch (Exception e) {
             handlePublishFailure(candidate, e);
         }
+    }
+
+    /**
+     * 历史数据里如果已经混入非法 topic，就不能再把它当成“可能偶发成功”的网络错误重试。
+     * 这里直接收口为死信，并留下明确错误原因，避免 6 次无意义重投污染运行态。
+     */
+    private void moveInvalidTopicCandidateToDeadLetter(TaskWorkflowEvent candidate) {
+        candidate.setDeliveryStatus(TaskWorkflowEvent.STATUS_DEAD_LETTER);
+        candidate.setNextAttemptAt(LocalDateTime.now());
+        candidate.setLastError(WorkflowEventTopicPolicy.buildInvalidTopicMessage(candidate.getTopic()));
+        taskWorkflowEventRepository.save(candidate);
+        log.error("workflow event moved to DLQ because of invalid topic, eventId={}, taskId={}, topic={}",
+                candidate.getEventId(),
+                candidate.getTaskId(),
+                candidate.getTopic());
     }
 
     private void handlePublishFailure(TaskWorkflowEvent candidate, Exception e) {

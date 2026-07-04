@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.workflow.coverage;
 
 import cn.bugstack.competitoragent.collection.CollectionExecutionResult;
+import cn.bugstack.competitoragent.collection.StructuredContentBlock;
 import cn.bugstack.competitoragent.search.EvidenceRepairPlan;
 import cn.bugstack.competitoragent.search.EvidenceRepairState;
 import org.junit.jupiter.api.Test;
@@ -100,6 +101,50 @@ class FieldEvidenceCoverageAggregatorTest {
                         .resourceLocator("https://open.bilibili.com")
                         .sourceUrls(List.of("https://open.bilibili.com"))
                         .qualitySignals(List.of("NAVIGATION_SHELL_DETECTED", "WEAK_MAIN_CONTENT"))
+                        .publicEvidenceRecoveryFieldName("coreFeatures")
+                        .publicEvidenceRecoveryEvidencePathKey("DOCS_API_GUIDE")
+                        .evidenceRepairPlan(EvidenceRepairPlan.builder()
+                                .state(EvidenceRepairState.REPAIR_NOT_REQUIRED)
+                                .build())
+                        .build()));
+
+        FieldEvidenceCoverage coreFeatures = updated.findField("coreFeatures").orElseThrow();
+        assertThat(coreFeatures.getStatus()).isEqualTo(FieldEvidenceCoverageStatus.EVIDENCE_PATH_COVERAGE_NOT_MET);
+        assertThat(coreFeatures.getAttemptedPaths()).containsExactly("DOCS_API_GUIDE");
+        assertThat(coreFeatures.getCompletedPaths()).isEmpty();
+        assertThat(coreFeatures.getSourceUrls()).isEmpty();
+        assertThat(coreFeatures.getRecommendedNextAction()).isEqualTo("RECOLLECT_FIELD_EVIDENCE");
+    }
+
+    @Test
+    void shouldNotCloseFieldWhenSuccessfulResultOnlyContainsThinIntroContent() {
+        DimensionEvidencePlan plan = DimensionEvidencePlan.builder()
+                .competitorName("Bilibili")
+                .maxCollectionRounds(2)
+                .fieldCoverages(List.of(FieldEvidenceCoverage.builder()
+                        .fieldName("coreFeatures")
+                        .status(FieldEvidenceCoverageStatus.NOT_STARTED)
+                        .minimumAttemptedPaths(1)
+                        .minDistinctEvidenceCount(1)
+                        .evidencePaths(List.of(CoverageEvidencePath.builder()
+                                .pathKey("DOCS_API_GUIDE")
+                                .required(true)
+                                .build()))
+                        .plannedQueries(List.of())
+                        .build()))
+                .build();
+
+        DimensionEvidencePlan updated = aggregator.applyCollectionResults(plan, List.of(
+                CollectionExecutionResult.builder()
+                        .success(true)
+                        .status("SUCCESS")
+                        .resourceLocator("https://open.bilibili.com/doc/4/feb66f99")
+                        .content("简短简介")
+                        .sourceUrls(List.of("https://open.bilibili.com/doc/4/feb66f99"))
+                        .structuredBlocks(List.of(StructuredContentBlock.builder()
+                                .blockType("PARAGRAPH")
+                                .content("短内容")
+                                .build()))
                         .publicEvidenceRecoveryFieldName("coreFeatures")
                         .publicEvidenceRecoveryEvidencePathKey("DOCS_API_GUIDE")
                         .evidenceRepairPlan(EvidenceRepairPlan.builder()

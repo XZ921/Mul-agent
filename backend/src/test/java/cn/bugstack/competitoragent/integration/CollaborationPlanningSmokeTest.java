@@ -5,6 +5,7 @@ import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.agent.capability.SpringAgentCapabilityRegistry;
 import cn.bugstack.competitoragent.config.CollectorProperties;
+import cn.bugstack.competitoragent.config.RocketMqProperties;
 import cn.bugstack.competitoragent.event.TaskEventPublisher;
 import cn.bugstack.competitoragent.log.AgentLogService;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
@@ -64,6 +65,7 @@ import cn.bugstack.competitoragent.workflow.WorkflowPlanAssembler;
 import cn.bugstack.competitoragent.workflow.WorkflowPlanValidator;
 import cn.bugstack.competitoragent.workflow.coverage.AnalysisDimensionMappingCatalog;
 import cn.bugstack.competitoragent.workflow.coverage.CoverageContractResolver;
+import cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventType;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
 import cn.bugstack.competitoragent.workflow.runtime.DynamicPlanAppender;
@@ -132,7 +134,12 @@ class CollaborationPlanningSmokeTest {
                 new CollaborationGoalAssembler(objectMapper),
                 new CollaborationPlanService(),
                 new InitialPlanReviewService(),
-                new CollaborationTraceService(workflowEventRepository, objectMapper)
+                new CollaborationTraceService(new WorkflowEventOutboxService(
+                        workflowEventRepository,
+                        buildRocketMqProperties(),
+                        objectMapper,
+                        mock(org.springframework.beans.factory.ObjectProvider.class)
+                ))
         );
 
         List<TaskNode> nodes = workflowFactory.createWorkflow(task);
@@ -214,6 +221,19 @@ class CollaborationPlanningSmokeTest {
         assertThat(decisions.get(0).getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
         assertThat(decisions.get(0).getInputRefs())
                 .containsEntry("agentSuggestionIds", List.of("as-task-99-analyze_competitors-1"));
+    }
+
+    private RocketMqProperties buildRocketMqProperties() {
+        RocketMqProperties properties = new RocketMqProperties();
+        properties.setEnabled(true);
+        properties.setRequired(true);
+        properties.setNameServer("127.0.0.1:9876");
+        properties.getProducer().setGroup("competitor-agent-workflow-producer");
+        properties.getConsumer().setGroup("competitor-agent-workflow-consumer");
+        properties.getWorkflow().setTopic("task-workflow-events");
+        properties.getWorkflow().setDispatchTag("TASK_EXECUTION_REQUESTED");
+        properties.getWorkflow().setLifecycleTag("NODE_LIFECYCLE");
+        return properties;
     }
 
     @Test

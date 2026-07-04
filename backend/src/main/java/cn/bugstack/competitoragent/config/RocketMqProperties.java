@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.config;
 
+import cn.bugstack.competitoragent.workflow.event.WorkflowEventTopicPolicy;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
@@ -82,7 +83,7 @@ public class RocketMqProperties {
         assertHasText(nameServer, "rocketmq.name-server");
         assertHasText(producer.getGroup(), "rocketmq.producer.group");
         assertHasText(consumer.getGroup(), "rocketmq.consumer.group");
-        assertHasText(workflow.getTopic(), "rocketmq.workflow.topic");
+        WorkflowEventTopicPolicy.validateRequiredTopic("rocketmq.workflow.topic", workflow.getTopic());
         assertHasText(workflow.getDispatchTag(), "rocketmq.workflow.dispatch-tag");
         assertHasText(workflow.getLifecycleTag(), "rocketmq.workflow.lifecycle-tag");
         if (workflow.getOutbox().getMaxRetries() < 1) {

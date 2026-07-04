@@ -1,0 +1,10 @@
+﻿            event_type            |        topic         |           tag            | delivery_status | retry_count | last_error 
+----------------------------------+----------------------+--------------------------+-----------------+-------------+------------
+ COLLABORATION_PLAN_RECORDED      | task-workflow-events | NODE_LIFECYCLE           | CONSUMED        |           0 | 
+ COLLABORATION_CHECKPOINT_UPDATED | task-workflow-events | NODE_LIFECYCLE           | CONSUMED        |           0 | 
+ TASK_CREATED                     | task-workflow-events | NODE_LIFECYCLE           | CONSUMED        |           0 | 
+ TASK_EXECUTION_REQUESTED         | task-workflow-events | TASK_EXECUTION_REQUESTED | PUBLISHED       |           0 | 
+ NODE_READY                       | task-workflow-events | NODE_LIFECYCLE           | CONSUMED        |           0 | 
+ NODE_READY                       | task-workflow-events | NODE_LIFECYCLE           | CONSUMED        |           0 | 
+(6 rows)
+

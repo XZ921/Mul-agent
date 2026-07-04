@@ -18,6 +18,7 @@ import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.ReportRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.task.AnalysisTaskRunner;
+import cn.bugstack.competitoragent.task.TaskExecutionCancellationRegistry;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
 import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskRecoveryService;
@@ -92,6 +93,9 @@ class TaskRuntimeCommandAppServiceTest {
     private TaskRecoveryService taskRecoveryService;
 
     @Mock
+    private TaskExecutionCancellationRegistry taskExecutionCancellationRegistry;
+
+    @Mock
     private TaskArtifactCleanupCoordinator taskArtifactCleanupCoordinator;
 
     @Mock
@@ -120,6 +124,7 @@ class TaskRuntimeCommandAppServiceTest {
                 workflowEventOutboxService,
                 dynamicTaskGraphService,
                 taskRecoveryService,
+                taskExecutionCancellationRegistry,
                 taskArtifactCleanupCoordinator,
                 taskQuotaCoordinator,
                 objectMapper);
@@ -746,6 +751,7 @@ class TaskRuntimeCommandAppServiceTest {
         assertNotNull(task.getCompletedAt());
         verify(taskRepository).save(task);
         verify(taskRecoveryService).markStoppedNodes(taskId);
+        verify(taskExecutionCancellationRegistry).cancelTask(taskId);
         verify(taskEventPublisher).publishTaskStatusEvent(
                 taskId,
                 AnalysisTaskStatus.STOPPED,

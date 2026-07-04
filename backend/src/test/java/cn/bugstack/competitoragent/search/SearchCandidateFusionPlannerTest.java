@@ -92,4 +92,75 @@ class SearchCandidateFusionPlannerTest {
         assertThat(decision.getPreselectedCandidates())
                 .anyMatch(candidate -> "www.woshipm.com".equals(candidate.getDomain()));
     }
+
+    @Test
+    void shouldPreserveDistinctOfficialEvidencePathsEvenWhenPerDomainCapIsTight() {
+        SearchCandidateFusionPlanner planner = new SearchCandidateFusionPlanner(
+                new SearchPolicyResolver(),
+                new SourceCandidateRanker()
+        );
+        CollectorNodeConfig config = CollectorNodeConfig.builder()
+                .competitorName("Notion AI")
+                .sourceType("DOCS")
+                .competitorUrls(List.of("https://docs.example.com"))
+                .build();
+
+        SearchCandidateFusionDecision decision = planner.plan(
+                config,
+                List.of(
+                        SourceCandidate.builder()
+                                .url("https://docs.example.com/docs/api")
+                                .title("API Guide")
+                                .sourceType("DOCS")
+                                .domain("docs.example.com")
+                                .evidencePathKey("DOCS_API_GUIDE")
+                                .pageType("OFFICIAL_DOC")
+                                .queryIntent("API_DOCS")
+                                .totalScore(0.95)
+                                .build(),
+                        SourceCandidate.builder()
+                                .url("https://docs.example.com/pricing")
+                                .title("Pricing")
+                                .sourceType("PRICING")
+                                .domain("docs.example.com")
+                                .evidencePathKey("OFFICIAL_PRICING_PAGE")
+                                .pageType("PRICING_PAGE")
+                                .queryIntent("OFFICIAL_PRICING")
+                                .totalScore(0.94)
+                                .build(),
+                        SourceCandidate.builder()
+                                .url("https://docs.example.com/help/setup")
+                                .title("Help Center")
+                                .sourceType("OFFICIAL")
+                                .domain("docs.example.com")
+                                .evidencePathKey("HELP_CENTER_SETUP")
+                                .pageType("HELP_CENTER")
+                                .queryIntent("HELP_CENTER")
+                                .totalScore(0.93)
+                                .build(),
+                        SourceCandidate.builder()
+                                .url("https://docs.example.com/reference/sdk")
+                                .title("SDK Reference")
+                                .sourceType("DOCS")
+                                .domain("docs.example.com")
+                                .evidencePathKey("SDK_REFERENCE")
+                                .pageType("OFFICIAL_DOC")
+                                .queryIntent("SDK_REFERENCE")
+                                .totalScore(0.92)
+                                .build()
+                ),
+                4,
+                2
+        );
+
+        assertThat(decision.getRankedCandidates())
+                .extracting(SourceCandidate::getUrl)
+                .contains(
+                        "https://docs.example.com/docs/api",
+                        "https://docs.example.com/pricing",
+                        "https://docs.example.com/help/setup",
+                        "https://docs.example.com/reference/sdk"
+                );
+        assertThat(decision.getPreselectedCandidates()).hasSize(4);
+    }
 }

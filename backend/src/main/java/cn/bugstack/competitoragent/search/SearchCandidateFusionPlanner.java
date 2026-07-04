@@ -107,27 +107,79 @@ public class SearchCandidateFusionPlanner {
                 .thenComparing(SourceCandidate::getTotalScore, Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(SourceCandidate::getPrefetchedRawContentLength, Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(SourceCandidate::getUrl, Comparator.nullsLast(String::compareTo)));
-        return applyPerDomainCap(ranked, maxCandidatesPerDomain);
+        return applyPerDomainCap(config, ranked, maxCandidatesPerDomain);
     }
 
-    private List<SourceCandidate> applyPerDomainCap(List<SourceCandidate> rankedCandidates, int maxCandidatesPerDomain) {
+    private List<SourceCandidate> applyPerDomainCap(CollectorNodeConfig config,
+                                                    List<SourceCandidate> rankedCandidates,
+                                                    int maxCandidatesPerDomain) {
         if (rankedCandidates == null || rankedCandidates.isEmpty() || maxCandidatesPerDomain <= 0) {
             return rankedCandidates == null ? List.of() : rankedCandidates;
         }
         Map<String, Integer> domainCounter = new LinkedHashMap<>();
+        Map<String, Set<String>> domainEvidencePathCounter = new LinkedHashMap<>();
         List<SourceCandidate> limited = new ArrayList<>();
         for (SourceCandidate rankedCandidate : rankedCandidates) {
             String domain = resolveDomain(rankedCandidate);
             int currentCount = domainCounter.getOrDefault(domain, 0);
-            if (StringUtils.hasText(domain) && currentCount >= maxCandidatesPerDomain) {
+            String evidencePathSignature = resolveEvidencePathSignature(rankedCandidate);
+            Set<String> retainedEvidencePaths = domainEvidencePathCounter.computeIfAbsent(
+                    domain == null ? "" : domain,
+                    ignored -> new LinkedHashSet<>()
+            );
+            boolean preserveDistinctOfficialEvidencePath = isOfficialDomainCandidate(config, rankedCandidate, domain)
+                    && StringUtils.hasText(evidencePathSignature)
+                    && !retainedEvidencePaths.contains(evidencePathSignature);
+            if (StringUtils.hasText(domain)
+                    && currentCount >= maxCandidatesPerDomain
+                    && !preserveDistinctOfficialEvidencePath) {
                 continue;
             }
             limited.add(rankedCandidate);
             if (StringUtils.hasText(domain)) {
                 domainCounter.put(domain, currentCount + 1);
             }
+            if (StringUtils.hasText(evidencePathSignature)) {
+                retainedEvidencePaths.add(evidencePathSignature);
+            }
         }
         return limited;
+    }
+
+    /**
+     * 官方同域下的 docs/pricing/help/reference 往往分别对应不同证据路径。
+     * 这里显式把 sourceType / evidencePathKey / pageType / queryIntent 组合成稳定签名，
+     * 允许每条证据路径至少保留 1 个候选，避免被 host 级别硬上限过早裁掉。
+     */
+    private String resolveEvidencePathSignature(SourceCandidate candidate) {
+        if (candidate == null) {
+            return null;
+        }
+        String sourceType = normalizeEvidencePathPart(candidate.getSourceType());
+        String evidencePathKey = normalizeEvidencePathPart(candidate.getEvidencePathKey());
+        String pageType = normalizeEvidencePathPart(candidate.getPageType());
+        String queryIntent = normalizeEvidencePathPart(candidate.getQueryIntent());
+        if (!StringUtils.hasText(sourceType)
+                && !StringUtils.hasText(evidencePathKey)
+                && !StringUtils.hasText(pageType)
+                && !StringUtils.hasText(queryIntent)) {
+            return null;
+        }
+        return String.join("|", sourceType, evidencePathKey, pageType, queryIntent);
+    }
+
+    private String normalizeEvidencePathPart(String value) {
+        return StringUtils.hasText(value) ? value.trim().toUpperCase(Locale.ROOT) : "";
+    }
+
+    private boolean isOfficialDomainCandidate(CollectorNodeConfig config,
+                                              SourceCandidate candidate,
+                                              String domain) {
+        if (!StringUtils.hasText(domain)) {
+            return false;
+        }
+        return resolveOfficialDomains(config).stream()
+                .anyMatch(officialDomain -> isSameOrSubDomain(domain, officialDomain));
     }
 
     private int resolveFusionTier(CollectorNodeConfig config, SourceCandidate candidate) {

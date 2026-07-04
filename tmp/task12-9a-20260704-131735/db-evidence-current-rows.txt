@@ -1,0 +1,5 @@
+﻿ id  | competitor_name  | source_type |     discovery_method     |   source_domain   |               url               | full_len |         created_at         
+-----+------------------+-------------+--------------------------+-------------------+---------------------------------+----------+----------------------------
+ 606 | 哔哩哔哩开放平台 | OFFICIAL    | PUBLIC_EVIDENCE_RECOVERY | m.bilibili-ad.com | https://m.bilibili-ad.com/about |     5435 | 2026-07-04 13:25:58.883183
+(1 row)
+

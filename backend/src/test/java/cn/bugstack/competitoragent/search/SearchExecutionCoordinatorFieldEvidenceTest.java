@@ -416,6 +416,39 @@ class SearchExecutionCoordinatorFieldEvidenceTest {
      * 保持旧测试入口不变，让既有场景仍然可以通过布尔开关快速构造“弱入口已验证”的上下文。
      */
     @Test
+    void shouldKeepFieldQueriesWhenCompletedPathsMetButDistinctEvidenceStillInsufficient() {
+        CapturingSearchSourceProvider provider = new CapturingSearchSourceProvider(
+                List.of(),
+                List.of(fieldEvidenceCandidate())
+        );
+        SearchExecutionCoordinator coordinator = newCoordinator(
+                provider,
+                emptyBrowserResult(),
+                Set.of("https://www.bilibili.com/docs")
+        );
+
+        coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩")
+                .competitorUrls(List.of("https://www.bilibili.com"))
+                .sourceType("DOCS")
+                .verifyCandidates(true)
+                .searchMode("HTTP_ONLY")
+                .searchFallbackOrder(List.of("HTTP"))
+                .preferredSearchProvider("tavily")
+                .browserSearchEnabled(false)
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .dimensionEvidencePlan(fieldPlanWithInsufficientDistinctEvidence())
+                .build());
+
+        List<SearchSourceRequest> supplementRequests = supplementRequests(provider);
+        assertThat(supplementRequests).hasSize(1);
+        assertThat(supplementRequests.get(0).getFieldEvidenceQueries())
+                .extracting(FieldEvidenceQuery::getQueryFingerprint)
+                .containsExactly("q-core-1", "q-core-2");
+    }
+
+    @Test
     void shouldKeepVerifiedDirectDiscoveryCandidatesAsSeedWhileOfficialSearchFirstSupplementStillRuns() {
         CapturingSearchSourceProvider provider = new CapturingSearchSourceProvider(
                 List.of(),
@@ -546,6 +579,33 @@ class SearchExecutionCoordinatorFieldEvidenceTest {
                         .status(FieldEvidenceCoverageStatus.NOT_STARTED)
                         .minimumAttemptedPaths(1)
                         .completedPaths(List.of())
+                        .plannedQueries(List.of(
+                                fieldEvidenceQuery(),
+                                FieldEvidenceQuery.builder()
+                                        .fieldName("coreFeatures")
+                                        .evidencePathKey("DOCS_SDK_GUIDE")
+                                        .queryIntent("SDK_GUIDE")
+                                        .sourceType("DOCS")
+                                        .query("site:open.bilibili.com SDK 文档")
+                                        .queryFingerprint("q-core-2")
+                                        .reason("核心功能 SDK 文档")
+                                        .build()
+                        ))
+                        .build()))
+                .build();
+    }
+
+    private DimensionEvidencePlan fieldPlanWithInsufficientDistinctEvidence() {
+        return DimensionEvidencePlan.builder()
+                .competitorName("哔哩哔哩")
+                .maxCollectionRounds(2)
+                .fieldCoverages(List.of(FieldEvidenceCoverage.builder()
+                        .fieldName("coreFeatures")
+                        .status(FieldEvidenceCoverageStatus.SUFFICIENT)
+                        .minimumAttemptedPaths(1)
+                        .minDistinctEvidenceCount(2)
+                        .completedPaths(List.of("DOCS_API_GUIDE"))
+                        .sourceUrls(List.of("https://open.bilibili.com/doc/4/feb66f99"))
                         .plannedQueries(List.of(
                                 fieldEvidenceQuery(),
                                 FieldEvidenceQuery.builder()

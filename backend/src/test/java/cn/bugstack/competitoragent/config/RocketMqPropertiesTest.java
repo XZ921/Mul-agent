@@ -82,6 +82,49 @@ class RocketMqPropertiesTest {
     }
 
     @Test
+    void shouldRejectWorkflowTopicContainingIllegalRocketMqCharacters() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(TestConfiguration.class)
+                .withPropertyValues(
+                        "rocketmq.enabled=true",
+                        "rocketmq.required=true",
+                        "rocketmq.name-server=127.0.0.1:9876",
+                        "rocketmq.producer.group=competitor-agent-workflow-producer",
+                        "rocketmq.consumer.group=competitor-agent-workflow-consumer",
+                        "rocketmq.workflow.topic=task.collaboration",
+                        "rocketmq.workflow.dispatch-tag=TASK_EXECUTION_REQUESTED",
+                        "rocketmq.workflow.lifecycle-tag=NODE_LIFECYCLE"
+                )
+                .run(context -> {
+                    RocketMqProperties properties = context.getBean(RocketMqProperties.class);
+                    assertThatThrownBy(properties::validateForExecution)
+                            .hasMessageContaining("rocketmq.workflow.topic")
+                            .hasMessageContaining("task.collaboration");
+                });
+    }
+
+    @Test
+    void shouldRejectBlankWorkflowTopicAtExecutionIngress() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(TestConfiguration.class)
+                .withPropertyValues(
+                        "rocketmq.enabled=true",
+                        "rocketmq.required=true",
+                        "rocketmq.name-server=127.0.0.1:9876",
+                        "rocketmq.producer.group=competitor-agent-workflow-producer",
+                        "rocketmq.consumer.group=competitor-agent-workflow-consumer",
+                        "rocketmq.workflow.topic= ",
+                        "rocketmq.workflow.dispatch-tag=TASK_EXECUTION_REQUESTED",
+                        "rocketmq.workflow.lifecycle-tag=NODE_LIFECYCLE"
+                )
+                .run(context -> {
+                    RocketMqProperties properties = context.getBean(RocketMqProperties.class);
+                    assertThatThrownBy(properties::validateForExecution)
+                            .hasMessageContaining("rocketmq.workflow.topic");
+                });
+    }
+
+    @Test
     void shouldEnableDefaultProfileAgainstLocalDockerRocketMq() throws IOException {
         RocketMqProperties properties = bindDefaultDocumentProperties();
 

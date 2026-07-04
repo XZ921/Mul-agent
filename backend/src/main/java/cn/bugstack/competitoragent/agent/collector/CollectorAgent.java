@@ -2342,14 +2342,15 @@ public class CollectorAgent extends BaseAgent {
                 qualityContext,
                 result,
                 verdict);
-        if (repairPlan != null && repairPlan.getState() == EvidenceRepairState.REPAIR_QUERY_PROPOSED) {
+        EvidenceRepairPlan mergedRepairPlan = mergeEvidenceRepairPlan(result.getEvidenceRepairPlan(), repairPlan);
+        if (mergedRepairPlan != null && mergedRepairPlan.getState() == EvidenceRepairState.REPAIR_QUERY_PROPOSED) {
             mergedSignals.add("REPAIR_QUERY_PROPOSED");
         }
         return result.toBuilder()
                 .evidenceQualityVerdict(verdict)
                 .qualitySignals(mergedSignals.stream().distinct().toList())
                 .qualityScore(verdict.getEvidenceUsabilityScore())
-                .evidenceRepairPlan(repairPlan)
+                .evidenceRepairPlan(mergedRepairPlan)
                 .publicEvidenceRecoveryFieldName(qualityContext == null ? null : qualityContext.getFieldName())
                 .publicEvidenceRecoveryEvidencePathKey(qualityContext == null ? null : qualityContext.getEvidencePathKey())
                 .publicEvidenceRecoveryQueryIntents(qualityContext == null || qualityContext.getCoverageQueryIntents() == null
@@ -2362,6 +2363,65 @@ public class CollectorAgent extends BaseAgent {
      * 将质量门禁的弱证据结论转成 repair 生命周期审计。
      * 这里只生成公开补采候选计划，不直接访问外部网络，也不宣称替代证据已经可用。
      */
+    /**
+     * 质量门禁会补充 verdict 和 repair 审计，但不能把上游已经确认的更强 repair 终态覆盖掉。
+     * 否则第二轮补证据明明已经 promoted，经过门禁后反而会退回 NOT_REQUIRED / QUERY_PROPOSED，导致字段闭环误判失败。
+     */
+    private static EvidenceRepairPlan mergeEvidenceRepairPlan(EvidenceRepairPlan existingPlan,
+                                                              EvidenceRepairPlan recomputedPlan) {
+        if (existingPlan == null) {
+            return recomputedPlan;
+        }
+        if (recomputedPlan == null) {
+            return existingPlan;
+        }
+        EvidenceRepairPlan strongerPlan = repairPlanRank(existingPlan) >= repairPlanRank(recomputedPlan)
+                ? existingPlan
+                : recomputedPlan;
+        EvidenceRepairPlan weakerPlan = strongerPlan == existingPlan ? recomputedPlan : existingPlan;
+        return strongerPlan.toBuilder()
+                .reason(StringUtils.hasText(strongerPlan.getReason()) ? strongerPlan.getReason() : weakerPlan.getReason())
+                .sourceUrl(StringUtils.hasText(strongerPlan.getSourceUrl()) ? strongerPlan.getSourceUrl() : weakerPlan.getSourceUrl())
+                .repairQueries(mergeRepairPlanUrls(strongerPlan.getRepairQueries(), weakerPlan.getRepairQueries()))
+                .candidateUrls(mergeRepairPlanUrls(strongerPlan.getCandidateUrls(), weakerPlan.getCandidateUrls()))
+                .promotedUrls(mergeRepairPlanUrls(strongerPlan.getPromotedUrls(), weakerPlan.getPromotedUrls()))
+                .build();
+    }
+
+    private static int repairPlanRank(EvidenceRepairPlan repairPlan) {
+        if (repairPlan == null || repairPlan.getState() == null) {
+            return -1;
+        }
+        return switch (repairPlan.getState()) {
+            case REPAIR_FAILED -> 0;
+            case REPAIR_QUERY_PROPOSED -> 1;
+            case REPAIR_CANDIDATE_VERIFIED -> 2;
+            case REPAIR_NOT_REQUIRED -> 3;
+            case REPAIR_EVIDENCE_PROMOTED -> 4;
+            case REPAIR_FIELD_PATH_COMPLETED -> 5;
+        };
+    }
+
+    private static List<String> mergeRepairPlanUrls(List<String> primary,
+                                                    List<String> secondary) {
+        LinkedHashSet<String> merged = new LinkedHashSet<>();
+        if (primary != null) {
+            for (String value : primary) {
+                if (StringUtils.hasText(value)) {
+                    merged.add(value.trim());
+                }
+            }
+        }
+        if (secondary != null) {
+            for (String value : secondary) {
+                if (StringUtils.hasText(value)) {
+                    merged.add(value.trim());
+                }
+            }
+        }
+        return merged.isEmpty() ? List.of() : new ArrayList<>(merged);
+    }
+
     private static EvidenceRepairPlan buildEvidenceRepairPlan(PublicEvidenceRecoveryService publicEvidenceRecoveryService,
                                                               CollectorNodeConfig config,
                                                               EvidenceQualityContext qualityContext,

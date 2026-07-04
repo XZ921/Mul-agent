@@ -30,6 +30,7 @@ import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeExecutionAttemptRepository;
 import cn.bugstack.competitoragent.repository.WorkflowDeadLetterRecordRepository;
+import cn.bugstack.competitoragent.task.TaskExecutionCancellationRegistry;
 import cn.bugstack.competitoragent.task.TaskExecutionLockService;
 import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
@@ -62,6 +63,8 @@ import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 /**
  * DAG 执行器，负责按 DAG 依赖驱动各类 Agent，并处理依赖、重试、条件分支和任务收口。
@@ -77,6 +80,7 @@ public class DagExecutor {
     private final NodeExecutionRecoveryPolicy recoveryPolicy;
     private final TaskSnapshotCacheService taskSnapshotCacheService;
     private final TaskExecutionLockService taskExecutionLockService;
+    private final TaskExecutionCancellationRegistry taskExecutionCancellationRegistry;
     private final TaskEventPublisher taskEventPublisher;
     private final WorkflowEventPublisher workflowEventPublisher;
     private final TaskNodeExecutionAttemptRepository taskNodeExecutionAttemptRepository;
@@ -100,6 +104,7 @@ public class DagExecutor {
                        ObjectMapper objectMapper,
                        TaskSnapshotCacheService taskSnapshotCacheService,
                        TaskExecutionLockService taskExecutionLockService,
+                       TaskExecutionCancellationRegistry taskExecutionCancellationRegistry,
                        TaskEventPublisher taskEventPublisher,
                        AgentLogService agentLogService,
                        WorkflowEventPublisher workflowEventPublisher,
@@ -123,6 +128,9 @@ public class DagExecutor {
         this.recoveryPolicy = new NodeExecutionRecoveryPolicy(objectMapper);
         this.taskSnapshotCacheService = taskSnapshotCacheService;
         this.taskExecutionLockService = taskExecutionLockService;
+        this.taskExecutionCancellationRegistry = taskExecutionCancellationRegistry == null
+                ? new TaskExecutionCancellationRegistry()
+                : taskExecutionCancellationRegistry;
         this.taskEventPublisher = taskEventPublisher;
         this.workflowEventPublisher = workflowEventPublisher;
         this.taskNodeExecutionAttemptRepository = taskNodeExecutionAttemptRepository;
@@ -167,6 +175,7 @@ public class DagExecutor {
                 objectMapper,
                 taskSnapshotCacheService,
                 taskExecutionLockService,
+                new TaskExecutionCancellationRegistry(),
                 taskEventPublisher,
                 agentLogService,
                 workflowEventPublisher,
@@ -210,6 +219,7 @@ public class DagExecutor {
                 objectMapper,
                 taskSnapshotCacheService,
                 taskExecutionLockService,
+                new TaskExecutionCancellationRegistry(),
                 taskEventPublisher,
                 agentLogService,
                 workflowEventPublisher,
@@ -250,6 +260,7 @@ public class DagExecutor {
                 objectMapper,
                 taskSnapshotCacheService,
                 taskExecutionLockService,
+                new TaskExecutionCancellationRegistry(),
                 taskEventPublisher,
                 agentLogService,
                 workflowEventPublisher,
@@ -327,6 +338,7 @@ public class DagExecutor {
         ExecutorService executor = Executors.newFixedThreadPool(resolveParallelism(nodes.size()));
         CompletionService<NodeExecutionResult> completionService = new ExecutorCompletionService<>(executor);
         int runningCount = 0;
+        taskExecutionCancellationRegistry.registerTaskExecutor(taskId, executor);
         try {
             while (true) {
                 refreshNodeStates(taskId, nodes);
@@ -356,6 +368,9 @@ public class DagExecutor {
                 }
 
                 NodeExecutionResult completedResult = awaitNextCompletedNode(completionService);
+                if (completedResult == null) {
+                    continue;
+                }
                 runningCount--;
                 if (completedResult != null) {
                     lastTouchedNode = completedResult.getNode();
@@ -365,6 +380,7 @@ public class DagExecutor {
                 }
             }
         } finally {
+            taskExecutionCancellationRegistry.clearTask(taskId);
             executor.shutdown();
         }
 
@@ -474,7 +490,9 @@ public class DagExecutor {
             }
             workflowEventPublisher.publishNodeReady(node);
             TaskNode runningNode = markNodeRunning(node, nodeContext);
-            completionService.submit(() -> executeRunningNode(taskId, sharedContext, runningNode, nodeContext, lockOwner));
+            Future<NodeExecutionResult> nodeFuture = completionService.submit(
+                    () -> executeRunningNode(taskId, sharedContext, runningNode, nodeContext, lockOwner));
+            taskExecutionCancellationRegistry.registerNodeFuture(taskId, runningNode.getNodeName(), nodeFuture);
             progressed = true;
             submittedCount++;
             lastTouchedNode = runningNode;
@@ -484,7 +502,14 @@ public class DagExecutor {
 
     private NodeExecutionResult awaitNextCompletedNode(CompletionService<NodeExecutionResult> completionService) {
         try {
-            return completionService.take().get();
+            Future<NodeExecutionResult> completedFuture = completionService.poll(1, TimeUnit.SECONDS);
+            if (completedFuture == null) {
+                return null;
+            }
+            return completedFuture.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting node completion", e);
         } catch (Exception e) {
             throw new IllegalStateException("Failed while waiting node completion", e);
         }
@@ -539,7 +564,17 @@ public class DagExecutor {
             }
 
             AgentResult result = executeNodeOnce(capability, nodeContext);
+            boolean interrupted = Thread.interrupted();
             TaskNode latestNode = nodeRepository.findById(node.getId()).orElse(node);
+            /*
+             * 运行线程收到中断，或者 task/node 权威状态已经进入 STOPPED/SKIPPED，
+             * 都说明这一轮结果已经“迟到”了，只允许走停止收口，不能再覆盖成 SUCCESS/FAILED。
+             */
+            if (interrupted || isTaskStopped(taskId) || latestNode.getStatus() == TaskNodeStatus.SKIPPED) {
+                TaskNode stoppedNode = finalizeStoppedNode(taskId, latestNode);
+                syncNodeState(node, stoppedNode);
+                return new NodeExecutionResult(stoppedNode);
+            }
             if (latestNode.getControlState() == TaskNodeControlState.TERMINATE_REQUESTED) {
                 latestNode.setStatus(TaskNodeStatus.SKIPPED);
                 latestNode.setOutputData(null);
@@ -893,7 +928,13 @@ public class DagExecutor {
         node.setInputData(buildNodeInput(node, context));
         node.setErrorMessage(null);
         node.setInterventionReason(null);
-        node.setStartedAt(LocalDateTime.now());
+        /*
+         * 节点一旦进入 RUNNING，就说明这次执行尝试已经真实开始。
+         * 这里让 startedAt 与 lastAttemptAt 同步落库，避免外部排查时只能看到“正在运行”却看不到“最近一次开始尝试是什么时候”。
+         */
+        LocalDateTime startedAt = LocalDateTime.now();
+        node.setStartedAt(startedAt);
+        node.setLastAttemptAt(startedAt);
         node.setCompletedAt(null);
         TaskNode savedNode = nodeRepository.save(node);
         syncNodeState(node, savedNode);
@@ -964,6 +1005,30 @@ public class DagExecutor {
     /**
      * 依赖判断除了 SUCCESS 外，还要兼容 allowFailedDependency 的可选放行语义。
      */
+    private TaskNode finalizeStoppedNode(Long taskId, TaskNode latestNode) {
+        if (latestNode == null) {
+            return null;
+        }
+        String discardedResultMessage = "任务已被用户主动停止，当前轮执行结果已丢弃";
+        boolean requiresPersistence = latestNode.getStatus() != TaskNodeStatus.SKIPPED
+                || latestNode.getControlState() != TaskNodeControlState.NONE
+                || latestNode.getCompletedAt() == null
+                || !discardedResultMessage.equals(latestNode.getErrorMessage());
+        if (!requiresPersistence) {
+            return latestNode;
+        }
+        latestNode.setStatus(TaskNodeStatus.SKIPPED);
+        latestNode.setControlState(TaskNodeControlState.NONE);
+        latestNode.setOutputData(null);
+        latestNode.setErrorMessage(discardedResultMessage);
+        latestNode.setInterventionReason(null);
+        latestNode.setCompletedAt(LocalDateTime.now());
+        TaskNode stoppedNode = nodeRepository.save(latestNode);
+        runtimeStateRefresher.refreshRuntimeSnapshot(taskId);
+        taskEventPublisher.publishNodeStatusEvent(taskId, stoppedNode, "NODE_STOPPED");
+        return stoppedNode;
+    }
+
     private boolean dependenciesSatisfied(TaskNode node, Map<String, TaskNode> nodeMap) {
         List<String> dependencyNames = parseDependencyNames(node.getDependsOn());
         if (dependencyNames.isEmpty()) {

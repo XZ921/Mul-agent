@@ -22,6 +22,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Tavily Search API 客户端。
@@ -31,6 +35,8 @@ import java.util.Map;
 @Slf4j
 @Component
 public class TavilySearchClient {
+
+    private static final long EXPIRED_BUDGET_TIMEOUT_MILLIS = 5_000L;
 
     private final TavilySearchProperties properties;
     private final ObjectMapper objectMapper;
@@ -67,7 +73,7 @@ public class TavilySearchClient {
      * 保证上层 Provider 可以平稳降级，而不是把异常继续抛到路由层之外。
      */
     public TavilySearchResponse search(TavilySearchProfile profile) {
-        return search(profile, -1L);
+        return searchInternal(profile, null);
     }
 
     /**
@@ -75,6 +81,15 @@ public class TavilySearchClient {
      * 避免“还有 20 秒预算，却启动一个仍按默认 45 秒 timeout 运行的请求”。
      */
     public TavilySearchResponse search(TavilySearchProfile profile, long queryBudgetMillis) {
+        return searchInternal(profile, queryBudgetMillis);
+    }
+
+    /**
+     * 这里显式区分“没有预算约束”和“预算已经耗尽”两类语义：
+     * 1. 无预算约束：沿用 Tavily 默认 timeout 与 retry 行为；
+     * 2. 预算耗尽：只允许一次很短的 fail-open 收口，请求不能继续占住线程或无限重试。
+     */
+    private TavilySearchResponse searchInternal(TavilySearchProfile profile, Long queryBudgetMillis) {
         if (profile == null) {
             return emptyResponse(null, "tavily profile missing");
         }
@@ -86,6 +101,7 @@ public class TavilySearchClient {
         }
 
         int maxAttempts = Math.max(1, properties.getMaxRetries() + 1);
+        Long queryDeadlineEpochMillis = resolveQueryDeadlineEpochMillis(queryBudgetMillis);
         String requestBody;
         try {
             requestBody = buildRequestBody(profile);
@@ -95,20 +111,37 @@ public class TavilySearchClient {
 
         RuntimeException lastRuntimeError = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            Long remainingBudgetMillis = resolveRemainingBudgetMillis(queryBudgetMillis, queryDeadlineEpochMillis);
+            if (attempt > 1 && shouldStopRetryBecauseBudgetExhausted(queryBudgetMillis, remainingBudgetMillis)) {
+                break;
+            }
+            long effectiveTimeoutMillis = resolveEffectiveTimeoutMillis(remainingBudgetMillis);
+            CompletableFuture<HttpResponse<String>> responseFuture = null;
             try {
-                HttpRequest request = buildRequest(requestBody, queryBudgetMillis);
+                HttpRequest request = buildRequest(requestBody, effectiveTimeoutMillis);
                 lastRequestForTest = request;
                 lastRequestBodyForTest = requestBody;
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                responseFuture = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                HttpResponse<String> response = responseFuture.get(effectiveTimeoutMillis, TimeUnit.MILLISECONDS);
                 if (response.statusCode() < 200 || response.statusCode() >= 300) {
                     throw new IllegalStateException("tavily status=" + response.statusCode());
                 }
                 return parseResponse(response.body(), profile.getQuery());
             } catch (InterruptedException e) {
+                cancelFuture(responseFuture);
                 Thread.currentThread().interrupt();
                 log.warn("tavily search interrupted, query={}, attempt={}/{}",
                         profile.getQuery(), attempt, maxAttempts);
                 return emptyResponse(profile.getQuery(), "tavily interrupted");
+            } catch (TimeoutException e) {
+                cancelFuture(responseFuture);
+                log.warn("tavily search timed out, query={}, attempt={}/{}, timeout={}ms",
+                        profile.getQuery(), attempt, maxAttempts, effectiveTimeoutMillis);
+                return emptyResponse(profile.getQuery(), "tavily timeout after " + effectiveTimeoutMillis + "ms");
+            } catch (ExecutionException e) {
+                lastRuntimeError = unwrapExecutionFailure(e);
+                log.warn("tavily request failed, query={}, attempt={}/{}, error={}",
+                        profile.getQuery(), attempt, maxAttempts, lastRuntimeError.getMessage());
             } catch (RuntimeException e) {
                 lastRuntimeError = e;
                 log.warn("tavily search failed, query={}, attempt={}/{}, error={}",
@@ -131,8 +164,7 @@ public class TavilySearchClient {
         return lastRequestBodyForTest;
     }
 
-    private HttpRequest buildRequest(String requestBody, long queryBudgetMillis) {
-        long effectiveTimeoutMillis = resolveEffectiveTimeoutMillis(queryBudgetMillis);
+    private HttpRequest buildRequest(String requestBody, long effectiveTimeoutMillis) {
         return HttpRequest.newBuilder(URI.create(properties.getEndpoint()))
                 .timeout(Duration.ofMillis(effectiveTimeoutMillis))
                 .header("Content-Type", "application/json")
@@ -202,12 +234,60 @@ public class TavilySearchClient {
         return Math.max(1, properties == null ? 45 : properties.getTimeoutSeconds());
     }
 
-    private long resolveEffectiveTimeoutMillis(long queryBudgetMillis) {
-        long defaultTimeoutMillis = Math.max(1, properties.getTimeoutSeconds()) * 1000L;
+    private Long resolveQueryDeadlineEpochMillis(Long queryBudgetMillis) {
+        if (queryBudgetMillis == null || queryBudgetMillis <= 0L) {
+            return null;
+        }
+        return System.currentTimeMillis() + queryBudgetMillis;
+    }
+
+    private Long resolveRemainingBudgetMillis(Long queryBudgetMillis, Long queryDeadlineEpochMillis) {
+        if (queryBudgetMillis == null) {
+            return null;
+        }
         if (queryBudgetMillis <= 0L) {
+            return queryBudgetMillis;
+        }
+        if (queryDeadlineEpochMillis == null) {
+            return queryBudgetMillis;
+        }
+        return queryDeadlineEpochMillis - System.currentTimeMillis();
+    }
+
+    private boolean shouldStopRetryBecauseBudgetExhausted(Long queryBudgetMillis, Long remainingBudgetMillis) {
+        if (queryBudgetMillis == null) {
+            return false;
+        }
+        if (queryBudgetMillis <= 0L) {
+            return true;
+        }
+        return remainingBudgetMillis != null && remainingBudgetMillis <= 0L;
+    }
+
+    private long resolveEffectiveTimeoutMillis(Long queryBudgetMillis) {
+        long defaultTimeoutMillis = Math.max(1, properties.getTimeoutSeconds()) * 1000L;
+        if (queryBudgetMillis == null) {
             return defaultTimeoutMillis;
         }
+        if (queryBudgetMillis <= 0L) {
+            return Math.min(defaultTimeoutMillis, EXPIRED_BUDGET_TIMEOUT_MILLIS);
+        }
         return Math.max(1_000L, Math.min(defaultTimeoutMillis, queryBudgetMillis));
+    }
+
+    private RuntimeException unwrapExecutionFailure(ExecutionException executionException) {
+        Throwable cause = executionException.getCause();
+        if (cause instanceof RuntimeException runtimeException) {
+            return runtimeException;
+        }
+        String message = cause == null ? executionException.getMessage() : cause.getMessage();
+        return new IllegalStateException("tavily request failed: " + message, cause == null ? executionException : cause);
+    }
+
+    private void cancelFuture(CompletableFuture<HttpResponse<String>> responseFuture) {
+        if (responseFuture != null) {
+            responseFuture.cancel(true);
+        }
     }
 
     private String defaultText(String value) {

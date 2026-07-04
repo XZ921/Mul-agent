@@ -15,6 +15,7 @@ import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
 import cn.bugstack.competitoragent.search.SearchAuditSnapshot;
 import cn.bugstack.competitoragent.task.AnalysisTaskRunner;
+import cn.bugstack.competitoragent.task.TaskExecutionCancellationRegistry;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
 import cn.bugstack.competitoragent.task.TaskQuotaCoordinator;
 import cn.bugstack.competitoragent.task.TaskRecoveryService;
@@ -26,8 +27,8 @@ import cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -45,7 +46,6 @@ import java.util.Objects;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class TaskRuntimeCommandAppService {
 
     private final AnalysisTaskRepository taskRepository;
@@ -56,9 +56,64 @@ public class TaskRuntimeCommandAppService {
     private final WorkflowEventOutboxService workflowEventOutboxService;
     private final DynamicTaskGraphService dynamicTaskGraphService;
     private final TaskRecoveryService taskRecoveryService;
+    private final TaskExecutionCancellationRegistry taskExecutionCancellationRegistry;
     private final TaskArtifactCleanupCoordinator taskArtifactCleanupCoordinator;
     private final TaskQuotaCoordinator taskQuotaCoordinator;
     private final ObjectMapper objectMapper;
+
+    @Autowired
+    public TaskRuntimeCommandAppService(AnalysisTaskRepository taskRepository,
+                                        TaskNodeRepository nodeRepository,
+                                        TaskSnapshotCacheService taskSnapshotCacheService,
+                                        TaskEventPublisher taskEventPublisher,
+                                        AnalysisTaskRunner taskRunner,
+                                        WorkflowEventOutboxService workflowEventOutboxService,
+                                        DynamicTaskGraphService dynamicTaskGraphService,
+                                        TaskRecoveryService taskRecoveryService,
+                                        TaskExecutionCancellationRegistry taskExecutionCancellationRegistry,
+                                        TaskArtifactCleanupCoordinator taskArtifactCleanupCoordinator,
+                                        TaskQuotaCoordinator taskQuotaCoordinator,
+                                        ObjectMapper objectMapper) {
+        this.taskRepository = taskRepository;
+        this.nodeRepository = nodeRepository;
+        this.taskSnapshotCacheService = taskSnapshotCacheService;
+        this.taskEventPublisher = taskEventPublisher;
+        this.taskRunner = taskRunner;
+        this.workflowEventOutboxService = workflowEventOutboxService;
+        this.dynamicTaskGraphService = dynamicTaskGraphService;
+        this.taskRecoveryService = taskRecoveryService;
+        this.taskExecutionCancellationRegistry = taskExecutionCancellationRegistry == null
+                ? new TaskExecutionCancellationRegistry()
+                : taskExecutionCancellationRegistry;
+        this.taskArtifactCleanupCoordinator = taskArtifactCleanupCoordinator;
+        this.taskQuotaCoordinator = taskQuotaCoordinator;
+        this.objectMapper = objectMapper;
+    }
+
+    public TaskRuntimeCommandAppService(AnalysisTaskRepository taskRepository,
+                                        TaskNodeRepository nodeRepository,
+                                        TaskSnapshotCacheService taskSnapshotCacheService,
+                                        TaskEventPublisher taskEventPublisher,
+                                        AnalysisTaskRunner taskRunner,
+                                        WorkflowEventOutboxService workflowEventOutboxService,
+                                        DynamicTaskGraphService dynamicTaskGraphService,
+                                        TaskRecoveryService taskRecoveryService,
+                                        TaskArtifactCleanupCoordinator taskArtifactCleanupCoordinator,
+                                        TaskQuotaCoordinator taskQuotaCoordinator,
+                                        ObjectMapper objectMapper) {
+        this(taskRepository,
+                nodeRepository,
+                taskSnapshotCacheService,
+                taskEventPublisher,
+                taskRunner,
+                workflowEventOutboxService,
+                dynamicTaskGraphService,
+                taskRecoveryService,
+                new TaskExecutionCancellationRegistry(),
+                taskArtifactCleanupCoordinator,
+                taskQuotaCoordinator,
+                objectMapper);
+    }
 
     @Transactional
     public void executeTask(Long taskId) {
@@ -320,6 +375,7 @@ public class TaskRuntimeCommandAppService {
         task.setCompletedAt(LocalDateTime.now());
         taskQuotaCoordinator.releaseTaskQuotaIfHeld(task);
         taskRepository.save(task);
+        taskExecutionCancellationRegistry.cancelTask(taskId);
         taskRecoveryService.markStoppedNodes(taskId);
         refreshTaskSnapshot(taskId);
         taskEventPublisher.publishTaskStatusEvent(

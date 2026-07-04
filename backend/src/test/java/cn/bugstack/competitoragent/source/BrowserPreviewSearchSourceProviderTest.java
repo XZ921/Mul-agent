@@ -78,8 +78,9 @@ class BrowserPreviewSearchSourceProviderTest {
         assertEquals("DOCS", previewConfig.getSourceType());
         assertEquals("official", previewConfig.getSourceFamilyKey());
         assertEquals("PRIMARY_VERTICAL", previewConfig.getSourceFamilyRole());
-        assertTrue(previewConfig.getPrimaryTools().contains("WEB_SCRAPER"));
-        assertTrue(previewConfig.getAuxiliaryTools().contains("PUBLIC_SEARCH"));
+        assertTrue(previewConfig.getPrimaryTools().contains("PUBLIC_SEARCH"));
+        assertTrue(previewConfig.getAuxiliaryTools().contains("WEB_SCRAPER"));
+        assertTrue(previewConfig.getAuxiliaryTools().contains("JINA_READER"));
         assertTrue(previewConfig.getQueryTemplates().contains("search-docs-primary"));
         assertEquals("BROWSER_ONLY", previewConfig.getSearchMode());
         assertTrue(Boolean.TRUE.equals(previewConfig.getBrowserSearchEnabled()));

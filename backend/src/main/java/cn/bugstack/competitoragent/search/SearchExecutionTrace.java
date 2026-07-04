@@ -31,6 +31,12 @@ public class SearchExecutionTrace {
     private List<String> fallbackOrder;
     private Integer plannedCandidateCount;
     private Integer baseTargetCount;
+    private Integer preSupplementEffectiveSearchFirstTargetCount;
+    private Integer preSupplementFusionRankedCandidateCount;
+    private Integer preSupplementFusionPreselectedCandidateCount;
+    private Integer preSupplementFusionFastLaneCandidateCount;
+    private Integer preSupplementFusionVerificationCandidateCount;
+    private Integer preSupplementFusionThirdPartyCandidateCount;
     private Integer effectiveSearchFirstTargetCount;
     private Integer fusionRankedCandidateCount;
     private Integer fusionPreselectedCandidateCount;

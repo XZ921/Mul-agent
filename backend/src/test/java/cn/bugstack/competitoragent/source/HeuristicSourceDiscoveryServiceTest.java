@@ -62,8 +62,9 @@ class HeuristicSourceDiscoveryServiceTest {
         assertFalse(docsPlan.getCandidates().isEmpty());
         assertEquals("official", docsPlan.getSourceFamilyKey());
         assertEquals("PRIMARY_VERTICAL", docsPlan.getSourceFamilyRole());
-        assertTrue(docsPlan.getPrimaryTools().contains("WEB_SCRAPER"));
-        assertTrue(docsPlan.getAuxiliaryTools().contains("PUBLIC_SEARCH"));
+        assertTrue(docsPlan.getPrimaryTools().contains("PUBLIC_SEARCH"));
+        assertTrue(docsPlan.getAuxiliaryTools().contains("WEB_SCRAPER"));
+        assertTrue(docsPlan.getAuxiliaryTools().contains("JINA_READER"));
         assertTrue(docsPlan.getQueryTemplates().contains("search-docs-primary"));
         assertEquals(docsPlan.getUrls(), docsPlan.getSourceUrls());
         assertTrue(docsPlan.getCandidates().stream().anyMatch(candidate ->

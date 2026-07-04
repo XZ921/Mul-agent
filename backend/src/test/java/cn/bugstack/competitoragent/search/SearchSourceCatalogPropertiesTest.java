@@ -15,9 +15,9 @@ class SearchSourceCatalogPropertiesTest {
         assertThat(properties.getFamilies().get("official").getDirectPathTemplates())
                 .containsExactly("/", "/pricing", "/docs", "/documentation", "/help");
         assertThat(properties.getFamilies().get("official").getPrimaryTools())
-                .contains("WEB_SCRAPER", "JINA_READER");
-        assertThat(properties.getFamilies().get("official").getAuxiliaryTools())
                 .contains("PUBLIC_SEARCH");
+        assertThat(properties.getFamilies().get("official").getAuxiliaryTools())
+                .contains("WEB_SCRAPER", "JINA_READER");
         assertThat(properties.getFamilies().get("news").getUpdatePolicy().getMode())
                 .isEqualTo("REALTIME_RSS_AND_SCHEDULED_SWEEP");
         assertThat(properties.getFamilies().get("github").getPrimaryTools())

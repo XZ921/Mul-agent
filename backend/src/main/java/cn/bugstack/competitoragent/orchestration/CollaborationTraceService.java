@@ -1,10 +1,9 @@
 package cn.bugstack.competitoragent.orchestration;
 
 import cn.bugstack.competitoragent.model.entity.TaskWorkflowEvent;
-import cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository;
+import cn.bugstack.competitoragent.workflow.event.WorkflowEvent;
+import cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventType;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -20,14 +19,10 @@ import java.util.UUID;
 @Service
 public class CollaborationTraceService {
 
-    private static final String TOPIC = "task.collaboration";
+    private final WorkflowEventOutboxService workflowEventOutboxService;
 
-    private final TaskWorkflowEventRepository repository;
-    private final ObjectMapper objectMapper;
-
-    public CollaborationTraceService(TaskWorkflowEventRepository repository, ObjectMapper objectMapper) {
-        this.repository = repository;
-        this.objectMapper = objectMapper;
+    public CollaborationTraceService(WorkflowEventOutboxService workflowEventOutboxService) {
+        this.workflowEventOutboxService = workflowEventOutboxService;
     }
 
     /**
@@ -63,7 +58,6 @@ public class CollaborationTraceService {
                 planVersionId,
                 branchKey,
                 WorkflowEventType.COLLABORATION_PLAN_RECORDED,
-                "collaboration_plan_recorded",
                 payload,
                 normalizedPlan.getSourceUrls());
     }
@@ -95,7 +89,6 @@ public class CollaborationTraceService {
                 planVersionId,
                 branchKey,
                 WorkflowEventType.COLLABORATION_CHECKPOINT_UPDATED,
-                "collaboration_checkpoint_updated",
                 payload,
                 normalizedCheckpoint.getSourceUrls());
     }
@@ -105,34 +98,19 @@ public class CollaborationTraceService {
                                         Long planVersionId,
                                         String branchKey,
                                         WorkflowEventType eventType,
-                                        String tag,
                                         Map<String, Object> payload,
                                         List<String> sourceUrls) {
         LocalDateTime now = LocalDateTime.now();
-        TaskWorkflowEvent event = TaskWorkflowEvent.builder()
+        return workflowEventOutboxService.stage(WorkflowEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .taskId(taskId)
                 .nodeName(nodeName)
                 .planVersionId(planVersionId)
                 .branchKey(branchKey)
                 .eventType(eventType)
-                .deliveryStatus(TaskWorkflowEvent.STATUS_PENDING)
-                .topic(TOPIC)
-                .tag(tag)
-                .payload(writeJson(payload))
-                .sourceUrls(writeJson(sourceUrls == null ? List.of() : sourceUrls))
-                .nextAttemptAt(now)
-                .createdAt(now)
-                .updatedAt(now)
-                .build();
-        return repository.save(event);
-    }
-
-    private String writeJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("serialize collaboration trace failed", e);
-        }
+                .payload(payload)
+                .sourceUrls(sourceUrls == null ? List.of() : sourceUrls)
+                .occurredAt(now)
+                .build());
     }
 }

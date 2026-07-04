@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.workflow;
 
 import cn.bugstack.competitoragent.config.CollectorProperties;
+import cn.bugstack.competitoragent.config.RocketMqProperties;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.entity.TaskPlan;
@@ -24,6 +25,7 @@ import cn.bugstack.competitoragent.source.SourceDiscoveryService;
 import cn.bugstack.competitoragent.source.SourcePlan;
 import cn.bugstack.competitoragent.workflow.coverage.AnalysisDimensionMappingCatalog;
 import cn.bugstack.competitoragent.workflow.coverage.CoverageContractResolver;
+import cn.bugstack.competitoragent.workflow.event.WorkflowEventOutboxService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -91,9 +93,11 @@ class WorkflowFactoryTest {
         assertEquals("official", config.path("sourceFamilyKey").asText());
         assertEquals("PRIMARY_VERTICAL", config.path("sourceFamilyRole").asText());
         assertTrue(objectMapper.convertValue(config.path("primaryTools"), new TypeReference<List<String>>() {
+        }).contains("PUBLIC_SEARCH"));
+        assertTrue(objectMapper.convertValue(config.path("auxiliaryTools"), new TypeReference<List<String>>() {
         }).contains("WEB_SCRAPER"));
         assertTrue(objectMapper.convertValue(config.path("auxiliaryTools"), new TypeReference<List<String>>() {
-        }).contains("PUBLIC_SEARCH"));
+        }).contains("JINA_READER"));
         assertTrue(objectMapper.convertValue(config.path("queryTemplates"), new TypeReference<List<String>>() {
         }).contains("search-docs-primary"));
         assertTrue(config.has("discoveryNotes"));
@@ -405,7 +409,13 @@ class WorkflowFactoryTest {
         InitialPlanReviewService initialPlanReviewService = new InitialPlanReviewService();
         TaskWorkflowEventRepository taskWorkflowEventRepository = Mockito.mock(TaskWorkflowEventRepository.class);
         when(taskWorkflowEventRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        CollaborationTraceService collaborationTraceService = new CollaborationTraceService(taskWorkflowEventRepository, objectMapper);
+        WorkflowEventOutboxService workflowEventOutboxService = new WorkflowEventOutboxService(
+                taskWorkflowEventRepository,
+                buildRocketMqProperties(),
+                objectMapper,
+                Mockito.mock(org.springframework.beans.factory.ObjectProvider.class)
+        );
+        CollaborationTraceService collaborationTraceService = new CollaborationTraceService(workflowEventOutboxService);
         return new WorkflowFactory(
                 nodeRepository,
                 new WorkflowPlanValidator(),
@@ -418,6 +428,19 @@ class WorkflowFactoryTest {
                 initialPlanReviewService,
                 collaborationTraceService
         );
+    }
+
+    private RocketMqProperties buildRocketMqProperties() {
+        RocketMqProperties properties = new RocketMqProperties();
+        properties.setEnabled(true);
+        properties.setRequired(true);
+        properties.setNameServer("127.0.0.1:9876");
+        properties.getProducer().setGroup("competitor-agent-workflow-producer");
+        properties.getConsumer().setGroup("competitor-agent-workflow-consumer");
+        properties.getWorkflow().setTopic("task-workflow-events");
+        properties.getWorkflow().setDispatchTag("TASK_EXECUTION_REQUESTED");
+        properties.getWorkflow().setLifecycleTag("NODE_LIFECYCLE");
+        return properties;
     }
 
     private SearchSourceProvider buildSearchSourceProvider() {

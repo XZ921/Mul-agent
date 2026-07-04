@@ -100,27 +100,35 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
         }
 
         DomainHintSet domainHintSet = domainHintResolver.resolve(request, List.of());
-        List<String> scopes = resolveEffectiveScopes(request);
+        ScopeResolution scopeResolution = resolveScopeResolution(request);
         Map<String, SourceCandidate> merged = new LinkedHashMap<>();
-        for (String scope : scopes) {
-            for (SourceCandidate candidate : searchScope(request, scope, domainHintSet)) {
+        List<TavilyFastLaneAudit> scopeAudits = new ArrayList<>();
+        for (String scope : scopeResolution.effectiveScopes()) {
+            ScopeSearchResult scopeSearchResult = searchScope(request, scope, domainHintSet);
+            for (SourceCandidate candidate : scopeSearchResult.candidates()) {
                 if (candidate != null && StringUtils.hasText(candidate.getUrl())) {
                     merged.putIfAbsent(candidate.getUrl(), candidate);
                 }
             }
+            if (shouldMergeFieldEvidenceAudit(scopeSearchResult.audit())) {
+                scopeAudits.add(scopeSearchResult.audit());
+            }
+        }
+        if (hasFieldEvidenceQueries(request)) {
+            request.setTavilyFastLaneAudit(buildMergedFieldEvidenceAudit(scopeResolution, scopeAudits));
         }
         return new ArrayList<>(merged.values());
     }
 
-    private List<String> resolveEffectiveScopes(SearchSourceRequest request) {
-        LinkedHashSet<String> scopes = new LinkedHashSet<>();
-        List<String> requestedScopes = request == null ? null : request.getRequestedScopes();
-        if (requestedScopes == null || requestedScopes.isEmpty()) {
-            scopes.addAll(DEFAULT_SCOPES);
+    private ScopeResolution resolveScopeResolution(SearchSourceRequest request) {
+        LinkedHashSet<String> requestedScopeSet = new LinkedHashSet<>();
+        List<String> rawRequestedScopes = request == null ? null : request.getRequestedScopes();
+        if (rawRequestedScopes == null || rawRequestedScopes.isEmpty()) {
+            requestedScopeSet.addAll(DEFAULT_SCOPES);
         } else {
-            for (String scope : requestedScopes) {
+            for (String scope : rawRequestedScopes) {
                 if (StringUtils.hasText(scope)) {
-                    scopes.add(normalizeScope(scope));
+                    requestedScopeSet.add(normalizeScope(scope));
                 }
             }
         }
@@ -128,14 +136,30 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
          * 字段级 query 本身已经声明了要找的证据类型，外层节点 scope 不能把它过滤掉。
          * 例如 OFFICIAL 节点里规划出的 DOCS / OPEN_WEB 变体，必须进入 Tavily 执行队列。
          */
+        if (requestedScopeSet.isEmpty()) {
+            requestedScopeSet.addAll(DEFAULT_SCOPES);
+        }
+        LinkedHashSet<String> effectiveScopeSet = new LinkedHashSet<>(requestedScopeSet);
+        LinkedHashMap<String, LinkedHashSet<String>> scopeExpansionSources = new LinkedHashMap<>();
         if (request != null && request.getFieldEvidenceQueries() != null) {
             for (FieldEvidenceQuery query : request.getFieldEvidenceQueries()) {
-                if (query != null && StringUtils.hasText(query.getSourceType())) {
-                    scopes.add(normalizeScope(query.getSourceType()));
+                if (query == null || !StringUtils.hasText(query.getSourceType())) {
+                    continue;
+                }
+                String expandedScope = normalizeScope(query.getSourceType());
+                effectiveScopeSet.add(expandedScope);
+                if (!requestedScopeSet.contains(expandedScope)) {
+                    scopeExpansionSources
+                            .computeIfAbsent(expandedScope, ignored -> new LinkedHashSet<>())
+                            .add(describeScopeExpansionSource(query));
                 }
             }
         }
-        return scopes.isEmpty() ? DEFAULT_SCOPES : new ArrayList<>(scopes);
+        return new ScopeResolution(
+                new ArrayList<>(requestedScopeSet),
+                new ArrayList<>(effectiveScopeSet),
+                copyScopeExpansionSources(scopeExpansionSources)
+        );
     }
 
     @Override
@@ -148,10 +172,10 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
                 .build());
     }
 
-    private List<SourceCandidate> searchScope(SearchSourceRequest request,
-                                              String scope,
-                                              DomainHintSet domainHintSet) {
-        if (request.getFieldEvidenceQueries() != null && !request.getFieldEvidenceQueries().isEmpty()) {
+    private ScopeSearchResult searchScope(SearchSourceRequest request,
+                                          String scope,
+                                          DomainHintSet domainHintSet) {
+        if (hasFieldEvidenceQueries(request)) {
             return searchFieldEvidenceQueries(request, scope);
         }
         TavilySearchProfile primaryProfile = buildPrimaryProfile(request, scope, domainHintSet);
@@ -165,20 +189,22 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
                     "officialDocHitCount=0; usableContentRatio below threshold"
             );
             TavilySearchClient.TavilySearchResponse expansionResponse = client.search(expansionProfile);
-            return deduplicateByUrl(concat(primaryCandidates, mapResponse(request, expansionResponse, expansionProfile, scope)));
+            return new ScopeSearchResult(
+                    deduplicateByUrl(concat(primaryCandidates, mapResponse(request, expansionResponse, expansionProfile, scope))),
+                    null
+            );
         }
-        return primaryCandidates;
+        return new ScopeSearchResult(primaryCandidates, null);
     }
 
     /**
      * 字段级证据 query 必须逐条执行，不能退化成只消费第一条 searchQueries。
      * 这里按当前 scope 过滤匹配的字段 query，并对单条 Tavily 调用做 fail-open。
      */
-    private List<SourceCandidate> searchFieldEvidenceQueries(SearchSourceRequest request, String scope) {
+    private ScopeSearchResult searchFieldEvidenceQueries(SearchSourceRequest request, String scope) {
         List<SourceCandidate> candidates = new ArrayList<>();
         List<FieldEvidenceQueryExecutionAudit> queryAudits = new ArrayList<>();
         LinkedHashSet<String> requestIds = new LinkedHashSet<>();
-        boolean startedAnyFieldEvidenceQuery = false;
         for (FieldEvidenceQuery query : request.getFieldEvidenceQueries()) {
             if (query == null || !StringUtils.hasText(query.getQuery())) {
                 continue;
@@ -187,17 +213,23 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
             if (!normalizeScope(queryScope).equals(normalizeScope(scope))) {
                 continue;
             }
-            TavilySearchProfile profile = profileResolver.resolveFieldEvidence(query);
-            long remainingBudgetMillis = resolveRemainingFieldEvidenceBudgetMillis(request);
-            if (startedAnyFieldEvidenceQuery && shouldStopFieldEvidenceExecution(remainingBudgetMillis)) {
+            Long remainingBudgetMillis = resolveRemainingFieldEvidenceBudgetMillis(request);
+            /*
+             * field evidence 的预算门禁必须作用于每一条 query，而不是只限制“第二条及以后”。
+             * 一旦 deadline 已经过期，或者剩余预算连最小启动窗口都不够，就只记录 skipped audit，
+             * 不再继续构造 profile，更不能继续发 Tavily 请求。
+             */
+            if (shouldStopFieldEvidenceExecution(remainingBudgetMillis)) {
                 queryAudits.add(buildFieldEvidenceQueryAudit(query, "SKIPPED", 0L, 0,
                         null, "SKIPPED_BUDGET_EXHAUSTED", null));
-                break;
+                continue;
             }
+            TavilySearchProfile profile = profileResolver.resolveFieldEvidence(query);
             long startedAt = System.currentTimeMillis();
             try {
-                TavilySearchClient.TavilySearchResponse response = client.search(profile, remainingBudgetMillis);
-                startedAnyFieldEvidenceQuery = true;
+                TavilySearchClient.TavilySearchResponse response = remainingBudgetMillis == null
+                        ? client.search(profile)
+                        : client.search(profile, remainingBudgetMillis);
                 int resultCount = response == null || response.getResults() == null ? 0 : response.getResults().size();
                 String requestId = response == null ? null : response.getRequestId();
                 if (StringUtils.hasText(requestId)) {
@@ -214,15 +246,16 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
                 }
                 candidates.addAll(mapResponse(request, response, profile, queryScope));
             } catch (RuntimeException exception) {
-                startedAnyFieldEvidenceQuery = true;
                 queryAudits.add(buildFieldEvidenceQueryAudit(query, "FAILED",
                         System.currentTimeMillis() - startedAt, 0, null,
                         null, exception.getMessage()));
                 candidates.add(buildFailedFieldEvidenceCandidate(query, queryScope, exception.getMessage()));
             }
         }
-        request.setTavilyFastLaneAudit(buildFieldEvidenceFastLaneAudit(queryAudits, requestIds));
-        return deduplicateByUrl(candidates);
+        return new ScopeSearchResult(
+                deduplicateByUrl(candidates),
+                buildFieldEvidenceFastLaneAudit(queryAudits, requestIds)
+        );
     }
 
     private TavilyFastLaneAudit buildFieldEvidenceFastLaneAudit(List<FieldEvidenceQueryExecutionAudit> queryAudits,
@@ -263,6 +296,23 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
                 .build();
     }
 
+    /**
+     * 多 scope field query 的审计必须在 search() 外层统一合并，
+     * 这样后一个 scope 的空 audit 才不会把前一个 scope 的有效审计冲掉。
+     */
+    private TavilyFastLaneAudit buildMergedFieldEvidenceAudit(ScopeResolution scopeResolution,
+                                                              List<TavilyFastLaneAudit> scopeAudits) {
+        TavilyFastLaneAudit mergedAudit = TavilyFastLaneAudit.merge(scopeAudits);
+        if (mergedAudit == null) {
+            return null;
+        }
+        return mergedAudit.toBuilder()
+                .requestedScopes(scopeResolution == null ? List.of() : scopeResolution.requestedScopes())
+                .effectiveScopes(scopeResolution == null ? List.of() : scopeResolution.effectiveScopes())
+                .scopeExpansionSources(scopeResolution == null ? Map.of() : scopeResolution.scopeExpansionSources())
+                .build();
+    }
+
     private FieldEvidenceQueryExecutionAudit buildFieldEvidenceQueryAudit(FieldEvidenceQuery query,
                                                                           String status,
                                                                           long elapsedMillis,
@@ -289,13 +339,25 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
      * 执行层预算闸门的职责是“没预算就别再启动下一条长请求”，
      * 这里先实现最小兜底：只要 deadline 已经耗尽，或连 1 秒启动预算都不够，就直接停止后续 query。
      */
-    private boolean shouldStopFieldEvidenceExecution(long remainingBudgetMillis) {
-        return remainingBudgetMillis != -1L && remainingBudgetMillis < FIELD_QUERY_MIN_START_BUDGET_MILLIS;
+    private boolean shouldStopFieldEvidenceExecution(Long remainingBudgetMillis) {
+        return remainingBudgetMillis != null && remainingBudgetMillis < FIELD_QUERY_MIN_START_BUDGET_MILLIS;
     }
 
-    private long resolveRemainingFieldEvidenceBudgetMillis(SearchSourceRequest request) {
+    private boolean shouldMergeFieldEvidenceAudit(TavilyFastLaneAudit audit) {
+        return audit != null
+                && audit.getFieldEvidenceQueryExecutions() != null
+                && !audit.getFieldEvidenceQueryExecutions().isEmpty();
+    }
+
+    private boolean hasFieldEvidenceQueries(SearchSourceRequest request) {
+        return request != null
+                && request.getFieldEvidenceQueries() != null
+                && !request.getFieldEvidenceQueries().isEmpty();
+    }
+
+    private Long resolveRemainingFieldEvidenceBudgetMillis(SearchSourceRequest request) {
         if (request == null || request.getFieldEvidenceExecutionDeadlineEpochMillis() == null) {
-            return -1L;
+            return null;
         }
         return request.getFieldEvidenceExecutionDeadlineEpochMillis() - System.currentTimeMillis();
     }
@@ -595,6 +657,38 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
         return null;
     }
 
+    private String describeScopeExpansionSource(FieldEvidenceQuery query) {
+        if (query == null) {
+            return "fieldQuery:unknown";
+        }
+        String fingerprint = StringUtils.hasText(query.getQueryFingerprint())
+                ? query.getQueryFingerprint().trim()
+                : "unknown";
+        String fieldName = StringUtils.hasText(query.getFieldName()) ? query.getFieldName().trim() : "unknown";
+        String evidencePathKey = StringUtils.hasText(query.getEvidencePathKey())
+                ? query.getEvidencePathKey().trim()
+                : "unknown";
+        String queryIntent = StringUtils.hasText(query.getQueryIntent()) ? query.getQueryIntent().trim() : "unknown";
+        return "fieldQuery:" + fingerprint
+                + "|field=" + fieldName
+                + "|path=" + evidencePathKey
+                + "|intent=" + queryIntent;
+    }
+
+    private Map<String, List<String>> copyScopeExpansionSources(Map<String, LinkedHashSet<String>> scopeExpansionSources) {
+        if (scopeExpansionSources == null || scopeExpansionSources.isEmpty()) {
+            return Map.of();
+        }
+        LinkedHashMap<String, List<String>> copied = new LinkedHashMap<>();
+        for (Map.Entry<String, LinkedHashSet<String>> entry : scopeExpansionSources.entrySet()) {
+            if (!StringUtils.hasText(entry.getKey()) || entry.getValue() == null || entry.getValue().isEmpty()) {
+                continue;
+            }
+            copied.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+        }
+        return copied.isEmpty() ? Map.of() : copied;
+    }
+
     private List<SourceCandidate> deduplicateByUrl(List<SourceCandidate> candidates) {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
@@ -633,5 +727,14 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
 
     private String defaultText(String value) {
         return value == null ? "" : value;
+    }
+
+    private record ScopeResolution(List<String> requestedScopes,
+                                   List<String> effectiveScopes,
+                                   Map<String, List<String>> scopeExpansionSources) {
+    }
+
+    private record ScopeSearchResult(List<SourceCandidate> candidates,
+                                     TavilyFastLaneAudit audit) {
     }
 }

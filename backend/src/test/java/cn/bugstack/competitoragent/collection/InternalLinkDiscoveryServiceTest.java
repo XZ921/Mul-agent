@@ -122,6 +122,32 @@ class InternalLinkDiscoveryServiceTest {
         assertThat(discoveredCandidates).isEmpty();
     }
 
+    @Test
+    void shouldReturnEmptyWhenCurrentResultHasNoContentInsteadOfFetchingChildPages() throws Exception {
+        Object service = newService(2);
+        CollectionTaskPackage sourcePackage = CollectionTaskPackage.builder()
+                .competitorName("Acme AI")
+                .sourceFamilyKey("official")
+                .sourceType("DOCS")
+                .url("https://docs.example.com/open/doc")
+                .resourceLocator("https://docs.example.com/open/doc")
+                .sourceUrls(List.of("https://docs.example.com/open/doc"))
+                .build();
+        CollectionExecutionResult result = CollectionExecutionResult.builder()
+                .success(true)
+                .status("SUCCESS")
+                .resourceLocator("https://docs.example.com/open/doc")
+                .content("")
+                .sourceUrls(List.of("https://docs.example.com/open/doc"))
+                .build()
+                .normalize();
+
+        @SuppressWarnings("unchecked")
+        List<Object> discoveredCandidates = (List<Object>) invokeDiscover(service, sourcePackage, result, 0);
+
+        assertThat(discoveredCandidates).isEmpty();
+    }
+
     private Object newService(int maxDepth) throws Exception {
         Class<?> propertiesClass = loadRequiredClass(
                 "cn.bugstack.competitoragent.collection.InternalLinkDiscoveryProperties");
