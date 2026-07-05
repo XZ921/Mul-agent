@@ -1,12 +1,13 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.common.http.HardTimeoutHttpClient;
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.security.UrlSecurityUtils;
 import cn.bugstack.competitoragent.search.SerpApiProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -29,17 +30,38 @@ import java.util.Set;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class SerpApiSearchSourceProvider implements SearchSourceProvider {
 
     private final SerpApiProperties properties;
     private final SearchProviderProperties searchProviderProperties;
     private final PromptTemplateService promptTemplateService;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
+    private final HttpClient httpClient;
+
+    @Autowired
+    public SerpApiSearchSourceProvider(SerpApiProperties properties,
+                                       SearchProviderProperties searchProviderProperties,
+                                       PromptTemplateService promptTemplateService,
+                                       ObjectMapper objectMapper) {
+        this(properties, searchProviderProperties, promptTemplateService, objectMapper, null);
+    }
+
+    SerpApiSearchSourceProvider(SerpApiProperties properties,
+                                SearchProviderProperties searchProviderProperties,
+                                PromptTemplateService promptTemplateService,
+                                ObjectMapper objectMapper,
+                                HttpClient httpClient) {
+        this.properties = properties;
+        this.searchProviderProperties = searchProviderProperties;
+        this.promptTemplateService = promptTemplateService;
+        this.objectMapper = objectMapper;
+        this.httpClient = httpClient == null
+                ? HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .connectTimeout(Duration.ofSeconds(10))
+                .build()
+                : httpClient;
+    }
 
     @Override
     public SearchSourceProviderDescriptor descriptor() {
@@ -112,12 +134,18 @@ public class SerpApiSearchSourceProvider implements SearchSourceProvider {
 
     private List<SourceCandidate> searchOnce(String competitorName, String scope, String query) {
         try {
+            Duration protocolTimeout = Duration.ofSeconds(Math.max(1, searchProviderProperties.getTimeoutSeconds()));
             HttpRequest request = HttpRequest.newBuilder(buildUri(query))
-                    .timeout(Duration.ofSeconds(15))
+                    .timeout(protocolTimeout)
                     .header("Accept", "application/json")
                     .GET()
                     .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = HardTimeoutHttpClient.send(
+                    httpClient,
+                    request,
+                    HttpResponse.BodyHandlers.ofString(),
+                    request.timeout().orElse(protocolTimeout)
+            );
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new IllegalStateException("serpapi status=" + response.statusCode());
             }

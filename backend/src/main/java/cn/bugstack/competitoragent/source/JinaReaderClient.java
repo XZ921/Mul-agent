@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.source;
 
 import cn.bugstack.competitoragent.collection.CollectionFailureKind;
 import cn.bugstack.competitoragent.collection.StructuredContentBlock;
+import cn.bugstack.competitoragent.common.http.HardTimeoutHttpClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -78,10 +79,21 @@ public class JinaReaderClient {
         }
 
         int maxAttempts = Math.max(1, properties.getMaxRetries() + 1);
+        HttpRequest httpRequest = buildRequest(request);
         RuntimeException lastError = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                HttpResponse<String> response = httpClient.send(buildRequest(request), HttpResponse.BodyHandlers.ofString());
+                /**
+                 * 轻量正文链路继续保留 request 自身的协议层 timeout，
+                 * 但真正的线程 deadline 交给统一硬超时 helper 控制，
+                 * 避免 Jina 上游响应异常时把采集线程无限期挂起。
+                 */
+                HttpResponse<String> response = HardTimeoutHttpClient.send(
+                        httpClient,
+                        httpRequest,
+                        HttpResponse.BodyHandlers.ofString(),
+                        httpRequest.timeout().orElse(Duration.ofSeconds(Math.max(1, properties.getTimeoutSeconds())))
+                );
                 if (response.statusCode() < 200 || response.statusCode() >= 300) {
                     return buildFailureResult(CollectionFailureKind.HTTP_STATUS_ERROR,
                             "jina reader status=" + response.statusCode(),

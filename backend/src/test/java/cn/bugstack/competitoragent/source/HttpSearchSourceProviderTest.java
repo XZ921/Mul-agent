@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.source;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
+import cn.bugstack.competitoragent.testsupport.NeverCompletingHttpClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -9,10 +10,12 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HttpSearchSourceProviderTest {
@@ -155,6 +158,23 @@ class HttpSearchSourceProviderTest {
         assertTrue(descriptor.getCapabilities().contains("GENERIC_JSON_API"));
         assertTrue(descriptor.isEnabled(new SearchProviderProperties()));
         assertTrue(descriptor.isFailOpen(new SearchProviderProperties()));
+    }
+
+    @Test
+    void shouldFailOpenWhenHttpFutureNeverCompletes() {
+        SearchProviderProperties props = baseProperties();
+        props.setEndpoint("https://search.example.com/api");
+        props.setTimeoutSeconds(1);
+        props.setMaxRetries(0);
+        NeverCompletingHttpClient httpClient = new NeverCompletingHttpClient();
+        HttpSearchSourceProvider provider = new HttpSearchSourceProvider(props, new ObjectMapper(), httpClient);
+
+        List<SourceCandidate> candidates = assertTimeoutPreemptively(Duration.ofSeconds(2),
+                () -> provider.search("Notion AI", List.of("DOCS")));
+
+        assertTrue(candidates.isEmpty());
+        assertTrue(httpClient.cancelled());
+        assertEquals(1, httpClient.asyncAttemptCount());
     }
 
     private void startServer(int statusCode, String responseBody) throws IOException {

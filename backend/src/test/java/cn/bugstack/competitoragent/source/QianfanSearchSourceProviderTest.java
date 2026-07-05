@@ -2,14 +2,18 @@ package cn.bugstack.competitoragent.source;
 
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.search.QianfanSearchProperties;
+import cn.bugstack.competitoragent.testsupport.NeverCompletingHttpClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
+import java.time.Duration;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class QianfanSearchSourceProviderTest {
@@ -235,10 +239,42 @@ class QianfanSearchSourceProviderTest {
         assertTrue(descriptor.isFailOpen(new SearchProviderProperties()));
     }
 
+    @Test
+    void shouldFailOpenWhenHttpFutureNeverCompletes() {
+        QianfanSearchProperties properties = qianfanSearchProperties("https://qianfan.baidubce.com/v2/ai_search/web_search");
+        SearchProviderProperties searchProviderProperties = searchProviderProperties();
+        searchProviderProperties.setMaxRetries(0);
+        searchProviderProperties.setTimeoutSeconds(1);
+        NeverCompletingHttpClient httpClient = new NeverCompletingHttpClient();
+        QianfanSearchSourceProvider provider = new QianfanSearchSourceProvider(
+                properties,
+                searchProviderProperties,
+                singleQueryPromptTemplateService("哔哩哔哩 文档 API"),
+                objectMapper,
+                httpClient
+        );
+
+        List<SourceCandidate> candidates = assertTimeoutPreemptively(Duration.ofSeconds(2),
+                () -> provider.search("哔哩哔哩", List.of("DOCS")));
+
+        assertThat(candidates).isEmpty();
+        assertThat(httpClient.cancelled()).isTrue();
+        assertThat(httpClient.asyncAttemptCount()).isEqualTo(1);
+    }
+
     private PromptTemplateService promptTemplateService() {
         PromptTemplateService service = new PromptTemplateService(new ObjectMapper());
         service.init();
         return service;
+    }
+
+    private PromptTemplateService singleQueryPromptTemplateService(String query) {
+        return new PromptTemplateService(new ObjectMapper()) {
+            @Override
+            public List<String> buildSearchQueries(String competitorName, String sourceType, String domainHint) {
+                return List.of(query);
+            }
+        };
     }
 
     private SearchProviderProperties searchProviderProperties() {

@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.common.http.HardTimeoutHttpClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
@@ -20,13 +21,20 @@ public class GithubApiClient {
 
     private final GithubApiProperties properties;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
+    private final HttpClient httpClient;
 
     public GithubApiClient(GithubApiProperties properties, ObjectMapper objectMapper) {
+        this(properties, objectMapper, null);
+    }
+
+    GithubApiClient(GithubApiProperties properties, ObjectMapper objectMapper, HttpClient httpClient) {
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.httpClient = httpClient == null
+                ? HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .build()
+                : httpClient;
     }
 
     public JsonNode fetchRepository(String owner, String repo) {
@@ -84,7 +92,17 @@ public class GithubApiClient {
                 if (StringUtils.hasText(properties.getApiToken())) {
                     builder.header("Authorization", "Bearer " + properties.getApiToken());
                 }
-                HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+                HttpRequest request = builder.build();
+                /**
+                 * GitHub API 作为共享基础客户端，必须统一具备调用层硬超时，
+                 * 否则 discovery provider 和 collection executor 都会被同一类阻塞问题放大。
+                 */
+                HttpResponse<String> response = HardTimeoutHttpClient.send(
+                        httpClient,
+                        request,
+                        HttpResponse.BodyHandlers.ofString(),
+                        request.timeout().orElse(Duration.ofSeconds(properties.getTimeoutSeconds()))
+                );
                 if (response.statusCode() < 200 || response.statusCode() >= 300) {
                     throw new IllegalStateException("github api status=" + response.statusCode());
                 }

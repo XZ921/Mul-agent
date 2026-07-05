@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.llm;
 
+import cn.bugstack.competitoragent.common.http.HardTimeoutHttpClient;
 import cn.bugstack.competitoragent.config.AiProviderProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeoutException;
 
 /**
  * OpenAI 兼容客户端。
@@ -40,11 +42,17 @@ public class OpenAiCompatibleClient implements ModelProvider {
     private final Map<String, ChatLanguageModel> chatModelCache = new ConcurrentHashMap<>();
 
     public OpenAiCompatibleClient(AiProviderProperties aiProps) {
+        this(aiProps, null, null);
+    }
+
+    OpenAiCompatibleClient(AiProviderProperties aiProps, HttpClient httpClient, ObjectMapper objectMapper) {
         this.aiProps = aiProps;
-        this.httpClient = HttpClient.newBuilder()
+        this.httpClient = httpClient == null
+                ? HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(aiProps.getTimeoutSeconds()))
-                .build();
-        this.objectMapper = new ObjectMapper();
+                .build()
+                : httpClient;
+        this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper;
     }
 
     @Override
@@ -175,7 +183,21 @@ public class OpenAiCompatibleClient implements ModelProvider {
 
         HttpRequest request = builder.POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload)))
                 .build();
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response;
+        try {
+            /**
+             * embedding / rerank 仍以调用方传入 timeout 作为协议层 timeout，
+             * 再由统一 helper 补足调用线程硬超时，避免非流式 LLM HTTP 调用长期挂住工作线程。
+             */
+            response = HardTimeoutHttpClient.send(
+                    httpClient,
+                    request,
+                    HttpResponse.BodyHandlers.ofString(),
+                    timeout == null ? Duration.ofSeconds(aiProps.getTimeoutSeconds()) : timeout
+            );
+        } catch (TimeoutException exception) {
+            throw new LlmException("AI endpoint request timed out", "HTTP_TIMEOUT", exception);
+        }
         if (response.statusCode() >= 400) {
             String providerErrorCode = "HTTP_" + response.statusCode();
             throw new LlmException(

@@ -2,13 +2,17 @@ package cn.bugstack.competitoragent.source;
 
 import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.search.SerpApiProperties;
+import cn.bugstack.competitoragent.testsupport.NeverCompletingHttpClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
+import java.time.Duration;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SerpApiSearchSourceProviderTest {
@@ -87,10 +91,40 @@ class SerpApiSearchSourceProviderTest {
         assertTrue(provider.search("Notion AI", List.of("DOCS")).isEmpty());
     }
 
+    @Test
+    void shouldFailOpenWhenHttpFutureNeverCompletes() {
+        NeverCompletingHttpClient httpClient = new NeverCompletingHttpClient();
+        SearchProviderProperties searchProviderProperties = searchProviderProperties();
+        searchProviderProperties.setTimeoutSeconds(1);
+        SerpApiSearchSourceProvider provider = new SerpApiSearchSourceProvider(
+                serpApiProperties("https://serpapi.com/search"),
+                searchProviderProperties,
+                singleQueryPromptTemplateService("Notion AI documentation"),
+                new ObjectMapper(),
+                httpClient
+        );
+
+        List<SourceCandidate> candidates = assertTimeoutPreemptively(Duration.ofSeconds(2),
+                () -> provider.search("Notion AI", List.of("DOCS")));
+
+        assertThat(candidates).isEmpty();
+        assertThat(httpClient.cancelled()).isTrue();
+        assertThat(httpClient.asyncAttemptCount()).isEqualTo(1);
+    }
+
     private PromptTemplateService promptTemplateService() {
         PromptTemplateService service = new PromptTemplateService(new ObjectMapper());
         service.init();
         return service;
+    }
+
+    private PromptTemplateService singleQueryPromptTemplateService(String query) {
+        return new PromptTemplateService(new ObjectMapper()) {
+            @Override
+            public List<String> buildSearchQueries(String competitorName, String sourceType, String domainHint) {
+                return List.of(query);
+            }
+        };
     }
 
     private SearchProviderProperties searchProviderProperties() {

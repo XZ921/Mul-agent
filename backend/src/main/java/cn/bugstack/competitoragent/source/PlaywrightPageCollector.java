@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.source;
 
 import cn.bugstack.competitoragent.collection.WebPageRenderHint;
+import cn.bugstack.competitoragent.common.http.HardTimeoutHttpClient;
 import cn.bugstack.competitoragent.config.CollectorProperties;
 import cn.bugstack.competitoragent.config.PlaywrightBrowserManager;
 import cn.bugstack.competitoragent.search.AntiBotDetectionResult;
@@ -77,10 +78,17 @@ public class PlaywrightPageCollector implements SourceCollector {
     private final BrowserRuntimeDiagnosticLogger diagnosticLogger;
     private final CanonicalUrlResolver canonicalUrlResolver;
     private final PublicShellRecoveryExtractor publicShellRecoveryExtractor;
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build();
+    private final HttpClient httpClient;
+
+    /**
+     * HTTP 快路的客户端单独抽成工厂方法，既便于测试注入，也避免各构造器重复拼接默认配置。
+     */
+    private static HttpClient buildHttpClient() {
+        return HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
+    }
 
     @Autowired
     public PlaywrightPageCollector(PlaywrightBrowserManager browserManager,
@@ -96,7 +104,8 @@ public class PlaywrightPageCollector implements SourceCollector {
                 antiBotSignalDetector,
                 diagnosticLogger,
                 new CanonicalUrlResolver(),
-                new PublicShellRecoveryExtractor());
+                new PublicShellRecoveryExtractor(),
+                null);
     }
 
     public PlaywrightPageCollector(PlaywrightBrowserManager browserManager,
@@ -113,7 +122,8 @@ public class PlaywrightPageCollector implements SourceCollector {
                 antiBotSignalDetector,
                 diagnosticLogger,
                 canonicalUrlResolver,
-                new PublicShellRecoveryExtractor());
+                new PublicShellRecoveryExtractor(),
+                null);
     }
 
     public PlaywrightPageCollector(PlaywrightBrowserManager browserManager,
@@ -124,6 +134,26 @@ public class PlaywrightPageCollector implements SourceCollector {
                                    BrowserRuntimeDiagnosticLogger diagnosticLogger,
                                    CanonicalUrlResolver canonicalUrlResolver,
                                    PublicShellRecoveryExtractor publicShellRecoveryExtractor) {
+        this(browserManager,
+                collectorProperties,
+                fallbackPolicy,
+                browserFailureClassifier,
+                antiBotSignalDetector,
+                diagnosticLogger,
+                canonicalUrlResolver,
+                publicShellRecoveryExtractor,
+                null);
+    }
+
+    PlaywrightPageCollector(PlaywrightBrowserManager browserManager,
+                            CollectorProperties collectorProperties,
+                            SearchRuntimeFallbackPolicy fallbackPolicy,
+                            BrowserFailureClassifier browserFailureClassifier,
+                            AntiBotSignalDetector antiBotSignalDetector,
+                            BrowserRuntimeDiagnosticLogger diagnosticLogger,
+                            CanonicalUrlResolver canonicalUrlResolver,
+                            PublicShellRecoveryExtractor publicShellRecoveryExtractor,
+                            HttpClient httpClient) {
         this.browserManager = browserManager;
         this.collectorProperties = collectorProperties;
         this.fallbackPolicy = fallbackPolicy;
@@ -134,6 +164,7 @@ public class PlaywrightPageCollector implements SourceCollector {
         this.publicShellRecoveryExtractor = publicShellRecoveryExtractor == null
                 ? new PublicShellRecoveryExtractor()
                 : publicShellRecoveryExtractor;
+        this.httpClient = httpClient == null ? buildHttpClient() : httpClient;
     }
 
     public PlaywrightPageCollector(PlaywrightBrowserManager browserManager,
@@ -239,7 +270,11 @@ public class PlaywrightPageCollector implements SourceCollector {
      * 对公开静态页面保留轻量 HTTP 路径。
      * 这里仍然需要内容质量判断，避免把 SPA 壳页误当成采集成功。
      */
-    private CollectedPage collectByHttp(String url, String competitorName, String sourceType) {
+    /**
+     * 公开静态页面优先走 HTTP 快路。
+     * 这里改成包内可见，便于测试只覆盖 HTTP 超时语义，而不被浏览器兜底路径掩盖。
+     */
+    CollectedPage collectByHttp(String url, String competitorName, String sourceType) {
         try {
             HttpRequest request = HttpRequest.newBuilder(UrlSecurityUtils.requireHttpOrHttps(url, "collect.url"))
                     .timeout(Duration.ofSeconds(Math.max(1, collectorProperties.getPageTimeoutSeconds())))
@@ -247,7 +282,18 @@ public class PlaywrightPageCollector implements SourceCollector {
                     .GET()
                     .build();
 
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            /**
+             * HTTP 快路必须沿用页面采集的既有 timeout 预算，
+             * 不能为了解决卡死问题引入更短的固定超时，否则会和浏览器渲染预算口径冲突。
+             */
+            Duration protocolTimeout = request.timeout()
+                    .orElse(Duration.ofSeconds(Math.max(1, collectorProperties.getPageTimeoutSeconds())));
+            HttpResponse<String> response = HardTimeoutHttpClient.send(
+                    httpClient,
+                    request,
+                    HttpResponse.BodyHandlers.ofString(),
+                    protocolTimeout
+            );
             if (response.statusCode() < 200 || response.statusCode() >= 400) {
                 return failed(url, competitorName, sourceType, "HTTP status error: " + response.statusCode());
             }

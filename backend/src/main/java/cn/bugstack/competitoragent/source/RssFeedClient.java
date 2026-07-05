@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.common.http.HardTimeoutHttpClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -57,13 +58,20 @@ public class RssFeedClient {
         RuntimeException lastError = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                HttpResponse<byte[]> response = httpClient.send(
-                        HttpRequest.newBuilder(URI.create(feedUrl.trim()))
-                                .timeout(Duration.ofSeconds(Math.max(1, properties.getTimeoutSeconds())))
-                                .header("Accept", "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8")
-                                .GET()
-                                .build(),
-                        HttpResponse.BodyHandlers.ofByteArray()
+                HttpRequest request = HttpRequest.newBuilder(URI.create(feedUrl.trim()))
+                        .timeout(Duration.ofSeconds(Math.max(1, properties.getTimeoutSeconds())))
+                        .header("Accept", "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8")
+                        .GET()
+                        .build();
+                /**
+                 * RSS 拉取保留原有 request timeout 作为协议层约束，
+                 * 再通过统一 helper 补足调用层硬超时，避免源配置补充阶段被单个 feed 长时间挂住。
+                 */
+                HttpResponse<byte[]> response = HardTimeoutHttpClient.send(
+                        httpClient,
+                        request,
+                        HttpResponse.BodyHandlers.ofByteArray(),
+                        request.timeout().orElse(Duration.ofSeconds(Math.max(1, properties.getTimeoutSeconds())))
                 );
                 if (response.statusCode() < 200 || response.statusCode() >= 300) {
                     throw new IllegalStateException("rss feed status=" + response.statusCode());

@@ -1,9 +1,10 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.common.http.HardTimeoutHttpClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -26,15 +27,27 @@ import java.util.Set;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class HttpSearchSourceProvider implements SearchSourceProvider {
 
     private final SearchProviderProperties properties;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
+    private final HttpClient httpClient;
+
+    @Autowired
+    public HttpSearchSourceProvider(SearchProviderProperties properties, ObjectMapper objectMapper) {
+        this(properties, objectMapper, null);
+    }
+
+    HttpSearchSourceProvider(SearchProviderProperties properties, ObjectMapper objectMapper, HttpClient httpClient) {
+        this.properties = properties;
+        this.objectMapper = objectMapper;
+        this.httpClient = httpClient == null
+                ? HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .connectTimeout(Duration.ofSeconds(10))
+                .build()
+                : httpClient;
+    }
 
     @Override
     public SearchSourceProviderDescriptor descriptor() {
@@ -97,7 +110,16 @@ public class HttpSearchSourceProvider implements SearchSourceProvider {
         HttpRequest request = buildRequest(query);
 
         try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            /**
+             * HTTP 搜索仍沿用当前 request 上的协议层 timeout，
+             * 但调用线程的硬超时统一走公共 helper，避免通用搜索兜底把规划线程长期阻塞。
+             */
+            HttpResponse<String> response = HardTimeoutHttpClient.send(
+                    httpClient,
+                    request,
+                    HttpResponse.BodyHandlers.ofString(),
+                    request.timeout().orElse(Duration.ofSeconds(properties.getTimeoutSeconds()))
+            );
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new SearchApiException("search api status=" + response.statusCode(), response.statusCode());
             }

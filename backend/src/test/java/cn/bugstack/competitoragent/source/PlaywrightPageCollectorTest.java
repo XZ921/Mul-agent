@@ -3,11 +3,13 @@ package cn.bugstack.competitoragent.source;
 import cn.bugstack.competitoragent.collection.WebPageRenderHint;
 import cn.bugstack.competitoragent.config.CollectorProperties;
 import cn.bugstack.competitoragent.config.PlaywrightBrowserManager;
+import cn.bugstack.competitoragent.search.CanonicalUrlResolver;
 import cn.bugstack.competitoragent.search.BrowserFailureClassifier;
 import cn.bugstack.competitoragent.search.BrowserRuntimeDiagnosticLog;
 import cn.bugstack.competitoragent.search.BrowserRuntimeDiagnosticLogger;
 import cn.bugstack.competitoragent.search.SearchBrowserProperties;
 import cn.bugstack.competitoragent.search.SearchRuntimeFallbackPolicy;
+import cn.bugstack.competitoragent.testsupport.NeverCompletingHttpClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.playwright.Browser;
@@ -18,10 +20,12 @@ import org.mockito.ArgumentCaptor;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -93,6 +97,32 @@ class PlaywrightPageCollectorTest {
                 """;
 
         assertTrue(collector.isMeaningfulHttpContent(html, content));
+    }
+
+    @Test
+    void shouldFailOpenHttpFastPathWhenHttpFutureNeverCompletes() {
+        NeverCompletingHttpClient httpClient = new NeverCompletingHttpClient();
+        CollectorProperties properties = new CollectorProperties();
+        properties.setPageTimeoutSeconds(1);
+        PlaywrightPageCollector httpOnlyCollector = new PlaywrightPageCollector(
+                browserManager,
+                properties,
+                fallbackPolicy,
+                new BrowserFailureClassifier(),
+                antiBotSignalDetector,
+                diagnosticLogger,
+                new CanonicalUrlResolver(),
+                new PublicShellRecoveryExtractor(),
+                httpClient
+        );
+
+        SourceCollector.CollectedPage page = assertTimeoutPreemptively(Duration.ofSeconds(2),
+                () -> httpOnlyCollector.collectByHttp("https://example.com/docs", "Acme AI", "DOCS"));
+
+        assertFalse(page.isSuccess());
+        assertTrue(page.getErrorMessage().contains("HTTP collect failed"));
+        assertTrue(httpClient.cancelled());
+        assertEquals(1, httpClient.asyncAttemptCount());
     }
 
     @Test

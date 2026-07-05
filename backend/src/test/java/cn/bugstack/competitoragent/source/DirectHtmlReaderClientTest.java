@@ -1,12 +1,15 @@
 package cn.bugstack.competitoragent.source;
 
 import cn.bugstack.competitoragent.collection.CollectionFailureKind;
+import cn.bugstack.competitoragent.testsupport.NeverCompletingHttpClient;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -15,6 +18,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 class DirectHtmlReaderClientTest {
 
@@ -37,7 +41,8 @@ class DirectHtmlReaderClientTest {
                   </body>
                 </html>
                 """);
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+        when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.completedFuture(response));
 
         DirectHtmlReaderClient client = new DirectHtmlReaderClient(properties, httpClient);
         PageContentExtractionResult result = client.collect(SourceCollectRequest.builder()
@@ -70,7 +75,8 @@ class DirectHtmlReaderClientTest {
                   </body>
                 </html>
                 """.formatted("x".repeat(1000)));
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+        when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.completedFuture(response));
 
         DirectHtmlReaderClient client = new DirectHtmlReaderClient(properties, httpClient);
         PageContentExtractionResult result = client.collect(SourceCollectRequest.builder()
@@ -104,7 +110,8 @@ class DirectHtmlReaderClientTest {
                   </body>
                 </html>
                 """.formatted(readableChinese, "x".repeat(3000)));
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+        when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.completedFuture(response));
 
         DirectHtmlReaderClient client = new DirectHtmlReaderClient(properties, httpClient);
         PageContentExtractionResult result = client.collect(SourceCollectRequest.builder()
@@ -127,9 +134,9 @@ class DirectHtmlReaderClientTest {
         HttpResponse<String> response = mock(HttpResponse.class);
         when(response.statusCode()).thenReturn(200);
         when(response.body()).thenReturn("<html><body><main>可用文档正文，重试后成功。</main></body></html>");
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
-                .thenThrow(new IOException("temporary network error"))
-                .thenReturn(response);
+        when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.failedFuture(new IOException("temporary network error")))
+                .thenReturn(CompletableFuture.completedFuture(response));
 
         DirectHtmlReaderClient client = new DirectHtmlReaderClient(properties, httpClient);
         PageContentExtractionResult result = client.collect(SourceCollectRequest.builder()
@@ -139,7 +146,7 @@ class DirectHtmlReaderClientTest {
 
         assertThat(result.isSuccess()).isTrue();
         assertThat(result.getMainContent()).contains("重试后成功");
-        verify(httpClient, times(2)).send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class));
+        verify(httpClient, times(2)).sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class));
     }
 
     @Test
@@ -149,7 +156,8 @@ class DirectHtmlReaderClientTest {
         HttpResponse<String> response = mock(HttpResponse.class);
         when(response.statusCode()).thenReturn(403);
         when(response.body()).thenReturn("forbidden");
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+        when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.completedFuture(response));
 
         DirectHtmlReaderClient client = new DirectHtmlReaderClient(properties, httpClient);
         PageContentExtractionResult result = client.collect(SourceCollectRequest.builder()
@@ -160,5 +168,27 @@ class DirectHtmlReaderClientTest {
         assertThat(result.isSuccess()).isFalse();
         assertThat(result.getFailureKind()).isEqualTo(CollectionFailureKind.HTTP_STATUS_ERROR.name());
         assertThat(result.getQualitySignals()).contains("DIRECT_HTML_HTTP_STATUS_ERROR");
+    }
+
+    @Test
+    void shouldFailOpenWhenHttpFutureNeverCompletesWithinHardTimeoutBudget() {
+        DirectHtmlReaderProperties properties = new DirectHtmlReaderProperties();
+        properties.setTimeoutSeconds(1);
+        properties.setMaxRetries(0);
+        NeverCompletingHttpClient httpClient = new NeverCompletingHttpClient();
+
+        DirectHtmlReaderClient client = new DirectHtmlReaderClient(properties, httpClient);
+        PageContentExtractionResult result = assertTimeoutPreemptively(Duration.ofSeconds(2),
+                () -> client.collect(SourceCollectRequest.builder()
+                        .url("https://open.example.com/doc")
+                        .sourceType("DOCS")
+                        .sourceUrls(List.of("https://open.example.com/doc"))
+                        .build()));
+
+        assertThat(result.isSuccess()).isFalse();
+        assertThat(result.getFailureKind()).isEqualTo(CollectionFailureKind.RUNTIME_FAILURE.name());
+        assertThat(result.getQualitySignals()).contains("DIRECT_HTML_RUNTIME_FAILURE");
+        assertThat(httpClient.cancelled()).isTrue();
+        assertThat(httpClient.asyncAttemptCount()).isEqualTo(1);
     }
 }

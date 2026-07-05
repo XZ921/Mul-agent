@@ -1,12 +1,15 @@
 package cn.bugstack.competitoragent.source;
 
+import cn.bugstack.competitoragent.testsupport.NeverCompletingHttpClient;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 class RssFeedClientTest {
 
@@ -52,5 +55,22 @@ class RssFeedClientTest {
                 """.getBytes(StandardCharsets.UTF_8), "text/html", "https://blog.example.com/feed.xml"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("not rss feed");
+    }
+
+    @Test
+    void shouldFailFastWhenHttpFutureNeverCompletes() {
+        RssFeedProperties properties = new RssFeedProperties();
+        properties.setTimeoutSeconds(1);
+        properties.setMaxRetries(0);
+        NeverCompletingHttpClient httpClient = new NeverCompletingHttpClient();
+        RssFeedClient client = new RssFeedClient(properties, httpClient);
+
+        assertThatThrownBy(() -> assertTimeoutPreemptively(Duration.ofSeconds(2),
+                () -> client.fetch("https://blog.example.com/feed.xml")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("rss feed request failed");
+
+        assertThat(httpClient.cancelled()).isTrue();
+        assertThat(httpClient.asyncAttemptCount()).isEqualTo(1);
     }
 }

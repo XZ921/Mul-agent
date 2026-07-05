@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.source;
 
 import cn.bugstack.competitoragent.collection.CollectionFailureKind;
 import cn.bugstack.competitoragent.collection.StructuredContentBlock;
+import cn.bugstack.competitoragent.common.http.HardTimeoutHttpClient;
 import com.microsoft.playwright.Page;
 import lombok.extern.slf4j.Slf4j;
 
@@ -10,6 +11,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -289,17 +291,28 @@ public final class PageContentExtractionSupport {
     }
 
     private static String fetchExternalScript(String scriptUrl) {
+        return fetchExternalScript(scriptUrl, EXTERNAL_SCRIPT_HTTP_CLIENT);
+    }
+
+    /**
+     * 外部 JS 拉取保留默认静态客户端入口，同时开放包内重载给测试注入永不完成客户端。
+     * 这样既不污染生产静态状态，也能验证超时场景下 future 是否被真正取消。
+     */
+    static String fetchExternalScript(String scriptUrl, HttpClient httpClient) {
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create(scriptUrl))
                     .timeout(EXTERNAL_SCRIPT_TIMEOUT)
                     .GET()
                     .build();
-            HttpResponse<String> response = EXTERNAL_SCRIPT_HTTP_CLIENT.send(
+
+            HttpResponse<String> response = HardTimeoutHttpClient.send(
+                    httpClient,
                     request,
-                    HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8)
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8),
+                    EXTERNAL_SCRIPT_TIMEOUT
             );
             if (response.statusCode() < 200 || response.statusCode() >= 300 || response.body() == null) {
-                return null;
+                return "";
             }
             String body = response.body();
             return body.length() <= MAX_EXTERNAL_SCRIPT_CHARS
@@ -307,9 +320,13 @@ public final class PageContentExtractionSupport {
                     : body.substring(0, MAX_EXTERNAL_SCRIPT_CHARS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            return null;
+            return "";
         } catch (IOException | RuntimeException exception) {
-            return null;
+            log.debug("external script fetch failed, url={}, error={}", scriptUrl, exception.getMessage());
+            return "";
+        } catch (Exception exception) {
+            log.debug("external script fetch failed, url={}, error={}", scriptUrl, exception.getMessage());
+            return "";
         }
     }
 

@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.source;
 
 import cn.bugstack.competitoragent.collection.CollectionFailureKind;
 import cn.bugstack.competitoragent.collection.StructuredContentBlock;
+import cn.bugstack.competitoragent.common.http.HardTimeoutHttpClient;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -86,10 +87,21 @@ public class DirectHtmlReaderClient {
         }
 
         int maxAttempts = Math.max(1, properties.getMaxRetries() + 1);
+        HttpRequest httpRequest = buildRequest(request);
         RuntimeException lastError = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                HttpResponse<String> response = httpClient.send(buildRequest(request), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                /**
+                 * 这里把 HttpRequest.timeout() 继续当作协议层 timeout，
+                 * 再交给统一 helper 补上“协议 timeout + grace”的调用层硬超时，
+                 * 避免 JDK 阻塞式 send() 把采集线程长期挂住。
+                 */
+                HttpResponse<String> response = HardTimeoutHttpClient.send(
+                        httpClient,
+                        httpRequest,
+                        HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8),
+                        httpRequest.timeout().orElse(Duration.ofSeconds(Math.max(1, properties.getTimeoutSeconds())))
+                );
                 if (response.statusCode() < 200 || response.statusCode() >= 300) {
                     return buildFailureResult(CollectionFailureKind.HTTP_STATUS_ERROR,
                             "direct html status=" + response.statusCode(),
