@@ -28,6 +28,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
@@ -181,7 +182,7 @@ public class SearchExecutionCoordinator {
     }
 
     public SearchExecutionResult execute(CollectorNodeConfig config) {
-        return execute(config, null);
+        return execute(config, null, null, null);
     }
 
 
@@ -210,6 +211,13 @@ public class SearchExecutionCoordinator {
 
     public SearchExecutionResult execute(CollectorNodeConfig config,
                                          Consumer<SearchExecutionUpdate> progressListener) {
+        return execute(config, null, null, progressListener);
+    }
+
+    public SearchExecutionResult execute(CollectorNodeConfig config,
+                                         Long taskId,
+                                         Map<String, Set<String>> fieldEvidenceFingerprintClaims,
+                                         Consumer<SearchExecutionUpdate> progressListener) {
         long searchStartedAt = System.currentTimeMillis();
         SearchExecutionPlan executionPlan = initializePlan(config.getSearchExecutionPlan());
         long baseSearchTimeoutMillis = searchPolicyResolver.resolveSearchTimeoutMillis(
@@ -218,6 +226,8 @@ public class SearchExecutionCoordinator {
         );
         ResolvedFieldEvidenceQueryPlan fieldEvidenceQueryPlan = resolveExecutableFieldEvidenceQueries(
                 config,
+                taskId,
+                fieldEvidenceFingerprintClaims,
                 baseSearchTimeoutMillis
         );
         long searchTimeoutMillis = baseSearchTimeoutMillis;
@@ -1340,6 +1350,8 @@ public class SearchExecutionCoordinator {
     /**
      * 闂傚倸鍊搁崐鎼佸磹瀹勬噴褰掑炊瑜滃ù鏍煏婵炲灝鍔存繛鎾愁煼閺岀喖鎮滃鍡樼暥缂佺虎鍘搁崑鎾绘⒒娴ｇ瓔娼愰柛搴ｅ帶铻為柛鏇ㄥ灡閳锋帗銇勯弽顐沪闁绘搫缍侀悡顐﹀炊閵娧€鏋旈梺绋款儐閹告悂鍩ユ径濞炬瀻闊洦鎼╅埀顒€绻樺濠氬磼濞嗘帒鍘″銈庡幖閻楁挸顕ｉ悽鍓叉晢闁告洦鍓欏▓鐐烘⒑鐠団€崇€婚柍褜鍓欏嵄闁割偁鍨洪崰鎰版煛閸愩劎澧曠紒鐘崇墱閹叉悂鎮ч崼婵堢懆缂備胶濮电粙鎺楀Φ閸曨垰妫橀柛顭戝枟閸婎垶姊虹拠鑼婵☆偅绻傞～蹇涘传閸斿€熸閹风娀骞撻幒鏃戝晥濠碉紕鍋戦崐鎴﹀礉瀹€鍕櫇妞ゅ繐鐗婇崑妯汇亜閺囨浜惧Δ鐘靛仜濞差參銆佸鈧幃娆撴偨閻㈤潧绁﹂梻鍌欐祰椤曆呮崲閹烘纾婚柣妯哄棘濞戙垹绀嬫い鎾寸☉娴?priority 缂傚倸鍊搁崐鎼佸磹閹间礁纾瑰瀣捣閻棗銆掑锝呬壕濡炪們鍨洪悧鐘茬暦閵娾晛绾ч柟瀵稿У閻掗箖姊绘担渚綊闁告洖鐏氶悾鐑芥⒑缁嬫鍎岄柡鍛閻忓啴姊洪幐搴ｇ畵闁瑰啿閰ｅ鍐测枎閹寸姷锛滈梺缁樏崯鍧楀煝閺囥垺鐓涚€光偓閳ь剟宕伴弽顓炵畺婵犲﹤鍚橀悢鍏兼優闂侇偅绋掗崑鍛磽閸屾瑨鍏岄柛瀣尭椤灝螣閼测晝鐓嬮梺姹囧灪閹爼鍩€椤掆偓閸熷瓨淇婇悜钘夌厸闁稿本鍩冮崑鎾绘倻閼恒儳鍘鹃梺鍛婄缚閸庢煡寮抽埡鍛厪闁糕剝锚婵秵鎱ㄦ繝鍕妺閻庣數鍘ч埢搴ㄥ箣閻樻﹫缍佸娲川婵犲啫鏆楅梺鍝ュТ闁帮綁銆佸鑸垫櫜濠㈣埖蓱閺呮繈姊洪棃娑氬婵炲眰鍔戣棟闁冲搫鎳忛埛鎴犵磽娴ｇ櫢渚涢柣鎺嶇矙閺屸剝鎷呯憴鍕偓鎰殽閻愬樊妯€妞ゃ垺宀搁崺鈧い鎺嗗亾妞?field query闂?     * 闂傚倸鍊搁崐鎼佸磹閻戣姤鍊块柨鏇楀亾妞ゎ亜鍟撮獮鎰償閿濆孩閿ら梻浣虹帛閸旀洟骞栭銈囩幓婵°倕鎳忛悡娆徝归崗鍏肩稇濞存粈鍗抽弻鈩冩媴閸涘妫＄紓浣虹帛缁诲啰鎹㈠┑瀣＜婵犲﹤鍠氶弶鎼佹⒒娴ｄ警鐒惧Δ鐘叉憸缁棁銇愰幒鎴ｆ憰濠电偞鍨崹褰掑础閹惰姤鐓忓┑鐐茬仢閸斻倕霉閻撳孩鍠樻慨濠冩そ瀹曨偊宕熼澶嬶紒婵犵數鍋涘鍓佸垝鎼粹垾锝夊箛閺夎法顔婂┑掳鍊撶粈浣圭瑜版帗鈷戠憸鐗堝俯閺嗘帡鏌ｉ幒鐐电暤闁诡噣绠栭幃婊堟嚍閵夈垺瀚肩紓鍌欑贰閸ㄥ崬煤濡　鏋嶉柛娑樼摠閻撴瑩鏌ц箛锝呪偓瀣敂閸偅鏅梺鎸庣箓椤︿粙寮崱娑欑厱闁哄洨鍋熸禒娑㈡煛閸滃啰鍒伴柍瑙勫灴閹晝绱掑Ο濠氭暘婵犵數鍋涢惇浼村磹濠靛棭鍤曢柕濞炬櫓閺佸洭鏌ｅΟ鍏兼毄闁?provider 濠电姷鏁告慨鐑藉极閹间礁纾婚柣鎰惈缁犳澘鈹戦悩宕囶暡闁稿骸绉电换婵囩節閸屾粌顣虹紓浣插亾闁告劏鏂傛禍婊堢叓閸ャ劍灏い蹇ｄ邯閺岋繝宕卞Δ鍐唶闂?deadline 闂傚倸鍊搁崐鎼佸磹閻戣姤鍊块柨鏇炲€归崕鎴犳喐閻楀牆绗掔紒鈧径灞稿亾閸忓浜鹃梺閫炲苯澧撮柛鈹惧亾濡炪倖甯婄粈渚€宕甸鍕厱闁规崘娉涢弸娑㈡煟濞戝崬娅嶇€规洖宕灒闁兼祴鏅濆Σ鍥⒒娴ｈ鍋犻柛搴灦瀹曟繄浠﹂崜褜娴勯梺闈涚箳婵厼銆掓繝姘厪闁割偅绻冮ˉ鐘差熆瑜滈崜鐔煎蓟閵堝牄浜归柟鐑樻⒒閺嗩偊鎮楀▓鍨珮闁稿锕ら悾閿嬬附缁嬪灝宓嗛梺缁樻煥閹碱偊鐛Δ鍛拻濞达絽鎲￠幆鍫ユ煕閻斿搫鈻堢€规洘鍨块獮妯尖偓娑櫭鎸庣節閻㈤潧孝闁稿﹨宕电划鏃堟惞閸忓浜炬繛鍫濈仢閺嬫稒銇勯鐐叉Щ闁伙絿鍏樺畷濂稿即閵婏附娅屽┑鐐舵彧缂嶁偓妞ゎ偄顦甸幃?     * 闂傚倸鍊搁崐鎼佸磹閹间礁纾瑰瀣椤愪粙鏌ㄩ悢鍝勑㈢紒鈧崼鐔虹闁糕剝蓱鐏忎即鏌涙繝鍛厫缂佺粯绻堝Λ鍐ㄢ槈閸楃偛澹堥梻?coordinator 闂傚倸鍊搁崐鎼佸磹妞嬪海鐭嗗〒姘ｅ亾妤犵偛顦甸弫鎾绘偐閼碱剦妲烽梻浣告惈濞层劍鎱ㄩ悜鑺ュ剹闁瑰墽绮悡鐔兼煏韫囨洖孝妞ゃ儱绻橀弻鈩冩媴缁嬫寧娈梺瀹狀潐閸ㄥ灝鐣烽幒鎴僵妞ゆ挾鍋炲▓姗€姊绘担铏瑰笡閻㈩垱甯￠垾锕傛倻閽樺鎽曢悗骞垮劚閻楁粌顬婇妸鈺傗拺闁告稑锕ョ亸鐢告煕閻樻煡鍙勯柟顕€绠栭幃婊堟嚍閵夈儰姹楅梺鑽ゅТ濞诧箒銇愰崘顔艰埞闁靛ň鏅滈崑鈩冪節婵犲倸鏆為柟鐧哥悼缁辨帡顢欓懖鈺佲叺闂佺硶鏂侀崑鎾愁渻閵堝棗绗掗悗姘煎弮閸╂盯骞嬮敂鐣屽幍闂佸吋绁撮弲娑欑濠婂牊鐓曢柡鍐ｅ亾鐎光偓閹间礁钃熼柣鏂挎惈閺嬪牓鏌涘Δ鍐ㄤ粧闁哥姴锕?quota 濠电姷鏁告慨鐢割敊閺嶎厼绐楁俊銈呭暞閺嗘粓鏌熼悜妯荤厸闁稿鎸搁～婵嬫偂鎼达紕顔愭俊鐐€ら崑鍕崲濡ゅ懎桅闁圭増婢樼粻鎶芥煙鐎电浠╃紒韬插灲濮婄粯鎷呴搹鐟扮濠殿喖锕ら…宄扮暦閵忥綆妯佺紓?     */
     private ResolvedFieldEvidenceQueryPlan resolveExecutableFieldEvidenceQueries(CollectorNodeConfig config,
+                                                                                 Long taskId,
+                                                                                 Map<String, Set<String>> fieldEvidenceFingerprintClaims,
                                                                                  long baseSearchTimeoutMillis) {
         List<FieldEvidenceQuery> planned = resolveFieldEvidenceQueries(config);
         if (planned == null || planned.isEmpty()) {
@@ -1349,9 +1361,34 @@ public class SearchExecutionCoordinator {
                 planned,
                 searchPolicyResolver.resolveFieldEvidenceMaxQueriesPerField(),
                 searchPolicyResolver.resolveFieldEvidenceMinThirdPartyQueriesPerField(),
-                searchPolicyResolver.resolveFieldEvidenceMaxQueriesPerNode()
+                searchPolicyResolver.resolveFieldEvidenceMaxQueriesPerNode(),
+                resolveFieldEvidenceFingerprintClaimSet(fieldEvidenceFingerprintClaims, taskId, config)
         );
         return ResolvedFieldEvidenceQueryPlan.from(executionPlan);
+    }
+
+    /**
+     * 跨 collector 的字段证据去重必须按“任务 + 竞品”做隔离。
+     * 这样同一任务下多个 collector 会共享同一份 claim set，而不同任务即使竞品同名也不会互相误伤。
+     */
+    private Set<String> resolveFieldEvidenceFingerprintClaimSet(Map<String, Set<String>> fieldEvidenceFingerprintClaims,
+                                                                Long taskId,
+                                                                CollectorNodeConfig config) {
+        if (fieldEvidenceFingerprintClaims == null || taskId == null || config == null
+                || !StringUtils.hasText(config.getCompetitorName())) {
+            return null;
+        }
+        return fieldEvidenceFingerprintClaims.computeIfAbsent(
+                buildFieldEvidenceFingerprintClaimStateKey(taskId, config),
+                ignored -> ConcurrentHashMap.newKeySet()
+        );
+    }
+
+    private String buildFieldEvidenceFingerprintClaimStateKey(Long taskId, CollectorNodeConfig config) {
+        String competitorName = config != null && StringUtils.hasText(config.getCompetitorName())
+                ? config.getCompetitorName().trim()
+                : "";
+        return "fieldEvidence.executedFingerprints::" + taskId + "::" + competitorName;
     }
     /**
      * 闂傚倸鍊搁崐椋庣矆娴ｉ潻鑰块梺顒€绉甸崑锟犳煙閹増顥夋鐐灲閺屽秹宕崟顐熷亾瑜版帒绾?deadline 闂?search 闂傚倸鍊搁崐宄懊归崶顒夋晪闁哄稁鍘肩粈鍫熺箾閸℃ɑ灏ㄩ柍褜鍓ㄧ粻鎾诲箖濠婂嫭鍙忛柟鑸妼娴滈箖鏌涘畝鈧崑娑㈡偂濞戙垺鐓曢柟鏉垮悁缁ㄩ绱掑Δ鈧ˇ顖炲煘閹寸偛绠犻梺绋匡攻閸旀瑥鐣烽幋锕€绠绘繛锝庡厸缁ㄥ姊洪幐搴⑩拻闁哄拋鍋婂畷锝夊焵椤掑嫭鈷戦悹鍥ｂ偓铏亞缂備緡鍠楅悷锔界┍婵犲洤绠瑰ù锝堝€介妸鈺傜叆闁哄洦顨呮禍楣冩⒑闁偛鑻晶顔锯偓瑙勬处閸撶喖宕洪妷锕€绶為柟閭﹀墰椤旀帒顪冮妶鍡欏闁活収鍠楃粩鐔煎即閵忊檧鎷绘繛杈剧到閹诧繝宕悙鐑樼厽闁绘棁顔婇崥顐も偓鍨緲閿曨亪骞冮崜褌娌紓浣靛灩娴犳椽姊绘担铏瑰笡闁告梹顨婂畷鏇㈠Χ婢跺﹦鏌у銈嗗笒閸婄敻宕戦幘璇茬濠㈣泛锕ｆ竟鏇㈡⒒娴ｅ憡鍟炴繛璇ч檮缁傚秹鎮欓崹顐綗濠殿喗顭堥崺鏍煕?provider 婵犵數濮烽弫鎼佸磻閻愬搫绠板┑鐘崇閸庡秵绻濇繝鍌滃缂佲偓鐎ｎ偁浜滈柟鎵虫櫅閳ь剚鐗犲畷顖炲Ω閳哄倵鎷绘繛杈剧到閹诧繝宕悙鐑樺仺妞ゆ牗渚楀▓鏇㈡煕閹烘埊鏀荤紒鍌涘笧閳ь剨绲芥晶搴ｇ矙韫囨稒鈷戦柟绋垮缁€鈧梺绋匡工閹芥粎妲愰幒妤€鐓涢柛娑卞枤閸橀潧顪冮妶鍡欏ⅹ婵☆偅鏌ㄩ—鍐箳閹炽劌缍婇幃婊堟嚍閵夈垺瀚兼繝娈垮枤閹虫挸煤閵堝棔绻嗗┑鍌氭啞閸婂灚鎱ㄥΟ鐓庡付闁诲骏绲跨槐鎺楊敊閼恒儺妫冨Δ鐘靛仦閿曘垽銆佸▎鎾村殐闁冲搫鍟紞渚€姊婚崒娆戭槮闁硅绻濋獮鎰版倻閼恒儱娈戦柣鐘荤細濞咃綁寮抽敃鍌涚厱妞ゆ劧绲剧粈鍐煟閹惧瓨绀冪紒缁樼洴瀹曞崬螣閸忕厧娅樼紓鍌欐閼冲爼宕楀鈧?     */

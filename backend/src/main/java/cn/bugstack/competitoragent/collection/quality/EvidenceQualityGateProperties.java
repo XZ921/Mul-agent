@@ -22,6 +22,13 @@ public class EvidenceQualityGateProperties {
     private double authGateScoreCap = 0.20D;
     private double navigationShellScoreCap = 0.30D;
     private double rootEntryScoreCap = 0.45D;
+    /**
+     * 放宽官方长正文质量门后，需要一个反向闸门来兜住已知聚合/导航站。
+     * 这里保留成配置项，便于后续继续扩容，而不是把 explinks 这类站点硬编码散落到多个判断里。
+     */
+    private List<String> aggregatorDomains = List.of(
+            "explinks.com"
+    );
     private List<String> authSignals = List.of(
             "验证码",
             "智能验证",

@@ -78,7 +78,7 @@ public class SourceFamilyDirectDiscoveryPlanner {
                 }
                 putCandidate(candidates, buildCandidate(
                         expandedUrl,
-                        resolveTemplateSourceType(template),
+                        resolveTemplateSourceType(template, requestedSourceType),
                         competitorName,
                         "official",
                         "FAMILY_TEMPLATE",
@@ -94,7 +94,7 @@ public class SourceFamilyDirectDiscoveryPlanner {
                 }
                 putCandidate(candidates, buildCandidate(
                         expandedUrl,
-                        resolveTemplateSourceType(template),
+                        resolveTemplateSourceType(template, requestedSourceType),
                         competitorName,
                         "official",
                         "FAMILY_SUBDOMAIN_TEMPLATE",
@@ -180,9 +180,15 @@ public class SourceFamilyDirectDiscoveryPlanner {
      * family template 的 sourceType 由模板路径本身决定。
      * 根路径归入 OFFICIAL，其余 docs/pricing 模板分别映射到对应 sourceType。
      */
-    private String resolveTemplateSourceType(String template) {
+    private String resolveTemplateSourceType(String template, String requestedSourceType) {
         if (!StringUtils.hasText(template) || "/".equals(template.trim())) {
             return "OFFICIAL";
+        }
+        String normalizedTemplate = template.trim().toLowerCase(Locale.ROOT);
+        if (normalizedTemplate.startsWith("open.")) {
+            // 开放平台子域既是官方入口，也可能承载文档；在 OFFICIAL 节点必须先保留官方根入口，
+            // 否则后续按 sourceType 过滤时会把 open.bilibili.com 这类关键入口直接丢弃。
+            return "OFFICIAL".equalsIgnoreCase(requestedSourceType) ? "OFFICIAL" : inferSourceTypeFromPath(template);
         }
         return inferSourceTypeFromPath(template);
     }

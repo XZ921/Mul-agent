@@ -106,4 +106,29 @@ class EvidenceQualityGateTest {
                 .contains("FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG", "FIELD_RELEVANCE_WEAK", "EVIDENCE_REPAIR_REQUIRED");
         assertThat(verdict.getTaskRelevanceScore()).isLessThan(0.50D);
     }
+
+    @Test
+    void shouldDemoteAggregatorPollutionPageEvenWhenItLooksLikeHttpOfficialPage() {
+        EvidenceQualityGateProperties properties = new EvidenceQualityGateProperties();
+        properties.setAggregatorDomains(List.of("explinks.com"));
+        EvidenceQualityGate gate = new EvidenceQualityGate(properties);
+
+        EvidenceQualityVerdict verdict = gate.evaluate(
+                EvidenceQualityContext.builder()
+                        .url("https://www.explinks.com/pd/avail/4102f93b4aef8f4a")
+                        .sourceType("OFFICIAL")
+                        .fieldName("coreFeatures")
+                        .evidencePathKey("DOCS_API_GUIDE")
+                        .expectedSignals(List.of("API", "SDK", "developer"))
+                        .build(),
+                "explinks 导航聚合页。京东云 API 网关 Azure OpenAI 云服务器 购买指南 服务商 广告 推荐 列表。",
+                List.of("OFFICIAL_DOMAIN_MATCHED"),
+                0.89D);
+
+        assertThat(verdict.isRepairRequired()).isTrue();
+        assertThat(verdict.getSourceAuthenticityScore()).isLessThan(0.70D);
+        assertThat(verdict.getQualitySignals())
+                .contains("AGGREGATOR_DOMAIN_DETECTED", "EVIDENCE_REPAIR_REQUIRED");
+        assertThat(verdict.getIssues()).contains(EvidenceQualityIssue.SCORE_CONTRADICTION_DETECTED);
+    }
 }

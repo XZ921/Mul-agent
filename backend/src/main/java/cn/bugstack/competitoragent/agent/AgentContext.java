@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import cn.bugstack.competitoragent.task.SharedNodeOutputEnvelope;
 import cn.bugstack.competitoragent.context.TaskRagContextBundle;
@@ -47,6 +48,15 @@ public class AgentContext {
      */
     @Builder.Default
     private Map<String, SharedNodeOutputEnvelope> sharedOutputEnvelopes = new ConcurrentHashMap<>();
+
+    /**
+     * 字段证据 query 的任务运行期原子 claim registry。
+     * key 使用 fieldEvidence.executedFingerprints::<taskId>::<competitorName>，
+     * value 使用 ConcurrentHashMap.newKeySet()，通过 Set.add 的原子返回值，
+     * 保证同一任务内多个 collector 不会重复执行相同 fingerprint 的字段证据查询。
+     */
+    @Builder.Default
+    private Map<String, Set<String>> fieldEvidenceFingerprintClaims = new ConcurrentHashMap<>();
 
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

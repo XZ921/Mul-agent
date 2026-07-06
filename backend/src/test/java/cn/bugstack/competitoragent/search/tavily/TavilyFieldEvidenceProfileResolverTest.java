@@ -28,12 +28,32 @@ class TavilyFieldEvidenceProfileResolverTest {
                 .reason("字段发现阶段先做轻量候选发现")
                 .build());
 
-        assertThat(profile.getQueryMode()).isEqualTo(TavilyQueryMode.TRUSTED_WEB_EXPANSION);
+        assertThat(profile.getQueryMode()).isEqualTo(TavilyQueryMode.OFFICIAL_DOCS);
+        assertThat(profile.getIncludeDomains()).containsExactly("open.douyin.com");
         assertThat(profile.getSearchDepth()).isEqualTo("basic");
         assertThat(profile.isIncludeRawContent()).isFalse();
         assertThat(profile.getProfileStage()).isEqualTo("FIELD_EVIDENCE_DISCOVERY");
         assertThat(profile.getOfficialDomains()).containsExactly("open.douyin.com");
         assertThat(profile.getMaxResults()).isEqualTo(5);
+    }
+
+    @Test
+    void shouldKeepThirdPartyFieldEvidenceOnOpenWeb() {
+        TavilySearchProfileResolver resolver = new TavilySearchProfileResolver(new TavilySearchProperties());
+
+        TavilySearchProfile profile = resolver.resolveFieldEvidence(FieldEvidenceQuery.builder()
+                .fieldName("weaknesses")
+                .evidencePathKey("PUBLIC_REVIEW_OR_NEWS")
+                .queryIntent("THIRD_PARTY_REVIEW")
+                .sourceType("REVIEW")
+                .query("bilibili open platform review limitations")
+                .queryFingerprint("q-review")
+                .reason("第三方字段证据保持开放网搜索")
+                .build());
+
+        assertThat(profile.getQueryMode()).isEqualTo(TavilyQueryMode.OPEN_WEB);
+        assertThat(profile.getIncludeDomains()).isEmpty();
+        assertThat(profile.getOfficialDomains()).isEmpty();
     }
 
     @Test

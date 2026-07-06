@@ -1,0 +1,23 @@
+{
+    "taskName":  "task12-9a-rerun-20260705-152655",
+    "subjectProduct":  "面向内容开发者的短视频与直播开放平台",
+    "competitorNames":  [
+                            "抖音开放平台",
+                            "哔哩哔哩开放平台"
+                        ],
+    "competitorUrls":  [
+                           "https://open.douyin.com/",
+                           "https://open.bilibili.com/"
+                       ],
+    "reportLanguage":  "中文",
+    "reportTemplate":  "标准版",
+    "sourceScope":  [
+                        "官方",
+                        "第三方技术社区"
+                    ],
+    "analysisDimensions":  [
+                               "开放平台能力与API",
+                               "开发者服务与文档",
+                               "商业化与分成政策"
+                           ]
+}

@@ -41,6 +41,7 @@ import cn.bugstack.competitoragent.search.SearchExecutionPlan;
 import cn.bugstack.competitoragent.search.SearchPolicyResolver;
 import cn.bugstack.competitoragent.search.SearchExecutionCoordinator;
 import cn.bugstack.competitoragent.search.SearchExecutionResult;
+import cn.bugstack.competitoragent.search.SearchExecutionStep;
 import cn.bugstack.competitoragent.source.SearchSourceProvider;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
@@ -583,6 +584,66 @@ class CollectorAgentTest {
         assertTrue(output.path("downstreamEvidenceViews").isArray());
         assertEquals(0, output.path("downstreamEvidenceViews").size());
         assertEquals(0, output.path("documents").get(0).path("downstreamEvidenceViews").size());
+    }
+
+    @Test
+    void shouldFailWhenCollectedContentExistsButFormalSelectedTargetsAreMissing() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent agent = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchCoordinator,
+                collectionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper
+        );
+        when(searchCoordinator.execute(any(), any())).thenReturn(SearchExecutionResult.builder()
+                .executionPlan(SearchExecutionPlan.builder()
+                        .steps(List.of(SearchExecutionStep.builder()
+                                .stepCode("COLLECT_PAGES")
+                                .goal("collect selected pages and persist evidence")
+                                .status(SearchExecutionStep.StepStatus.PENDING)
+                                .build()))
+                        .build())
+                .sourceCandidates(List.of())
+                .selectedTargets(List.of(SearchCollectionTarget.builder().build()))
+                .build());
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
+                .status("SUCCESS")
+                .results(List.of(buildSuccessfulCollectionResult(
+                        "collect_sources_01_03#001",
+                        1,
+                        "https://example.com/docs",
+                        "Docs without formal target"
+                )))
+                .build());
+        when(collectionCoordinator.summarize(any())).thenReturn(CollectionExecutionReport.builder()
+                .status("SUCCESS")
+                .results(List.of())
+                .build());
+
+        AgentResult result = agent.execute(buildSingleCandidateContext(
+                "https://example.com/docs",
+                "Docs without formal target",
+                "DOCS"
+        ));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("FAILED", result.getStatus().name());
+        assertEquals(0, output.path("selectedTargets").size());
+        assertEquals(1, output.path("successCollected").asInt());
+        assertEquals("FAILED",
+                output.path("searchExecutionPlan").path("steps").get(0).path("status").asText());
+        assertEquals("FAILED",
+                output.path("searchProgressSnapshots")
+                        .get(output.path("searchProgressSnapshots").size() - 1)
+                        .path("status").asText());
+        assertTrue(output.path("issueFlags").toString().contains("FORMAL_TARGETS_MISSING"));
+        verify(evidenceRepository, times(1)).save(any(EvidenceSource.class));
     }
 
     @Test

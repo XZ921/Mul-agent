@@ -83,4 +83,29 @@ class JinaReaderClientTest {
         assertThat(httpClient.cancelled()).isTrue();
         assertThat(httpClient.asyncAttemptCount()).isEqualTo(1);
     }
+
+    @Test
+    void shouldTightenAnonymousFreeEndpointBudgetByDefault() {
+        JinaReaderProperties properties = new JinaReaderProperties();
+
+        assertThat(properties.getTimeoutSeconds()).isEqualTo(8);
+        assertThat(properties.getMaxRetries()).isEqualTo(0);
+    }
+
+    @Test
+    void shouldKeepConfiguredBudgetWhenBearerTokenPresent() {
+        JinaReaderProperties properties = new JinaReaderProperties();
+        properties.setBearerToken("premium-token");
+        properties.setTimeoutSeconds(20);
+        properties.setMaxRetries(2);
+
+        HttpRequest request = new JinaReaderClient(properties, null).buildRequest(SourceCollectRequest.builder()
+                .url("https://docs.example.com/api/reference")
+                .sourceUrls(List.of("https://docs.example.com/api/reference"))
+                .build());
+
+        assertThat(request.timeout()).hasValue(Duration.ofSeconds(20));
+        assertThat(request.headers().firstValue("Authorization")).hasValue("Bearer premium-token");
+        assertThat(properties.getMaxRetries()).isEqualTo(2);
+    }
 }

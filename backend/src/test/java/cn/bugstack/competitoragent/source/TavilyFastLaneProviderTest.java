@@ -151,6 +151,58 @@ class TavilyFastLaneProviderTest {
     }
 
     @Test
+    void shouldNotFallbackWhenOfficialDocsQueryAlreadyReturnsUsableOfficialPage() {
+        TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
+        StubTavilySearchClient client = new StubTavilySearchClient();
+        client.responses = List.of(
+                TavilySearchClient.TavilySearchResponse.builder()
+                        .query("抖音 开放平台 API 官方文档")
+                        .requestId("req-official-page-1")
+                        .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                                .title("抖音开发者生态动态")
+                                .url("https://static.douyin.com/news/platform-ecosystem-update")
+                                .content("抖音开发者生态动态")
+                                .rawContent("抖音开发者生态动态 ".repeat(260))
+                                .score(0.83D)
+                                .build()))
+                        .build(),
+                TavilySearchClient.TavilySearchResponse.builder()
+                        .query("抖音 开放平台 API 文档 技术解读 使用说明")
+                        .requestId("req-official-page-expand")
+                        .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                                .title("不应触发的扩展结果")
+                                .url("https://example.com/should-not-expand")
+                                .content("unexpected expansion")
+                                .rawContent("unexpected expansion ".repeat(260))
+                                .score(0.75D)
+                                .build()))
+                        .build());
+
+        TavilyFastLaneProvider provider = new TavilyFastLaneProvider(
+                properties(),
+                client,
+                new TavilySearchProfileResolver(properties()),
+                registry,
+                new ObjectMapper()
+        );
+
+        List<SourceCandidate> candidates = provider.search(SearchSourceRequest.builder()
+                .competitorName("抖音")
+                .requestedScopes(List.of("DOCS"))
+                .includeDomains(List.of("static.douyin.com"))
+                .preferredProviderKey("tavily")
+                .preferredQueryMode("OFFICIAL_DOCS")
+                .build());
+
+        assertThat(client.executedProfiles).hasSize(1);
+        assertThat(client.executedProfiles.get(0).getQueryMode()).isEqualTo(TavilyQueryMode.OFFICIAL_DOCS);
+        assertThat(candidates).hasSize(1);
+        assertThat(candidates.get(0).getDomain()).isEqualTo("static.douyin.com");
+        assertThat(candidates.get(0).getPageType()).isEqualTo("ARTICLE");
+        assertThat(candidates.get(0).getFastLaneUsable()).isTrue();
+    }
+
+    @Test
     void shouldUseSearchFirstTrustedExpansionForPrimaryOfficialScopeAndKeepQueryOverride() {
         TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
         StubTavilySearchClient client = new StubTavilySearchClient();
@@ -855,11 +907,11 @@ class TavilyFastLaneProviderTest {
                         "skipReason",
                         "failureReason")
                 .containsExactly(
-                        tuple("q-success", "DOCS", "TRUSTED_WEB_EXPANSION", "FIELD_EVIDENCE_DISCOVERY",
+                        tuple("q-success", "DOCS", "OFFICIAL_DOCS", "FIELD_EVIDENCE_DISCOVERY",
                                 "basic", false, "SUCCESS", 1, null, null),
-                        tuple("q-failed", "DOCS", "TRUSTED_WEB_EXPANSION", "FIELD_EVIDENCE_DISCOVERY",
+                        tuple("q-failed", "DOCS", "OFFICIAL_DOCS", "FIELD_EVIDENCE_DISCOVERY",
                                 "basic", false, "FAILED", 0, null, "HTTP 429"),
-                        tuple("q-skipped", "DOCS", "TRUSTED_WEB_EXPANSION", "FIELD_EVIDENCE_DISCOVERY",
+                        tuple("q-skipped", "DOCS", "OFFICIAL_DOCS", "FIELD_EVIDENCE_DISCOVERY",
                                 "basic", false, "SKIPPED", 0, "SKIPPED_BUDGET_EXHAUSTED", null)
                 );
     }

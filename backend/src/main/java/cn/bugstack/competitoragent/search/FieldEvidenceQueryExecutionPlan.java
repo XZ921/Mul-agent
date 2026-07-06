@@ -16,7 +16,8 @@ public record FieldEvidenceQueryExecutionPlan(
         List<FieldEvidenceQuery> skipped,
         Map<String, Integer> skipReasons,
         Map<String, Integer> fieldDistribution,
-        Map<String, Integer> sourceTypeDistribution
+        Map<String, Integer> sourceTypeDistribution,
+        List<String> claimedFingerprints
 ) {
 
     public FieldEvidenceQueryExecutionPlan {
@@ -26,10 +27,11 @@ public record FieldEvidenceQueryExecutionPlan(
         skipReasons = skipReasons == null ? Map.of() : Map.copyOf(skipReasons);
         fieldDistribution = fieldDistribution == null ? Map.of() : Map.copyOf(fieldDistribution);
         sourceTypeDistribution = sourceTypeDistribution == null ? Map.of() : Map.copyOf(sourceTypeDistribution);
+        claimedFingerprints = claimedFingerprints == null ? List.of() : List.copyOf(claimedFingerprints);
     }
 
     public static FieldEvidenceQueryExecutionPlan empty() {
-        return new FieldEvidenceQueryExecutionPlan(List.of(), List.of(), List.of(), Map.of(), Map.of(), Map.of());
+        return new FieldEvidenceQueryExecutionPlan(List.of(), List.of(), List.of(), Map.of(), Map.of(), Map.of(), List.of());
     }
 
     public List<FieldEvidenceQuery> getPlanned() {
@@ -54,5 +56,9 @@ public record FieldEvidenceQueryExecutionPlan(
 
     public Map<String, Integer> getSourceTypeDistribution() {
         return sourceTypeDistribution;
+    }
+
+    public List<String> getClaimedFingerprints() {
+        return claimedFingerprints;
     }
 }

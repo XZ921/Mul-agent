@@ -12,6 +12,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "collection.jina-reader")
 public class JinaReaderProperties {
 
+    /**
+     * 匿名免费端点的默认预算必须比正式 token 链路更保守。
+     * 否则 r.jina.ai 在慢响应时会把补源阶段的时间预算按“20s * 2 retries”持续放大，
+     * 最终表现成线程会回收，但任务长时间收不敛。
+     */
+    public static final int DEFAULT_FREE_TIMEOUT_SECONDS = 8;
+    public static final int DEFAULT_FREE_MAX_RETRIES = 0;
+
     private boolean enabled = true;
     private String endpoint = "https://r.jina.ai/http://";
     /**
@@ -20,7 +28,7 @@ public class JinaReaderProperties {
      * 该字段只影响速率额度与权限，不改变轻量正文采集主逻辑。
      */
     private String bearerToken;
-    private int timeoutSeconds = 20;
-    private int maxRetries = 2;
+    private int timeoutSeconds = DEFAULT_FREE_TIMEOUT_SECONDS;
+    private int maxRetries = DEFAULT_FREE_MAX_RETRIES;
     private int minimumContentLength = 160;
 }

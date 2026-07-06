@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -39,11 +41,24 @@ public class FieldEvidenceQueryExecutionGate {
                                                    int maxPerField,
                                                    int minThirdPartyPerField,
                                                    int maxPerNode) {
+        return resolve(planned, maxPerField, minThirdPartyPerField, maxPerNode, null);
+    }
+
+    /**
+     * 在单节点限流规则之外，再叠加运行期跨节点原子 claim。
+     * 只有 claim 成功的 query 才允许真正进入 executable，其余重复 fingerprint
+     * 会被记入 skipped，并补充 SKIPPED_CROSS_NODE_DEDUP 审计原因。
+     */
+    public FieldEvidenceQueryExecutionPlan resolve(List<FieldEvidenceQuery> planned,
+                                                   int maxPerField,
+                                                   int minThirdPartyPerField,
+                                                   int maxPerNode,
+                                                   Set<String> claimSet) {
         List<FieldEvidenceQuery> ordered = sortQueries(planned);
         if (ordered.isEmpty()) {
             return FieldEvidenceQueryExecutionPlan.empty();
         }
-
+        Set<String> effectiveClaimSet = claimSet == null ? ConcurrentHashMap.newKeySet() : claimSet;
         Map<String, List<FieldEvidenceQuery>> byField = ordered.stream()
                 .collect(Collectors.groupingBy(
                         query -> defaultText(query == null ? null : query.getFieldName(), "unknown"),
@@ -64,6 +79,32 @@ public class FieldEvidenceQueryExecutionGate {
             increment(skipReasons, "SKIPPED_FIELD_SOURCE_QUOTA_EXHAUSTED", slice.skipped().size());
         }
 
+        /**
+         * 跨节点去重的第一次快照过滤必须放在字段 quota 之后。
+         * 这样即使高优先级 query 已被其他 collector 抢先执行，也不会把同字段更低优先级 query
+         * 补位顶上来，保证整体执行预算仍然保持单节点原始配额形状。
+         */
+        List<FieldEvidenceQuery> eligibleForRoundRobin = new ArrayList<>();
+        List<FieldEvidenceQuery> preSkippedCrossNodeDedup = new ArrayList<>();
+        for (FieldEvidenceQuery query : executable) {
+            String fingerprint = resolveFingerprint(query);
+            if (StringUtils.hasText(fingerprint) && effectiveClaimSet.contains(fingerprint)) {
+                preSkippedCrossNodeDedup.add(query);
+                continue;
+            }
+            eligibleForRoundRobin.add(query);
+        }
+        executable = eligibleForRoundRobin;
+        skipped.addAll(preSkippedCrossNodeDedup);
+        increment(skipReasons, "SKIPPED_CROSS_NODE_DEDUP", preSkippedCrossNodeDedup.size());
+
+        /**
+         * 这里即便没有触发节点级 cap，也要把 executable 顺序摊平为“跨字段轮转”。
+         * 原因不是数量治理，而是 provider 在短预算/慢补源场景下往往只能执行前几条 query：
+         * 如果仍然按字段成组输出，就会出现前几个字段连续占满执行机会、后续字段完全摸不到的塌缩现象。
+         */
+        executable = retainByFieldRoundRobin(executable, executable.size());
+
         if (executable.size() > normalizedMaxPerNode) {
             List<FieldEvidenceQuery> retained = retainByFieldRoundRobin(executable, normalizedMaxPerNode);
             List<FieldEvidenceQuery> overflow = resolveOverflow(executable, retained);
@@ -72,13 +113,36 @@ public class FieldEvidenceQueryExecutionGate {
             increment(skipReasons, "SKIPPED_NODE_QUERY_CAP_EXHAUSTED", overflow.size());
         }
 
+        /**
+         * 这里必须在最终 executable 成形之后再做原子 claim。
+         * 这样才能避免“先读快照再追加”的并发竞争，让同一 competitor 下只有一个 collector
+         * 真正拿到某个 fingerprint 的执行权。
+         */
+        List<FieldEvidenceQuery> claimedExecutable = new ArrayList<>();
+        List<String> claimedFingerprints = new ArrayList<>();
+        for (FieldEvidenceQuery query : executable) {
+            String fingerprint = resolveFingerprint(query);
+            if (!StringUtils.hasText(fingerprint)) {
+                continue;
+            }
+            if (effectiveClaimSet.add(fingerprint)) {
+                claimedExecutable.add(query);
+                claimedFingerprints.add(fingerprint);
+                continue;
+            }
+            skipped.add(query);
+            increment(skipReasons, "SKIPPED_CROSS_NODE_DEDUP", 1);
+        }
+        executable = claimedExecutable;
+
         return new FieldEvidenceQueryExecutionPlan(
                 ordered,
                 executable,
                 skipped,
                 skipReasons,
                 countBy(executable, FieldEvidenceQuery::getFieldName, "unknown"),
-                countBy(executable, FieldEvidenceQuery::getSourceType, "UNKNOWN")
+                countBy(executable, FieldEvidenceQuery::getSourceType, "UNKNOWN"),
+                claimedFingerprints
         );
     }
 

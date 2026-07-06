@@ -11,6 +11,7 @@ import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.output.Response;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -41,6 +42,7 @@ public class OpenAiCompatibleClient implements ModelProvider {
     private final ObjectMapper objectMapper;
     private final Map<String, ChatLanguageModel> chatModelCache = new ConcurrentHashMap<>();
 
+    @Autowired
     public OpenAiCompatibleClient(AiProviderProperties aiProps) {
         this(aiProps, null, null);
     }

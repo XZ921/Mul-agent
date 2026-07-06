@@ -245,7 +245,11 @@ public class CollectorAgent extends BaseAgent {
         String sourceType = !StringUtils.hasText(config.getSourceType()) ? "OFFICIAL" : config.getSourceType();
         List<Map<String, Object>> results = new ArrayList<>();
         int[] successCounterRef = new int[] {0};
-        SearchExecutionResult searchExecutionResult = searchExecutionCoordinator.execute(config, update ->
+        SearchExecutionResult searchExecutionResult = searchExecutionCoordinator.execute(
+                config,
+                context.getTaskId(),
+                context.getFieldEvidenceFingerprintClaims(),
+                update ->
                 persistRunningOutput(context, config, sourceType, update, results, successCounterRef[0]));
         SearchExecutionPlan executionPlan = searchExecutionResult.getExecutionPlan();
         List<SearchProgressSnapshot> progressSnapshots = searchExecutionResult.getProgressSnapshots() == null
@@ -527,6 +531,7 @@ public class CollectorAgent extends BaseAgent {
         int fieldEvidenceLoopRounds = fieldEvidenceLoopOutcome.rounds();
 
         try {
+            boolean hasFormalSelectedTargets = hasFormalSelectedTargets(targets);
             if (successCounterRef[0] == 0) {
                 markCollectStep(executionPlan, SearchExecutionStep.StepStatus.FAILED,
                         "未采集到可用页面内容");
@@ -551,6 +556,22 @@ public class CollectorAgent extends BaseAgent {
                         .errorMessage(actionableError)
                         .build();
             }
+            if (!hasFormalSelectedTargets) {
+                return buildMissingFormalTargetsFailure(
+                        context,
+                        config,
+                        sourceType,
+                        searchExecutionResult,
+                        executionPlan,
+                        collectionReport,
+                        progressSnapshots,
+                        results,
+                        successCounterRef[0],
+                        targets,
+                        fieldEvidenceLoopRounds
+                );
+            }
+
             markCollectStep(executionPlan, SearchExecutionStep.StepStatus.SUCCESS,
                     "页面采集完成，可用来源 " + successCounterRef[0] + "/" + results.size() + " 条");
             progressSnapshots.add(buildProgressSnapshot(executionPlan,
@@ -872,6 +893,7 @@ public class CollectorAgent extends BaseAgent {
         int fieldEvidenceLoopRounds = fieldEvidenceLoopOutcome.rounds();
 
         try {
+            boolean hasFormalSelectedTargets = hasFormalSelectedTargets(targets);
             if (successCounterRef[0] == 0) {
                 markCollectStep(executionPlan, SearchExecutionStep.StepStatus.FAILED, "未采集到可用页面内容");
                 progressSnapshots.add(buildProgressSnapshot(executionPlan,
@@ -897,6 +919,21 @@ public class CollectorAgent extends BaseAgent {
                         .build();
             }
 
+            if (!hasFormalSelectedTargets) {
+                return buildMissingFormalTargetsFailure(
+                        context,
+                        config,
+                        sourceType,
+                        searchExecutionResult,
+                        executionPlan,
+                        collectionReport,
+                        progressSnapshots,
+                        results,
+                        successCounterRef[0],
+                        targets,
+                        fieldEvidenceLoopRounds
+                );
+            }
             markCollectStep(executionPlan, SearchExecutionStep.StepStatus.SUCCESS,
                     "页面采集完成，可用来源 " + successCounterRef[0] + "/" + results.size() + " 条");
             progressSnapshots.add(buildProgressSnapshot(executionPlan,
@@ -1038,6 +1075,37 @@ public class CollectorAgent extends BaseAgent {
         return objectMapper.writeValueAsString(output);
     }
 
+    private AgentResult buildMissingFormalTargetsFailure(AgentContext context,
+                                                         CollectorNodeConfig config,
+                                                         String sourceType,
+                                                         SearchExecutionResult searchExecutionResult,
+                                                         SearchExecutionPlan executionPlan,
+                                                         CollectionExecutionReport collectionReport,
+                                                         List<SearchProgressSnapshot> progressSnapshots,
+                                                         List<Map<String, Object>> results,
+                                                         int successCounter,
+                                                         List<SearchCollectionTarget> targets,
+                                                         int fieldEvidenceLoopRounds) throws JsonProcessingException {
+        String actionableError = "采集到了页面内容，但没有形成正式 selectedTargets，节点不能判定为成功，请检查搜索/选靶状态机";
+        markCollectStep(executionPlan, SearchExecutionStep.StepStatus.FAILED,
+                "已采集到页面，但缺少正式 selectedTargets，结果仅保留审计与修复线索");
+        progressSnapshots.add(buildProgressSnapshot(executionPlan,
+                "COLLECT_PAGES",
+                "已采集到页面，但缺少正式 selectedTargets，结果仅保留审计与修复线索",
+                Boolean.TRUE.equals(readBoolean(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegraded)),
+                readString(searchExecutionResult.getExecutionTrace(), SearchExecutionTrace::getDegradationReason)));
+        String outputJson = buildCollectorOutput(
+                config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, collectionReport,
+                progressSnapshots, results, successCounter, targets, fieldEvidenceLoopRounds);
+        return AgentResult.builder()
+                .status(TaskNodeStatus.FAILED)
+                .outputData(outputJson)
+                .outputSummary(actionableError)
+                .reasoningSummary(searchExecutionResult.getReasoningSummary())
+                .errorMessage(actionableError)
+                .build();
+    }
+
     /**
      * Collector 的历史输出里已经有 results 明细，这里在不破坏旧字段的前提下，
      * 再组装一份稳定契约给下游使用，确保 sourceUrls / issueFlags / evidenceFragments 不会再散落在不同命名里。
@@ -1111,6 +1179,9 @@ public class CollectorAgent extends BaseAgent {
         }
         if (successCounter == 0 && !results.isEmpty()) {
             issueFlags.add("NO_USABLE_CONTENT");
+        }
+        if (!hasFormalSelectedTargetsInResults(results) && successCounter > 0) {
+            issueFlags.add("FORMAL_TARGETS_MISSING");
         }
         if (sourceUrls.isEmpty() && config != null && config.getCompetitorUrls() != null) {
             sourceUrls.addAll(config.getCompetitorUrls());
@@ -1370,6 +1441,41 @@ public class CollectorAgent extends BaseAgent {
             }
             List<String> flags = readStringList(result.get("issueFlags"));
             if (flags.stream().anyMatch(issueFlag::equalsIgnoreCase)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * selectedTargets 不能只看列表是否非空。
+     * 运行期可能会残留没有 candidate/url 的占位 target；这种对象只能保留审计价值，不能支撑节点成功语义。
+     */
+    private boolean hasFormalSelectedTargets(List<SearchCollectionTarget> targets) {
+        if (targets == null || targets.isEmpty()) {
+            return false;
+        }
+        for (SearchCollectionTarget target : targets) {
+            if (target == null || target.getCandidate() == null) {
+                continue;
+            }
+            if (StringUtils.hasText(target.getCandidate().getUrl())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasFormalSelectedTargetsInResults(List<Map<String, Object>> results) {
+        if (results == null || results.isEmpty()) {
+            return false;
+        }
+        for (Map<String, Object> result : results) {
+            if (result == null) {
+                continue;
+            }
+            if (StringUtils.hasText(toText(result.get("selectionStage")))
+                    || StringUtils.hasText(toText(result.get("selectionReason")))) {
                 return true;
             }
         }
@@ -1831,7 +1937,11 @@ public class CollectorAgent extends BaseAgent {
         rounds++;
         DimensionEvidencePlan narrowedPlan = narrowPlanToUnfinishedFields(updatedPlan);
         config.setDimensionEvidencePlan(narrowedPlan);
-        SearchExecutionResult secondRoundSearchResult = searchExecutionCoordinator.execute(config, update ->
+        SearchExecutionResult secondRoundSearchResult = searchExecutionCoordinator.execute(
+                config,
+                context.getTaskId(),
+                context.getFieldEvidenceFingerprintClaims(),
+                update ->
                 persistRunningOutput(context, config, sourceType, update, results, successCounterRef[0]));
         List<SearchCollectionTarget> secondRoundTargets = secondRoundSearchResult.getSelectedTargets() == null
                 ? List.of()
@@ -2778,17 +2888,23 @@ public class CollectorAgent extends BaseAgent {
         if (executionPlan == null || executionPlan.getSteps() == null) {
             return;
         }
-        for (int index = 0; index < executionPlan.getSteps().size(); index++) {
-            SearchExecutionStep step = executionPlan.getSteps().get(index);
+        /*
+         * executionPlan.steps 可能来自 List.of、反序列化快照或上游不可变集合。
+         * Collector 只负责推进采集步骤状态，不能假设外部传入的列表一定可原地 set。
+         */
+        List<SearchExecutionStep> mutableSteps = new ArrayList<>(executionPlan.getSteps());
+        for (int index = 0; index < mutableSteps.size(); index++) {
+            SearchExecutionStep step = mutableSteps.get(index);
             if (!"COLLECT_PAGES".equals(step.getStepCode())) {
                 continue;
             }
-            executionPlan.getSteps().set(index, step.toBuilder()
+            mutableSteps.set(index, step.toBuilder()
                     .status(status)
                     .message(message)
                     .startedAt(step.getStartedAt() == null ? LocalDateTime.now() : step.getStartedAt())
                     .completedAt(status == SearchExecutionStep.StepStatus.RUNNING ? null : LocalDateTime.now())
                     .build());
+            executionPlan.setSteps(mutableSteps);
             return;
         }
     }

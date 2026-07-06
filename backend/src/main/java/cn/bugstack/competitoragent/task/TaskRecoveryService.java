@@ -196,7 +196,7 @@ public class TaskRecoveryService {
             return Optional.empty();
         }
         Optional<TaskProgressSnapshot> cachedSnapshot = taskSnapshotCacheService.getTaskSnapshot(taskId);
-        if (cachedSnapshot.isPresent()) {
+        if (cachedSnapshot.isPresent() && !isSnapshotStale(taskId, cachedSnapshot.get())) {
             return cachedSnapshot;
         }
         return taskRepository.findById(taskId).map(task -> {
@@ -212,6 +212,37 @@ public class TaskRecoveryService {
             taskSnapshotCacheService.saveTaskSnapshot(rebuiltSnapshot);
             return rebuiltSnapshot;
         });
+    }
+
+    /**
+     * Redis 快照是运行期加速层，不是最终事实源。
+     * 当节点已经在数据库里推进到更新的 lastAttemptAt/startedAt/completedAt，而快照仍停留在旧时间时，
+     * 详情页会误判为“任务没动”。这里用任务和节点事实时间做轻量 freshness 校验，发现滞后就回源重建。
+     */
+    private boolean isSnapshotStale(Long taskId, TaskProgressSnapshot cachedSnapshot) {
+        if (cachedSnapshot == null || cachedSnapshot.getUpdatedAt() == null) {
+            return true;
+        }
+        LocalDateTime latestFactTime = taskRepository.findById(taskId)
+                .map(AnalysisTask::getUpdatedAt)
+                .orElse(null);
+        List<TaskNode> nodes = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId);
+        for (TaskNode node : nodes) {
+            latestFactTime = maxTime(latestFactTime, node == null ? null : node.getLastAttemptAt());
+            latestFactTime = maxTime(latestFactTime, node == null ? null : node.getStartedAt());
+            latestFactTime = maxTime(latestFactTime, node == null ? null : node.getCompletedAt());
+        }
+        return latestFactTime != null && cachedSnapshot.getUpdatedAt().isBefore(latestFactTime);
+    }
+
+    private LocalDateTime maxTime(LocalDateTime left, LocalDateTime right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return left.isAfter(right) ? left : right;
     }
 
     /**

@@ -21,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -259,6 +260,43 @@ class TaskRecoveryServiceTest {
         assertEquals("官网补源", snapshot.getCurrentStage());
         assertEquals(1, snapshot.getCompletedNodes());
         assertEquals(List.of("collect_sources_web"), snapshot.getActiveNodeNames());
+        verify(taskSnapshotCacheService).saveTaskSnapshot(any(TaskProgressSnapshot.class));
+    }
+
+    @Test
+    void shouldRebuildRecoverySnapshotWhenCachedSnapshotIsOlderThanRunningNode() {
+        LocalDateTime staleSnapshotTime = LocalDateTime.of(2026, 7, 5, 15, 27, 0);
+        LocalDateTime nodeProgressTime = LocalDateTime.of(2026, 7, 5, 15, 30, 0);
+        AnalysisTask task = AnalysisTask.builder()
+                .id(87L)
+                .status(AnalysisTaskStatus.RUNNING)
+                .updatedAt(nodeProgressTime)
+                .build();
+        TaskNode runningNode = TaskNode.builder()
+                .taskId(87L)
+                .nodeName("collect_sources_douyin")
+                .displayName("抖音采集")
+                .status(TaskNodeStatus.RUNNING)
+                .lastAttemptAt(nodeProgressTime)
+                .build();
+        TaskProgressSnapshot staleSnapshot = TaskProgressSnapshot.builder()
+                .taskId(87L)
+                .taskStatus("RUNNING")
+                .currentStage("信息采集")
+                .completedNodes(0)
+                .totalNodes(1)
+                .activeNodeNames(List.of("collect_sources_old"))
+                .updatedAt(staleSnapshotTime)
+                .build();
+
+        when(taskSnapshotCacheService.getTaskSnapshot(87L)).thenReturn(Optional.of(staleSnapshot));
+        when(taskRepository.findById(87L)).thenReturn(Optional.of(task));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(87L)).thenReturn(List.of(runningNode));
+
+        TaskProgressSnapshot snapshot = recoveryService.getTaskSnapshotOrRebuild(87L).orElseThrow();
+
+        assertEquals("抖音采集", snapshot.getCurrentStage());
+        assertEquals(List.of("collect_sources_douyin"), snapshot.getActiveNodeNames());
         verify(taskSnapshotCacheService).saveTaskSnapshot(any(TaskProgressSnapshot.class));
     }
 

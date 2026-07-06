@@ -160,17 +160,14 @@ public class TavilySearchProfileResolver {
 
     /**
      * 字段级 query 的查询模式按 sourceType 收口。
-     * 官方/文档/定价类只说明证据类型；是否扩展到全网仍由 search-first family 路由决定。
+     * 官方/文档/定价类字段证据必须先走官方锚点，是否继续扩展到开放网络交给 provider 的 shouldExpand 再判定。
      */
     private TavilyQueryMode resolveFieldEvidenceMode(FieldEvidenceQuery query) {
         String sourceType = query == null ? null : query.getSourceType();
         if ("OFFICIAL".equalsIgnoreCase(sourceType)
                 || "DOCS".equalsIgnoreCase(sourceType)
                 || "PRICING".equalsIgnoreCase(sourceType)) {
-            // search-first 家族由 family 路由决定检索范围，sourceType 只描述证据类型，不能再强制官方锚点。
-            if (searchPolicyResolver.isSearchFirstSourceFamilyForSourceType(sourceType)) {
-                return TavilyQueryMode.TRUSTED_WEB_EXPANSION;
-            }
+            // 字段级官方证据先验证官方结果，避免默认把每条 query 都扩散到开放网。
             return TavilyQueryMode.OFFICIAL_DOCS;
         }
         return TavilyQueryMode.OPEN_WEB;

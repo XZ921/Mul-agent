@@ -18,7 +18,16 @@ import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -206,6 +215,67 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
         assertThat(result.getExecutionTrace().getSearchTimeoutMillis()).isGreaterThanOrEqualTo(21_000L);
     }
 
+    @Test
+    void shouldAtomicallyDeduplicateFieldEvidenceQueriesAcrossConcurrentCollectors() throws Exception {
+        RecordingBudgetAwareSearchSourceProvider provider = new RecordingBudgetAwareSearchSourceProvider();
+        provider.enableConcurrentBarrier(2);
+        SearchExecutionCoordinator coordinator = newCoordinator(provider);
+        CollectorNodeConfig config = CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩")
+                .sourceType("DOCS")
+                .verifyCandidates(false)
+                .searchMode("HTTP_ONLY")
+                .searchFallbackOrder(List.of("HTTP"))
+                .preferredSearchProvider("tavily")
+                .browserSearchEnabled(false)
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .searchTimeoutMillis(6_000L)
+                .dimensionEvidencePlan(prioritizedFieldPlan())
+                .build();
+        Map<String, Set<String>> claimRegistry = new ConcurrentHashMap<>();
+
+        ExecutorService executorService = Executors.newFixedThreadPool(2);
+        try {
+            Future<SearchExecutionResult> first = executorService.submit(() ->
+                    coordinator.execute(config, 88L, claimRegistry, update -> {
+                    }));
+            Future<SearchExecutionResult> second = executorService.submit(() ->
+                    coordinator.execute(config, 88L, claimRegistry, update -> {
+                    }));
+
+            SearchExecutionResult firstResult = first.get(10, TimeUnit.SECONDS);
+            SearchExecutionResult secondResult = second.get(10, TimeUnit.SECONDS);
+
+            assertThat(provider.requests).hasSize(2);
+
+            List<String> executedFingerprints = provider.requests.stream()
+                    .flatMap(request -> request.getFieldEvidenceQueries().stream())
+                    .map(FieldEvidenceQuery::getQueryFingerprint)
+                    .toList();
+            assertThat(executedFingerprints).doesNotHaveDuplicates();
+            assertThat(executedFingerprints)
+                    .containsExactlyInAnyOrder("q-priority-10", "q-priority-20", "q-priority-30");
+
+            int totalSkipped = firstResult.getExecutionTrace().getFieldEvidenceQuerySkippedCount()
+                    + secondResult.getExecutionTrace().getFieldEvidenceQuerySkippedCount();
+            assertThat(totalSkipped).isEqualTo(5);
+
+            int totalCrossNodeDedup = firstResult.getExecutionTrace().getFieldEvidenceQuerySkipReasons()
+                    .getOrDefault("SKIPPED_CROSS_NODE_DEDUP", 0)
+                    + secondResult.getExecutionTrace().getFieldEvidenceQuerySkipReasons()
+                    .getOrDefault("SKIPPED_CROSS_NODE_DEDUP", 0);
+            assertThat(totalCrossNodeDedup).isEqualTo(3);
+
+            assertThat(claimRegistry)
+                    .containsKey("fieldEvidence.executedFingerprints::88::哔哩哔哩");
+            assertThat(claimRegistry.get("fieldEvidence.executedFingerprints::88::哔哩哔哩"))
+                    .containsExactlyInAnyOrder("q-priority-10", "q-priority-20", "q-priority-30");
+        } finally {
+            executorService.shutdownNow();
+        }
+    }
+
     private SearchExecutionCoordinator newCoordinator(RecordingBudgetAwareSearchSourceProvider provider) {
         BrowserSearchRuntimeService browserSearchRuntimeService = mock(BrowserSearchRuntimeService.class);
         when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
@@ -346,8 +416,10 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
 
     private static final class RecordingBudgetAwareSearchSourceProvider implements SearchSourceProvider {
 
-        private final List<SearchSourceRequest> requests = new ArrayList<>();
+        private final List<SearchSourceRequest> requests = Collections.synchronizedList(new ArrayList<>());
         private boolean emitProviderFieldQueryAudit = false;
+        private volatile CountDownLatch concurrentSearchReadyLatch;
+        private volatile CountDownLatch concurrentSearchReleaseLatch;
 
         @Override
         public SearchSourceProviderDescriptor descriptor() {
@@ -367,6 +439,7 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
 
         @Override
         public List<SourceCandidate> search(SearchSourceRequest request) {
+            awaitConcurrentSearchBarrier();
             requests.add(request);
             if (request == null || request.getFieldEvidenceQueries() == null) {
                 return List.of();
@@ -453,6 +526,30 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
         @Override
         public List<SourceCandidate> search(String competitorName, List<String> requestedScopes) {
             return List.of();
+        }
+
+        private void enableConcurrentBarrier(int participants) {
+            this.concurrentSearchReadyLatch = new CountDownLatch(participants);
+            this.concurrentSearchReleaseLatch = new CountDownLatch(1);
+        }
+
+        private void awaitConcurrentSearchBarrier() {
+            CountDownLatch readyLatch = concurrentSearchReadyLatch;
+            CountDownLatch releaseLatch = concurrentSearchReleaseLatch;
+            if (readyLatch == null || releaseLatch == null) {
+                return;
+            }
+            readyLatch.countDown();
+            try {
+                boolean allReady = readyLatch.await(5, TimeUnit.SECONDS);
+                if (allReady) {
+                    releaseLatch.countDown();
+                }
+                releaseLatch.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("concurrent search barrier interrupted", exception);
+            }
         }
     }
 }

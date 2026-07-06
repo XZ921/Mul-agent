@@ -896,6 +896,7 @@ public class DagExecutor {
                 .traceId(sharedContext.getTraceId())
                 .sharedState(sharedContext.getSharedState())
                 .sharedOutputEnvelopes(sharedContext.getSharedOutputEnvelopes())
+                .fieldEvidenceFingerprintClaims(sharedContext.getFieldEvidenceFingerprintClaims())
                 .createdAt(sharedContext.getCreatedAt())
                 .build();
     }

@@ -586,27 +586,15 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
             return true;
         }
 
-        /**
-         * trusted expansion 不应只在“完全没结果”时触发。
-         * 对 OFFICIAL_DOCS 首轮来说，只要出现下面任一情况，就说明官方锚点不足以直接支撑 fast lane：
-         * 1. 命中了结果，但全部被 Gate 判为不可直接使用；
-         * 2. 存在可用结果，但没有形成真正的 OFFICIAL_DOC / PDF 官方文档命中；
-         * 这样可以避免首轮只返回搜索页、视频列表页或论坛噪声时，provider 误以为已经“有结果”而放弃受控扩展。
+        /*
+         * 官方锚点扩展只处理“第一枪完全不可用”的场景。
+         * 只要 OFFICIAL_DOCS 首轮已经拿到可用候选，即使页面类型不是 OFFICIAL_DOC/PDF，
+         * 也先接受这次官方命中，避免因为类型不够像文档而继续扩散到开放网，重新放大 Tavily 请求量。
          */
         long usableCount = primaryCandidates.stream()
                 .filter(candidate -> Boolean.TRUE.equals(candidate.getFastLaneUsable()))
                 .count();
-        if (usableCount <= 0L) {
-            return true;
-        }
-        long officialDocHitCount = primaryCandidates.stream()
-                .filter(candidate -> Boolean.TRUE.equals(candidate.getFastLaneUsable()))
-                .filter(candidate -> {
-                    String pageType = candidate.getPageType();
-                    return "OFFICIAL_DOC".equalsIgnoreCase(pageType) || "PDF".equalsIgnoreCase(pageType);
-                })
-                .count();
-        return officialDocHitCount <= 0L;
+        return usableCount <= 0L;
     }
 
     /**

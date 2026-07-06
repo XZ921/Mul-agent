@@ -52,6 +52,80 @@ class FieldEvidenceQueryExecutionGateTest {
         assertThat(plan.skipReasons()).containsKey("SKIPPED_NODE_QUERY_CAP_EXHAUSTED");
     }
 
+    @Test
+    void shouldRoundRobinExecutableOrderAcrossFieldsBeforeProviderConsumesShortBudget() {
+        FieldEvidenceQueryExecutionGate gate = new FieldEvidenceQueryExecutionGate();
+        List<FieldEvidenceQuery> planned = List.of(
+                query("coreFeatures", "DOCS", 10, "core-docs-1"),
+                query("coreFeatures", "DOCS", 20, "core-docs-2"),
+                query("pricing", "DOCS", 30, "pricing-docs-1"),
+                query("pricing", "DOCS", 40, "pricing-docs-2")
+        );
+
+        FieldEvidenceQueryExecutionPlan plan = gate.resolve(planned, 2, 0, 8);
+
+        assertThat(plan.executable())
+                .extracting(FieldEvidenceQuery::getQueryFingerprint)
+                .containsExactly("core-docs-1", "pricing-docs-1", "core-docs-2", "pricing-docs-2");
+    }
+
+    @Test
+    void shouldSpreadFirstProviderSlotsAcrossFieldsWhenOnlyFewQueriesCanRun() {
+        FieldEvidenceQueryExecutionGate gate = new FieldEvidenceQueryExecutionGate();
+        List<FieldEvidenceQuery> planned = new ArrayList<>();
+        for (int fieldIndex = 0; fieldIndex < 7; fieldIndex++) {
+            String fieldName = "field-" + fieldIndex;
+            planned.add(query(fieldName, "DOCS", fieldIndex * 10 + 1, fieldName + "-docs-1"));
+            planned.add(query(fieldName, "OFFICIAL", fieldIndex * 10 + 2, fieldName + "-official-1"));
+            planned.add(query(fieldName, "REVIEW", fieldIndex * 10 + 3, fieldName + "-review-1"));
+            planned.add(query(fieldName, "NEWS", fieldIndex * 10 + 4, fieldName + "-news-1"));
+        }
+
+        FieldEvidenceQueryExecutionPlan plan = gate.resolve(planned, 3, 1, 24);
+
+        assertThat(plan.executable()).hasSize(21);
+        assertThat(plan.executable().stream()
+                .limit(4)
+                .map(FieldEvidenceQuery::getFieldName)
+                .distinct()
+                .count()).isEqualTo(4L);
+        assertThat(plan.skipReasons()).containsEntry("SKIPPED_FIELD_SOURCE_QUOTA_EXHAUSTED", 7);
+    }
+
+    @Test
+    void shouldSkipQueryWhenFingerprintAlreadyClaimedBySiblingCollector() {
+        FieldEvidenceQueryExecutionGate gate = new FieldEvidenceQueryExecutionGate();
+        List<FieldEvidenceQuery> planned = List.of(
+                query("summary", "OFFICIAL", 0, "summary-official-1"),
+                query("summary", "DOCS", 1, "summary-docs-1"),
+                query("pricing", "OFFICIAL", 2, "pricing-official-1")
+        );
+
+        java.util.Set<String> claimSet = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        claimSet.add("summary-official-1");
+
+        FieldEvidenceQueryExecutionPlan plan = gate.resolve(
+                planned,
+                3,
+                0,
+                24,
+                claimSet
+        );
+
+        assertThat(plan.executable())
+                .extracting(FieldEvidenceQuery::getQueryFingerprint)
+                .containsExactly("summary-docs-1", "pricing-official-1");
+        assertThat(plan.skipped())
+                .extracting(FieldEvidenceQuery::getQueryFingerprint)
+                .contains("summary-official-1");
+        assertThat(plan.skipReasons())
+                .containsEntry("SKIPPED_CROSS_NODE_DEDUP", 1);
+        assertThat(plan.claimedFingerprints())
+                .containsExactly("summary-docs-1", "pricing-official-1");
+        assertThat(claimSet)
+                .contains("summary-official-1", "summary-docs-1", "pricing-official-1");
+    }
+
     private FieldEvidenceQuery query(String fieldName,
                                      String sourceType,
                                      Integer priority,

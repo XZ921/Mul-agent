@@ -125,6 +125,29 @@ class TavilyFastLaneAcceptanceTest {
     }
 
     @Test
+    void shouldNotFallbackToTrustedExpansionWhenOfficialDocsReturnsUsableCandidate() throws Exception {
+        SearchSourceRequest officialDocsRequest = SearchSourceRequest.builder()
+                .competitorName("douyin")
+                .requestedScopes(List.of("DOCS"))
+                .searchQueries(List.of("douyin open platform api docs"))
+                .preferredDomains(List.of(OFFICIAL_DOMAIN))
+                .includeDomains(List.of(OFFICIAL_DOMAIN))
+                .preferredProviderKey("tavily")
+                .preferredQueryMode("OFFICIAL_DOCS")
+                .build();
+
+        AcceptanceScenario scenario = runScenario(officialDocsRequest,
+                List.of(
+                        loadFixture("tavily/official-docs-response.json"),
+                        loadFixture("tavily/recommendation-algorithm-response.json")
+                ));
+
+        assertThat(scenario.executedProfiles).hasSize(1);
+        assertThat(scenario.executedProfiles.get(0).getQueryMode()).isEqualTo(TavilyQueryMode.OFFICIAL_DOCS);
+        assertThat(scenario.metrics.officialDocHitCount).isGreaterThan(0);
+    }
+
+    @Test
     void shouldRejectNoisePagesWithExplicitFastLaneReasons() throws Exception {
         SearchSourceRequest openWebRequest = SearchSourceRequest.builder()
                 .competitorName("douyin")

@@ -52,6 +52,44 @@ class SourceFamilyDirectDiscoveryPlannerTest {
     }
 
     @Test
+    void shouldKeepOpenPlatformSubdomainInOfficialCandidatePool() {
+        SourceFamilyDirectDiscoveryPlanner planner = new SourceFamilyDirectDiscoveryPlanner(new SearchPolicyResolver());
+
+        List<SourceCandidate> candidates = planner.buildInitialCandidates(
+                "哔哩哔哩",
+                "OFFICIAL",
+                List.of("https://bilibili.com")
+        );
+
+        assertThat(candidates)
+                .filteredOn(candidate -> "https://open.bilibili.com".equals(candidate.getUrl()))
+                .singleElement()
+                .satisfies(candidate -> {
+                    assertThat(candidate.getSourceType()).isEqualTo("OFFICIAL");
+                    assertThat(candidate.getDiscoveryMethod()).isEqualTo("FAMILY_SUBDOMAIN_TEMPLATE");
+                });
+    }
+
+    @Test
+    void shouldKeepOpenPlatformSubdomainAsDocsEntryForDocsCandidatePool() {
+        SourceFamilyDirectDiscoveryPlanner planner = new SourceFamilyDirectDiscoveryPlanner(new SearchPolicyResolver());
+
+        List<SourceCandidate> candidates = planner.buildInitialCandidates(
+                "抖音",
+                "DOCS",
+                List.of("https://douyin.com")
+        );
+
+        assertThat(candidates)
+                .filteredOn(candidate -> "https://open.douyin.com".equals(candidate.getUrl()))
+                .singleElement()
+                .satisfies(candidate -> {
+                    assertThat(candidate.getSourceType()).isEqualTo("DOCS");
+                    assertThat(candidate.getQualitySignals()).contains("OPEN_PLATFORM_DOCS_ENTRY");
+                });
+    }
+
+    @Test
     void shouldKeepProvidedOfficialPathAsDirectLocatorButExpandTemplatesFromRootOnly() {
         SourceFamilyDirectDiscoveryPlanner planner = new SourceFamilyDirectDiscoveryPlanner(new SearchPolicyResolver());
 

@@ -203,12 +203,31 @@ public class CandidateOwnershipPolicy {
         String domain = normalizeDomain(firstText(candidate == null ? null : candidate.getDomain(),
                 extractDomain(firstText(candidate == null ? null : candidate.getUrl(), page == null ? null : page.getUrl()))));
         String text = candidateAndPageText(candidate, page);
+        boolean domainMatched = false;
+        for (String alias : aliases) {
+            String normalizedAlias = normalizeAliasForDomainMatch(alias);
+            if (!StringUtils.hasText(normalizedAlias)) {
+                continue;
+            }
+            if (matchesDomainAlias(domain, normalizedAlias)) {
+                domainMatched = true;
+                break;
+            }
+        }
+        if (domainMatched) {
+            return true;
+        }
+        if (candidate != null && isSearchDiscovered(candidate)) {
+            // 运行期搜索候选如果域名不归属于竞品，只因标题/正文提到品牌而放行，
+            // 会把 explinks、apifox、GitHub 仓库等第三方页面误当成官方根域继续扩展。
+            return false;
+        }
         for (String alias : aliases) {
             String normalizedAlias = compact(alias);
             if (!StringUtils.hasText(normalizedAlias)) {
                 continue;
             }
-            if (domain.contains(normalizedAlias) || text.contains(normalizedAlias)) {
+            if (text.contains(normalizedAlias)) {
                 return true;
             }
         }
@@ -231,11 +250,11 @@ public class CandidateOwnershipPolicy {
                 extractDomain(candidate == null ? null : candidate.getUrl())
         ));
         for (String alias : aliases) {
-            String normalizedAlias = compact(alias);
+            String normalizedAlias = normalizeAliasForDomainMatch(alias);
             if (!StringUtils.hasText(normalizedAlias)) {
                 continue;
             }
-            if (domain.contains(normalizedAlias)) {
+            if (matchesDomainAlias(domain, normalizedAlias)) {
                 return true;
             }
         }
@@ -345,18 +364,82 @@ public class CandidateOwnershipPolicy {
             if (!StringUtils.hasText(domain)) {
                 continue;
             }
-            aliases.add(compact(domain));
+            aliases.add(domain);
             String registrableDomain = extractRegistrableDomain(domain);
             if (StringUtils.hasText(registrableDomain)) {
-                aliases.add(compact(registrableDomain));
+                aliases.add(registrableDomain);
             }
             String primaryLabel = extractPrimaryLabel(domain);
-            if (StringUtils.hasText(primaryLabel)) {
-                aliases.add(compact(primaryLabel));
+            if (StringUtils.hasText(primaryLabel) && !isGenericSubdomainLabel(primaryLabel)) {
+                aliases.add(primaryLabel);
             }
         }
         aliases.removeIf(alias -> !StringUtils.hasText(alias));
         return new ArrayList<>(aliases);
+    }
+
+    /**
+     * 域名归属必须是完整域名、注册域或其子域关系，不能使用字符串 contains。
+     * bilibili.apifox.cn 包含 bilibili，但并不是 bilibili.com 的子域，不能通过官方归属闸门。
+     */
+    private boolean matchesDomainAlias(String domain, String normalizedAlias) {
+        if (!StringUtils.hasText(domain) || !StringUtils.hasText(normalizedAlias)) {
+            return false;
+        }
+        String normalizedDomain = normalizeDomain(domain);
+        String alias = normalizeDomain(normalizedAlias);
+        if (!StringUtils.hasText(normalizedDomain) || !StringUtils.hasText(alias)) {
+            return false;
+        }
+        if (alias.contains(".")) {
+            return normalizedDomain.equals(alias) || normalizedDomain.endsWith("." + alias);
+        }
+        String primaryLabel = extractPrimaryLabel(normalizedDomain);
+        return primaryLabel.equals(alias) || containsHyphenDelimitedLabel(primaryLabel, alias);
+    }
+
+    private boolean containsHyphenDelimitedLabel(String primaryLabel, String alias) {
+        if (!StringUtils.hasText(primaryLabel) || !StringUtils.hasText(alias)) {
+            return false;
+        }
+        for (String segment : primaryLabel.split("-")) {
+            if (segment.equals(alias)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 域名归属匹配需要保留 bilibili.com 这类点号结构；
+     * 正文品牌匹配才使用 compact 去掉标点，避免把域名别名压成 bilibilicom 后无法做子域判断。
+     */
+    private String normalizeAliasForDomainMatch(String alias) {
+        if (!StringUtils.hasText(alias)) {
+            return "";
+        }
+        String normalized = alias.trim().toLowerCase(Locale.ROOT);
+        return normalized.contains(".") ? normalizeDomain(normalized) : compact(normalized);
+    }
+
+    /**
+     * 从 competitorUrl 提取归属别名时，open/docs/developer/help 只是入口类型，不是品牌名。
+     * 保留这些泛标签会让 explinks.com 这类页面因为出现 open 字样而被误认为官方候选。
+     */
+    private boolean isGenericSubdomainLabel(String label) {
+        if (!StringUtils.hasText(label)) {
+            return true;
+        }
+        String normalized = label.trim().toLowerCase(Locale.ROOT);
+        return "open".equals(normalized)
+                || "docs".equals(normalized)
+                || "doc".equals(normalized)
+                || "developer".equals(normalized)
+                || "developers".equals(normalized)
+                || "help".equals(normalized)
+                || "support".equals(normalized)
+                || "api".equals(normalized)
+                || "www".equals(normalized);
     }
 
     private String extractRegistrableDomain(String domain) {

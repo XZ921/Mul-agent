@@ -13,5 +13,6 @@ class EvidenceQualityGatePropertiesTest {
         assertThat(properties.getAuthSignals())
                 .contains("验证码", "智能验证", "由极验提供技术支持");
         assertThat(properties.getNavigationShellLinkRatioThreshold()).isEqualTo(0.55D);
+        assertThat(properties.getAggregatorDomains()).contains("explinks.com");
     }
 }

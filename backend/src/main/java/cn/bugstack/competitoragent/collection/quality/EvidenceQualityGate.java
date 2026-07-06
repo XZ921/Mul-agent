@@ -53,11 +53,22 @@ public class EvidenceQualityGate {
         }
 
         String safeContent = content == null ? "" : content;
-        double sourceScore = isOfficial(context == null ? null : context.getSourceType(),
-                context == null ? null : context.getUrl()) ? 0.90D : 0.60D;
+        boolean aggregatorDomain = isAggregatorDomain(context == null ? null : context.getUrl());
+        double sourceScore = resolveSourceAuthenticityScore(context, aggregatorDomain);
         ContentUsabilityScore contentUsabilityScore = calculateContentUsabilityScore(context, safeContent, issues, signals);
         double contentScore = contentUsabilityScore.getUsability();
         double taskScore = taskRelevanceScore(context, safeContent, issues, signals);
+
+        if (aggregatorDomain) {
+            /**
+             * 聚合页本身并不等于“不可读”，但它不应该再享受 OFFICIAL/DOCS 的高信任兜底。
+             * 这里统一打上 repairRequired，让它只能停留在 audit/修复链路，不能再直接充当正式证据。
+             */
+            signals.add("AGGREGATOR_DOMAIN_DETECTED");
+            signals.add("EVIDENCE_REPAIR_REQUIRED");
+            contentScore = Math.min(contentScore, properties.getNavigationShellScoreCap());
+            taskScore = Math.min(taskScore, 0.35D);
+        }
 
         boolean authGateContent = isAuthGateContent(safeContent);
         /*
@@ -149,8 +160,7 @@ public class EvidenceQualityGate {
         ContentUsabilityScore score = contentUsabilityScorer.score(CollectedPageView.builder()
                 .url(context == null ? null : context.getUrl())
                 .sourceType(context == null ? null : context.getSourceType())
-                .sourceTrust(isOfficial(context == null ? null : context.getSourceType(),
-                        context == null ? null : context.getUrl()) ? 0.90D : 0.60D)
+                .sourceTrust(resolveSourceAuthenticityScore(context, isAggregatorDomain(context == null ? null : context.getUrl())))
                 .bodyText(content)
                 .structuredBlocks(context == null || context.getExpectedSignals() == null ? List.of() : context.getExpectedSignals())
                 .build());
@@ -400,12 +410,61 @@ public class EvidenceQualityGate {
         }
     }
 
+    /**
+     * “来源真实性”不能再把任意 http/https URL 都抬成官方高信任。
+     * 这里只有明确的 OFFICIAL/DOCS/PRICING 类型，或明显的文档/帮助子域，才给高信任基线；
+     * 其余普通网页一律按第三方处理，避免聚合页被 URL 形态误抬高。
+     */
+    private double resolveSourceAuthenticityScore(EvidenceQualityContext context, boolean aggregatorDomain) {
+        if (aggregatorDomain) {
+            return 0.35D;
+        }
+        return isOfficial(context == null ? null : context.getSourceType(),
+                context == null ? null : context.getUrl()) ? 0.90D : 0.60D;
+    }
+
     private boolean isOfficial(String sourceType, String url) {
         String normalizedSourceType = sourceType == null ? "" : sourceType.toUpperCase(Locale.ROOT);
-        if (normalizedSourceType.contains("OFFICIAL") || normalizedSourceType.contains("DOCS")) {
+        if (normalizedSourceType.contains("OFFICIAL")
+                || normalizedSourceType.contains("DOCS")
+                || normalizedSourceType.contains("PRICING")) {
             return true;
         }
-        return StringUtils.hasText(url)
-                && (url.startsWith("https://") || url.startsWith("http://"));
+        String host = resolveHost(url);
+        return host.startsWith("docs.")
+                || host.startsWith("open.")
+                || host.contains("support")
+                || host.contains("help");
+    }
+
+    private boolean isAggregatorDomain(String url) {
+        String host = resolveHost(url);
+        if (!StringUtils.hasText(host)
+                || properties.getAggregatorDomains() == null
+                || properties.getAggregatorDomains().isEmpty()) {
+            return false;
+        }
+        for (String configuredDomain : properties.getAggregatorDomains()) {
+            if (!StringUtils.hasText(configuredDomain)) {
+                continue;
+            }
+            String normalizedDomain = configuredDomain.trim().toLowerCase(Locale.ROOT);
+            if (host.equals(normalizedDomain) || host.endsWith("." + normalizedDomain)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String resolveHost(String url) {
+        if (!StringUtils.hasText(url)) {
+            return "";
+        }
+        try {
+            URI uri = URI.create(url);
+            return uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+        } catch (Exception ignored) {
+            return "";
+        }
     }
 }

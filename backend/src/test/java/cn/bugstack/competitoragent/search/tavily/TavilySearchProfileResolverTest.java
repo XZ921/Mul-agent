@@ -64,7 +64,7 @@ class TavilySearchProfileResolverTest {
     }
 
     @Test
-    void shouldRouteSearchFirstOfficialFieldEvidenceToTrustedWebExpansion() {
+    void shouldRouteOfficialFieldEvidenceBackToOfficialDocsForNoiseReduction() {
         TavilySearchProfileResolver resolver = new TavilySearchProfileResolver(new TavilySearchProperties());
 
         for (String sourceType : List.of("OFFICIAL", "DOCS", "PRICING")) {
@@ -81,12 +81,12 @@ class TavilySearchProfileResolverTest {
 
             assertThat(profile.getQueryMode())
                     .as("sourceType=%s", sourceType)
-                    .isEqualTo(TavilyQueryMode.TRUSTED_WEB_EXPANSION);
+                    .isEqualTo(TavilyQueryMode.OFFICIAL_DOCS);
             assertThat(profile.getIncludeDomains())
-                    .as("trusted expansion must not keep official include_domains for sourceType=%s", sourceType)
-                    .isEmpty();
+                    .as("official docs mode must keep official include_domains for sourceType=%s", sourceType)
+                    .containsExactly("open.douyin.com");
             assertThat(profile.getOfficialDomains())
-                    .as("trusted expansion must keep official domain hints for Gate sourceType=%s", sourceType)
+                    .as("official docs mode must keep official domain hints for Gate sourceType=%s", sourceType)
                     .containsExactly("open.douyin.com");
         }
     }

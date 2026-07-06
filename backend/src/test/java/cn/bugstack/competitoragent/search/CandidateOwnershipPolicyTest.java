@@ -74,6 +74,64 @@ class CandidateOwnershipPolicyTest {
         assertFalse(policy.isRejectedMediator(candidate, null));
         assertTrue(policy.hasCompetitorOwnershipSignal("哔哩哔哩", candidate, null));
     }
+
+    @Test
+    void shouldRejectSearchDiscoveredDomainsThatOnlyContainCompetitorAlias() {
+        SourceCandidate apifoxCandidate = SourceCandidate.builder()
+                .url("https://bilibili.apifox.cn")
+                .domain("bilibili.apifox.cn")
+                .title("哔哩哔哩开放平台 API")
+                .sourceType("OFFICIAL")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .selectionStage("HTTP")
+                .build();
+        SourceCandidate githubCandidate = SourceCandidate.builder()
+                .url("https://github.com/bilibili-openplatform/example")
+                .domain("github.com")
+                .title("bilibili-openplatform")
+                .sourceType("OFFICIAL")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .selectionStage("HTTP")
+                .build();
+        SourceCandidate officialCandidate = SourceCandidate.builder()
+                .url("https://open.bilibili.com")
+                .domain("open.bilibili.com")
+                .title("哔哩哔哩开放平台")
+                .sourceType("OFFICIAL")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .selectionStage("HTTP")
+                .build();
+
+        assertFalse(policy.hasCompetitorDomainOwnershipSignalForCandidate(
+                "哔哩哔哩",
+                List.of("https://open.bilibili.com"),
+                apifoxCandidate
+        ));
+        assertFalse(policy.hasCompetitorOwnershipSignal(
+                "哔哩哔哩",
+                List.of("https://open.bilibili.com"),
+                apifoxCandidate,
+                SourceCollector.CollectedPage.builder()
+                        .title("哔哩哔哩开放平台 API")
+                        .content("页面正文提到了 bilibili，但域名仍然属于第三方 API 文档站。")
+                        .success(true)
+                        .build()
+        ));
+        assertFalse(policy.hasCompetitorDomainOwnershipSignalForCandidate(
+                "哔哩哔哩",
+                List.of("https://open.bilibili.com"),
+                githubCandidate
+        ));
+        assertTrue(policy.hasCompetitorDomainOwnershipSignalForCandidate(
+                "哔哩哔哩",
+                List.of("https://open.bilibili.com"),
+                officialCandidate
+        ));
+    }
+
     @Test
     void shouldRejectSitemapDiscoveryRootWithoutCompetitorOwnershipSignal() {
         SourceCandidate candidate = SourceCandidate.builder()
