@@ -117,6 +117,48 @@ class FieldEvidenceCoverageAggregatorTest {
     }
 
     @Test
+    void shouldCountSubstantiveFieldEvidenceWhenAuthGateSignalIsOnlyWeakAuditSignal() {
+        DimensionEvidencePlan plan = DimensionEvidencePlan.builder()
+                .competitorName("Douyin Open Platform")
+                .maxCollectionRounds(2)
+                .fieldCoverages(List.of(FieldEvidenceCoverage.builder()
+                        .fieldName("coreFeatures")
+                        .status(FieldEvidenceCoverageStatus.NOT_STARTED)
+                        .minimumAttemptedPaths(1)
+                        .minDistinctEvidenceCount(1)
+                        .evidencePaths(List.of(CoverageEvidencePath.builder()
+                                .pathKey("DOCS_API_GUIDE")
+                                .required(true)
+                                .build()))
+                        .plannedQueries(List.of())
+                        .build()))
+                .build();
+
+        DimensionEvidencePlan updated = aggregator.applyCollectionResults(plan, List.of(
+                CollectionExecutionResult.builder()
+                        .success(true)
+                        .status("SUCCESS")
+                        .resourceLocator("https://open.douyin.com/platform/resource/docs/transfer")
+                        .content(("Official API documentation with OAuth authorization, login callback, "
+                                + "token exchange, SDK guide, permission scopes and public integration steps. ").repeat(4))
+                        .sourceUrls(List.of("https://open.douyin.com/platform/resource/docs/transfer"))
+                        .qualitySignals(List.of("OFFICIAL_DOMAIN_MATCHED", "AUTH_GATE_WEAK_SIGNAL"))
+                        .publicEvidenceRecoveryFieldName("coreFeatures")
+                        .publicEvidenceRecoveryEvidencePathKey("DOCS_API_GUIDE")
+                        .evidenceRepairPlan(EvidenceRepairPlan.builder()
+                                .state(EvidenceRepairState.REPAIR_NOT_REQUIRED)
+                                .build())
+                        .build()));
+
+        FieldEvidenceCoverage coreFeatures = updated.findField("coreFeatures").orElseThrow();
+        assertThat(coreFeatures.getStatus()).isEqualTo(FieldEvidenceCoverageStatus.SUFFICIENT);
+        assertThat(coreFeatures.getAttemptedPaths()).containsExactly("DOCS_API_GUIDE");
+        assertThat(coreFeatures.getCompletedPaths()).containsExactly("DOCS_API_GUIDE");
+        assertThat(coreFeatures.getSourceUrls()).containsExactly("https://open.douyin.com/platform/resource/docs/transfer");
+        assertThat(coreFeatures.getRecommendedNextAction()).isEqualTo("ACCEPT_FIELD_EVIDENCE");
+    }
+
+    @Test
     void shouldNotCloseFieldWhenSuccessfulResultOnlyContainsThinIntroContent() {
         DimensionEvidencePlan plan = DimensionEvidencePlan.builder()
                 .competitorName("Bilibili")

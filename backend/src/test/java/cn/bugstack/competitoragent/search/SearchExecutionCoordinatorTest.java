@@ -235,7 +235,7 @@ class SearchExecutionCoordinatorTest {
 
         InOrder inOrder = inOrder(candidateVerifier, targetSelector);
         inOrder.verify(candidateVerifier).verify(eq("Notion AI"), eq("DOCS"), any());
-        inOrder.verify(targetSelector).selectTargets(any(), any(), anyInt());
+        inOrder.verify(targetSelector).selectTargets(any(CollectorNodeConfig.class), any(), any(), anyInt());
         verify(browserRuntimeService, never()).search(any());
         assertEquals("SKIP_SUPPLEMENT_ENOUGH_VERIFIED", result.getExecutionTrace().getFallbackDecision());
         assertEquals("https://planned.example.com/docs", result.getSelectedTargets().get(0).getCandidate().getUrl());
@@ -1076,6 +1076,67 @@ class SearchExecutionCoordinatorTest {
     }
 
     @Test
+    void shouldMarkOfficialSearchRootTemplateAsDiscoveryOnlyContinuationForOfficialNode() {
+        TavilyBootstrapPlanner bootstrapPlanner = mock(TavilyBootstrapPlanner.class);
+        when(bootstrapPlanner.plan(any(), any())).thenReturn(TavilyBootstrapDecision.builder()
+                .shouldExecute(false)
+                .reason("bootstrap disabled in this fixture")
+                .seedCandidates(List.of())
+                .build());
+        SearchExecutionCoordinator searchCoordinator = new SearchExecutionCoordinator(
+                new CandidateVerifier(sourceCollector),
+                browserSearchRuntimeService,
+                searchSourceProvider,
+                new SourceCandidateRanker(),
+                new CollectionTargetSelector(),
+                new SearchPolicyResolver(),
+                new CanonicalUrlResolver(),
+                new SitemapDiscoveryService(new SitemapDiscoveryProperties()),
+                new CandidateOwnershipPolicy(),
+                bootstrapPlanner
+        );
+        SourceCandidate searchRoot = SourceCandidate.builder()
+                .url("https://www.douyin.com")
+                .title("Douyin")
+                .sourceType("OFFICIAL")
+                .discoveryMethod("SEARCH")
+                .reason("HTTP search hit official root")
+                .domain("www.douyin.com")
+                .sourceUrls(List.of("https://www.douyin.com"))
+                .relevanceScore(0.90)
+                .freshnessScore(0.60)
+                .qualityScore(0.86)
+                .build();
+        when(searchSourceProvider.search(any(), any())).thenReturn(List.of(searchRoot));
+        when(searchSourceProvider.search(any(SearchSourceRequest.class))).thenReturn(List.of(searchRoot));
+
+        SearchExecutionResult result = searchCoordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Douyin")
+                .sourceType("OFFICIAL")
+                .sourceCandidates(List.of())
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .maxSearchResults(5)
+                .minVerifiedCandidates(1)
+                .build());
+
+        SourceCandidate openRoot = result.getSourceCandidates().stream()
+                .filter(candidate -> candidate != null
+                        && "https://open.douyin.com".equals(candidate.getUrl())
+                        && "SEARCH_ROOT_TEMPLATE".equals(candidate.getDiscoveryMethod()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("source candidates were " + result.getSourceCandidates().stream()
+                        .map(candidate -> candidate == null
+                                ? "null"
+                                : candidate.getUrl() + "|" + candidate.getSourceType() + "|" + candidate.getDiscoveryMethod())
+                        .toList()));
+        assertEquals(Boolean.TRUE, openRoot.getCandidateDiscoveryUsable());
+        assertFalse(Boolean.TRUE.equals(openRoot.getVerified()));
+        assertFalse(Boolean.TRUE.equals(openRoot.getFastLaneUsable()));
+    }
+
+    @Test
     void shouldAppendSitemapDiscoveredCandidatesBeforeFinalSelection() {
         SitemapDiscoveryService sitemapDiscoveryService = mock(SitemapDiscoveryService.class);
         SearchExecutionCoordinator searchCoordinator = new SearchExecutionCoordinator(
@@ -1258,6 +1319,49 @@ class SearchExecutionCoordinatorTest {
                 any(),
                 any(),
                 argThat(rootUrls -> rootUrls != null && rootUrls.contains("https://blog.csdn.net"))
+        );
+    }
+
+    @Test
+    void shouldNotDiscoverSitemapForVerifiedThirdPartySearchEvidenceRoot() {
+        SitemapDiscoveryService sitemapDiscoveryService = mock(SitemapDiscoveryService.class);
+        SearchExecutionCoordinator searchCoordinator = new SearchExecutionCoordinator(
+                new CandidateVerifier(sourceCollector),
+                browserSearchRuntimeService,
+                searchSourceProvider,
+                new SourceCandidateRanker(),
+                new CollectionTargetSelector(),
+                new SearchPolicyResolver(),
+                new CanonicalUrlResolver(),
+                sitemapDiscoveryService
+        );
+        when(searchSourceProvider.search(any(SearchSourceRequest.class))).thenReturn(List.of());
+
+        searchCoordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Douyin")
+                .competitorUrls(List.of("https://www.douyin.com"))
+                .sourceType("OFFICIAL")
+                .sourceCandidates(List.of(SourceCandidate.builder()
+                        .url("https://partner.example.com/research/douyin-open-platform")
+                        .domain("partner.example.com")
+                        .title("Douyin official developer overview")
+                        .sourceType("OFFICIAL")
+                        .providerKey("tavily")
+                        .discoveryMethod("TAVILY_FAST_LANE")
+                        .selectionStage("VERIFIED")
+                        .verified(true)
+                        .build()))
+                .verifyCandidates(Boolean.FALSE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .maxSearchResults(5)
+                .minVerifiedCandidates(1)
+                .build());
+
+        verify(sitemapDiscoveryService, never()).discover(
+                any(),
+                any(),
+                argThat(rootUrls -> rootUrls != null && rootUrls.contains("https://partner.example.com"))
         );
     }
 

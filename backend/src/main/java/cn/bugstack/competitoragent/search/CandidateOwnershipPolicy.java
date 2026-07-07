@@ -163,14 +163,18 @@ public class CandidateOwnershipPolicy {
         if (isRejectedMediator(candidate, null) || isUtilityGatePage(candidate, null)) {
             return false;
         }
+        /*
+         * 搜索发现候选即使已经通过证据级验证，也只能说明“这一个页面可作为证据”。
+         * 是否允许继续向根域 / sitemap 放大，仍必须回到 domain ownership 严格闸门。
+         */
+        if (isSearchDiscovered(candidate)) {
+            return hasCompetitorDomainOwnershipSignal(competitorName, competitorUrls, candidate);
+        }
         if (Boolean.TRUE.equals(candidate.getVerified())) {
             return true;
         }
         // 只要是搜索发现/运行期补源得到的候选，继续向根域扩展前都必须过归属校验，
         // 否则 sitemap 很容易把无关域名当成官方根域继续放大。
-        if (isSearchDiscovered(candidate)) {
-            return hasCompetitorDomainOwnershipSignal(competitorName, competitorUrls, candidate);
-        }
         return true;
     }
 
@@ -188,6 +192,45 @@ public class CandidateOwnershipPolicy {
         return hasCompetitorOwnershipSignal(competitorName, List.of(), candidate, page);
     }
 
+    public boolean hasCompetitorEvidenceOwnershipSignal(String competitorName,
+                                                        SourceCandidate candidate,
+                                                        SourceCollector.CollectedPage page) {
+        return hasCompetitorEvidenceOwnershipSignal(competitorName, List.of(), candidate, page);
+    }
+
+    /**
+     * 单页证据接纳使用“证据级归属”判定：域名严格命中时直接通过；
+     * 域名不命中时，只允许已经抓到正文的页面凭正文品牌信号通过，且不会授权后续根域 / sitemap 扩展。
+     */
+    public boolean hasCompetitorEvidenceOwnershipSignal(String competitorName,
+                                                        List<String> competitorUrls,
+                                                        SourceCandidate candidate,
+                                                        SourceCollector.CollectedPage page) {
+        List<String> aliases = buildAliases(competitorName, competitorUrls);
+        if (aliases.isEmpty()) {
+            return false;
+        }
+        String domain = normalizeDomain(firstText(candidate == null ? null : candidate.getDomain(),
+                extractDomain(firstText(candidate == null ? null : candidate.getUrl(), page == null ? null : page.getUrl()))));
+        if (matchesAnyDomainAlias(domain, aliases)) {
+            return true;
+        }
+        if (isRejectedMediator(candidate, page) || isUtilityGatePage(candidate, page)) {
+            return false;
+        }
+        String text = compact(pageText(page));
+        if (!StringUtils.hasText(text)) {
+            return false;
+        }
+        for (String alias : aliases) {
+            String normalizedAlias = compact(alias);
+            if (StringUtils.hasText(normalizedAlias) && text.contains(normalizedAlias)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * 归属校验优先使用用户给出的 competitorUrls 主域信号，其次回退到 competitorName 别名。
      * 当没有任何归属信号时，默认判定为不通过，避免 sitemap 把无关域名放大进候选池。
@@ -203,18 +246,7 @@ public class CandidateOwnershipPolicy {
         String domain = normalizeDomain(firstText(candidate == null ? null : candidate.getDomain(),
                 extractDomain(firstText(candidate == null ? null : candidate.getUrl(), page == null ? null : page.getUrl()))));
         String text = candidateAndPageText(candidate, page);
-        boolean domainMatched = false;
-        for (String alias : aliases) {
-            String normalizedAlias = normalizeAliasForDomainMatch(alias);
-            if (!StringUtils.hasText(normalizedAlias)) {
-                continue;
-            }
-            if (matchesDomainAlias(domain, normalizedAlias)) {
-                domainMatched = true;
-                break;
-            }
-        }
-        if (domainMatched) {
+        if (matchesAnyDomainAlias(domain, aliases)) {
             return true;
         }
         if (candidate != null && isSearchDiscovered(candidate)) {
@@ -228,6 +260,19 @@ public class CandidateOwnershipPolicy {
                 continue;
             }
             if (text.contains(normalizedAlias)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesAnyDomainAlias(String domain, List<String> aliases) {
+        for (String alias : aliases) {
+            String normalizedAlias = normalizeAliasForDomainMatch(alias);
+            if (!StringUtils.hasText(normalizedAlias)) {
+                continue;
+            }
+            if (matchesDomainAlias(domain, normalizedAlias)) {
                 return true;
             }
         }

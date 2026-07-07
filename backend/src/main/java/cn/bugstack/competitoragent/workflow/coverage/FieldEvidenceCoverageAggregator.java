@@ -141,16 +141,31 @@ public class FieldEvidenceCoverageAggregator {
                 continue;
             }
             String normalized = signal.trim().toUpperCase(java.util.Locale.ROOT);
-            if (normalized.contains("NAVIGATION_SHELL")
-                    || normalized.contains("WEAK_MAIN_CONTENT")
-                    || normalized.contains("LINK_FARM_WITHOUT_BODY")
-                    || normalized.contains("AUTH_GATE")
-                    || normalized.contains("CAPTCHA")
-                    || normalized.contains("REPAIR_QUERY_PROPOSED")) {
+            if (isHardUnusableEvidenceSignal(normalized)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * 字段覆盖只排除真正不可用的强阻断证据。
+     * AUTH_GATE_WEAK_SIGNAL 表示长正文中出现了登录/授权词，但质量门已经确认它仍有可用主题内容，
+     * 因此不能和 AUTH_GATE_DETECTED 混为一谈，否则会出现“证据已落库但字段覆盖永远不关闭”的接缝。
+     */
+    private boolean isHardUnusableEvidenceSignal(String normalizedSignal) {
+        if (!StringUtils.hasText(normalizedSignal)) {
+            return false;
+        }
+        if (normalizedSignal.contains("NAVIGATION_SHELL")
+                || normalizedSignal.contains("WEAK_MAIN_CONTENT")
+                || normalizedSignal.contains("LINK_FARM_WITHOUT_BODY")
+                || normalizedSignal.contains("CAPTCHA")
+                || normalizedSignal.contains("REPAIR_QUERY_PROPOSED")) {
+            return true;
+        }
+        return "AUTH_GATE_DETECTED".equals(normalizedSignal)
+                || "AUTH_OR_CAPTCHA_GATE".equals(normalizedSignal);
     }
 
     private List<String> promotedUrls(EvidenceRepairPlan repairPlan) {

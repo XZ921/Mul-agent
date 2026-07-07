@@ -147,6 +147,58 @@ class CandidateOwnershipPolicyTest {
     }
 
     @Test
+    void shouldAllowSearchDiscoveredSinglePageEvidenceByCollectedBrandTextButKeepRootExpansionStrict() {
+        SourceCandidate candidate = SourceCandidate.builder()
+                .url("https://partner.example.com/research/douyin-open-platform")
+                .domain("partner.example.com")
+                .title("Douyin open platform overview")
+                .sourceType("OFFICIAL")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_FAST_LANE")
+                .selectionStage("HTTP")
+                .build();
+        SourceCollector.CollectedPage page = SourceCollector.CollectedPage.builder()
+                .url("https://partner.example.com/research/douyin-open-platform")
+                .title("Douyin official developer overview")
+                .content("Douyin official overview and features for creators and developers.")
+                .success(true)
+                .build();
+
+        assertFalse(policy.hasCompetitorDomainOwnershipSignalForCandidate(
+                "Douyin",
+                List.of("https://www.douyin.com"),
+                candidate
+        ));
+        assertFalse(policy.isTrustedSearchRoot("Douyin", List.of("https://www.douyin.com"), candidate));
+        assertTrue(policy.hasCompetitorEvidenceOwnershipSignal(
+                "Douyin",
+                List.of("https://www.douyin.com"),
+                candidate,
+                page
+        ));
+    }
+
+    @Test
+    void shouldNotPromoteVerifiedSearchDiscoveredThirdPartyEvidenceToExpandableRoot() {
+        SourceCandidate verifiedThirdPartyEvidence = SourceCandidate.builder()
+                .url("https://partner.example.com/research/douyin-open-platform")
+                .domain("partner.example.com")
+                .title("Douyin official developer overview")
+                .sourceType("OFFICIAL")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_FAST_LANE")
+                .selectionStage("VERIFIED")
+                .verified(true)
+                .build();
+
+        assertFalse(policy.isTrustedSearchRoot(
+                "Douyin",
+                List.of("https://www.douyin.com"),
+                verifiedThirdPartyEvidence
+        ));
+    }
+
+    @Test
     void shouldTreatCompetitorUrlPrimaryDomainAsOwnershipAlias() {
         SourceCandidate candidate = SourceCandidate.builder()
                 .url("https://open.feishu.cn/document/server-docs/docs")

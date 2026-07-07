@@ -587,14 +587,48 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
         }
 
         /*
-         * 官方锚点扩展只处理“第一枪完全不可用”的场景。
-         * 只要 OFFICIAL_DOCS 首轮已经拿到可用候选，即使页面类型不是 OFFICIAL_DOC/PDF，
-         * 也先接受这次官方命中，避免因为类型不够像文档而继续扩散到开放网，重新放大 Tavily 请求量。
+         * 合理回退 task88 的收口条件：OFFICIAL_DOCS 首轮只有“可进入正式正文链路”的候选时才停止扩展。
+         * 根入口页、首页壳页即使被 Tavily Gate 标成 fastLaneUsable，也很容易在后续 Playwright/质量门槛中归零，
+         * 因此不能用它们阻断 trusted expansion；但真正的文章、文档、PDF 仍会保留 task88 的降本收益。
          */
-        long usableCount = primaryCandidates.stream()
-                .filter(candidate -> Boolean.TRUE.equals(candidate.getFastLaneUsable()))
-                .count();
-        return usableCount <= 0L;
+        return primaryCandidates.stream().noneMatch(this::isCollectionReadyOfficialDocsCandidate);
+    }
+
+    private boolean isCollectionReadyOfficialDocsCandidate(SourceCandidate candidate) {
+        if (candidate == null || !Boolean.TRUE.equals(candidate.getFastLaneUsable())) {
+            return false;
+        }
+        if (candidate.getSourceUrls() == null || candidate.getSourceUrls().isEmpty()) {
+            return false;
+        }
+        if (isOfficialEntryPage(candidate.getUrl())) {
+            return false;
+        }
+        String pageType = defaultText(candidate.getPageType()).trim().toUpperCase(Locale.ROOT);
+        return "ARTICLE".equals(pageType)
+                || "OFFICIAL_DOC".equals(pageType)
+                || "PDF".equals(pageType);
+    }
+
+    private boolean isOfficialEntryPage(String url) {
+        if (!StringUtils.hasText(url)) {
+            return true;
+        }
+        try {
+            URI uri = URI.create(url.trim());
+            String path = uri.getPath();
+            if (!StringUtils.hasText(path) || "/".equals(path.trim())) {
+                return true;
+            }
+            String normalizedPath = path.trim().toLowerCase(Locale.ROOT);
+            return "/home".equals(normalizedPath)
+                    || "/index".equals(normalizedPath)
+                    || "/app".equals(normalizedPath)
+                    || "/download".equals(normalizedPath)
+                    || "/about".equals(normalizedPath);
+        } catch (Exception exception) {
+            return false;
+        }
     }
 
     /**

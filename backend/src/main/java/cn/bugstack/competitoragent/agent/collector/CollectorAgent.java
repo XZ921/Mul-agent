@@ -1937,12 +1937,23 @@ public class CollectorAgent extends BaseAgent {
         rounds++;
         DimensionEvidencePlan narrowedPlan = narrowPlanToUnfinishedFields(updatedPlan);
         config.setDimensionEvidencePlan(narrowedPlan);
-        SearchExecutionResult secondRoundSearchResult = searchExecutionCoordinator.execute(
-                config,
-                context.getTaskId(),
-                context.getFieldEvidenceFingerprintClaims(),
-                update ->
-                persistRunningOutput(context, config, sourceType, update, results, successCounterRef[0]));
+        String previousClaimScope = config.getFieldEvidenceClaimScope();
+        config.setFieldEvidenceClaimScope("recollection-" + rounds);
+        SearchExecutionResult secondRoundSearchResult;
+        try {
+            /*
+             * 第二轮补采服务于第一轮未覆盖字段，不能继续复用首轮 fingerprint claim set。
+             * 这里仅切换 claim scope，不关闭同一补采轮内的跨节点去重，避免把 task88 的降本能力整体回滚。
+             */
+            secondRoundSearchResult = searchExecutionCoordinator.execute(
+                    config,
+                    context.getTaskId(),
+                    context.getFieldEvidenceFingerprintClaims(),
+                    update ->
+                    persistRunningOutput(context, config, sourceType, update, results, successCounterRef[0]));
+        } finally {
+            config.setFieldEvidenceClaimScope(previousClaimScope);
+        }
         List<SearchCollectionTarget> secondRoundTargets = secondRoundSearchResult.getSelectedTargets() == null
                 ? List.of()
                 : secondRoundSearchResult.getSelectedTargets();
@@ -2872,14 +2883,29 @@ public class CollectorAgent extends BaseAgent {
                 continue;
             }
             String normalized = signal.trim().toUpperCase(java.util.Locale.ROOT);
-            if (normalized.contains("NAVIGATION_SHELL")
-                    || normalized.contains("LINK_FARM_WITHOUT_BODY")
-                    || normalized.contains("AUTH_GATE")
-                    || normalized.contains("CAPTCHA")) {
+            if (isHardFormalEvidenceBlockingSignal(normalized)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * 这里只识别会污染正式证据链路的强阻断信号。
+     * AUTH_GATE_WEAK_SIGNAL 是质量门对长正文官方文档的审计提示，说明页面里出现了登录/授权词，
+     * 但正文仍可支撑分析；它不能被 contains("AUTH_GATE") 误读成登录墙硬阻断。
+     */
+    private boolean isHardFormalEvidenceBlockingSignal(String normalizedSignal) {
+        if (!StringUtils.hasText(normalizedSignal)) {
+            return false;
+        }
+        if (normalizedSignal.contains("NAVIGATION_SHELL")
+                || normalizedSignal.contains("LINK_FARM_WITHOUT_BODY")
+                || normalizedSignal.contains("CAPTCHA")) {
+            return true;
+        }
+        return "AUTH_GATE_DETECTED".equals(normalizedSignal)
+                || "AUTH_OR_CAPTCHA_GATE".equals(normalizedSignal);
     }
 
     private void markCollectStep(SearchExecutionPlan executionPlan,

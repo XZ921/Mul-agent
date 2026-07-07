@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.search;
 
+import cn.bugstack.competitoragent.agent.collector.CollectorNodeConfig;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCollector;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,206 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CollectionTargetSelectorTest {
 
     private final CollectionTargetSelector selector = new CollectionTargetSelector();
+
+    @Test
+    void shouldPreferOfficialDocumentPrimaryEvidenceOverRelatedDomainArticleFastLaneForOfficialNode() {
+        CollectorNodeConfig config = CollectorNodeConfig.builder()
+                .competitorName("抖音开放平台")
+                .competitorUrls(List.of("https://open.douyin.com"))
+                .includeDomains(List.of("op.jinritemai.com"))
+                .sourceType("OFFICIAL")
+                .build();
+        SourceCandidate relatedDomainArticle = SourceCandidate.builder()
+                .url("https://op.jinritemai.com")
+                .title("巨量百应开放能力")
+                .sourceType("OFFICIAL")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .domain("op.jinritemai.com")
+                .pageType("ARTICLE")
+                .qualityTier("STRONG")
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("prefetch-related-domain")
+                .prefetchedRawContentLength(8_000)
+                .totalScore(0.99)
+                .build();
+        SourceCandidate officialDocument = SourceCandidate.builder()
+                .url("https://open.douyin.com/platform/resource/docs/develop/permission/overall-permission")
+                .title("权限申请与能力说明")
+                .sourceType("OFFICIAL")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .domain("open.douyin.com")
+                .pageType("OFFICIAL_DOC")
+                .qualityTier("STRONG")
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("prefetch-official-doc")
+                .prefetchedRawContentLength(4_000)
+                .queryIntent("API_DOCS")
+                .evidencePathKey("OFFICIAL_PUBLIC_PROFILE")
+                .totalScore(0.56)
+                .build();
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                config,
+                List.of(relatedDomainArticle, officialDocument),
+                Map.of(),
+                2
+        );
+
+        assertEquals(2, decision.getSelectedTargets().size());
+        assertEquals(officialDocument.getUrl(), decision.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertEquals(relatedDomainArticle.getUrl(), decision.getSelectedTargets().get(1).getCandidate().getUrl());
+        assertEquals(0, decision.getSelectedTargets().get(0).getCandidate().getSelectionTier());
+        assertEquals("OFFICIAL_PRIMARY_EVIDENCE",
+                decision.getSelectedTargets().get(0).getCandidate().getSelectionRole());
+        assertEquals(1, decision.getSelectedTargets().get(1).getCandidate().getSelectionTier());
+        assertEquals("OFFICIAL_SUPPLEMENT_EVIDENCE",
+                decision.getSelectedTargets().get(1).getCandidate().getSelectionRole());
+    }
+
+    @Test
+    void shouldNotPromoteOfficialDocPageTypeWithoutDocumentPathSignalAsOfficialPrimaryEvidence() {
+        CollectorNodeConfig config = CollectorNodeConfig.builder()
+                .competitorName("抖音开放平台")
+                .competitorUrls(List.of("https://open.douyin.com"))
+                .includeDomains(List.of("op.jinritemai.com"))
+                .sourceType("OFFICIAL")
+                .build();
+        SourceCandidate misclassifiedRelatedDomain = SourceCandidate.builder()
+                .url("https://op.jinritemai.com")
+                .title("巨量百应首页")
+                .sourceType("OFFICIAL")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .domain("op.jinritemai.com")
+                .pageType("OFFICIAL_DOC")
+                .qualityTier("STRONG")
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("prefetch-misclassified-related-domain")
+                .prefetchedRawContentLength(8_000)
+                .totalScore(0.99)
+                .build();
+        SourceCandidate officialDocument = SourceCandidate.builder()
+                .url("https://open.douyin.com/platform/resource/docs/develop/permission/overall-permission")
+                .title("权限申请与能力说明")
+                .sourceType("DOCS")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .domain("open.douyin.com")
+                .pageType("OFFICIAL_DOC")
+                .qualityTier("STRONG")
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("prefetch-official-doc")
+                .prefetchedRawContentLength(4_000)
+                .queryIntent("OFFICIAL_DOCS")
+                .evidencePathKey("OFFICIAL_PUBLIC_PROFILE")
+                .totalScore(0.56)
+                .build();
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                config,
+                List.of(misclassifiedRelatedDomain, officialDocument),
+                Map.of(),
+                1
+        );
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        assertEquals(officialDocument.getUrl(), decision.getSelectedTargets().get(0).getCandidate().getUrl());
+    }
+
+    @Test
+    void shouldStillSelectThirdPartyFastLaneAsSupplementWhenNoOfficialPrimaryEvidenceExists() {
+        CollectorNodeConfig config = CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩开放平台")
+                .competitorUrls(List.of("https://open.bilibili.com"))
+                .sourceType("OFFICIAL")
+                .build();
+        SourceCandidate thirdPartyFastLane = SourceCandidate.builder()
+                .url("https://explinks.com/api/scd20240709052919a4a3d7")
+                .title("哔哩哔哩开放平台 API")
+                .sourceType("OFFICIAL")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .domain("explinks.com")
+                .pageType("ARTICLE")
+                .qualityTier("STRONG")
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("prefetch-explinks")
+                .prefetchedRawContentLength(5_000)
+                .totalScore(0.72)
+                .build();
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                config,
+                List.of(thirdPartyFastLane),
+                Map.of(),
+                1
+        );
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        assertEquals(thirdPartyFastLane.getUrl(), decision.getSelectedTargets().get(0).getCandidate().getUrl());
+    }
+
+    @Test
+    void shouldTreatVerifiedOfficialDocumentPathWithoutPageTypeAsOfficialPrimaryEvidence() {
+        CollectorNodeConfig config = CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩开放平台")
+                .competitorUrls(List.of("https://open.bilibili.com"))
+                .sourceType("OFFICIAL")
+                .build();
+        SourceCandidate thirdPartyFastLane = SourceCandidate.builder()
+                .url("https://explinks.com/api/scd20240709052919a4a3d7")
+                .title("哔哩哔哩开放平台 API")
+                .sourceType("OFFICIAL")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .domain("explinks.com")
+                .pageType("ARTICLE")
+                .qualityTier("STRONG")
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("prefetch-explinks")
+                .prefetchedRawContentLength(5_000)
+                .totalScore(0.99)
+                .build();
+        SourceCandidate verifiedOfficialDocs = SourceCandidate.builder()
+                .url("https://open.bilibili.com/docs/api/oauth")
+                .title("开放平台接口文档")
+                .sourceType("DOCS")
+                .discoveryMethod("SEARCH_ROOT_TEMPLATE")
+                .domain("open.bilibili.com")
+                .selectionStage("VERIFIED")
+                .verified(Boolean.TRUE)
+                .queryIntent("API_DOCS")
+                .totalScore(0.56)
+                .build();
+        Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
+        attemptedTargets.put(verifiedOfficialDocs.getUrl(), SearchCollectionTarget.builder()
+                .candidate(verifiedOfficialDocs)
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url(verifiedOfficialDocs.getUrl())
+                        .title("开放平台接口文档")
+                        .content("开放平台接口文档".repeat(120))
+                        .success(true)
+                        .build())
+                .build());
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                config,
+                List.of(thirdPartyFastLane, verifiedOfficialDocs),
+                attemptedTargets,
+                1
+        );
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        assertEquals(verifiedOfficialDocs.getUrl(), decision.getSelectedTargets().get(0).getCandidate().getUrl());
+    }
 
     @Test
     void shouldPreferVerifiedAttemptedTargetOverHigherScoredDiscardedCandidateAndReuseCollectedPage() {
@@ -580,6 +781,42 @@ class CollectionTargetSelectorTest {
         assertEquals(Boolean.FALSE, selectedCandidate.getHasPrefetchedContent());
         assertEquals("字段发现候选已入选，仍需后续正文采集", selectedCandidate.getSelectionReason());
         assertEquals("字段发现候选可继续进入正文采集链路", selectedCandidate.getSelectionSummary());
+    }
+
+    @Test
+    void shouldKeepOfficialSearchRootTemplateAsSupplementContinuationNotPrimaryEvidence() {
+        CollectorNodeConfig config = CollectorNodeConfig.builder()
+                .competitorName("Douyin")
+                .competitorUrls(List.of("https://open.douyin.com/"))
+                .sourceType("OFFICIAL")
+                .build();
+        SourceCandidate discoveryRoot = SourceCandidate.builder()
+                .url("https://open.douyin.com")
+                .title("Douyin Open Platform")
+                .sourceType("OFFICIAL")
+                .domain("open.douyin.com")
+                .discoveryMethod("SEARCH_ROOT_TEMPLATE")
+                .candidateDiscoveryUsable(Boolean.TRUE)
+                .fastLaneUsable(Boolean.FALSE)
+                .hasPrefetchedContent(Boolean.FALSE)
+                .prefetchedRawContentLength(0)
+                .sourceUrls(List.of("https://www.douyin.com"))
+                .totalScore(0.74)
+                .build();
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                config,
+                List.of(discoveryRoot),
+                Map.of(),
+                1
+        );
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        SourceCandidate selectedCandidate = decision.getSelectedTargets().get(0).getCandidate();
+        assertEquals("https://open.douyin.com", selectedCandidate.getUrl());
+        assertEquals("SELECTED", selectedCandidate.getSelectionStage());
+        assertEquals(1, selectedCandidate.getSelectionTier());
+        assertEquals("OFFICIAL_SUPPLEMENT_EVIDENCE", selectedCandidate.getSelectionRole());
     }
 
     @Test

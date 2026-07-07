@@ -18,6 +18,7 @@ import cn.bugstack.competitoragent.search.SearchExecutionCoordinator;
 import cn.bugstack.competitoragent.search.SearchExecutionResult;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCollector;
+import cn.bugstack.competitoragent.workflow.coverage.DimensionEvidencePlan;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -47,11 +48,13 @@ class CollectorAgentFieldEvidenceLoopTest {
 
     @Test
     void shouldRunSecondRoundOnlyForUnfinishedFieldEvidencePlan() throws Exception {
-        List<CollectorNodeConfig> executedConfigs = new ArrayList<>();
+        List<DimensionEvidencePlan> executedPlans = new ArrayList<>();
+        List<String> executedClaimScopes = new ArrayList<>();
         doAnswer(invocation -> {
             CollectorNodeConfig config = invocation.getArgument(0);
-            executedConfigs.add(config);
-            int round = executedConfigs.size();
+            executedPlans.add(config.getDimensionEvidencePlan());
+            executedClaimScopes.add(config.getFieldEvidenceClaimScope());
+            int round = executedPlans.size();
             SourceCandidate candidate = SourceCandidate.builder()
                     .url(round == 1
                             ? "https://open.bilibili.com"
@@ -73,7 +76,7 @@ class CollectorAgentFieldEvidenceLoopTest {
                             .candidate(candidate)
                             .build()))
                     .build();
-        }).when(searchExecutionCoordinator).execute(any(CollectorNodeConfig.class), any());
+        }).when(searchExecutionCoordinator).execute(any(CollectorNodeConfig.class), eq(66L), any(), any());
 
         when(collectionExecutionCoordinator.execute(any(), any(), any(), eq("哔哩哔哩"), anyList(), any()))
                 .thenReturn(CollectionExecutionReport.builder()
@@ -133,10 +136,11 @@ class CollectorAgentFieldEvidenceLoopTest {
 
         JsonNode output = objectMapper.readTree(result.getOutputData());
         JsonNode coreFeatures = findField(output.path("dimensionEvidencePlan"), "coreFeatures");
-        assertThat(executedConfigs).hasSize(2);
-        assertThat(executedConfigs.get(1).getDimensionEvidencePlan().allPlannedQueries())
+        assertThat(executedPlans).hasSize(2);
+        assertThat(executedPlans.get(1).allPlannedQueries())
                 .extracting(query -> query.getEvidencePathKey())
                 .containsOnly("DOCS_API_GUIDE");
+        assertThat(executedClaimScopes).containsExactly(null, "recollection-2");
         assertThat(output.path("fieldEvidenceLoopRounds").asInt()).isEqualTo(2);
         assertThat(output.path("fieldEvidenceRecollectionTriggered").asBoolean()).isTrue();
         assertThat(coreFeatures.path("status").asText()).isEqualTo("SUFFICIENT");

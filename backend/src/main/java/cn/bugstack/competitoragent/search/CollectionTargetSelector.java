@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.search;
 
+import cn.bugstack.competitoragent.agent.collector.CollectorNodeConfig;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCollector;
 import org.springframework.stereotype.Component;
@@ -21,6 +22,16 @@ import java.util.Set;
  */
 @Component
 public class CollectionTargetSelector {
+
+    private static final Set<String> OFFICIAL_PRIMARY_SOURCE_TYPES = Set.of("OFFICIAL", "DOCS");
+    private static final Set<String> OFFICIAL_PRIMARY_PAGE_TYPES = Set.of(
+            "OFFICIAL_DOC",
+            "DOCS",
+            "API_DOC",
+            "REFERENCE_DOC",
+            "HELP_CENTER",
+            "PRICING_PAGE"
+    );
 
     private static final String TAVILY_PREFETCH_SELECTED_REASON = "Tavily prefetch 正文可用";
 
@@ -52,6 +63,13 @@ public class CollectionTargetSelector {
     public SearchSelectionDecision selectTargets(List<SourceCandidate> candidates,
                                                  Map<String, SearchCollectionTarget> attemptedTargets,
                                                  int targetCount) {
+        return selectTargets(null, candidates, attemptedTargets, targetCount);
+    }
+
+    public SearchSelectionDecision selectTargets(CollectorNodeConfig config,
+                                                 List<SourceCandidate> candidates,
+                                                 Map<String, SearchCollectionTarget> attemptedTargets,
+                                                 int targetCount) {
         if (candidates == null || candidates.isEmpty() || targetCount <= 0) {
             return SearchSelectionDecision.builder()
                     .selectedTargets(List.of())
@@ -69,7 +87,7 @@ public class CollectionTargetSelector {
         List<SourceCandidate> rankedCandidates = candidates.stream()
                 .filter(candidate -> candidate != null && StringUtils.hasText(candidate.getUrl()))
                 .sorted(Comparator.<SourceCandidate>comparingInt(
-                                candidate -> resolveSelectionTier(candidate, normalizedAttemptedTargets))
+                                candidate -> resolveSelectionTier(config, candidate, normalizedAttemptedTargets))
                         .thenComparing(SourceCandidate::getTotalScore, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
 
@@ -99,7 +117,7 @@ public class CollectionTargetSelector {
 
         Map<String, SourceCandidate> rejectedByUrl = indexCandidatesByNormalizedUrl(rejectedByEligibility);
         List<SourceCandidate> updatedCandidates = candidates.stream()
-                .map(candidate -> mergeSelectionResult(candidate, selectedUrls, normalizedAttemptedTargets, rejectedByUrl))
+                .map(candidate -> mergeSelectionResult(config, candidate, selectedUrls, normalizedAttemptedTargets, rejectedByUrl))
                 .toList();
         List<SourceCandidate> discardedCandidates = resolveDiscardedCandidates(updatedCandidates,
                 selectedUrls,
@@ -317,7 +335,8 @@ public class CollectionTargetSelector {
                 && !Boolean.TRUE.equals(candidate.getFastLaneUsable());
     }
 
-    private SourceCandidate mergeSelectionResult(SourceCandidate candidate,
+    private SourceCandidate mergeSelectionResult(CollectorNodeConfig config,
+                                                 SourceCandidate candidate,
                                                  Set<String> selectedUrls,
                                                  Map<String, SearchCollectionTarget> attemptedTargets,
                                                  Map<String, SourceCandidate> rejectedByUrl) {
@@ -327,9 +346,9 @@ public class CollectionTargetSelector {
         String normalizedUrl = normalizeUrl(candidate.getUrl());
         SourceCandidate rejected = rejectedByUrl.get(normalizedUrl);
         if (rejected != null) {
-            return rejected;
+            return annotateSelectionAudit(config, rejected, attemptedTargets);
         }
-        return applySelectionResult(candidate, selectedUrls, attemptedTargets);
+        return annotateSelectionAudit(config, applySelectionResult(candidate, selectedUrls, attemptedTargets), attemptedTargets);
     }
 
     /**
@@ -354,19 +373,29 @@ public class CollectionTargetSelector {
      * 1. 可用 Tavily prefetch 真文必须严格优先于 verified 根域壳页，避免 targetCount=1 时被高分壳页挤掉。
      * 2. verified 的真内容候选仍然保持与 prefetch 同档竞争，不能被一刀切降级。
      */
-    private int resolveSelectionTier(SourceCandidate candidate,
+    private int resolveSelectionTier(CollectorNodeConfig config,
+                                     SourceCandidate candidate,
                                      Map<String, SearchCollectionTarget> attemptedTargets) {
         if (candidate == null) {
             return Integer.MAX_VALUE;
         }
         SearchCollectionTarget attemptedTarget = attemptedTargets.get(normalizeUrl(candidate.getUrl()));
+        if (isOfficialPrimaryEvidenceCandidate(config, candidate, attemptedTarget)) {
+            return 0;
+        }
         if (isUsablePrefetchedCandidate(candidate)) {
+            if (isOfficialNode(config)) {
+                return 1;
+            }
             return 0;
         }
         if (Boolean.TRUE.equals(candidate.getVerified()) && hasThinAttemptedPage(candidate, attemptedTarget)) {
             return 1;
         }
         if (Boolean.TRUE.equals(candidate.getVerified())) {
+            if (isOfficialNode(config)) {
+                return 1;
+            }
             return 0;
         }
         if (isDiscoveryOnlyCandidate(candidate)) {
@@ -379,6 +408,215 @@ public class CollectionTargetSelector {
             return 3;
         }
         return 2;
+    }
+
+    /**
+     * 把 selector 的分层判断写回候选快照，解决“运行时只能看到 SELECTED/DISCARDED，
+     * 看不出 OFFICIAL 节点里它是主证据还是补证”的排障盲区。
+     * 这里不改变任何入选条件，只把 resolveSelectionTier 的结果翻译成稳定审计字段。
+     */
+    private SourceCandidate annotateSelectionAudit(CollectorNodeConfig config,
+                                                   SourceCandidate candidate,
+                                                   Map<String, SearchCollectionTarget> attemptedTargets) {
+        if (candidate == null) {
+            return null;
+        }
+        SelectionTierAudit audit = resolveSelectionTierAudit(config, candidate, attemptedTargets);
+        return candidate.toBuilder()
+                .selectionTier(audit.tier())
+                .selectionRole(audit.role())
+                .selectionTierReason(audit.reason())
+                .build();
+    }
+
+    private SelectionTierAudit resolveSelectionTierAudit(CollectorNodeConfig config,
+                                                         SourceCandidate candidate,
+                                                         Map<String, SearchCollectionTarget> attemptedTargets) {
+        int tier = resolveSelectionTier(config, candidate, attemptedTargets);
+        if (isOfficialNode(config)) {
+            if (tier == 0) {
+                return new SelectionTierAudit(0,
+                        "OFFICIAL_PRIMARY_EVIDENCE",
+                        "OFFICIAL 节点主证据：官方域、文档角色信号与正文可用性同时成立");
+            }
+            if (tier == 1) {
+                return new SelectionTierAudit(1,
+                        "OFFICIAL_SUPPLEMENT_EVIDENCE",
+                        "OFFICIAL 节点补证：可作为单页证据或降级入口，但不具备主证据优先级");
+            }
+            if (tier == 3) {
+                return new SelectionTierAudit(3,
+                        "DISCARDED_CANDIDATE",
+                        "候选已被验证、归属或可用性规则拒绝");
+            }
+            return new SelectionTierAudit(tier,
+                    "OFFICIAL_FALLBACK_CANDIDATE",
+                    "OFFICIAL 节点兜底候选：仅在缺少主证据和补证时参与排序");
+        }
+        if (tier == 0) {
+            return new SelectionTierAudit(0,
+                    "PRIMARY_EVIDENCE",
+                    "通用节点主证据：正文可用或验证通过");
+        }
+        if (tier == 3) {
+            return new SelectionTierAudit(3,
+                    "DISCARDED_CANDIDATE",
+                    "候选已被验证、归属或可用性规则拒绝");
+        }
+        return new SelectionTierAudit(tier,
+                "FALLBACK_EVIDENCE",
+                "通用节点兜底证据候选");
+    }
+
+    /**
+     * OFFICIAL 节点的 tier 0 表示“可以作为主证据”，不能再简单等同于“有一段可用正文”。
+     * 第三方聚合页、相关业务域文章即使有 Tavily 正文，也只能作为补证；只有官方域、文档型来源、
+     * 文档型页面/路径信号同时成立，且正文已经可用或验证通过，才授予主证据优先级。
+     */
+    private boolean isOfficialPrimaryEvidenceCandidate(CollectorNodeConfig config,
+                                                       SourceCandidate candidate,
+                                                       SearchCollectionTarget attemptedTarget) {
+        if (!isOfficialNode(config) || candidate == null) {
+            return false;
+        }
+        if (!isOfficialEvidenceDomain(config, candidate)) {
+            return false;
+        }
+        if (!isOfficialPrimarySourceType(candidate.getSourceType())) {
+            return false;
+        }
+        if (!hasOfficialDocumentRoleSignal(candidate)) {
+            return false;
+        }
+        if (isUsablePrefetchedCandidate(candidate)) {
+            return true;
+        }
+        return Boolean.TRUE.equals(candidate.getVerified()) && !hasThinAttemptedPage(candidate, attemptedTarget);
+    }
+
+    private boolean isOfficialNode(CollectorNodeConfig config) {
+        return config != null && "OFFICIAL".equalsIgnoreCase(config.getSourceType());
+    }
+
+    private boolean isOfficialPrimarySourceType(String sourceType) {
+        return StringUtils.hasText(sourceType)
+                && OFFICIAL_PRIMARY_SOURCE_TYPES.contains(sourceType.trim().toUpperCase(Locale.ROOT));
+    }
+
+    private boolean hasOfficialDocumentRoleSignal(SourceCandidate candidate) {
+        String pageType = normalizeUpper(candidate.getPageType());
+        boolean knownDocumentPageType = StringUtils.hasText(pageType)
+                && OFFICIAL_PRIMARY_PAGE_TYPES.contains(pageType);
+        boolean documentPathSignal = hasOfficialDocumentPathSignal(candidate);
+        /*
+         * pageType 命中但路径/意图没有文档信号时，视为分类器可能误判，不能升级成主证据。
+         * pageType 缺失时保留 legacy 兼容：sourceType + URL/intent 的 docs 信号足够强，仍可进入主证据竞争。
+         */
+        if (knownDocumentPageType) {
+            return documentPathSignal;
+        }
+        return !StringUtils.hasText(pageType) && documentPathSignal;
+    }
+
+    private boolean hasOfficialDocumentPathSignal(SourceCandidate candidate) {
+        String joined = String.join(" ",
+                firstNonBlank(candidate.getUrl(), ""),
+                firstNonBlank(candidate.getEvidencePathKey(), ""),
+                firstNonBlank(candidate.getQueryIntent(), ""),
+                firstNonBlank(candidate.getTavilyQueryMode(), ""),
+                firstNonBlank(candidate.getTitle(), "")
+        ).toLowerCase(Locale.ROOT);
+        return joined.contains("/docs")
+                || joined.contains("/doc")
+                || joined.contains("documentation")
+                || joined.contains("developer")
+                || joined.contains("openapi")
+                || joined.contains("api_docs")
+                || joined.contains("official_docs")
+                || joined.contains("sdk_")
+                || joined.contains("sdk guide")
+                || joined.contains("reference")
+                || joined.contains("help_center")
+                || joined.contains("pricing")
+                || joined.contains("billing")
+                || joined.contains("policy");
+    }
+
+    private boolean isOfficialEvidenceDomain(CollectorNodeConfig config, SourceCandidate candidate) {
+        String domain = normalizeDomain(firstNonBlank(candidate.getDomain(), extractHost(candidate.getUrl())));
+        if (!StringUtils.hasText(domain)) {
+            return false;
+        }
+        return resolveOfficialDomains(config).stream()
+                .anyMatch(officialDomain -> isSameOrSubDomain(domain, officialDomain));
+    }
+
+    private Set<String> resolveOfficialDomains(CollectorNodeConfig config) {
+        LinkedHashSet<String> officialDomains = new LinkedHashSet<>();
+        if (config == null) {
+            return officialDomains;
+        }
+        addDomains(officialDomains, config.getCompetitorUrls());
+        addDomains(officialDomains, config.getPreferredDomains());
+        addDomains(officialDomains, config.getIncludeDomains());
+        return officialDomains;
+    }
+
+    private void addDomains(Set<String> domains, List<String> values) {
+        if (values == null) {
+            return;
+        }
+        for (String value : values) {
+            String host = normalizeDomain(extractHost(value));
+            if (StringUtils.hasText(host)) {
+                domains.add(host);
+                continue;
+            }
+            String normalized = normalizeDomain(value);
+            if (StringUtils.hasText(normalized)) {
+                domains.add(normalized);
+            }
+        }
+    }
+
+    private String extractHost(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            String candidate = value.trim();
+            java.net.URI uri = candidate.contains("://")
+                    ? java.net.URI.create(candidate)
+                    : java.net.URI.create("https://" + candidate);
+            return uri.getHost();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String normalizeDomain(String domain) {
+        if (!StringUtils.hasText(domain)) {
+            return null;
+        }
+        String normalized = domain.trim().toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("www.")) {
+            normalized = normalized.substring(4);
+        }
+        return normalized;
+    }
+
+    private boolean isSameOrSubDomain(String domain, String officialDomain) {
+        if (!StringUtils.hasText(domain) || !StringUtils.hasText(officialDomain)) {
+            return false;
+        }
+        String normalizedDomain = normalizeDomain(domain);
+        String normalizedOfficialDomain = normalizeDomain(officialDomain);
+        return normalizedDomain.equals(normalizedOfficialDomain)
+                || normalizedDomain.endsWith("." + normalizedOfficialDomain);
+    }
+
+    private String normalizeUpper(String value) {
+        return StringUtils.hasText(value) ? value.trim().toUpperCase(Locale.ROOT) : "";
     }
 
     /**
@@ -634,6 +872,9 @@ public class CollectionTargetSelector {
      */
     private String normalizeUrl(String url) {
         return canonicalUrlResolver.canonicalize(url);
+    }
+
+    private record SelectionTierAudit(Integer tier, String role, String reason) {
     }
 
     private record SelectionEligibility(boolean selectable, String reason, String summary) {

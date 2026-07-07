@@ -78,4 +78,12 @@ public class SourceCandidate {
     private String selectionStage;
     private String selectionReason;
     private String selectionSummary;
+
+    /**
+     * 选择层审计字段：记录 selector 对候选的主证据/补证分层判断。
+     * 这些字段只用于运行时可见性和回放排障，不参与候选归属、扩根或正文采集判定。
+     */
+    private Integer selectionTier;
+    private String selectionRole;
+    private String selectionTierReason;
 }

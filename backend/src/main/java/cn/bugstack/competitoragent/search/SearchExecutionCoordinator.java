@@ -674,6 +674,7 @@ public class SearchExecutionCoordinator {
         effectiveTargetCount = finalFusionDecision.getEffectiveTargetCount();
 
         SearchSelectionDecision selectionDecision = collectionTargetSelector.selectTargets(
+                config,
                 allCandidates,
                 attemptedTargets,
                 effectiveTargetCount
@@ -1388,7 +1389,15 @@ public class SearchExecutionCoordinator {
         String competitorName = config != null && StringUtils.hasText(config.getCompetitorName())
                 ? config.getCompetitorName().trim()
                 : "";
-        return "fieldEvidence.executedFingerprints::" + taskId + "::" + competitorName;
+        String baseKey = "fieldEvidence.executedFingerprints::" + taskId + "::" + competitorName;
+        if (config == null || !StringUtils.hasText(config.getFieldEvidenceClaimScope())) {
+            return baseKey;
+        }
+        /*
+         * task88 的首轮跨节点去重仍使用基础 key；补采 / 修复轮通过 scope 使用同一 registry 的独立 set。
+         * 这样既保留并发降本，又不会让第一轮 0 正式证据的失败 query 永久阻断后续召回。
+         */
+        return baseKey + "::" + config.getFieldEvidenceClaimScope().trim();
     }
     /**
      * 闂傚倸鍊搁崐椋庣矆娴ｉ潻鑰块梺顒€绉甸崑锟犳煙閹増顥夋鐐灲閺屽秹宕崟顐熷亾瑜版帒绾?deadline 闂?search 闂傚倸鍊搁崐宄懊归崶顒夋晪闁哄稁鍘肩粈鍫熺箾閸℃ɑ灏ㄩ柍褜鍓ㄧ粻鎾诲箖濠婂嫭鍙忛柟鑸妼娴滈箖鏌涘畝鈧崑娑㈡偂濞戙垺鐓曢柟鏉垮悁缁ㄩ绱掑Δ鈧ˇ顖炲煘閹寸偛绠犻梺绋匡攻閸旀瑥鐣烽幋锕€绠绘繛锝庡厸缁ㄥ姊洪幐搴⑩拻闁哄拋鍋婂畷锝夊焵椤掑嫭鈷戦悹鍥ｂ偓铏亞缂備緡鍠楅悷锔界┍婵犲洤绠瑰ù锝堝€介妸鈺傜叆闁哄洦顨呮禍楣冩⒑闁偛鑻晶顔锯偓瑙勬处閸撶喖宕洪妷锕€绶為柟閭﹀墰椤旀帒顪冮妶鍡欏闁活収鍠楃粩鐔煎即閵忊檧鎷绘繛杈剧到閹诧繝宕悙鐑樼厽闁绘棁顔婇崥顐も偓鍨緲閿曨亪骞冮崜褌娌紓浣靛灩娴犳椽姊绘担铏瑰笡闁告梹顨婂畷鏇㈠Χ婢跺﹦鏌у銈嗗笒閸婄敻宕戦幘璇茬濠㈣泛锕ｆ竟鏇㈡⒒娴ｅ憡鍟炴繛璇ч檮缁傚秹鎮欓崹顐綗濠殿喗顭堥崺鏍煕?provider 婵犵數濮烽弫鎼佸磻閻愬搫绠板┑鐘崇閸庡秵绻濇繝鍌滃缂佲偓鐎ｎ偁浜滈柟鎵虫櫅閳ь剚鐗犲畷顖炲Ω閳哄倵鎷绘繛杈剧到閹诧繝宕悙鐑樺仺妞ゆ牗渚楀▓鏇㈡煕閹烘埊鏀荤紒鍌涘笧閳ь剨绲芥晶搴ｇ矙韫囨稒鈷戦柟绋垮缁€鈧梺绋匡工閹芥粎妲愰幒妤€鐓涢柛娑卞枤閸橀潧顪冮妶鍡欏ⅹ婵☆偅鏌ㄩ—鍐箳閹炽劌缍婇幃婊堟嚍閵夈垺瀚兼繝娈垮枤閹虫挸煤閵堝棔绻嗗┑鍌氭啞閸婂灚鎱ㄥΟ鐓庡付闁诲骏绲跨槐鎺楊敊閼恒儺妫冨Δ鐘靛仦閿曘垽銆佸▎鎾村殐闁冲搫鍟紞渚€姊婚崒娆戭槮闁硅绻濋獮鎰版倻閼恒儱娈戦柣鐘荤細濞咃綁寮抽敃鍌涚厱妞ゆ劧绲剧粈鍐煟閹惧瓨绀冪紒缁樼洴瀹曞崬螣閸忕厧娅樼紓鍌欐閼冲爼宕楀鈧?     */
@@ -1470,6 +1479,12 @@ public class SearchExecutionCoordinator {
                     return normalizedCandidate.toBuilder()
                             .discoveryMethod("SEARCH_ROOT_TEMPLATE")
                             .reason("search result root expanded through direct discovery templates")
+                            /*
+                             * SEARCH_ROOT_TEMPLATE 来自运行期搜索结果，只能表达“这个官方入口值得继续抓正文/内链”，
+                             * 不能等同于已验证证据，也不能绕过 CandidateOwnershipPolicy 的根域扩展闸门。
+                             * 因此这里只给严格归属且带 open/docs/developer/help 入口信号的候选打 discovery-only 标记。
+                             */
+                            .candidateDiscoveryUsable(shouldMarkSearchRootTemplateAsDiscoveryContinuation(config, normalizedCandidate))
                             .relevanceScore(0.74D)
                             .freshnessScore(0.55D)
                             .qualityScore(0.80D)
@@ -1482,6 +1497,74 @@ public class SearchExecutionCoordinator {
 
     /**
      * 闂?direct discovery 闂傚倸鍊搁崐鎼佸磹妞嬪海鐭嗗ù锝夋交閼板潡姊洪鈧粔鏌ュ焵椤掆偓閸婂湱绮嬮幒鏂哄亾閿濆簼绨介柡灞熷啠鏀介柣鎰綑閻忕喖鏌涢妸銉хШ鐎规洏鍎抽幉鎾礋閳衡偓缁ㄥ姊虹憴鍕姢鐎规洦鍓熼幃姗€鍩￠崘顏嗭紲闂佺粯鐟﹂悷銉ッ洪敃鍌涘亗闊洦鎼╅悢鍡涙偣閸ワ絺鍋撳畷鍥﹀摋闂佽瀛╅崙褰掑闯閿濆拋鍤曢柟鎯板Г閸嬫劗绱撴担楠ㄦ岸骞忛搹鍦＝濞达絽澹婇崕蹇涙倶韫囨挻鍤囩€殿喓鍔嶇换婵嗩潩椤撶姴骞楅梻浣虹帛閺屻劌顕ｇ捄琛℃瀺濠电姴娲﹂悡鏇㈡煃鐟欏嫬鍔ゅù婊呭亾娣囧﹪鎮欓鍕ㄥ亾閺嵮屽晠濠电姵鑹剧壕濠氭煙閻愵剛鏆樺ù婊勭矒閺屻劑寮崶璺烘闂佽绻掓繛鈧柟顕嗙節婵¤埖寰勭€ｎ剙骞愰柣搴＄畭閸庤鲸顨ラ幖浣哄祦闁哄稁鍋嗙壕濂告煟濡搫鑸圭€规挸妫濋弻锛勪沪閸撗勫垱婵犵绱曢崗姗€鐛€ｎ亖鏀介柛鈩兩戦宥夋⒒娴ｅ憡鍟為拑閬嶆偨椤栥倗绡€鐎殿喖顭烽弫鎰緞鐎ｎ亙绨婚梻浣告啞缁哄潡宕曢弻銉ュ惞闁稿本绮庣壕钘壝归敐鍛儓閺嶏繝姊洪幖鐐插闁靛牆鎲℃穱濠囨偨缁嬭法鐤€闂佸搫顦冲▔鏇㈡晬濠婂啠鏀介柣妯荤懃鐎氼剟宕濋妶鍚ょ懓顭ㄩ崼銏㈡毇闂佸搫鐭夌紞渚€骞冮姀銈呭窛濠电姴瀚崵鎺楁⒒娴ｅ憡鎯堟俊顐ｇ洴瀹曚即骞囬钘夊簥濠电偞鍨崹褰掓煁閸ヮ剚鐓熼柡鍐ㄧ墱濡垵霉閻撳氦瀚伴摶鏍煟濮椻偓濞佳勭閿曞倹鐓熸俊銈勭劍缁€瀣煃閵夘垳鐣靛┑鈩冩倐閸┾剝鎷呴崫銉у春濠碉紕鍋戦崐鏍箰妤ｅ啫纾绘慨妞诲亾妤犵偛顦靛畷婊嗩槾缁惧彞绮欓弻娑氫沪閹规劕顥濋梺閫炲苯澧伴柛蹇旓耿楠炲啴鎮欓悜妯绘珖闂佺鏈銊╊敊閸ャ劎绡€闁汇垽娼ф牎缂佺偓婢樼粔鐟扮暦?URL闂?     * 闂傚倸鍊搁崐椋庣矆娓氣偓楠炴牠顢曚綅閸ヮ剦鏁冮柨鏇楀亾闁汇倗鍋撶换婵囩節閸屾粌顤€闂佺顑戠换婵嬪蓟閵娾晛鍗抽柣鎰ゴ閸嬫捁銇愰幒鎴狅紱?sourceUrls 闂傚倸鍊搁崐鎼佸磹妞嬪海鐭嗗〒姘ｅ亾妤犵偞鐗犻、鏇㈡晝閳ь剟鎮块鈧弻鏇熺箾閻愵剚鐝旈梺鎼炲妼閸婃悂鍩為幋锕€纾兼繝濠傛捣閸斿摜绱撴担鎻掍壕闂佺鏈粙鎰崲閸℃ǜ浜滈柡宥冨姀婢规﹢鏌熼钘夌伌闁诡喗顨呴～婵嬵敇閻愬弶鎳欓梻浣筋嚃閸犳銆冮崨鏉戠叀濠㈣泛艌閺嬪秹鏌ц箛锝呬簻闁诲繑鎸抽弻銊モ攽閸繀妲愰悗娈垮枙缁瑩銆佸鈧幃銏ゅ传閸曨偆鐟查梻鍌氬€风欢姘焽瑜旂瘬闁逞屽墮閳规垿鍨鹃搹顐㈡灎闂佽鍨伴惉濂稿焵椤掑﹦绉甸柛鐘愁殜閹€斥枎閹扳晙绨婚梺鍝勫暙濞层倖绂嶈ぐ鎺撶叆婵炴垶顭囨牎婵烇絽娲ら敃顏勭暦閿濆棗绶炲┑鐘插亞濞兼岸姊绘担鐟邦嚋缂佽瀚板畷鎴﹀Χ婢跺牃鍋撴担鍓叉建闁逞屽墴楠炲啴鍩￠崨顔间缓闂傚倸鐗婄粙鎴犵不婵犳碍鈷掗柛灞捐壘閳ь剟顥撶划鍫熺瑹閳ь剟鐛径鎰櫖闁告洦鍓欐惔濠囨倵楠炲灝鍔氭俊顐ｇ洴閵嗗懘宕ｆ径宀€鐦堥梻鍌氱墛缁嬫帡鏁嶅澶嬬厽闁瑰搫绉堕惌娆撴煛瀹€瀣М濠殿喒鍋撻梺闈涚箚閺呮繈宕濋幖浣光拺閻犲洩灏欑粻鐑樼箾閸涱喗绀堥柟骞垮灩閳规垹鈧綆浜滈悗顓烆渻閵堝棗濮х紒韫矙瀵啿螖閸愵亞锛濇繛杈剧稻瑜板啯绂嶉悙顒傜瘈闁靛骏绲剧涵楣冩嚌鐏炲彞绻嗛柟缁樺笧婢э箓鏌″畝瀣瘈鐎规洘锕㈡俊鎼佸Ψ閵忕姳澹曢梺褰掓？缁€渚€宕欓悩宕囩闁糕剝蓱鐏忎即鏌ｉ幘瀛樼闁绘搩鍋婂畷鍫曞Ω閿旈敮鍋撴總鍛婄厵閻庣數顭堝暩闂佹椿鍘藉畝鎼佸蓟濞戞鏃堝礃閵娿倖鐫忛梻浣姐€€閸嬫挸霉閻樺樊鍎愰柣鎾存礃閵囧嫰骞囬埡浣插亾閺囥垹鍑犻柟杈鹃檮閻撶喖鏌ㄥ┑鍡涱€楀褍鐡ㄩ幈銊︾節閸愨斂浠㈤悗瑙勬处閸嬪﹤鐣烽悢纰辨晣闁绘垵妫欏▓濂告⒒閸屾瑨鍏屾い顓炵墦椤㈡牠宕卞☉妯碱唶闂佸憡鎸嗛崟鍨稐闂備浇顫夐崕鎶芥偤閵婏箑鍨旈柟缁㈠枟閻撴洘绻濋棃娑橆仼闁告梹纰嶉妵鍕晲閸℃ǜ浠㈠┑顔硷攻濡炶棄鐣烽妸锔剧瘈闁告洦鍓欏▍鎴炵節绾版ɑ顫婇柛瀣噽閹广垽宕掗悙鏉戜患闂佺粯鍨兼慨銈夊疾閹绘帩鐔嗛悹杞拌閸庢劖绻涢崨顔剧煉婵﹥妞介獮鏍倷閹绘帒顫戦梻浣告啞閺屻劑鏌婇敐鍜佸殨闁规儼濮ら崑鎰磽娴ｉ姘跺箯濞差亝鈷戦柛娑橈功閳藉鏌ㄩ弴顏嗙暤妤犵偛锕獮鍥偋閸垹骞堥梻渚€娼ц噹闁告洦鍓氶惁鎾翠繆閵堝洤啸闁稿绋撻幑銏ゅ箛閻楀牆浠奸梺璺ㄥ枔婵绮婚妷鈺傜叄闊浄绲芥禍婵嬫煛閸℃鏀诲ǎ鍥э躬閹瑩顢旈崟銊ヤ壕闁哄稁鍘介崑瀣繆閵堝懎鏆熼柣顓熺懇閺屾盯顢曢悩鎻掑缂佺偓鍎抽…鐑藉蓟閻旂厧绠查柟浼存涧濞堟劕鈹戦埄鍐ㄧ祷缂傚秴锕ら～?     */
+    private boolean shouldMarkSearchRootTemplateAsDiscoveryContinuation(CollectorNodeConfig config,
+                                                                        SourceCandidate candidate) {
+        if (config == null || candidate == null || !StringUtils.hasText(candidate.getUrl())) {
+            return false;
+        }
+        if (!isOfficialSearchFamily(config)) {
+            return false;
+        }
+        if (!isOfficialDiscoveryContinuationSourceType(candidate.getSourceType())) {
+            return false;
+        }
+        if (!candidateOwnershipPolicy.hasCompetitorDomainOwnershipSignalForCandidate(
+                config.getCompetitorName(),
+                defaultList(config.getCompetitorUrls()),
+                candidate
+        )) {
+            return false;
+        }
+        return hasOfficialDiscoveryContinuationEntrySignal(candidate);
+    }
+
+    private boolean isOfficialSearchFamily(CollectorNodeConfig config) {
+        return "official".equalsIgnoreCase(searchPolicyResolver.resolveSourceFamilyKeyForSourceType(
+                config == null ? null : config.getSourceType()
+        ));
+    }
+
+    private boolean isOfficialDiscoveryContinuationSourceType(String sourceType) {
+        return "OFFICIAL".equalsIgnoreCase(sourceType) || "DOCS".equalsIgnoreCase(sourceType);
+    }
+
+    private String safeText(String value) {
+        return StringUtils.hasText(value) ? value : "";
+    }
+
+    private boolean hasOfficialDiscoveryContinuationEntrySignal(SourceCandidate candidate) {
+        String normalizedUrl = candidate == null || candidate.getUrl() == null
+                ? ""
+                : candidate.getUrl().toLowerCase(Locale.ROOT);
+        String host = extractDomain(normalizedUrl);
+        String joined = String.join(" ",
+                normalizedUrl,
+                safeText(host),
+                safeText(candidate == null ? null : candidate.getTitle()),
+                safeText(candidate == null ? null : candidate.getSourceType())
+        ).toLowerCase(Locale.ROOT);
+        return startsWithAny(host, "open.", "developer.", "docs.", "help.")
+                || joined.contains("/docs")
+                || joined.contains("/documentation")
+                || joined.contains("/developer")
+                || joined.contains("/help")
+                || joined.contains("/guide")
+                || joined.contains("/api")
+                || joined.contains("/reference");
+    }
+
+    private boolean startsWithAny(String value, String... prefixes) {
+        if (!StringUtils.hasText(value)) {
+            return false;
+        }
+        for (String prefix : prefixes) {
+            if (value.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private List<String> resolveSearchExpansionSourceUrls(SourceCandidate expandedCandidate,
                                                           List<SourceCandidate> searchCandidates) {
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();

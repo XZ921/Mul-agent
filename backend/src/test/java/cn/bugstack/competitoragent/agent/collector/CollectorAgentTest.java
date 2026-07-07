@@ -480,7 +480,7 @@ class CollectorAgentTest {
                 taskRetrievalIndexService,
                 objectMapper
         );
-        when(searchCoordinator.execute(any(), any())).thenReturn(SearchExecutionResult.builder()
+        when(searchCoordinator.execute(any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
                 .executionPlan(SearchExecutionPlan.builder()
                         .steps(List.of())
                         .build())
@@ -539,7 +539,7 @@ class CollectorAgentTest {
                 taskRetrievalIndexService,
                 objectMapper
         );
-        when(searchCoordinator.execute(any(), any())).thenReturn(SearchExecutionResult.builder()
+        when(searchCoordinator.execute(any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
                 .executionPlan(SearchExecutionPlan.builder()
                         .steps(List.of())
                         .build())
@@ -587,6 +587,71 @@ class CollectorAgentTest {
     }
 
     @Test
+    void shouldPromoteUsefulContentWhenAuthGateSignalIsOnlyWeakAuditSignal() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent agent = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchCoordinator,
+                collectionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper
+        );
+        when(searchCoordinator.execute(any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
+                .executionPlan(SearchExecutionPlan.builder()
+                        .steps(List.of())
+                        .build())
+                .sourceCandidates(List.of())
+                .selectedTargets(List.of(SearchCollectionTarget.builder()
+                        .candidate(buildSourceCandidate("https://example.com/docs/auth"))
+                        .build()))
+                .build());
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
+                .status("SUCCESS")
+                .results(List.of(CollectionExecutionResult.builder()
+                        .taskPackageKey("collect_sources_01_03#001")
+                        .targetIndex(1)
+                        .executorType("WEB_PAGE")
+                        .success(true)
+                        .status("SUCCESS")
+                        .resourceLocator("https://example.com/docs/auth")
+                        .title("Docs auth")
+                        .content("useful official API docs with OAuth authorization, SDK guide, login callback, "
+                                + "token exchange, webhook configuration and enough public details for analysis")
+                        .sourceUrls(List.of("https://example.com/docs/auth"))
+                        .discoveryDepth(0)
+                        .qualitySignals(List.of("OFFICIAL_DOMAIN_MATCHED", "AUTH_GATE_WEAK_SIGNAL"))
+                        .qualityScore(0.75D)
+                        .build()
+                        .normalize()))
+                .build());
+        when(collectionCoordinator.summarize(any())).thenReturn(CollectionExecutionReport.builder()
+                .status("SUCCESS")
+                .results(List.of())
+                .build());
+
+        AgentResult result = agent.execute(buildSingleCandidateContext(
+                "https://example.com/docs/auth",
+                "Docs auth",
+                "DOCS"
+        ));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name(), result.getErrorMessage());
+        verify(evidenceRepository, times(1)).save(any(EvidenceSource.class));
+        assertEquals(true, output.path("results").get(0).path("persisted").asBoolean());
+        assertEquals(1, output.path("successCollected").asInt());
+        assertTrue(output.path("results").get(0).path("issueFlags").toString().contains("AUTH_GATE_WEAK_SIGNAL"));
+        assertTrue(!output.path("results").get(0).path("issueFlags").toString().contains("FORMAL_EVIDENCE_DEGRADED"));
+        assertTrue(output.path("downstreamEvidenceViews").isArray());
+        assertEquals(1, output.path("downstreamEvidenceViews").size());
+    }
+
+    @Test
     void shouldFailWhenCollectedContentExistsButFormalSelectedTargetsAreMissing() throws Exception {
         SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
         CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
@@ -601,7 +666,7 @@ class CollectorAgentTest {
                 taskRetrievalIndexService,
                 objectMapper
         );
-        when(searchCoordinator.execute(any(), any())).thenReturn(SearchExecutionResult.builder()
+        when(searchCoordinator.execute(any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
                 .executionPlan(SearchExecutionPlan.builder()
                         .steps(List.of(SearchExecutionStep.builder()
                                 .stepCode("COLLECT_PAGES")
@@ -661,7 +726,7 @@ class CollectorAgentTest {
                 taskRetrievalIndexService,
                 objectMapper
         );
-        when(searchCoordinator.execute(any(), any())).thenReturn(SearchExecutionResult.builder()
+        when(searchCoordinator.execute(any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
                 .executionPlan(SearchExecutionPlan.builder()
                         .steps(List.of())
                         .build())

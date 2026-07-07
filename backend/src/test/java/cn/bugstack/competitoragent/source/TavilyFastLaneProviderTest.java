@@ -203,6 +203,59 @@ class TavilyFastLaneProviderTest {
     }
 
     @Test
+    void shouldFallbackToTrustedExpansionWhenOfficialDocsOnlyReturnsRootEntryPage() {
+        TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
+        StubTavilySearchClient client = new StubTavilySearchClient();
+        client.responses = List.of(
+                TavilySearchClient.TavilySearchResponse.builder()
+                        .query("Douyin open platform official docs")
+                        .requestId("req-root-entry-1")
+                        .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                                .title("Douyin Open Platform")
+                                .url("https://open.douyin.com")
+                                .content("developer entry shell")
+                                .rawContent("Douyin Open Platform developer entry shell ".repeat(120))
+                                .score(0.86D)
+                                .build()))
+                        .build(),
+                TavilySearchClient.TavilySearchResponse.builder()
+                        .query("Douyin open platform docs technical guide")
+                        .requestId("req-root-entry-expand")
+                        .results(List.of(TavilySearchClient.TavilySearchResult.builder()
+                                .title("Douyin open platform API guide")
+                                .url("https://developer.open-douyin.com/docs/resource/zh-CN/dop/develop/openapi/account-permission")
+                                .content("API guide")
+                                .rawContent("API guide ".repeat(260))
+                                .score(0.82D)
+                                .build()))
+                        .build());
+
+        TavilyFastLaneProvider provider = new TavilyFastLaneProvider(
+                properties(),
+                client,
+                new TavilySearchProfileResolver(properties()),
+                registry,
+                new ObjectMapper()
+        );
+
+        List<SourceCandidate> candidates = provider.search(SearchSourceRequest.builder()
+                .competitorName("Douyin")
+                .requestedScopes(List.of("DOCS"))
+                .searchQueries(List.of("Douyin open platform official docs"))
+                .includeDomains(List.of("open.douyin.com"))
+                .preferredProviderKey("tavily")
+                .preferredQueryMode("OFFICIAL_DOCS")
+                .build());
+
+        assertThat(client.executedProfiles).hasSize(2);
+        assertThat(client.executedProfiles.get(0).getQueryMode()).isEqualTo(TavilyQueryMode.OFFICIAL_DOCS);
+        assertThat(client.executedProfiles.get(1).getQueryMode()).isEqualTo(TavilyQueryMode.TRUSTED_WEB_EXPANSION);
+        assertThat(candidates)
+                .extracting(SourceCandidate::getUrl)
+                .contains("https://developer.open-douyin.com/docs/resource/zh-CN/dop/develop/openapi/account-permission");
+    }
+
+    @Test
     void shouldUseSearchFirstTrustedExpansionForPrimaryOfficialScopeAndKeepQueryOverride() {
         TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
         StubTavilySearchClient client = new StubTavilySearchClient();

@@ -40,6 +40,7 @@ import java.util.List;
         "blockingCoverageFields",
         "coverageQueryIntents",
         "dimensionEvidencePlan",
+        "fieldEvidenceClaimScope",
         "recoveryFieldName",
         "recoveryEvidencePathKey",
         "recoveryQueryIntents",
@@ -150,6 +151,13 @@ public class CollectorNodeConfig {
      * 它把 CoverageContract 中 required 字段翻译成运行态预算，后续搜索与采集闭环直接消费这份快照。
      */
     private DimensionEvidencePlan dimensionEvidencePlan;
+
+    /**
+     * 字段证据 query 的运行期去重命名空间。
+     * 首轮采集保持为空，继续复用「任务 + 竞品」级去重；补采轮写入独立 scope，
+     * 避免第一轮失败的 fingerprint 永久占用后续修复机会。
+     */
+    private String fieldEvidenceClaimScope;
 
     private String recoveryFieldName;
 

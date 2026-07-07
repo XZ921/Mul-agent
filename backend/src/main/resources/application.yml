@@ -445,7 +445,7 @@ qianfan-search:
 tavily-search:
   enabled: true
   endpoint: https://api.tavily.com/search
-  api-key: ${TAVILY_API_KEY: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}
+  api-key: ${TAVILY_API_KEY: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}
   search-depth: advanced
   include-raw-content: true
   max-results: 5

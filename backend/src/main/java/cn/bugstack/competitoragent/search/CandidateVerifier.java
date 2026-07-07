@@ -172,7 +172,7 @@ public class CandidateVerifier {
             boolean directMarketingPage = isMarketingLandingPage(directPage, sourceType);
             boolean directRejectedMediator = candidateOwnershipPolicy.isRejectedMediator(candidate, directPage);
             boolean directOwnershipMatched = !candidateOwnershipPolicy.shouldRequireOwnershipValidation(candidate, sourceType)
-                    || candidateOwnershipPolicy.hasCompetitorOwnershipSignal(competitorName, candidate, directPage);
+                    || candidateOwnershipPolicy.hasCompetitorEvidenceOwnershipSignal(competitorName, candidate, directPage);
             boolean directVerified = isVerified(
                     directPage,
                     directMatchedSignals,
@@ -200,7 +200,7 @@ public class CandidateVerifier {
         boolean marketingPage = isMarketingLandingPage(page, sourceType);
         boolean rejectedMediator = candidateOwnershipPolicy.isRejectedMediator(candidate, page);
         boolean ownershipMatched = !candidateOwnershipPolicy.shouldRequireOwnershipValidation(candidate, sourceType)
-                || candidateOwnershipPolicy.hasCompetitorOwnershipSignal(competitorName, candidate, page);
+                || candidateOwnershipPolicy.hasCompetitorEvidenceOwnershipSignal(competitorName, candidate, page);
         return buildVerificationTarget(
                 candidate,
                 page,

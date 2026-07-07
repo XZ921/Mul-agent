@@ -129,6 +129,37 @@ class CandidateVerifierTest {
     }
 
     @Test
+    void shouldVerifySearchDiscoveredOfficialSinglePageWhenCollectedPageMentionsCompetitor() {
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(sourceCollector.collect("https://partner.example.com/research/douyin-open-platform", "Douyin", "OFFICIAL"))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://partner.example.com/research/douyin-open-platform")
+                        .title("Douyin official developer overview")
+                        .content("Douyin official overview and features for creators and developers.")
+                        .snippet("Douyin official overview")
+                        .competitorName("Douyin")
+                        .sourceType("OFFICIAL")
+                        .success(true)
+                        .build());
+        CandidateVerifier verifier = new CandidateVerifier(sourceCollector);
+
+        CandidateVerificationResult result = verifier.verify("Douyin", "OFFICIAL", List.of(
+                SourceCandidate.builder()
+                        .url("https://partner.example.com/research/douyin-open-platform")
+                        .domain("partner.example.com")
+                        .title("Douyin open platform overview")
+                        .sourceType("OFFICIAL")
+                        .providerKey("tavily")
+                        .discoveryMethod("TAVILY_FAST_LANE")
+                        .selectionStage("HTTP")
+                        .build()
+        ));
+
+        assertEquals(1, result.getVerifiedTargets().size());
+        assertTrue(Boolean.TRUE.equals(result.getUpdatedCandidates().get(0).getVerified()));
+    }
+
+    @Test
     void shouldUseDirectHtmlAsPositiveShortcutBeforeBrowserVerification() {
         SourceCollector sourceCollector = mock(SourceCollector.class);
         DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);

@@ -276,6 +276,63 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
         }
     }
 
+    @Test
+    void shouldKeepRecollectionClaimScopeSeparateFromInitialFieldEvidenceQueries() {
+        RecordingBudgetAwareSearchSourceProvider provider = new RecordingBudgetAwareSearchSourceProvider();
+        SearchExecutionCoordinator coordinator = newCoordinator(provider);
+        Map<String, Set<String>> claimRegistry = new ConcurrentHashMap<>();
+
+        CollectorNodeConfig initialConfig = CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩")
+                .sourceType("DOCS")
+                .verifyCandidates(false)
+                .searchMode("HTTP_ONLY")
+                .searchFallbackOrder(List.of("HTTP"))
+                .preferredSearchProvider("tavily")
+                .browserSearchEnabled(false)
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .searchTimeoutMillis(6_000L)
+                .dimensionEvidencePlan(prioritizedFieldPlan())
+                .build();
+        CollectorNodeConfig recollectionConfig = CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩")
+                .sourceType("DOCS")
+                .fieldEvidenceClaimScope("recollection-2")
+                .verifyCandidates(false)
+                .searchMode("HTTP_ONLY")
+                .searchFallbackOrder(List.of("HTTP"))
+                .preferredSearchProvider("tavily")
+                .browserSearchEnabled(false)
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .searchTimeoutMillis(6_000L)
+                .dimensionEvidencePlan(prioritizedFieldPlan())
+                .build();
+
+        SearchExecutionResult initialResult = coordinator.execute(initialConfig, 89L, claimRegistry, update -> {
+        });
+        SearchExecutionResult recollectionResult = coordinator.execute(recollectionConfig, 89L, claimRegistry, update -> {
+        });
+
+        assertThat(provider.requests).hasSize(2);
+        assertThat(provider.requests.get(0).getFieldEvidenceQueries())
+                .extracting(FieldEvidenceQuery::getQueryFingerprint)
+                .containsExactly("q-priority-10", "q-priority-20", "q-priority-30");
+        assertThat(provider.requests.get(1).getFieldEvidenceQueries())
+                .extracting(FieldEvidenceQuery::getQueryFingerprint)
+                .containsExactly("q-priority-10", "q-priority-20", "q-priority-30");
+        assertThat(initialResult.getExecutionTrace().getFieldEvidenceQuerySkipReasons())
+                .doesNotContainKey("SKIPPED_CROSS_NODE_DEDUP");
+        assertThat(recollectionResult.getExecutionTrace().getFieldEvidenceQuerySkipReasons())
+                .doesNotContainKey("SKIPPED_CROSS_NODE_DEDUP");
+        assertThat(claimRegistry)
+                .containsKeys(
+                        "fieldEvidence.executedFingerprints::89::哔哩哔哩",
+                        "fieldEvidence.executedFingerprints::89::哔哩哔哩::recollection-2"
+                );
+    }
+
     private SearchExecutionCoordinator newCoordinator(RecordingBudgetAwareSearchSourceProvider provider) {
         BrowserSearchRuntimeService browserSearchRuntimeService = mock(BrowserSearchRuntimeService.class);
         when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
