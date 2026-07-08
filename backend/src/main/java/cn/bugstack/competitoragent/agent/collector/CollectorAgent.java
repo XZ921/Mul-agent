@@ -69,6 +69,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * 采集 Agent。
@@ -79,6 +87,12 @@ import java.util.Set;
 public class CollectorAgent extends BaseAgent {
 
     private static final String DISCARDED_AFTER_STOP = "DISCARDED_AFTER_STOP";
+    private static final String HARD_DEADLINE_REACHED = "HARD_DEADLINE_REACHED";
+    private static final long OFFICIAL_COLLECTOR_HARD_DEADLINE_MILLIS = 90_000L;
+    private static final long PRICING_COLLECTOR_HARD_DEADLINE_MILLIS = 90_000L;
+    private static final long DOCS_COLLECTOR_HARD_DEADLINE_MILLIS = 150_000L;
+    private static final long REVIEW_COLLECTOR_HARD_DEADLINE_MILLIS = 120_000L;
+    private static final long DEFAULT_COLLECTOR_HARD_DEADLINE_MILLIS = 120_000L;
 
     private final SourceCollector sourceCollector;
     private final EvidenceSourceRepository evidenceRepository;
@@ -245,15 +259,62 @@ public class CollectorAgent extends BaseAgent {
         }
 
         String sourceType = !StringUtils.hasText(config.getSourceType()) ? "OFFICIAL" : config.getSourceType();
+        long collectorHardDeadlineEpochMillis = resolveCollectorHardDeadlineEpochMillis(config, sourceType);
         List<Map<String, Object>> results = new ArrayList<>();
         List<FieldEvidenceClaimCleanup> fieldEvidenceClaimCleanups = new ArrayList<>();
         int[] successCounterRef = new int[] {0};
-        SearchExecutionResult searchExecutionResult = searchExecutionCoordinator.execute(
-                config,
-                context.getTaskId(),
-                context.getFieldEvidenceFingerprintClaims(),
-                update ->
-                persistRunningOutput(context, config, sourceType, update, results, successCounterRef[0]));
+        AtomicReference<SearchExecutionUpdate> latestSearchUpdateRef = new AtomicReference<>();
+        Consumer<SearchExecutionUpdate> searchProgressListener = update -> {
+            latestSearchUpdateRef.set(update);
+            persistRunningOutput(context, config, sourceType, update, results, successCounterRef[0]);
+        };
+        SearchExecutionResult searchExecutionResult;
+        try {
+            searchExecutionResult = executeSearchWithinHardDeadline(
+                    context,
+                    config,
+                    sourceType,
+                    collectorHardDeadlineEpochMillis,
+                    searchProgressListener
+            );
+        } catch (TimeoutException e) {
+            SearchExecutionResult deadlineMarkedSearchResult = buildDeadlineInterruptedSearchResult(
+                    config,
+                    sourceType,
+                    latestSearchUpdateRef.get(),
+                    collectorHardDeadlineEpochMillis
+            );
+            registerFieldEvidenceClaimCleanup(context, config, deadlineMarkedSearchResult, fieldEvidenceClaimCleanups);
+            List<SearchProgressSnapshot> progressSnapshots = deadlineMarkedSearchResult.getProgressSnapshots() == null
+                    ? new ArrayList<>()
+                    : new ArrayList<>(deadlineMarkedSearchResult.getProgressSnapshots());
+            List<SearchCollectionTarget> timeoutTargets = resolveDeadlineInterruptedTargets(deadlineMarkedSearchResult);
+            CollectionExecutionReport deadlineReport = buildDeadlineInterruptedCollectionReportFromPrefetchedTargets(
+                    context,
+                    config,
+                    sourceType,
+                    deadlineMarkedSearchResult,
+                    deadlineMarkedSearchResult.getExecutionPlan(),
+                    progressSnapshots,
+                    timeoutTargets,
+                    results,
+                    successCounterRef
+            );
+            return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
+                    buildCollectorHardDeadlineResult(
+                            context,
+                            config,
+                            sourceType,
+                            deadlineMarkedSearchResult,
+                            deadlineMarkedSearchResult.getExecutionPlan(),
+                            deadlineReport,
+                            progressSnapshots,
+                            results,
+                            successCounterRef[0],
+                            timeoutTargets,
+                            0
+                    ));
+        }
         registerFieldEvidenceClaimCleanup(context, config, searchExecutionResult, fieldEvidenceClaimCleanups);
         SearchExecutionPlan executionPlan = searchExecutionResult.getExecutionPlan();
         List<SearchProgressSnapshot> progressSnapshots = searchExecutionResult.getProgressSnapshots() == null
@@ -315,6 +376,7 @@ public class CollectorAgent extends BaseAgent {
                     context,
                     config,
                     sourceType,
+                    collectorHardDeadlineEpochMillis,
                     searchExecutionResult,
                     executionPlan,
                     progressSnapshots,
@@ -810,6 +872,7 @@ public class CollectorAgent extends BaseAgent {
     private AgentResult executeCollectionPhaseWithRecursiveResults(AgentContext context,
                                                                   CollectorNodeConfig config,
                                                                   String sourceType,
+                                                                  long collectorHardDeadlineEpochMillis,
                                                                   SearchExecutionResult searchExecutionResult,
                                                                   SearchExecutionPlan executionPlan,
                                                                    List<SearchProgressSnapshot> progressSnapshots,
@@ -857,14 +920,45 @@ public class CollectorAgent extends BaseAgent {
         List<SearchCollectionTarget> executableTargets = targets.stream()
                 .filter(this::shouldExecuteThroughCoordinatorInRecursiveMode)
                 .toList();
-        CollectionExecutionReport collectionReport = collectionExecutionCoordinator.execute(
-                context.getTaskId(),
-                context.getCurrentNodeName(),
-                context.getPlanVersionId(),
-                config.getCompetitorName(),
-                executableTargets,
-                config.getCollectionAuditCheckpoint()
-        );
+        CollectionExecutionReport collectionReport;
+        try {
+            collectionReport = executeCollectionCoordinatorWithinHardDeadline(
+                    context,
+                    config,
+                    executableTargets,
+                    collectorHardDeadlineEpochMillis
+            );
+        } catch (TimeoutException e) {
+            SearchExecutionResult deadlineMarkedSearchResult = markSearchExecutionResultAsHardDeadlineReached(
+                    searchExecutionResult,
+                    collectorHardDeadlineEpochMillis
+            );
+            CollectionExecutionReport deadlineReport = buildDeadlineInterruptedCollectionReportFromPrefetchedTargets(
+                    context,
+                    config,
+                    sourceType,
+                    deadlineMarkedSearchResult,
+                    executionPlan,
+                    progressSnapshots,
+                    targets,
+                    results,
+                    successCounterRef
+            );
+            return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
+                    buildCollectorHardDeadlineResult(
+                            context,
+                            config,
+                            sourceType,
+                            deadlineMarkedSearchResult,
+                            executionPlan,
+                            deadlineReport,
+                            progressSnapshots,
+                            results,
+                            successCounterRef[0],
+                            targets,
+                            1
+                    ));
+        }
         List<CollectionExecutionResult> collectionResults = collectionReport == null || collectionReport.getResults() == null
                 ? List.of()
                 : collectionReport.getResults();
@@ -1178,6 +1272,17 @@ public class CollectorAgent extends BaseAgent {
         output.put("fieldEvidenceRecollectionTriggered", fieldEvidenceLoopRounds > 1);
         output.put("fieldEvidenceFinalStatus", summarizeFieldEvidenceFinalStatus(config.getDimensionEvidencePlan()));
         CollectResult collectResult = buildCollectResult(config, results, successCounter);
+        List<String> degradationReasons = resolveDegradationReasons(searchExecutionResult == null
+                ? null
+                : searchExecutionResult.getExecutionTrace());
+        output.put("degraded", !degradationReasons.isEmpty());
+        output.put("degradationReason", degradationReasons.isEmpty() ? null : degradationReasons.get(0));
+        output.put("degradationReasons", degradationReasons);
+        /*
+         * readyForQuorum 只代表“当前节点是否已经形成可交接证据”，
+         * 不能被 competitorUrls 回填的 sourceUrls 误导，因此这里显式按正式成功证据数判断。
+         */
+        output.put("readyForQuorum", successCounter > 0 && hasFormalSelectedTargetsInResults(results));
         output.put("contractVersion", collectResult.getContractVersion());
         output.put("documents", collectResult.getDocuments());
         output.put("sourceUrls", collectResult.getSourceUrls());
@@ -1616,6 +1721,375 @@ public class CollectorAgent extends BaseAgent {
                     .build());
         }
         return failedReport;
+    }
+
+    /**
+     * hard deadline 是“采集节点级收口”而不是单次 Tavily 请求 timeout。
+     * 它的职责是防止 DOCS/REVIEW 这类长尾节点无限拉长，并在到点后优先交接已有证据。
+     */
+    long resolveCollectorHardDeadlineMillis(CollectorNodeConfig config, String sourceType) {
+        String family = config == null ? null : config.getSourceFamilyKey();
+        if (!StringUtils.hasText(family)) {
+            family = sourceType;
+        }
+        if (!StringUtils.hasText(family) && config != null) {
+            family = config.getSourceType();
+        }
+        String normalizedFamily = family == null ? "" : family.trim().toUpperCase(java.util.Locale.ROOT);
+        if (normalizedFamily.contains("DOCS")) {
+            return DOCS_COLLECTOR_HARD_DEADLINE_MILLIS;
+        }
+        if (normalizedFamily.contains("OFFICIAL")) {
+            return OFFICIAL_COLLECTOR_HARD_DEADLINE_MILLIS;
+        }
+        if (normalizedFamily.contains("PRICING")) {
+            return PRICING_COLLECTOR_HARD_DEADLINE_MILLIS;
+        }
+        if (normalizedFamily.contains("REVIEW")) {
+            return REVIEW_COLLECTOR_HARD_DEADLINE_MILLIS;
+        }
+        return DEFAULT_COLLECTOR_HARD_DEADLINE_MILLIS;
+    }
+
+    private long resolveCollectorHardDeadlineEpochMillis(CollectorNodeConfig config, String sourceType) {
+        long timeoutMillis = resolveCollectorHardDeadlineMillis(config, sourceType);
+        if (timeoutMillis <= 0L) {
+            return Long.MAX_VALUE;
+        }
+        return System.currentTimeMillis() + timeoutMillis;
+    }
+
+    private long resolveRemainingCollectorHardDeadlineMillis(long collectorHardDeadlineEpochMillis) {
+        if (collectorHardDeadlineEpochMillis == Long.MAX_VALUE) {
+            return Long.MAX_VALUE;
+        }
+        return Math.max(0L, collectorHardDeadlineEpochMillis - System.currentTimeMillis());
+    }
+
+    /**
+     * 节点级 hard deadline 必须覆盖 search + collect 全链路。
+     * 旧实现只限制 collection coordinator，DOCS 这类长尾 search 会在进入采集前无限拖住节点。
+     */
+    private SearchExecutionResult executeSearchWithinHardDeadline(AgentContext context,
+                                                                  CollectorNodeConfig config,
+                                                                  String sourceType,
+                                                                  long collectorHardDeadlineEpochMillis,
+                                                                  Consumer<SearchExecutionUpdate> progressListener)
+            throws TimeoutException {
+        long remainingMillis = resolveRemainingCollectorHardDeadlineMillis(collectorHardDeadlineEpochMillis);
+        if (remainingMillis <= 0L) {
+            throw new TimeoutException(HARD_DEADLINE_REACHED);
+        }
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        Future<SearchExecutionResult> future = executorService.submit(() -> searchExecutionCoordinator.execute(
+                config,
+                context.getTaskId(),
+                context.getFieldEvidenceFingerprintClaims(),
+                progressListener
+        ));
+        try {
+            return future.get(remainingMillis, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            throw e;
+        } catch (InterruptedException e) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("collector search interrupted while waiting for hard deadline", e);
+        } catch (ExecutionException e) {
+            future.cancel(true);
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("collector search failed", cause);
+        } finally {
+            executorService.shutdownNow();
+        }
+    }
+
+    private SearchExecutionResult buildDeadlineInterruptedSearchResult(CollectorNodeConfig config,
+                                                                       String sourceType,
+                                                                       SearchExecutionUpdate latestUpdate,
+                                                                       long collectorHardDeadlineEpochMillis) {
+        SearchExecutionPlan executionPlan = latestUpdate == null ? null : latestUpdate.getExecutionPlan();
+        if (executionPlan == null) {
+            executionPlan = buildFallbackSearchExecutionPlan(config);
+        }
+        List<SearchProgressSnapshot> progressSnapshots = latestUpdate == null
+                || latestUpdate.getProgressSnapshots() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(latestUpdate.getProgressSnapshots());
+        if (progressSnapshots.isEmpty() && latestUpdate != null && latestUpdate.getLatestProgress() != null) {
+            progressSnapshots.add(latestUpdate.getLatestProgress());
+        }
+        SearchExecutionTrace trace = latestUpdate == null ? null : latestUpdate.getExecutionTrace();
+        if (trace == null) {
+            trace = SearchExecutionTrace.builder()
+                    .searchMode(config == null ? null : config.getSearchMode())
+                    .searchQueries(config == null ? List.of() : config.getSearchQueries())
+                    .fallbackOrder(config == null ? List.of() : config.getSearchFallbackOrder())
+                    .build();
+        }
+        trace.setDegraded(true);
+        trace.setCircuitBroken(true);
+        trace.setDegradationReason(HARD_DEADLINE_REACHED);
+        trace.setSearchElapsedMillis(resolveCollectorHardDeadlineMillis(config, sourceType));
+        trace.setGeneratedAt(LocalDateTime.now());
+        return SearchExecutionResult.builder()
+                .executionPlan(executionPlan)
+                .progressSnapshot(progressSnapshots.isEmpty() ? null : progressSnapshots.get(progressSnapshots.size() - 1))
+                .progressSnapshots(progressSnapshots)
+                .sourceCandidates(latestUpdate == null || latestUpdate.getSourceCandidates() == null
+                        ? resolveFallbackSourceCandidates(config)
+                        : latestUpdate.getSourceCandidates())
+                .attemptedTargets(latestUpdate == null ? List.of() : safeList(latestUpdate.getAttemptedTargets()))
+                .selectedTargets(latestUpdate == null ? List.of() : safeList(latestUpdate.getSelectedTargets()))
+                .discardedCandidates(latestUpdate == null ? List.of() : safeList(latestUpdate.getDiscardedCandidates()))
+                .replayTimeline(latestUpdate == null ? List.of() : safeList(latestUpdate.getReplayTimeline()))
+                .reasoningSummary("collector hard deadline reached during search phase")
+                .executionTrace(trace)
+                .build();
+    }
+
+    private SearchExecutionPlan buildFallbackSearchExecutionPlan(CollectorNodeConfig config) {
+        return SearchExecutionPlan.builder()
+                .stage("COLLECTOR_SEARCH_AND_COLLECT")
+                .searchQueries(config == null ? List.of() : config.getSearchQueries())
+                .fallbackOrder(config == null ? List.of() : config.getSearchFallbackOrder())
+                .targetCount(config == null ? null : config.getMaxSearchResults())
+                .minVerifiedCount(config == null ? null : config.getMinVerifiedCandidates())
+                .steps(List.of(
+                        SearchExecutionStep.builder()
+                                .stepCode("LOAD_CANDIDATES")
+                                .goal("读取规划期候选来源")
+                                .status(SearchExecutionStep.StepStatus.SUCCESS)
+                                .build(),
+                        SearchExecutionStep.builder()
+                                .stepCode("BROWSER_SUPPLEMENT_SEARCH")
+                                .goal("运行期补源")
+                                .status(SearchExecutionStep.StepStatus.FAILED)
+                                .message("达到采集节点硬截止")
+                                .completedAt(LocalDateTime.now())
+                                .build(),
+                        SearchExecutionStep.builder()
+                                .stepCode("COLLECT_PAGES")
+                                .goal("抓取页面正文并持久化证据")
+                                .status(SearchExecutionStep.StepStatus.PENDING)
+                                .build()
+                ))
+                .build();
+    }
+
+    private List<SearchCollectionTarget> resolveDeadlineInterruptedTargets(SearchExecutionResult searchExecutionResult) {
+        if (searchExecutionResult == null) {
+            return List.of();
+        }
+        if (searchExecutionResult.getSelectedTargets() != null && !searchExecutionResult.getSelectedTargets().isEmpty()) {
+            return searchExecutionResult.getSelectedTargets();
+        }
+        if (searchExecutionResult.getAttemptedTargets() != null && !searchExecutionResult.getAttemptedTargets().isEmpty()) {
+            return searchExecutionResult.getAttemptedTargets();
+        }
+        return List.of();
+    }
+
+    private List<SourceCandidate> resolveFallbackSourceCandidates(CollectorNodeConfig config) {
+        if (config == null || config.getSourceCandidates() == null) {
+            return List.of();
+        }
+        return config.getSourceCandidates();
+    }
+
+    private <T> List<T> safeList(List<T> values) {
+        return values == null ? List.of() : values;
+    }
+
+    private CollectionExecutionReport executeCollectionCoordinatorWithinHardDeadline(AgentContext context,
+                                                                                     CollectorNodeConfig config,
+                                                                                     List<SearchCollectionTarget> targets,
+                                                                                     long collectorHardDeadlineEpochMillis) throws TimeoutException {
+        long remainingMillis = resolveRemainingCollectorHardDeadlineMillis(collectorHardDeadlineEpochMillis);
+        if (remainingMillis <= 0L) {
+            throw new TimeoutException(HARD_DEADLINE_REACHED);
+        }
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        Future<CollectionExecutionReport> future = executorService.submit(() -> collectionExecutionCoordinator.execute(
+                context.getTaskId(),
+                context.getCurrentNodeName(),
+                context.getPlanVersionId(),
+                config.getCompetitorName(),
+                targets,
+                config.getCollectionAuditCheckpoint()
+        ));
+        try {
+            return future.get(remainingMillis, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            throw e;
+        } catch (InterruptedException e) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("collector execution interrupted while waiting for hard deadline", e);
+        } catch (ExecutionException e) {
+            future.cancel(true);
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("collector execution failed", cause);
+        } finally {
+            executorService.shutdownNow();
+        }
+    }
+
+    private SearchExecutionResult markSearchExecutionResultAsHardDeadlineReached(SearchExecutionResult searchExecutionResult,
+                                                                                 long collectorHardDeadlineEpochMillis) {
+        if (searchExecutionResult == null) {
+            return null;
+        }
+        SearchExecutionTrace executionTrace = searchExecutionResult.getExecutionTrace();
+        if (executionTrace == null) {
+            executionTrace = SearchExecutionTrace.builder().build();
+            searchExecutionResult.setExecutionTrace(executionTrace);
+        }
+        executionTrace.setDegraded(true);
+        executionTrace.setDegradationReason(HARD_DEADLINE_REACHED);
+        executionTrace.setGeneratedAt(LocalDateTime.now());
+        if (executionTrace.getSearchElapsedMillis() == null && collectorHardDeadlineEpochMillis != Long.MAX_VALUE) {
+            long elapsedMillis = Math.max(0L, resolveCollectorHardDeadlineMillis(
+                    null,
+                    executionTrace.getSearchMode()) - resolveRemainingCollectorHardDeadlineMillis(collectorHardDeadlineEpochMillis));
+            executionTrace.setSearchElapsedMillis(elapsedMillis);
+        }
+        return searchExecutionResult;
+    }
+
+    private CollectionExecutionReport buildDeadlineInterruptedCollectionReportFromPrefetchedTargets(AgentContext context,
+                                                                                                    CollectorNodeConfig config,
+                                                                                                    String sourceType,
+                                                                                                    SearchExecutionResult searchExecutionResult,
+                                                                                                    SearchExecutionPlan executionPlan,
+                                                                                                    List<SearchProgressSnapshot> progressSnapshots,
+                                                                                                    List<SearchCollectionTarget> targets,
+                                                                                                    List<Map<String, Object>> results,
+                                                                                                    int[] successCounterRef) {
+        List<CollectionExecutionResult> auditResults = new ArrayList<>();
+        int[] evidenceCounterRef = new int[] {results == null ? 0 : results.size()};
+        int[] processedPageCounterRef = new int[] {0};
+        int totalCollectedPages = targets == null ? 0 : targets.size();
+        if (targets != null) {
+            for (int index = 0; index < targets.size(); index++) {
+                SearchCollectionTarget target = targets.get(index);
+                if (target == null || target.getCollectedPage() == null) {
+                    continue;
+                }
+                SourceCandidate matchedCandidate = target.getCandidate();
+                String url = matchedCandidate == null ? null : matchedCandidate.getUrl();
+                CollectionExecutionResult prefetchedAuditResult = buildAuditResultFromPrefetchedPage(
+                        context,
+                        config,
+                        sourceType,
+                        index + 1,
+                        target,
+                        target.getCollectedPage());
+                auditResults.add(prefetchedAuditResult);
+                processedPageCounterRef[0]++;
+                appendCollectedResultEntry(context, config, sourceType, searchExecutionResult, executionPlan,
+                        progressSnapshots, targets, results, successCounterRef, evidenceCounterRef,
+                        processedPageCounterRef[0], totalCollectedPages, prefetchedAuditResult,
+                        target.getCollectedPage(), matchedCandidate, url);
+            }
+        }
+        CollectionExecutionReport collectionReport = collectionExecutionCoordinator.summarize(auditResults);
+        return markDeadlineInterruptedCollectionReport(collectionReport, successCounterRef[0] > 0);
+    }
+
+    private CollectionExecutionReport markDeadlineInterruptedCollectionReport(CollectionExecutionReport collectionReport,
+                                                                              boolean hasUsableEvidence) {
+        if (collectionReport == null) {
+            collectionReport = collectionExecutionCoordinator.summarize(List.of());
+        }
+        String status = hasUsableEvidence ? "PARTIAL_SUCCESS" : "FAILED";
+        CollectionExecutionReport interruptedReport = collectionReport.toBuilder()
+                .status(status)
+                .build();
+        if (collectionReport.getAuditSnapshot() != null) {
+            interruptedReport.setAuditSnapshot(collectionReport.getAuditSnapshot().toBuilder()
+                    .status(status)
+                    .summary(collectionReport.getAuditSnapshot().getSummary() == null
+                            ? null
+                            : collectionReport.getAuditSnapshot().getSummary().toBuilder()
+                            .status(status)
+                            .build())
+                    .build());
+        }
+        return interruptedReport;
+    }
+
+    private AgentResult buildCollectorHardDeadlineResult(AgentContext context,
+                                                         CollectorNodeConfig config,
+                                                         String sourceType,
+                                                         SearchExecutionResult searchExecutionResult,
+                                                         SearchExecutionPlan executionPlan,
+                                                         CollectionExecutionReport collectionReport,
+                                                         List<SearchProgressSnapshot> progressSnapshots,
+                                                         List<Map<String, Object>> results,
+                                                         int successCounter,
+                                                         List<SearchCollectionTarget> targets,
+                                                         int fieldEvidenceLoopRounds) {
+        boolean hasUsableEvidence = successCounter > 0 && hasFormalSelectedTargetsInResults(results);
+        String progressMessage = hasUsableEvidence
+                ? "达到采集节点硬截止，已停止补采并交接已有证据"
+                : "达到采集节点硬截止前未形成可交接证据";
+        markCollectStep(executionPlan,
+                hasUsableEvidence ? SearchExecutionStep.StepStatus.SUCCESS : SearchExecutionStep.StepStatus.FAILED,
+                progressMessage);
+        progressSnapshots.add(buildProgressSnapshot(
+                executionPlan,
+                "COLLECT_PAGES",
+                progressMessage,
+                true,
+                HARD_DEADLINE_REACHED));
+        try {
+            String outputJson = buildCollectorOutput(
+                    config,
+                    sourceType,
+                    context.getTaskRagPromptContext(),
+                    searchExecutionResult,
+                    collectionReport,
+                    progressSnapshots,
+                    results,
+                    successCounter,
+                    targets,
+                    fieldEvidenceLoopRounds
+            );
+            if (hasUsableEvidence) {
+                return AgentResult.builder()
+                        .status(TaskNodeStatus.SUCCESS_DEGRADED)
+                        .outputData(outputJson)
+                        .outputSummary("达到采集节点硬截止，已交接 " + config.getCompetitorName() + " 的 "
+                                + sourceType + " 部分证据")
+                        .reasoningSummary(searchExecutionResult == null ? null : searchExecutionResult.getReasoningSummary())
+                        .build();
+            }
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.FAILED)
+                    .outputData(outputJson)
+                    .outputSummary("达到采集节点硬截止前未形成可交接证据")
+                    .reasoningSummary(searchExecutionResult == null ? null : searchExecutionResult.getReasoningSummary())
+                    .errorMessage("达到采集节点硬截止前未形成可交接证据")
+                    .build();
+        } catch (JsonProcessingException e) {
+            return AgentResult.failed("采集结果序列化失败：" + e.getMessage());
+        }
+    }
+
+    private List<String> resolveDegradationReasons(SearchExecutionTrace executionTrace) {
+        if (executionTrace == null || !StringUtils.hasText(executionTrace.getDegradationReason())) {
+            return List.of();
+        }
+        return List.of(executionTrace.getDegradationReason().trim());
     }
 
     /**

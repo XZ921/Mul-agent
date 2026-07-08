@@ -296,7 +296,7 @@ public class CollectionTargetSelector {
     private boolean isExplicitCandidate(SourceCandidate candidate) {
         String method = candidate == null ? null : candidate.getDiscoveryMethod();
         String provider = candidate == null ? null : candidate.getProviderKey();
-        return equalsAny(method, "DIRECT_LOCATOR", "FAMILY_TEMPLATE", "FAMILY_SUBDOMAIN_TEMPLATE", "HEURISTIC")
+        return equalsAny(method, "DIRECT_LOCATOR", "FAMILY_TEMPLATE", "FAMILY_SUBDOMAIN_TEMPLATE", "HEURISTIC", "HEURISTIC_TEMPLATE")
                 || equalsAny(provider, "planned");
     }
 

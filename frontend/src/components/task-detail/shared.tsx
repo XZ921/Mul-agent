@@ -16,6 +16,7 @@ const nodeStatusColorMap: Record<NodeStatus, string> = {
   COMPENSATED: 'success',
   PAUSED: 'warning',
   SUCCESS: 'success',
+  SUCCESS_DEGRADED: 'gold',
   FAILED: 'error',
   SKIPPED: 'default',
 }
@@ -29,13 +30,20 @@ const taskStatusColorMap: Record<TaskStatus, string> = {
 }
 
 export function isTerminalNodeStatus(status: NodeStatus) {
-  return status === 'SUCCESS' || status === 'FAILED' || status === 'COMPENSATED' || status === 'SKIPPED'
+  return (
+    status === 'SUCCESS'
+    || status === 'SUCCESS_DEGRADED'
+    || status === 'FAILED'
+    || status === 'COMPENSATED'
+    || status === 'SKIPPED'
+  )
 }
 
 export function getNodeNoticeType(status: NodeStatus) {
   if (status === 'FAILED') return 'error' as const
   if (
-    status === 'SKIPPED'
+    status === 'SUCCESS_DEGRADED'
+    || status === 'SKIPPED'
     || status === 'PAUSED'
     || status === 'WAITING_RETRY'
     || status === 'WAITING_INTERVENTION'
@@ -89,6 +97,7 @@ export function displayValue(value: unknown) {
 
 export function stepStatusTag(status?: string) {
   if (status === 'SUCCESS') return <Tag color="green">已完成</Tag>
+  if (status === 'SUCCESS_DEGRADED') return <Tag color="gold">已降级完成</Tag>
   if (status === 'RUNNING') return <Tag color="blue">执行中</Tag>
   if (status === 'SKIPPED') return <Tag color="gold">已跳过</Tag>
   if (status === 'FAILED') return <Tag color="red">失败</Tag>
@@ -97,6 +106,7 @@ export function stepStatusTag(status?: string) {
 
 export function progressStatusTag(status?: string) {
   if (status === 'SUCCESS') return <Tag color="green">已完成</Tag>
+  if (status === 'SUCCESS_DEGRADED') return <Tag color="gold">已降级完成</Tag>
   if (status === 'RUNNING') return <Tag color="blue">执行中</Tag>
   if (status === 'SKIPPED') return <Tag color="gold">已跳过</Tag>
   if (status === 'FAILED') return <Tag color="red">失败</Tag>
@@ -413,6 +423,9 @@ export function getNodeHeadline(node: TaskNodeInfo) {
   if (node.status === 'WAITING_RETRY') {
     return node.statusSummary || '系统正在等待下一次自动重试'
   }
+  if (node.status === 'SUCCESS_DEGRADED') {
+    return node.outputSummary || '当前节点已按降级策略完成，可继续查看产物与缺口说明'
+  }
   if (node.status === 'COMPENSATED') {
     return node.outputSummary || '当前分支已完成补偿收口'
   }
@@ -463,6 +476,9 @@ export function getNodeHandlingReason(node: TaskNodeInfo) {
   if (node.interventionReason) return node.interventionReason
   if (node.status === 'WAITING_INTERVENTION') return '当前节点需要人工确认或补充信息后才能继续。'
   if (node.status === 'WAITING_RETRY') return '当前节点已经进入自动重试等待期，系统会按策略继续处理。'
+  if (node.status === 'SUCCESS_DEGRADED') {
+    return '当前节点已按降级策略完成收口，产物可以继续查看，但建议优先关注缺失证据或人工复核说明。'
+  }
   if (node.status === 'COMPENSATED') return '当前节点已通过补偿动作安全收口，通常不需要继续人工处理。'
   if (node.status === 'READY' || node.status === 'DISPATCHED') return '当前节点已经进入待调度阶段，请等待系统继续推进。'
   if (node.nodeNotes) return node.nodeNotes

@@ -56,6 +56,10 @@
 - [x] Task 5：阶段1 MVP 封版交付线被测试封板
 - [x] Task 6：正常竞品基线输入固定，已在 9093 串行执行两组友好基线 E2E；本轮未通过阶段1验收
 - [x] Task 7：阶段1验收结果已写回本文档；因未产出报告，不更新阶段1收口总文档
+- [x] Task 10：Collector 硬截止、`SUCCESS_DEGRADED` 终态和前后端状态展示已补齐并通过单测
+- [x] Task 9：采集分支证据充分 quorum 已落地，Extractor 可继承 collector readiness 降级审计
+- [x] Task 8：DOCS 真实入口优先与模板 fallback 审计已落地
+- [x] Task 11：阶段1字段补采预算与 supplement gate 收敛已落地，非关键 pending 字段不再单独拉起首报补采
 
 执行过程中每完成一个 Task，需要在本节勾选，并在对应 Task 下追加实测命令与结果摘要。
 
@@ -1333,9 +1337,9 @@ DOCS 节点不要求必须使用模板 URL。模板 URL 只是启发式兜底，
 
 验收口径：
 
-- [ ] 当 Tavily / 搜索发现的 DOCS 候选与模板 URL 同时存在时，真实发现候选必须排在模板候选前面。
-- [ ] 当模板 URL 被选中时，审计信息必须能解释“没有更高可信 DOCS 候选”。
-- [ ] 当 Tavily / 搜索没有发现 DOCS URL 时，模板 URL 可以被选中，但必须带 `fallbackReason=no_discovered_docs_candidate`。
+- [x] 当 Tavily / 搜索发现的 DOCS 候选与模板 URL 同时存在时，真实发现候选必须排在模板候选前面。
+- [x] 当模板 URL 被选中时，审计信息必须能解释“没有更高可信 DOCS 候选”。
+- [x] 当 Tavily / 搜索没有发现 DOCS URL 时，模板 URL 可以被选中，但必须带 `fallbackReason=no_discovered_docs_candidate`。
 - [ ] DOCS 候选即使抓取失败，也要保留候选来源、失败原因和原始 URL，不能让报告链路失去可追溯性。
 
 ### Task 8: DOCS 真实入口优先，模板 URL 降级为 fallback
@@ -1351,7 +1355,7 @@ DOCS 节点不要求必须使用模板 URL。模板 URL 只是启发式兜底，
 - Test: `backend/src/test/java/cn/bugstack/competitoragent/source/SourceCandidateRankerTest.java`
 - Test: `backend/src/test/java/cn/bugstack/competitoragent/search/CollectionTargetSelectorTest.java`
 
-- [ ] **Step 1: 写 DOCS 排名失败用例**
+- [x] **Step 1: 写 DOCS 排名失败用例**
 
 在 `SourceCandidateRankerTest` 增加用例：同一品牌同时存在 `https://www.airtable.com/docs` 模板候选与 `https://support.airtable.com/docs` 搜索发现候选时，`support.airtable.com/docs` 必须排在前面。
 
@@ -1363,7 +1367,7 @@ assertThat(ranked.get(0).sourceType()).isEqualTo("DOCS");
 assertThat(ranked.get(0).sourceUrls()).contains("https://support.airtable.com/docs");
 ```
 
-- [ ] **Step 2: 给模板候选加低信任审计标记**
+- [x] **Step 2: 给模板候选加低信任审计标记**
 
 在 `HeuristicSourceDiscoveryService` 生成 `/docs`、`/documentation`、`/help`、`/guide` 时，补充模板 fallback 标记。业务逻辑必须加中文注释，说明这类 URL 只是兜底猜测，不代表真实文档入口。
 
@@ -1378,7 +1382,7 @@ assertThat(ranked.get(0).sourceUrls()).contains("https://support.airtable.com/do
 }
 ```
 
-- [ ] **Step 3: 提升 Tavily / 搜索发现 DOCS 候选权重**
+- [x] **Step 3: 提升 Tavily / 搜索发现 DOCS 候选权重**
 
 在 `SourceCandidateRanker` 中对满足以下任一条件的 DOCS 候选加权：
 
@@ -1389,7 +1393,7 @@ assertThat(ranked.get(0).sourceUrls()).contains("https://support.airtable.com/do
 
 模板候选只在没有 verified DOCS 候选时进入前 N 个采集目标。
 
-- [ ] **Step 4: 防止 direct planner 覆盖真实发现结果**
+- [x] **Step 4: 防止 direct planner 覆盖真实发现结果**
 
 在 `SourceFamilyDirectDiscoveryPlanner` 中调整 DOCS direct family 策略：direct planner 可以补候选，但不能把已有搜索发现候选挤出。若必须补模板 URL，审计中写明明确原因：
 
@@ -1398,7 +1402,7 @@ fallbackReason=no_discovered_docs_candidate  // Tavily / 搜索、官网外链�
 fallbackReason=no_verified_docs_candidate    // 有 DOCS 候选但未通过官方域、路径或内容可信校验
 ```
 
-- [ ] **Step 5: 覆盖 Tavily 搜不到 DOCS 的 fallback 用例**
+- [x] **Step 5: 覆盖 Tavily 搜不到 DOCS 的 fallback 用例**
 
 在 `SourceFamilyDirectDiscoveryPlannerTest` 或 `CollectionTargetSelectorTest` 增加用例：Tavily / 搜索结果没有任何 DOCS 候选，只有官网根域可以拼模板 URL。断言模板 URL 可以进入 DOCS 目标，但必须带 fallback 审计：
 
@@ -1408,7 +1412,7 @@ assertThat(selectedDocsTarget.audit().templateFallback()).isTrue();
 assertThat(selectedDocsTarget.audit().fallbackReason()).isEqualTo("no_discovered_docs_candidate");
 ```
 
-- [ ] **Step 6: 运行 DOCS 选源单测**
+- [x] **Step 6: 运行 DOCS 选源单测**
 
 ```powershell
 mvn -pl backend "-Dtest=HeuristicSourceDiscoveryServiceTest,SourceFamilyDirectDiscoveryPlannerTest,SourceCandidateRankerTest,CollectionTargetSelectorTest" test
@@ -1419,6 +1423,32 @@ Expected:
 ```text
 BUILD SUCCESS
 ```
+
+### Task 8 实测记录（2026-07-08）
+
+- 红灯验证 1：
+  - 命令：`mvn -pl backend "-Dtest=SourceCandidateRankerTest#shouldPreferSearchDiscoveredDocsOverTemplateFallbackCandidate" test`
+  - 结果：失败，`expected: <https://support.airtable.com/docs> but was: <https://www.airtable.com/docs>`，确认模板 `/docs` 会压过搜索发现 DOCS。
+- 修复后 focused 验证 1：
+  - 命令：`mvn -pl backend "-Dtest=SourceCandidateRankerTest#shouldPreferSearchDiscoveredDocsOverTemplateFallbackCandidate" test`
+  - 结果：`Tests run: 1, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`。
+- 红灯验证 2：
+  - 命令：`mvn -pl backend "-Dtest=SourceFamilyDirectDiscoveryPlannerTest#shouldMarkOfficialTemplateCandidatesAsLowTrustFallbacks,HeuristicSourceDiscoveryServiceTest#shouldPreferSearchDiscoveredDocsAndKeepTemplateFallbackAudit" test`
+  - 结果：失败，direct planner 模板候选 `templateFallback` 为空；service 合并后的模板候选缺少 `no_verified_docs_candidate` 审计。
+- 修复后 focused 验证 2：
+  - 命令：`mvn -pl backend "-Dtest=SourceFamilyDirectDiscoveryPlannerTest#shouldMarkOfficialTemplateCandidatesAsLowTrustFallbacks,HeuristicSourceDiscoveryServiceTest#shouldPreferSearchDiscoveredDocsAndKeepTemplateFallbackAudit" test`
+  - 结果：`Tests run: 2, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`。
+- fallback 正向用例：
+  - 命令：`mvn -pl backend "-Dtest=HeuristicSourceDiscoveryServiceTest#shouldKeepTemplateFallbackCandidateWhenNoSearchDiscoveredDocsExists" test`
+  - 结果：`Tests run: 1, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`。
+- Task 8 组合验证：
+  - 命令：`mvn -pl backend "-Dtest=HeuristicSourceDiscoveryServiceTest,SourceFamilyDirectDiscoveryPlannerTest,SourceCandidateRankerTest,CollectionTargetSelectorTest" test`
+  - 结果：`Tests run: 46, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`。
+- 代码修改：
+  - `SourceCandidate` 新增 `templateFallback` / `fallbackReason` 审计字段。
+  - `SourceCandidateRanker` 对搜索发现且官方相邻的 DOCS 入口增加质量信号，并对 `FAMILY_TEMPLATE` / `FAMILY_SUBDOMAIN_TEMPLATE` / `HEURISTIC_TEMPLATE` / `SEARCH_ROOT_TEMPLATE` 做模板 fallback 降权。
+  - `HeuristicSourceDiscoveryService` 将路径拼接候选标记为 `HEURISTIC_TEMPLATE`，无搜索候选时保留 `no_discovered_docs_candidate`，存在搜索 DOCS 时模板候选改写为 `no_verified_docs_candidate`。
+  - `SourceFamilyDirectDiscoveryPlanner` 为 official family 模板候选补充低信任 fallback 审计；`CollectionTargetSelector` 同步识别 `HEURISTIC_TEMPLATE` 为显式候选。
 
 ### Task 9: 采集分支从全量成功门槛改为证据充分 quorum
 
@@ -1434,8 +1464,9 @@ BUILD SUCCESS
 - Test: `backend/src/test/java/cn/bugstack/competitoragent/workflow/DagExecutorRuntimeDependencyTest.java`
 - Test: `backend/src/test/java/cn/bugstack/competitoragent/workflow/CollectorEvidenceReadinessPolicyTest.java`
 - Test: `backend/src/test/java/cn/bugstack/competitoragent/agent/extractor/SchemaExtractorAgentTest.java`
+- Test: `backend/src/test/java/cn/bugstack/competitoragent/extractor/input/RepositoryExtractorInputProviderTest.java`
 
-- [ ] **Step 1: 写 DAG quorum 失败用例**
+- [x] **Step 1: 写 DAG quorum 失败用例**
 
 构造 OFFICIAL、PRICING、REVIEW 成功，DOCS 已被 Task 10 推进到 `SUCCESS_DEGRADED` / `FAILED` / `SKIPPED` 任一终态的任务。断言 `extract_schema` 在证据充分时可以进入 `RUNNING` / `SUCCESS`，同时 DOCS 的降级或失败状态被写入审计。
 
@@ -1470,7 +1501,7 @@ requiredAuditFlag:
 
 降级 quorum 只用于阶段1友好基线继续产出降级报告，不能把 OFFICIAL 缺失伪装成正常成功。Writer / Reviewer 必须能从审计中看到 `OFFICIAL_FAILED_DEGRADED_QUORUM`，并在报告缺口说明里写明官网采集失败。
 
-- [ ] **Step 2: 增加 CollectorEvidenceReadinessPolicy**
+- [x] **Step 2: 增加 CollectorEvidenceReadinessPolicy**
 
 该策略只负责判断“现有 collector 输出是否足够进入抽取”，不要混入报告质量判断。核心输入：
 
@@ -1495,7 +1526,7 @@ public record CollectorEvidenceReadiness(
 }
 ```
 
-- [ ] **Step 3: 在 DAG 层引入证据充分依赖**
+- [x] **Step 3: 在 DAG 层引入证据充分依赖**
 
 `ExecutionPlanDefinitionBuilder` 不再让 `extract_schema` 只依赖“所有 collector 节点成功”。`DagExecutor` 在 collector 依赖全部到达终态后调用 `CollectorEvidenceReadinessPolicy`。若 `ready=true`，允许下游启动，并把缺口写入节点上下文。
 
@@ -1503,11 +1534,11 @@ public record CollectorEvidenceReadiness(
 
 必须保留中文注释说明：这里不是忽略失败，而是把“下游能否开始”从“所有采集节点完成”改成“证据是否足够交付首版报告”。
 
-- [ ] **Step 4: 让 Extractor 能消费部分 collector 输出**
+- [x] **Step 4: 让 Extractor 能消费部分 collector 输出**
 
 `SchemaExtractorAgent` 读取 collector 输出时，不能因为某个 collector 缺失就丢弃其他 collector 的 `sourceUrls`。缺失分支必须进入 `evidenceGaps` 或等价字段，供 Analyzer / Writer 写入降级说明。
 
-- [ ] **Step 5: 运行 DAG 与 extractor 单测**
+- [x] **Step 5: 运行 DAG 与 extractor 单测**
 
 ```powershell
 mvn -pl backend "-Dtest=DagExecutorTest,DagExecutorRuntimeDependencyTest,CollectorEvidenceReadinessPolicyTest,SchemaExtractorAgentTest,SchemaExtractorAgentCoverageContractTest" test
@@ -1518,6 +1549,25 @@ Expected:
 ```text
 BUILD SUCCESS
 ```
+
+### Task 9 实测记录（2026-07-08）
+
+- 代码修改：
+  - 新增 `CollectorEvidenceReadiness` 与 `CollectorEvidenceReadinessPolicy`，按 `OFFICIAL + PRICING + (DOCS or REVIEW)`、`sourceUrls >= 5`、`distinctSourceDomains >= 2` 判断阶段1首报 quorum。
+  - `DagExecutor` 在多 family collector 依赖全部进入终态后评估 readiness；`SUCCESS_DEGRADED` 视为可交接终态，`RUNNING` / `WAITING_RETRY` / `PAUSED` 等非终态继续返回 `WAITING_COLLECTOR_TERMINAL_STATUS`，不绕过长尾节点。
+  - quorum 审计写入共享上下文 `collector_evidence_readiness`；Provider 将其投影为 `auditRefs.collectorEvidenceReadiness` 和 `COLLECTOR_FAMILY_MISSING_*` / `COLLECTOR_QUORUM_DEGRADED` 等 `issueFlags`。
+  - `SchemaExtractorAgent` 会把 Provider 输入中的 readiness issueFlags 合并到最终输出和 draft，供 Analyzer / Writer 继承降级说明；审计 JSON 不作为正文证据替代 repository 输入。
+  - 兼容边界：quorum 只接管阶段1多 family collector；单个 `collect_sources_web -> extract_schema` 的历史轻量 DAG 仍走普通依赖规则。
+- 验证：
+  - focused 红绿命令：`mvn -pl backend "-Dtest=RepositoryExtractorInputProviderTest#shouldExposeCollectorReadinessAuditAsInputIssueFlags,SchemaExtractorAgentTest#shouldPropagateCollectorReadinessIssueFlagsIntoExtractorOutput" test`
+  - focused 结果：红测曾按预期失败；实现后 `Tests run: 2, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`。
+  - DAG quorum focused 命令：`mvn -pl backend "-Dtest=CollectorEvidenceReadinessPolicyTest,DagExecutorTest#shouldReleaseExtractorWhenCollectorQuorumIsReadyEvenIfDocsFailed+shouldKeepExtractorPendingWhenCollectorQuorumSeesRunningNode" test`
+  - DAG quorum focused 结果：`Tests run: 4, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`。
+  - 兼容性回归命令：`mvn -pl backend "-Dtest=DagExecutorTest#shouldPassSharedOutputEnvelopeToDownstreamNodeContext" test`
+  - 兼容性回归结果：`Tests run: 1, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`。
+  - Task 9 组合命令：`mvn -pl backend "-Dtest=DagExecutorTest,DagExecutorRuntimeDependencyTest,CollectorEvidenceReadinessPolicyTest,SchemaExtractorAgentTest,SchemaExtractorAgentCoverageContractTest,RepositoryExtractorInputProviderTest" test`
+  - Task 9 组合结果：`Tests run: 69, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`。
+  - 备注：控制台仍存在 Maven `settings.xml` warning、部分测试故意触发的 JSON 解析 warning 和缺失 agent warning；均未导致本组测试失败。
 
 ### Task 10: Collector 硬截止与部分证据交接
 
@@ -1546,7 +1596,7 @@ BUILD SUCCESS
 - Test: `frontend/src/utils/taskNodeInsights.test.ts`
 - Test: `frontend/src/components/task-detail/NodeAccordionList.test.tsx`
 
-- [ ] **Step 1: 明确 SUCCESS_DEGRADED 的状态建模**
+- [x] **Step 1: 明确 SUCCESS_DEGRADED 的状态建模**
 
 本计划采用新增节点状态枚举，而不是用 `SUCCESS + degraded=true` 隐式模拟。
 
@@ -1566,7 +1616,7 @@ SUCCESS_DEGRADED 不等于完全成功，必须保留 degradationReasons / audit
 SUCCESS_DEGRADED 在任务恢复时应像 SUCCESS 一样保留检查点
 ```
 
-- [ ] **Step 2: 写硬截止交接失败用例**
+- [x] **Step 2: 写硬截止交接失败用例**
 
 模拟 DOCS 节点已采到 3 条有效 evidence 和 `sourceUrls`，但后续页面抓取超时。断言节点最终不是无限 `RUNNING`，而是：
 
@@ -1576,7 +1626,7 @@ outputData.sourceUrls 非空
 outputData.degradationReasons 包含 HARD_DEADLINE_REACHED
 ```
 
-- [ ] **Step 3: 在 CollectorAgent.doExecute() 实现 hard deadline**
+- [x] **Step 3: 在 CollectorAgent.doExecute() 实现 hard deadline**
 
 硬截止的实现位置放在 `CollectorAgent.doExecute()` 或 collector family 执行入口，建议用 `Future.get(timeout)` / `CompletableFuture.orTimeout(...)` 包住单个 collector 的采集闭环。
 
@@ -1588,7 +1638,7 @@ outputData.degradationReasons 包含 HARD_DEADLINE_REACHED
 
 必须加中文注释说明：hard deadline 是节点级收口机制，不是 Tavily 单次请求 timeout。
 
-- [ ] **Step 4: 定义 collector hard deadline**
+- [x] **Step 4: 定义 collector hard deadline**
 
 按 source family 设置单节点最大运行时间，阶段1建议先保守：
 
@@ -1601,11 +1651,11 @@ REVIEW: 120s
 
 这些值是防长尾的硬截止，不是 Tavily 单次请求 timeout。超过 hard deadline 时，collector 必须停止补采并生成可审计输出。
 
-- [ ] **Step 5: 保留部分 outputData**
+- [x] **Step 5: 保留部分 outputData**
 
 `CollectorAgent` / `DagExecutor` 在 stop、timeout、deadline 降级时不能清空已采集 evidence。只要有可用 `sourceUrls`，就应形成部分输出，并标记 `degraded=true`。
 
-- [ ] **Step 6: 对无证据超时与有证据超时做区分**
+- [x] **Step 6: 对无证据超时与有证据超时做区分**
 
 无证据超时：
 
@@ -1621,7 +1671,7 @@ status = TaskNodeStatus.SUCCESS_DEGRADED
 readyForQuorum = true
 ```
 
-- [ ] **Step 7: 更新 SUCCESS_DEGRADED 的全链路消费者**
+- [x] **Step 7: 更新 SUCCESS_DEGRADED 的全链路消费者**
 
 必须同步修改：
 
@@ -1632,7 +1682,7 @@ readyForQuorum = true
 - 前端 `TaskNodeStatus` 类型、状态文案、节点洞察、DAG 面板、节点列表：展示 `SUCCESS_DEGRADED` 为“降级成功 / 可交接”，颜色不能和失败混淆。
 - E2E 生成或记录 `collector-node-summary.json` 时，把 `SUCCESS_DEGRADED` 聚合为 terminal collector，并单独统计 degraded collector 数量。
 
-- [ ] **Step 8: 运行硬截止与状态展示单测**
+- [x] **Step 8: 运行硬截止与状态展示单测**
 
 ```powershell
 mvn -pl backend "-Dtest=SearchExecutionCoordinatorTest,SearchExecutionCoordinatorRepairAuditTest,CollectorAgentTest,DagExecutorTest,NodeExecutionRecoveryPolicyTest,TaskNodeViewAssemblerTest" test
@@ -1649,6 +1699,26 @@ backend: BUILD SUCCESS
 frontend: Test Files 3 passed
 ```
 
+### Task 10 实测记录（2026-07-08）
+
+- 代码修改：
+  - `TaskNodeStatus` 新增 `SUCCESS_DEGRADED`，并在 Swagger 注释中明确“节点已产出可交接结果但存在降级缺口”。
+  - `CollectorAgent` 增加节点级 hard deadline：`OFFICIAL=90s`、`PRICING=90s`、`DOCS=150s`、`REVIEW=120s`、默认 `120s`。该截止只用于采集节点收口，不替代 Tavily 单次请求 timeout。
+  - hard deadline 到达时，若已有正式采集证据和 `sourceUrls`，输出 `SUCCESS_DEGRADED`、`degraded=true`、`degradationReasons=["HARD_DEADLINE_REACHED"]`、`readyForQuorum=true`；若没有可交接证据，则输出 `FAILED` 且 `readyForQuorum=false`。
+  - `DagExecutor`、`NodeExecutionRecoveryPolicy`、`TaskRecoveryService`、`TaskRuntimeCommandAppService`、`TaskProgressSnapshot`、`TaskNodeViewAssembler`、`RuntimeEventEmitter`、`ReportService` 已把 `SUCCESS_DEGRADED` 纳入终态、检查点保留、输出复用、进度统计、事件推送和报告入口判断。
+  - 前端 `NodeStatus`、任务详情页、节点状态文案、事件 reducer、DAG 节点样式和节点列表展示已识别 `SUCCESS_DEGRADED` 为“降级成功 / 可交接”，颜色使用 gold/orange 系，不与失败态混淆。
+- 后端验证：
+  - 命令：`mvn -pl backend "-Dtest=SearchExecutionCoordinatorTest,SearchExecutionCoordinatorRepairAuditTest,CollectorAgentTest,DagExecutorTest,NodeExecutionRecoveryPolicyTest,TaskNodeViewAssemblerTest,TaskProgressSnapshotTest" test`
+  - 结果：`Tests run: 99, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`。
+  - 备注：控制台仍存在 Maven `settings.xml` warning、部分测试故意触发的 XML/JSON 解析警告和持久化失败 warning；均未导致本组测试失败。
+- 前端验证：
+  - 命令：`npm.cmd --prefix frontend test -- taskPresentation.test.ts taskNodeInsights.test.ts NodeAccordionList.test.tsx`
+  - 结果：`Test Files 3 passed`，`Tests 13 passed`。
+  - 追加覆盖命令：`npm.cmd --prefix frontend test -- taskPresentation.test.ts taskNodeInsights.test.ts shared.test.ts TaskDetailPage.test.tsx taskEventReducer.test.ts display.test.ts`
+  - 追加覆盖结果：`Test Files 6 passed`，`Tests 38 passed`。
+- 当前边界：
+  - Task 10 只解决“长尾 collector 能按硬截止进入终态并交接部分证据”。证据充分 quorum 的正式策略仍归 Task 9；字段补采预算和 supplement gate 收敛仍归 Task 11。
+
 ### Task 11: 阶段1字段补采预算与 supplement gate 收敛
 
 **Files:**
@@ -1661,7 +1731,7 @@ frontend: Test Files 3 passed
 - Test: `backend/src/test/java/cn/bugstack/competitoragent/search/FieldEvidenceQueryExecutionGateTest.java`
 - Test: `backend/src/test/java/cn/bugstack/competitoragent/workflow/coverage/DimensionEvidencePlanFactoryTest.java`
 
-- [ ] **Step 1: 写 pending field 不应无条件补采的失败用例**
+- [x] **Step 1: 写 pending field 不应无条件补采的失败用例**
 
 构造 collector 已满足 source family 和 `sourceUrls` quorum，但仍有非关键字段 pending。断言 `SearchExecutionCoordinator.shouldSupplement(...)` 返回 false，且审计记录：
 
@@ -1669,7 +1739,7 @@ frontend: Test Files 3 passed
 skipReason = STAGE1_QUORUM_READY_DEFER_FIELD_EVIDENCE
 ```
 
-- [ ] **Step 2: 区分阶段1首报字段与深挖字段**
+- [x] **Step 2: 区分阶段1首报字段与深挖字段**
 
 `DimensionEvidencePlanFactory` 输出字段计划时标注：
 
@@ -1681,23 +1751,21 @@ criticalForFirstReport=true/false
 
 ```text
 criticalForFirstReport=true:
-- pricing
+- summary
 - positioning
-- core_capabilities
-- integration_ecosystem
+- targetUsers
+- coreFeatures
+- pricing
 
 criticalForFirstReport=false:
-- advanced_features
-- user_review_sentiment
-- customer_case_studies
-- security_compliance_depth
-- migration_guides
-- roadmap_or_release_notes
+- strengths
+- weaknesses
+- 其他后续增强字段
 ```
 
 字段命名应映射到当前工程已有 schema 字段；如果现有字段名不同，必须在测试里明确映射关系，不能在实现时临时发明同义字段。非关键字段进入后续增强，不阻塞首报。
 
-- [ ] **Step 3: 修改 supplement gate**
+- [x] **Step 3: 修改 supplement gate**
 
 `hasPendingFieldEvidenceQueries` 不能再单独触发 supplement。新的触发条件必须同时满足：
 
@@ -1710,7 +1778,7 @@ criticalForFirstReport=false:
 
 当前 E2E 中 `fieldEvidenceQueryExecutedCount=0` 但 pending field evidence 仍推动 supplement，说明 Task 11 的核心是修复“为什么进入 supplement”。如果已经进入 supplement 后采集仍被拉长，由 Task 10 的 hard deadline 负责收口；Task 11 不替代节点级硬截止。
 
-- [ ] **Step 4: 写预算审计**
+- [x] **Step 4: 写预算审计**
 
 每个 collector 输出中记录：
 
@@ -1724,7 +1792,7 @@ criticalForFirstReport=false:
 }
 ```
 
-- [ ] **Step 5: 运行字段补采预算单测**
+- [x] **Step 5: 运行字段补采预算单测**
 
 ```powershell
 mvn -pl backend "-Dtest=SearchExecutionCoordinatorFieldEvidenceTest,SearchExecutionCoordinatorFieldEvidenceBudgetTest,FieldEvidenceQueryExecutionGateTest,DimensionEvidencePlanFactoryTest" test
@@ -1735,6 +1803,27 @@ Expected:
 ```text
 BUILD SUCCESS
 ```
+
+### Task 11 实测记录（2026-07-08）
+
+- 代码修改：
+  - `FieldEvidenceCoverage` 与 `FieldEvidenceQuery` 新增 `criticalForFirstReport` 标记，`DimensionEvidencePlan` 统一维护阶段1首报关键字段集合。
+  - 当前工程 schema 的首报关键字段映射为 `summary`、`positioning`、`targetUsers`、`coreFeatures`、`pricing`；`weaknesses` 等增强字段保留审计但不阻塞首报。
+  - `DimensionEvidencePlanFactory` 在字段 coverage 与 planned query 上同步写入 `criticalForFirstReport`，避免后续 gate 重新猜字段语义。
+  - `SearchExecutionCoordinator` 不再让 `hasPendingFieldEvidenceQueries` 单独触发 supplement；当 verified source quorum 已满足且只剩非关键字段 query 时，将 executable query 转为 skipped/deferred，并写入 `STAGE1_QUORUM_READY_DEFER_FIELD_EVIDENCE`。
+  - 被延期的字段 query 会从跨节点 field evidence claim 集合释放，避免后续增强轮误判为已占用。
+  - `resolveSearchFallbackOrder` 只在存在首报关键字段 pending 时优先 HTTP，再走 browser，避免非关键字段改变首报补采路径。
+- 红灯验证：
+  - 命令：`mvn -pl backend "-Dtest=SearchExecutionCoordinatorFieldEvidenceTest#shouldDeferNonCriticalPendingFieldEvidenceWhenVerifiedSourceQuorumReady" test`
+  - 结果：修复前失败，`weaknesses` 非关键字段仍触发 supplement request，确认旧 gate 会被 pending field evidence 单独拉起。
+- focused 验证：
+  - 命令：`mvn -pl backend "-Dtest=SearchExecutionCoordinatorFieldEvidenceTest#shouldDeferNonCriticalPendingFieldEvidenceWhenVerifiedSourceQuorumReady,DimensionEvidencePlanFactoryTest#shouldMarkOnlyStageOneFirstReportFieldsAsCritical" test`
+  - 结果：`BUILD SUCCESS`。
+- Task 11 组合验证：
+  - 命令：`mvn -pl backend "-Dtest=SearchExecutionCoordinatorFieldEvidenceTest,SearchExecutionCoordinatorFieldEvidenceBudgetTest,FieldEvidenceQueryExecutionGateTest,DimensionEvidencePlanFactoryTest" test`
+  - 结果：`Tests run: 29, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`。
+- 备注：
+  - 控制台仍存在 Maven `settings.xml` mirror warning、XML DOCTYPE warning 与 LF/CRLF 提示；本组测试未受影响。
 
 ### Task 12: 单样本优先的友好基线 E2E 复验与记录
 

@@ -28,6 +28,12 @@ public class SourceCandidate {
     private String sourceFamilyRole;
     private String providerKey;
     private String providerRole;
+    /**
+     * 标记该候选是否来自模板兜底。
+     * 真实搜索命中的 DOCS / PRICING 等入口应优先于模板猜测入口，后续 E2E 审计也会用它解释 fallback 原因。
+     */
+    private Boolean templateFallback;
+    private String fallbackReason;
     private List<String> sourceUrls;
     private double relevanceScore;
     private double freshnessScore;

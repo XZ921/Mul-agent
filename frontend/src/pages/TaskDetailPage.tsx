@@ -183,6 +183,20 @@ function mergeConfigPatch(rawConfig: string, patch: Record<string, unknown>) {
   return JSON.stringify({ ...base, ...patch }, null, 2)
 }
 
+/**
+ * 阶段 1 允许写作节点以“降级成功”方式交付。
+ * 这里的判断只代表“前端已经有可查看报告”，不代表质量已经回到高分通过态。
+ */
+function isWriterOutputReady(status: TaskNodeInfo['status']) {
+  return status === 'SUCCESS' || status === 'SUCCESS_DEGRADED'
+}
+
+function getWriterOutputStatusLabel(status: TaskNodeInfo['status']) {
+  if (status === 'SUCCESS') return '报告已生成'
+  if (status === 'SUCCESS_DEGRADED') return '降级报告已生成'
+  return getNodeStatusText(status)
+}
+
 function getConfigSuggestions(node: TaskNodeInfo | null, config: Record<string, unknown> | null): ConfigSuggestion[] {
   if (!node || !config) return []
 
@@ -442,10 +456,13 @@ function buildReadableOutput(
     const preview = summarizeMarkdown(rawOutput)
     return [
       { label: '产出类型', value: String(node.nodeName === 'rewrite_report' ? '修订后的报告' : '初版报告') },
-      { label: '输出状态', value: node.status === 'SUCCESS' ? '报告已生成' : getNodeStatusText(node.status) },
+      { label: '输出状态', value: getWriterOutputStatusLabel(node.status) },
       {
         label: '执行结果',
-        value: node.outputSummary || (node.nodeName === 'rewrite_report' ? '已根据初审意见完成改写' : '已完成报告生成'),
+        value: node.outputSummary
+          || (node.status === 'SUCCESS_DEGRADED'
+            ? '已按降级策略生成可交付报告，请结合缺口说明继续复核'
+            : (node.nodeName === 'rewrite_report' ? '已根据初审意见完成改写' : '已完成报告生成')),
       },
       { label: '内容预览', value: preview || '报告正文已生成，可在原始输出中查看完整 Markdown' },
       { label: '正文长度', value: rawOutputLength > 0 ? `${rawOutputLength} 字符` : '已写入报告正文' },
@@ -498,7 +515,7 @@ export function shouldFetchTaskReport(task: TaskInfo | null, nodes: TaskNodeInfo
     (node) =>
       node.agentType === 'WRITER' &&
       (node.nodeName === 'write_report' || node.nodeName === 'rewrite_report') &&
-      node.status === 'SUCCESS',
+      isWriterOutputReady(node.status),
   )
 }
 
@@ -625,6 +642,11 @@ export default function TaskDetailPage() {
     if (!task?.totalNodes) return 0
     return Math.round((completedNodeCount / task.totalNodes) * 100)
   }, [completedNodeCount, task])
+
+  const canViewReport = useMemo(
+    () => shouldFetchTaskReport(task, nodes) || Boolean(report),
+    [nodes, report, task],
+  )
 
   /**
    * 任务详情页进入统一对话时只传递任务级别的稳定上下文，
@@ -1204,7 +1226,7 @@ export default function TaskDetailPage() {
       </div>
 
       <TaskStatusHero
-        task={task}
+        task={{ ...task, canViewReport }}
         heroTone={heroTone}
         taskStageLabel={taskStageLabel}
         completedNodeCount={completedNodeCount}

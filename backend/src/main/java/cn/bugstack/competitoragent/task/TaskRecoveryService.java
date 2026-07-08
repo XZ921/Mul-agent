@@ -161,10 +161,12 @@ public class TaskRecoveryService {
     }
 
     /**
-     * 只回滚中断时仍停留在 RUNNING/PENDING 的节点，保留 SUCCESS 检查点供执行器续跑。
+     * 只回滚中断时仍停留在 RUNNING/PENDING 的节点，
+     * 保留 SUCCESS / SUCCESS_DEGRADED 检查点供执行器续跑。
      */
     private boolean isTerminalNodeStatus(TaskNodeStatus status) {
         return status == TaskNodeStatus.SUCCESS
+                || status == TaskNodeStatus.SUCCESS_DEGRADED
                 || status == TaskNodeStatus.FAILED
                 || status == TaskNodeStatus.SKIPPED
                 || status == TaskNodeStatus.COMPENSATED;
@@ -440,6 +442,7 @@ public class TaskRecoveryService {
                         .findFirst())
                 .or(() -> recoveryScopeNodes.stream()
                         .filter(node -> node.getStatus() != TaskNodeStatus.SUCCESS
+                                && node.getStatus() != TaskNodeStatus.SUCCESS_DEGRADED
                                 && node.getStatus() != TaskNodeStatus.COMPENSATED
                                 && node.getStatus() != TaskNodeStatus.SKIPPED)
                         .findFirst())

@@ -263,6 +263,65 @@ class RepositoryExtractorInputProviderTest {
     }
 
     @Test
+    void shouldExposeCollectorReadinessAuditAsInputIssueFlags() {
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(10L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(10L)
+                        .competitorName("Linear")
+                        .evidenceId("E1001")
+                        .title("Linear homepage")
+                        .url("https://www.linear.app")
+                        .sourceType("OFFICIAL")
+                        .fullContent("Linear is a product development platform for modern teams.")
+                        .build(),
+                EvidenceSource.builder()
+                        .taskId(10L)
+                        .competitorName("Linear")
+                        .evidenceId("E1002")
+                        .title("Linear pricing")
+                        .url("https://www.linear.app/pricing")
+                        .sourceType("PRICING")
+                        .fullContent("Linear offers Free, Basic, Business and Enterprise pricing tiers.")
+                        .build()
+        ));
+        AgentContext context = AgentContext.builder()
+                .taskId(10L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build();
+        context.putSharedOutput("collector_evidence_readiness", """
+                {
+                  "ready": true,
+                  "degraded": true,
+                  "reason": "STAGE1_COLLECTOR_QUORUM_READY",
+                  "satisfiedFamilies": ["OFFICIAL", "PRICING", "REVIEW"],
+                  "missingFamilies": ["DOCS"],
+                  "auditFlags": ["HARD_DEADLINE_REACHED"],
+                  "sourceUrls": [
+                    "https://www.linear.app",
+                    "https://www.linear.app/features",
+                    "https://www.linear.app/pricing",
+                    "https://www.g2.com/products/linear/reviews",
+                    "https://www.capterra.com/p/linear"
+                  ]
+                }
+                """);
+
+        ExtractorInputPackage inputPackage = provider.provide(context);
+
+        ExtractorCompetitorInput competitorInput = inputPackage.getCompetitors().get(0);
+        assertThat(String.valueOf(inputPackage.getAuditRefs().get("collectorEvidenceReadiness")))
+                .contains("STAGE1_COLLECTOR_QUORUM_READY")
+                .contains("DOCS")
+                .contains("HARD_DEADLINE_REACHED");
+        assertThat(competitorInput.getEvidenceCatalog())
+                .extracting(ExtractorEvidenceInput::getEvidenceId)
+                .contains("E1001", "E1002");
+        assertThat(competitorInput.getIssueFlags())
+                .contains("COLLECTOR_QUORUM_DEGRADED", "COLLECTOR_FAMILY_MISSING_DOCS", "HARD_DEADLINE_REACHED");
+    }
+
+    @Test
     void shouldMarkAuditRefsUnavailableReasonWhenCollectorEnvelopeMissing() {
         when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(9L)).thenReturn(List.of(
                 EvidenceSource.builder()

@@ -24,6 +24,11 @@ public class FieldEvidenceCoverage {
     private FieldEvidenceCoverageStatus status;
     private Integer minimumAttemptedPaths;
     private Integer minDistinctEvidenceCount;
+    /**
+     * 是否属于阶段1首版报告必须优先补齐的字段。
+     * 非首报关键字段仍会保留 plannedQueries 审计，但不应单独拖长首次采集 supplement。
+     */
+    private Boolean criticalForFirstReport;
 
     @Builder.Default
     private List<CoverageEvidencePath> evidencePaths = new ArrayList<>();

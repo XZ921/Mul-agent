@@ -257,7 +257,7 @@ public class TaskNodeViewAssembler {
             return false;
         }
         for (TaskNode node : nodes) {
-            if (node == null || node.getStatus() != TaskNodeStatus.SUCCESS) {
+            if (node == null || !isReusableOutputStatus(node.getStatus())) {
                 continue;
             }
             if (node.getAgentType() == AgentType.WRITER || isReportWriterNode(node.getNodeName())) {
@@ -411,10 +411,19 @@ public class TaskNodeViewAssembler {
             case RUNNING -> "节点执行中";
             case FAILED -> "节点执行失败";
             case SUCCESS -> "节点执行成功";
+            case SUCCESS_DEGRADED -> "节点降级成功";
             case SKIPPED -> "节点已跳过";
             case PAUSED -> "节点已暂停";
             case PENDING -> "待执行";
         };
+    }
+
+    /**
+     * SUCCESS_DEGRADED 虽然不等同于完全成功，
+     * 但仍然表示节点已经有可被详情页和下游消费的产物。
+     */
+    private boolean isReusableOutputStatus(TaskNodeStatus status) {
+        return status == TaskNodeStatus.SUCCESS || status == TaskNodeStatus.SUCCESS_DEGRADED;
     }
 
     private String buildEventStreamPath(Long taskId) {

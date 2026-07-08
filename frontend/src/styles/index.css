@@ -750,6 +750,11 @@ body {
   background: linear-gradient(180deg, var(--app-freeze-fcfffd) 0%, var(--app-freeze-eefaf3) 100%);
 }
 
+.dag-node-pill-success_degraded {
+  border-color: var(--app-freeze-ebd08f);
+  background: linear-gradient(180deg, var(--app-freeze-fffefb) 0%, var(--app-freeze-fff8e8) 100%);
+}
+
 .dag-node-pill-failed {
   border-color: var(--app-freeze-e0aba1);
   background: linear-gradient(180deg, var(--app-freeze-fffefd) 0%, var(--app-freeze-fff1ed) 100%);

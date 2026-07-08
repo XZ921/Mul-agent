@@ -382,4 +382,41 @@ describe('taskEventReducer', () => {
     expect(nextState.task?.completedNodes).toBe(1)
     expect(nextState.nodes[0]?.status).toBe('COMPENSATED')
   })
+
+  it('counts success degraded writer nodes as completed and unlocks report viewing', () => {
+    const hydrated = taskEventReducer(createInitialTaskEventRuntimeState(), {
+      type: 'hydrate',
+      task: buildFixtureTask({ completedNodes: 0, canViewReport: false }),
+      nodes: [
+        buildFixtureNode({
+          nodeName: 'write_report',
+          displayName: '生成分析报告',
+          agentType: 'WRITER',
+          status: 'RUNNING',
+          completedAt: null,
+        }),
+      ],
+      logs: [],
+      report: null,
+    })
+
+    const nextState = taskEventReducer(hydrated, {
+      type: 'apply-event',
+      event: buildFixtureEvent({
+        cursor: '24-304',
+        eventType: 'NODE_STATUS',
+        nodeName: 'write_report',
+        payload: {
+          nodeName: 'write_report',
+          action: 'NODE_COMPLETED',
+          status: 'SUCCESS_DEGRADED' as never,
+          completedAt: '2026-06-03T18:06:00',
+        },
+      }),
+    })
+
+    expect(nextState.task?.completedNodes).toBe(1)
+    expect(nextState.task?.canViewReport).toBe(true)
+    expect(nextState.nodes[0]?.status).toBe('SUCCESS_DEGRADED')
+  })
 })

@@ -648,6 +648,163 @@ class DagExecutorTest {
     }
 
     @Test
+    void shouldPersistSuccessDegradedNodeAsTerminalResult() {
+        Long taskId = 507L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode collector = TaskNode.builder()
+                .id(44L)
+                .taskId(taskId)
+                .nodeName("collect_sources_docs")
+                .displayName("collect_sources_docs")
+                .agentType(AgentType.COLLECTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .maxRetries(0)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId))
+                .thenReturn(List.of(collector));
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new SuccessDegradedCollectorAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("degraded-terminal-test").build());
+
+        assertEquals(TaskNodeStatus.SUCCESS_DEGRADED, collector.getStatus());
+        assertTrue(collector.getOutputData().contains("HARD_DEADLINE_REACHED"));
+        assertEquals(AnalysisTaskStatus.SUCCESS, task.getStatus());
+    }
+
+    @Test
+    void shouldReleaseExtractorWhenCollectorQuorumIsReadyEvenIfDocsFailed() {
+        Long taskId = 1609L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+        TaskNode official = completedCollector(taskId, 901L, "collect_sources_01_01", "OFFICIAL",
+                List.of("https://www.linear.app", "https://www.linear.app/features"), TaskNodeStatus.SUCCESS, true);
+        TaskNode docs = completedCollector(taskId, 902L, "collect_sources_01_02", "DOCS",
+                List.of("https://linear.app/docs"), TaskNodeStatus.FAILED, false);
+        TaskNode pricing = completedCollector(taskId, 903L, "collect_sources_01_03", "PRICING",
+                List.of("https://www.linear.app/pricing"), TaskNodeStatus.SUCCESS, true);
+        TaskNode review = completedCollector(taskId, 904L, "collect_sources_01_04", "REVIEW",
+                List.of("https://www.g2.com/products/linear/reviews", "https://www.capterra.com/p/linear"),
+                TaskNodeStatus.SUCCESS_DEGRADED, true);
+        TaskNode extractor = TaskNode.builder()
+                .id(905L)
+                .taskId(taskId)
+                .nodeName("extract_schema")
+                .displayName("extract_schema")
+                .agentType(AgentType.EXTRACTOR)
+                .dependsOn("""
+                        ["collect_sources_01_01","collect_sources_01_02","collect_sources_01_03","collect_sources_01_04"]
+                        """.trim())
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(4)
+                .build();
+        List<TaskNode> nodes = List.of(official, docs, pricing, review, extractor);
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(nodes);
+        when(nodeRepository.findById(any())).thenAnswer(invocation -> {
+            Long nodeId = invocation.getArgument(0);
+            return nodes.stream().filter(node -> node.getId().equals(nodeId)).findFirst();
+        });
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AgentContext context = AgentContext.builder().taskId(taskId).taskName("collector-quorum-test").build();
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new QuorumAwareExtractorAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        executor.execute(taskId, context);
+
+        assertEquals(TaskNodeStatus.SUCCESS, extractor.getStatus());
+        assertTrue(context.getSharedOutput("collector_evidence_readiness").contains("STAGE1_COLLECTOR_QUORUM_READY"));
+        assertTrue(context.getSharedOutput("collector_evidence_readiness").contains("DOCS"));
+    }
+
+    @Test
+    void shouldKeepExtractorPendingWhenCollectorQuorumSeesRunningNode() {
+        Long taskId = 1610L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+        TaskNode official = completedCollector(taskId, 911L, "collect_sources_01_01", "OFFICIAL",
+                List.of("https://www.linear.app", "https://www.linear.app/features"), TaskNodeStatus.SUCCESS, true);
+        TaskNode docs = completedCollector(taskId, 912L, "collect_sources_01_02", "DOCS",
+                List.of(), TaskNodeStatus.RUNNING, false);
+        TaskNode pricing = completedCollector(taskId, 913L, "collect_sources_01_03", "PRICING",
+                List.of("https://www.linear.app/pricing"), TaskNodeStatus.SUCCESS, true);
+        TaskNode review = completedCollector(taskId, 914L, "collect_sources_01_04", "REVIEW",
+                List.of("https://www.g2.com/products/linear/reviews", "https://www.capterra.com/p/linear"),
+                TaskNodeStatus.SUCCESS, true);
+        TaskNode extractor = TaskNode.builder()
+                .id(915L)
+                .taskId(taskId)
+                .nodeName("extract_schema")
+                .displayName("extract_schema")
+                .agentType(AgentType.EXTRACTOR)
+                .dependsOn("""
+                        ["collect_sources_01_01","collect_sources_01_02","collect_sources_01_03","collect_sources_01_04"]
+                        """.trim())
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(4)
+                .build();
+        List<TaskNode> nodes = List.of(official, docs, pricing, review, extractor);
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(nodes);
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new QuorumAwareExtractorAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("collector-running-quorum-test").build());
+
+        assertEquals(TaskNodeStatus.PENDING, extractor.getStatus());
+        assertEquals(AnalysisTaskStatus.RUNNING, task.getStatus());
+    }
+
+    @Test
     void should_fail_node_when_capability_is_missing() {
         Long taskId = 909L;
         AnalysisTask task = AnalysisTask.builder()
@@ -2147,6 +2304,51 @@ class DagExecutorTest {
         return new SpringAgentCapabilityRegistry(agents);
     }
 
+    private static TaskNode completedCollector(Long taskId,
+                                               Long nodeId,
+                                               String nodeName,
+                                               String sourceType,
+                                               List<String> sourceUrls,
+                                               TaskNodeStatus status,
+                                               boolean readyForQuorum) {
+        return TaskNode.builder()
+                .id(nodeId)
+                .taskId(taskId)
+                .nodeName(nodeName)
+                .displayName(nodeName)
+                .agentType(AgentType.COLLECTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(status)
+                .executionOrder(collectorExecutionOrder(sourceType))
+                .outputData("""
+                        {
+                          "sourceType": "%s",
+                          "readyForQuorum": %s,
+                          "sourceUrls": %s,
+                          "degradationReasons": %s
+                        }
+                        """.formatted(
+                        sourceType,
+                        readyForQuorum,
+                        sourceUrls.stream().map(value -> "\"" + value + "\"").toList(),
+                        status == TaskNodeStatus.SUCCESS_DEGRADED || status == TaskNodeStatus.FAILED
+                                ? "[\"HARD_DEADLINE_REACHED\"]"
+                                : "[]"))
+                .build();
+    }
+
+    private static int collectorExecutionOrder(String sourceType) {
+        return switch (sourceType) {
+            case "OFFICIAL" -> 0;
+            case "DOCS" -> 1;
+            case "PRICING" -> 2;
+            case "REVIEW" -> 3;
+            default -> 0;
+        };
+    }
+
     private static final class StopTaskDuringExecutionCollectorAgent implements Agent {
 
         private final AnalysisTask task;
@@ -2397,6 +2599,57 @@ class DagExecutorTest {
             return AgentResult.builder()
                     .status(TaskNodeStatus.SUCCESS)
                     .outputData("{\"reviewStage\":\"final\",\"passed\":true,\"requiresHumanIntervention\":false}")
+                    .build();
+        }
+    }
+
+    private static final class SuccessDegradedCollectorAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.COLLECTOR;
+        }
+
+        @Override
+        public String getName() {
+            return "success-degraded-collector";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS_DEGRADED)
+                    .outputData("""
+                            {
+                              "sourceUrls":["https://docs.example.com/reference"],
+                              "degradationReasons":["HARD_DEADLINE_REACHED"]
+                            }
+                            """)
+                    .build();
+        }
+    }
+
+    private static final class QuorumAwareExtractorAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.EXTRACTOR;
+        }
+
+        @Override
+        public String getName() {
+            return "quorum-aware-extractor";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            String readiness = context.getSharedOutput("collector_evidence_readiness");
+            return AgentResult.builder()
+                    .status(readiness == null || !readiness.contains("STAGE1_COLLECTOR_QUORUM_READY")
+                            ? TaskNodeStatus.FAILED
+                            : TaskNodeStatus.SUCCESS)
+                    .outputData("{\"sourceUrls\":[\"https://www.linear.app\"]}")
+                    .errorMessage(readiness == null ? "missing collector evidence readiness" : null)
                     .build();
         }
     }

@@ -164,7 +164,9 @@ public class ReportService {
                 .qualityIssues(issues)
                 .initialReview(initialReview)
                 .revisionPlan(revisionPlan)
-                .rewriteApplied(rewriteNode != null && rewriteNode.getStatus() == TaskNodeStatus.SUCCESS)
+                .rewriteApplied(rewriteNode != null
+                        && (rewriteNode.getStatus() == TaskNodeStatus.SUCCESS
+                        || rewriteNode.getStatus() == TaskNodeStatus.SUCCESS_DEGRADED))
                 .finalReview(finalReview)
                 .evidenceCount(report.getEvidenceCount())
                 .evidences(evidenceInfos)
@@ -1041,6 +1043,7 @@ public class ReportService {
                 case RUNNING -> "执行中";
                 case PAUSED -> "已暂停";
                 case SUCCESS -> "已完成";
+                case SUCCESS_DEGRADED -> "降级完成";
                 case FAILED -> "失败";
                 case SKIPPED -> "已跳过";
             };

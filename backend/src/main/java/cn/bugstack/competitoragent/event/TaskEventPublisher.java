@@ -150,6 +150,7 @@ public class TaskEventPublisher {
             case RUNNING -> "节点正在执行";
             case FAILED -> "节点执行失败";
             case SUCCESS -> "节点执行成功";
+            case SUCCESS_DEGRADED -> "节点降级成功";
             case SKIPPED -> "节点已跳过";
             case PAUSED -> "节点已暂停";
             case PENDING -> "节点等待编排";

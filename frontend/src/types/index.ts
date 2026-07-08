@@ -18,6 +18,7 @@ export type NodeStatus =
   | 'COMPENSATED'
   | 'PAUSED'
   | 'SUCCESS'
+  | 'SUCCESS_DEGRADED'
   | 'FAILED'
   | 'SKIPPED'
 

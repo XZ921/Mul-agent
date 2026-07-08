@@ -172,6 +172,35 @@ class TaskNodeViewAssemblerTest {
         });
     }
 
+    @Test
+    void shouldExposeSuccessDegradedStatusSummaryAndDegradationReason() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(60L)
+                .status(AnalysisTaskStatus.RUNNING)
+                .build();
+        TaskNode node = node("collect_sources_docs", AgentType.COLLECTOR, TaskNodeStatus.SUCCESS_DEGRADED, 1);
+        node.setOutputData("""
+                {
+                  "sourceUrls": ["https://docs.example.com/reference"],
+                  "searchExecutionTrace": {
+                    "degradationReason": "HARD_DEADLINE_REACHED"
+                  },
+                  "selectedTargets": [
+                    {
+                      "url": "https://docs.example.com/reference"
+                    }
+                  ],
+                  "successCollected": 1,
+                  "totalCollected": 1
+                }
+                """);
+
+        TaskNodeResponse response = assembler.toNodeResponse(task, node, List.of(node));
+
+        assertThat(response.getStatusSummary()).isEqualTo("节点降级成功");
+        assertThat(response.getOutputSummary()).contains("降级原因=HARD_DEADLINE_REACHED");
+    }
+
     private TaskNode node(String nodeName, AgentType agentType, TaskNodeStatus status, int executionOrder) {
         return TaskNode.builder()
                 .taskId(56L)

@@ -122,7 +122,9 @@ public class NodeExecutionRecoveryPolicy {
                 .anyMatch(node -> node.getStatus() == TaskNodeStatus.FAILED || node.getStatus() == TaskNodeStatus.SKIPPED);
         boolean allRequiredSucceeded = nodes.stream()
                 .filter(TaskNode::isRequired)
-                .allMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS || node.getStatus() == TaskNodeStatus.COMPENSATED);
+                .allMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS
+                        || node.getStatus() == TaskNodeStatus.SUCCESS_DEGRADED
+                        || node.getStatus() == TaskNodeStatus.COMPENSATED);
         boolean initialReviewPresent = nodes.stream().anyMatch(node -> "quality_check".equals(node.getNodeName()));
         boolean initialReviewPassed = nodes.stream()
                 .filter(node -> "quality_check".equals(node.getNodeName()))
@@ -193,14 +195,16 @@ public class NodeExecutionRecoveryPolicy {
 
     /**
      * 任务恢复 / 续跑时的节点复位策略。
-     * SUCCESS / COMPENSATED 节点保留检查点，其余节点回到待编排状态。
+     * SUCCESS / SUCCESS_DEGRADED / COMPENSATED 节点保留检查点，其余节点回到待编排状态。
      */
     public boolean resetNodesForResume(List<TaskNode> nodes, boolean includePausedNodes) {
         if (nodes == null || nodes.isEmpty()) {
             return false;
         }
         for (TaskNode node : nodes) {
-            if (node.getStatus() == TaskNodeStatus.SUCCESS || node.getStatus() == TaskNodeStatus.COMPENSATED) {
+            if (node.getStatus() == TaskNodeStatus.SUCCESS
+                    || node.getStatus() == TaskNodeStatus.SUCCESS_DEGRADED
+                    || node.getStatus() == TaskNodeStatus.COMPENSATED) {
                 continue;
             }
             if (!includePausedNodes && node.getStatus() == TaskNodeStatus.PAUSED) {
@@ -214,7 +218,7 @@ public class NodeExecutionRecoveryPolicy {
     /**
      * 服务重启恢复时，只回滚可能被中断的活跃节点。
      * READY / DISPATCHED / RUNNING 会回到待编排状态，
-     * WAITING_INTERVENTION 和 SUCCESS / COMPENSATED 会被保留。
+     * WAITING_INTERVENTION 和 SUCCESS / SUCCESS_DEGRADED / COMPENSATED 会被保留。
      */
     public boolean resetInterruptedNodes(List<TaskNode> nodes) {
         if (nodes == null || nodes.isEmpty()) {
@@ -395,6 +399,7 @@ public class NodeExecutionRecoveryPolicy {
 
     private boolean isTerminalStatus(TaskNodeStatus status) {
         return status == TaskNodeStatus.SUCCESS
+                || status == TaskNodeStatus.SUCCESS_DEGRADED
                 || status == TaskNodeStatus.FAILED
                 || status == TaskNodeStatus.SKIPPED
                 || status == TaskNodeStatus.COMPENSATED;

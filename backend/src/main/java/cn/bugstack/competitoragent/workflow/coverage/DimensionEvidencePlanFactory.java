@@ -33,7 +33,13 @@ public class DimensionEvidencePlanFactory {
                 if (!shouldPlan(field)) {
                     continue;
                 }
-                List<FieldEvidenceQuery> queries = queryPlanner.plan(competitorName, field, preferredDomains);
+                boolean criticalForFirstReport = DimensionEvidencePlan.isFirstReportCriticalField(field.getField());
+                List<FieldEvidenceQuery> queries = queryPlanner.plan(competitorName, field, preferredDomains).stream()
+                        .map(query -> query == null ? null : query.toBuilder()
+                                .criticalForFirstReport(criticalForFirstReport)
+                                .build())
+                        .filter(java.util.Objects::nonNull)
+                        .toList();
                 if (queries.isEmpty()) {
                     continue;
                 }
@@ -42,6 +48,7 @@ public class DimensionEvidencePlanFactory {
                         .status(FieldEvidenceCoverageStatus.NOT_STARTED)
                         .minimumAttemptedPaths(field.getMinimumAttemptedPaths())
                         .minDistinctEvidenceCount(field.getMinDistinctEvidenceCount())
+                        .criticalForFirstReport(criticalForFirstReport)
                         .evidencePaths(field.getEvidencePaths() == null ? List.of() : field.getEvidencePaths())
                         .attemptedPaths(List.of())
                         .completedPaths(List.of())

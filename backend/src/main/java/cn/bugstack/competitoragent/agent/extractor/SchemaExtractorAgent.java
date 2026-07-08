@@ -350,6 +350,12 @@ public class SchemaExtractorAgent extends BaseAgent {
                 competitorInput == null ? List.of() : competitorInput.getStructuredEvidence());
         List<ExtractorEvidenceInput> readableEvidenceInputs = normalizeEvidenceInputs(
                 competitorInput == null ? List.of() : competitorInput.getReadableEvidence());
+        /*
+         * collector quorum 的缺口是任务级审计事实，不一定挂在某条 EvidenceSource 上。
+         * 这里把 Provider 传入的 issueFlags 合并进抽取结果，保证 Analyzer / Writer 能继承降级说明，
+         * 但仍只使用 evidenceCatalog 中的正式证据作为正文输入，避免用审计 JSON 替代真实证据。
+         */
+        List<String> inputIssueFlags = collectInputIssueFlags(competitorInput, evidenceCatalog);
         Map<String, String> promptVariables = new LinkedHashMap<>();
         CoverageContract coverageContract = coverageContractProvider == null ? null : coverageContractProvider.resolve(context);
         promptVariables.put("competitorName", competitorName);
@@ -357,7 +363,7 @@ public class SchemaExtractorAgent extends BaseAgent {
         promptVariables.put("fieldExtractionGuidance", buildFieldExtractionGuidance(coverageContract));
         promptVariables.put("evidenceCatalog", buildEvidenceCatalog(evidenceCatalog));
         promptVariables.put("structuredEvidence", buildStructuredEvidence(structuredEvidenceInputs));
-        promptVariables.put("qualitySignalGuidance", buildQualitySignalGuidance(evidenceCatalog));
+        promptVariables.put("qualitySignalGuidance", buildQualitySignalGuidance(evidenceCatalog, inputIssueFlags));
         promptVariables.put("readableContent", buildReadableContent(readableEvidenceInputs));
         // 迁移期继续保留 collectedContent，但内容直接来自 extractor 内部输入投影，不再回转旧统一视图。
         promptVariables.put("collectedContent", buildCollectedContent(evidenceCatalog));
@@ -369,6 +375,7 @@ public class SchemaExtractorAgent extends BaseAgent {
                 competitorName,
                 evidenceCatalog,
                 prompt,
+                inputIssueFlags,
                 false
         );
         if (countExtractedFields(firstPass.schema()) > 0 || !hasReadableEvidenceContent(readableEvidenceInputs)) {
@@ -382,6 +389,7 @@ public class SchemaExtractorAgent extends BaseAgent {
                 competitorName,
                 evidenceCatalog,
                 prompt,
+                inputIssueFlags,
                 true
         );
     }
@@ -392,6 +400,7 @@ public class SchemaExtractorAgent extends BaseAgent {
     private NormalizedSchema invokeExtractorOnce(String competitorName,
                                                  List<ExtractorEvidenceInput> evidenceInputs,
                                                  String prompt,
+                                                 List<String> inputIssueFlags,
                                                  boolean strictBusinessRetry)
             throws LlmException, JsonProcessingException {
         JsonProcessingException lastParseException = null;
@@ -415,7 +424,9 @@ public class SchemaExtractorAgent extends BaseAgent {
                     log.warn("extractor recovered non-object json root, competitor={}, attempt={}/{}",
                             competitorName, attempt, EXTRACT_JSON_MAX_ATTEMPTS);
                 }
-                return normalizeSchema(parsedRoot.objectNode(), evidenceInputs, parsedRoot.issueFlags());
+                LinkedHashSet<String> inheritedIssueFlags = new LinkedHashSet<>(inputIssueFlags == null ? List.of() : inputIssueFlags);
+                inheritedIssueFlags.addAll(parsedRoot.issueFlags());
+                return normalizeSchema(parsedRoot.objectNode(), evidenceInputs, new ArrayList<>(inheritedIssueFlags));
             } catch (JsonProcessingException e) {
                 lastParseException = e;
                 log.warn("extractor json parse failed, competitor={}, attempt={}/{}",
@@ -1014,9 +1025,14 @@ public class SchemaExtractorAgent extends BaseAgent {
      * 把 qualitySignals / issueFlags 翻译成明确的提取指令，
      * 减少模型看见信号名称却不知道该如何处理的歧义。
      */
-    private String buildQualitySignalGuidance(List<ExtractorEvidenceInput> evidences) {
+    private String buildQualitySignalGuidance(List<ExtractorEvidenceInput> evidences, List<String> inputIssueFlags) {
         LinkedHashSet<String> signals = new LinkedHashSet<>();
         LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
+        for (String inputIssueFlag : inputIssueFlags == null ? List.<String>of() : inputIssueFlags) {
+            if (inputIssueFlag != null && !inputIssueFlag.isBlank()) {
+                issueFlags.add(inputIssueFlag.trim());
+            }
+        }
         for (ExtractorEvidenceInput evidence : evidences == null ? List.<ExtractorEvidenceInput>of() : evidences) {
             if (evidence == null) {
                 continue;
@@ -1039,6 +1055,10 @@ public class SchemaExtractorAgent extends BaseAgent {
             }
         }
         for (String issueFlag : issueFlags) {
+            if (issueFlag != null && issueFlag.startsWith("COLLECTOR_FAMILY_MISSING_")) {
+                guidance.add(issueFlag + ": 对应采集 family 未成功交接，只能基于已交接证据保守抽取，不能补编缺失来源。");
+                continue;
+            }
             switch (issueFlag) {
                 case "CONTENT_GAP", "COLLECT_FAILED", "NO_USABLE_CONTENT" ->
                         guidance.add(issueFlag + ": 该证据存在采集缺口，不要从缺失正文中编造字段。");
@@ -1048,6 +1068,29 @@ public class SchemaExtractorAgent extends BaseAgent {
         return guidance.isEmpty()
                 ? "无显式质量信号。按来源、正文和结构块内容谨慎提取。"
                 : String.join("\n", guidance);
+    }
+
+    private List<String> collectInputIssueFlags(ExtractorCompetitorInput competitorInput,
+                                                List<ExtractorEvidenceInput> evidenceInputs) {
+        LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
+        if (competitorInput != null && competitorInput.getIssueFlags() != null) {
+            for (String issueFlag : competitorInput.getIssueFlags()) {
+                if (issueFlag != null && !issueFlag.isBlank()) {
+                    issueFlags.add(issueFlag.trim());
+                }
+            }
+        }
+        for (ExtractorEvidenceInput evidenceInput : evidenceInputs == null ? List.<ExtractorEvidenceInput>of() : evidenceInputs) {
+            if (evidenceInput == null || evidenceInput.getIssueFlags() == null) {
+                continue;
+            }
+            for (String issueFlag : evidenceInput.getIssueFlags()) {
+                if (issueFlag != null && !issueFlag.isBlank()) {
+                    issueFlags.add(issueFlag.trim());
+                }
+            }
+        }
+        return new ArrayList<>(issueFlags);
     }
 
     /**

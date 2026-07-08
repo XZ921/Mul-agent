@@ -121,6 +121,48 @@ class NodeExecutionRecoveryPolicyTest {
     }
 
     @Test
+    void shouldTreatSuccessDegradedAsTerminalCheckpointDuringResume() {
+        TaskNode degradedCollector = TaskNode.builder()
+                .taskId(2L)
+                .nodeName("collect_sources_docs")
+                .displayName("collect_sources_docs")
+                .agentType(AgentType.COLLECTOR)
+                .status(TaskNodeStatus.SUCCESS_DEGRADED)
+                .outputData("""
+                        {
+                          "sourceUrls":["https://docs.example.com"],
+                          "degradationReasons":["HARD_DEADLINE_REACHED"]
+                        }
+                        """)
+                .retryCount(1)
+                .build();
+        TaskNode failedAnalyzer = TaskNode.builder()
+                .taskId(2L)
+                .nodeName("analyze_competitors")
+                .displayName("analyze_competitors")
+                .agentType(AgentType.ANALYZER)
+                .status(TaskNodeStatus.FAILED)
+                .outputData("{\"failed\":true}")
+                .errorMessage("failed")
+                .retryCount(3)
+                .build();
+
+        boolean recoverable = recoveryPolicy.resetNodesForResume(
+                List.of(degradedCollector, failedAnalyzer),
+                true
+        );
+
+        assertTrue(recoverable);
+        assertEquals(TaskNodeStatus.SUCCESS_DEGRADED, degradedCollector.getStatus());
+        assertTrue(degradedCollector.getOutputData().contains("HARD_DEADLINE_REACHED"));
+
+        assertEquals(TaskNodeStatus.PENDING, failedAnalyzer.getStatus());
+        assertNull(failedAnalyzer.getOutputData());
+        assertNull(failedAnalyzer.getErrorMessage());
+        assertEquals(0, failedAnalyzer.getRetryCount());
+    }
+
+    @Test
     void shouldKeepCollectorSearchAuditCheckpointWhenResettingInterruptedNodes() {
         TaskNode runningCollector = TaskNode.builder()
                 .taskId(2L)

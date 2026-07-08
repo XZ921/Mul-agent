@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.extractor.input;
 
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.task.SharedNodeOutputEnvelope;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +47,7 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
     @Override
     public ExtractorInputPackage provide(AgentContext context) {
         List<ExtractorEvidenceInput> allInputs = extractorEvidenceSourcePort.load(context);
+        CollectorReadinessAudit collectorReadinessAudit = readCollectorReadinessAudit(context);
         List<ExtractorEvidenceInput> usableInputs = new ArrayList<>();
         List<ExtractorEvidenceInput> skippedInputs = new ArrayList<>();
         for (ExtractorEvidenceInput input : allInputs == null ? List.<ExtractorEvidenceInput>of() : allInputs) {
@@ -71,8 +73,8 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
                 .schemaId(schemaRuntimeConfig.schemaId())
                 .dimensions(schemaRuntimeConfig.dimensions())
                 .inputSource("REPOSITORY_BACKED_PORT")
-                .auditRefs(buildAuditRefs(context))
-                .competitors(buildCompetitorInputs(usableByCompetitor, skippedByCompetitor))
+                .auditRefs(buildAuditRefs(context, collectorReadinessAudit))
+                .competitors(buildCompetitorInputs(usableByCompetitor, skippedByCompetitor, collectorReadinessAudit.issueFlags()))
                 .build();
     }
 
@@ -89,7 +91,8 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
     }
 
     private List<ExtractorCompetitorInput> buildCompetitorInputs(Map<String, List<ExtractorEvidenceInput>> usableByCompetitor,
-                                                                 Map<String, List<ExtractorEvidenceInput>> skippedByCompetitor) {
+                                                                 Map<String, List<ExtractorEvidenceInput>> skippedByCompetitor,
+                                                                 List<String> collectorReadinessIssueFlags) {
         LinkedHashSet<String> competitorNames = new LinkedHashSet<>();
         competitorNames.addAll(usableByCompetitor.keySet());
         competitorNames.addAll(skippedByCompetitor.keySet());
@@ -112,7 +115,7 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
                     .readableEvidence(filterReadableEvidence(evidenceCatalog))
                     .skippedEvidence(traceableSkippedInputs)
                     .sourceUrls(collectSourceUrls(evidenceCatalog))
-                    .issueFlags(collectIssueFlags(evidenceCatalog, traceableSkippedInputs))
+                    .issueFlags(collectIssueFlags(evidenceCatalog, traceableSkippedInputs, collectorReadinessIssueFlags))
                     .budget(buildBudget(selection.usedPromptEvidenceChars(), selection.truncated()))
                     .build());
         }
@@ -411,7 +414,9 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
         return new ArrayList<>(sourceUrls);
     }
 
-    private List<String> collectIssueFlags(List<ExtractorEvidenceInput> evidences, List<ExtractorEvidenceInput> skippedEvidence) {
+    private List<String> collectIssueFlags(List<ExtractorEvidenceInput> evidences,
+                                           List<ExtractorEvidenceInput> skippedEvidence,
+                                           List<String> collectorReadinessIssueFlags) {
         LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
         for (ExtractorEvidenceInput evidence : evidences == null ? List.<ExtractorEvidenceInput>of() : evidences) {
             if (evidence != null && evidence.getIssueFlags() != null) {
@@ -424,6 +429,11 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
                 if (skippedInput != null && skippedInput.getIssueFlags() != null) {
                     issueFlags.addAll(skippedInput.getIssueFlags());
                 }
+            }
+        }
+        for (String issueFlag : collectorReadinessIssueFlags == null ? List.<String>of() : collectorReadinessIssueFlags) {
+            if (hasText(issueFlag)) {
+                issueFlags.add(issueFlag.trim());
             }
         }
         return new ArrayList<>(issueFlags);
@@ -441,7 +451,7 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
      * auditRefs 只提供来源与可用性诊断，不允许反向替代 extractor 正文输入。
      * 这样 replay / cache 看得到“为什么能或不能解释这轮输入”，但不会把 shared envelope 误当成正式正文来源。
      */
-    private Map<String, Object> buildAuditRefs(AgentContext context) {
+    private Map<String, Object> buildAuditRefs(AgentContext context, CollectorReadinessAudit collectorReadinessAudit) {
         int collectorEnvelopeCount = 0;
         LinkedHashSet<String> projectionTypes = new LinkedHashSet<>();
         for (Map.Entry<String, SharedNodeOutputEnvelope> entry :
@@ -464,18 +474,87 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
         String collectionAuditAvailabilityReason = collectorEnvelopeCount == 0
                 ? "COLLECTOR_SHARED_ENVELOPE_MISSING"
                 : "COLLECTOR_SHARED_ENVELOPE_READY";
-        return Map.of(
-                "collectorEnvelopeCount", collectorEnvelopeCount,
-                "projectionTypes", new ArrayList<>(projectionTypes),
-                "searchAudit", Map.of(
-                        "available", hasSearchProjection,
-                        "availabilityReason", searchAuditAvailabilityReason,
-                        "usage", "用于解释来源发现与采集路径，不直接替代 extractor 正文输入"),
-                "collectionAudit", Map.of(
-                        "available", collectorEnvelopeCount > 0,
-                        "availabilityReason", collectionAuditAvailabilityReason,
-                        "usage", "用于解释采集失败、降级与 skippedEvidence 来源")
-        );
+        Map<String, Object> auditRefs = new LinkedHashMap<>();
+        auditRefs.put("collectorEnvelopeCount", collectorEnvelopeCount);
+        auditRefs.put("projectionTypes", new ArrayList<>(projectionTypes));
+        auditRefs.put("searchAudit", Map.of(
+                "available", hasSearchProjection,
+                "availabilityReason", searchAuditAvailabilityReason,
+                "usage", "用于解释来源发现与采集路径，不直接替代 extractor 正文输入"));
+        auditRefs.put("collectionAudit", Map.of(
+                "available", collectorEnvelopeCount > 0,
+                "availabilityReason", collectionAuditAvailabilityReason,
+                "usage", "用于解释采集失败、降级与 skippedEvidence 来源"));
+        if (collectorReadinessAudit != null && !collectorReadinessAudit.payload().isEmpty()) {
+            auditRefs.put("collectorEvidenceReadiness", collectorReadinessAudit.payload());
+        }
+        return auditRefs;
+    }
+
+    /**
+     * DAG quorum 审计属于“能否进入抽取”的任务级事实。
+     * Provider 只把它转换成轻量 auditRefs 与 issueFlags，不能把 readiness 中的 URL 当作正文证据替代 repository 输入。
+     */
+    private CollectorReadinessAudit readCollectorReadinessAudit(AgentContext context) {
+        String rawReadiness = context == null ? null : context.getSharedOutput("collector_evidence_readiness");
+        if (!hasText(rawReadiness)) {
+            return CollectorReadinessAudit.empty();
+        }
+        try {
+            JsonNode readiness = objectMapper.readTree(rawReadiness);
+            Map<String, Object> payload = objectMapper.convertValue(
+                    readiness,
+                    new TypeReference<Map<String, Object>>() {
+                    });
+            return new CollectorReadinessAudit(
+                    payload == null ? Map.of() : payload,
+                    buildCollectorReadinessIssueFlags(readiness));
+        } catch (Exception e) {
+            log.warn("provider failed to parse collector evidence readiness", e);
+            return new CollectorReadinessAudit(
+                    Map.of("available", false, "parseError", firstNonBlank(e.getMessage(), "UNKNOWN")),
+                    List.of("COLLECTOR_READINESS_AUDIT_PARSE_FAILED"));
+        }
+    }
+
+    private List<String> buildCollectorReadinessIssueFlags(JsonNode readiness) {
+        LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
+        if (readiness == null || readiness.isMissingNode() || readiness.isNull()) {
+            return List.of();
+        }
+        String reason = readiness.path("reason").asText(null);
+        if (hasText(reason)) {
+            issueFlags.add(reason.trim());
+        }
+        if (readiness.path("degraded").asBoolean(false)) {
+            issueFlags.add("COLLECTOR_QUORUM_DEGRADED");
+        }
+        for (String family : readStringList(readiness.path("missingFamilies"))) {
+            issueFlags.add("COLLECTOR_FAMILY_MISSING_" + normalizeIssueToken(family));
+        }
+        issueFlags.addAll(readStringList(readiness.path("auditFlags")));
+        return new ArrayList<>(issueFlags);
+    }
+
+    private List<String> readStringList(JsonNode node) {
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        for (JsonNode item : node) {
+            String value = item == null ? null : item.asText(null);
+            if (hasText(value)) {
+                values.add(value.trim());
+            }
+        }
+        return new ArrayList<>(values);
+    }
+
+    private String normalizeIssueToken(String value) {
+        if (!hasText(value)) {
+            return "UNKNOWN";
+        }
+        return value.trim().toUpperCase().replaceAll("[^A-Z0-9]+", "_");
     }
 
     private SchemaRuntimeConfig readSchemaRuntimeConfig(String currentNodeConfig) {
@@ -520,5 +599,12 @@ public class RepositoryExtractorInputProvider implements ExtractorInputProvider 
                                    List<ExtractorEvidenceInput> skippedEvidence,
                                    int usedPromptEvidenceChars,
                                    boolean truncated) {
+    }
+
+    private record CollectorReadinessAudit(Map<String, Object> payload, List<String> issueFlags) {
+
+        private static CollectorReadinessAudit empty() {
+            return new CollectorReadinessAudit(Map.of(), List.of());
+        }
     }
 }

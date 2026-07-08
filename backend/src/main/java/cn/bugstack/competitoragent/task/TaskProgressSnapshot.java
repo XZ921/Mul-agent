@@ -109,7 +109,13 @@ public class TaskProgressSnapshot {
     }
 
     private static boolean isCompletedStatus(TaskNodeStatus status) {
+        /*
+         * SUCCESS_DEGRADED 代表节点已经产出可交接结果，
+         * 因此它必须像 SUCCESS 一样计入 completedNodes，
+         * 同时不能继续被当成 active node 占用进度视图。
+         */
         return status == TaskNodeStatus.SUCCESS
+                || status == TaskNodeStatus.SUCCESS_DEGRADED
                 || status == TaskNodeStatus.FAILED
                 || status == TaskNodeStatus.SKIPPED
                 || status == TaskNodeStatus.COMPENSATED;

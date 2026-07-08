@@ -230,6 +230,7 @@ public class SourceFamilyDirectDiscoveryPlanner {
                                            String reason,
                                            List<String> sourceUrls) {
         String familyRole = searchPolicyResolver.resolveSourceFamilyRole(familyKey).name();
+        boolean templateFallback = isTemplateFallbackDiscoveryMethod(discoveryMethod);
         return SourceCandidate.builder()
                 .url(url)
                 .title(buildTitle(competitorName, sourceType, url))
@@ -239,12 +240,25 @@ public class SourceFamilyDirectDiscoveryPlanner {
                 .domain(extractHost(url))
                 .sourceFamilyKey(familyKey)
                 .sourceFamilyRole(familyRole)
+                .templateFallback(templateFallback)
+                .fallbackReason(templateFallback ? resolveTemplateFallbackReason(sourceType) : null)
                 .sourceUrls(sourceUrls)
                 .qualitySignals(buildQualitySignals(url, sourceType))
                 .relevanceScore(0.95D)
                 .freshnessScore(0.60D)
                 .qualityScore(0.92D)
                 .build();
+    }
+
+    private boolean isTemplateFallbackDiscoveryMethod(String discoveryMethod) {
+        return "FAMILY_TEMPLATE".equalsIgnoreCase(discoveryMethod)
+                || "FAMILY_SUBDOMAIN_TEMPLATE".equalsIgnoreCase(discoveryMethod);
+    }
+
+    private String resolveTemplateFallbackReason(String sourceType) {
+        return "DOCS".equalsIgnoreCase(sourceType)
+                ? "no_discovered_docs_candidate"
+                : "no_discovered_candidate";
     }
 
     private List<String> buildQualitySignals(String url, String sourceType) {

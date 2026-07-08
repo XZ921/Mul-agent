@@ -251,6 +251,8 @@ function applyNodeStatusEvent(
     const nextOutputSummary =
       payload.action === 'NODE_RUNNING'
         ? '节点执行中，等待实时输出...'
+        : payload.action === 'NODE_COMPLETED' && payload.status === 'SUCCESS_DEGRADED'
+          ? node.outputSummary || '节点已按降级策略完成，可继续查看输出摘要。'
         : payload.action === 'NODE_COMPLETED'
           ? node.outputSummary || '节点已完成，可继续查看输出摘要。'
           : node.outputSummary
@@ -296,11 +298,14 @@ function applyNodeStatusEvent(
         activeNodeNames: nodes
           .filter((node) => node.status === 'RUNNING' || node.status === 'PAUSED')
           .map((node) => node.nodeName),
+        // 阶段 1 允许写作节点以“降级成功”方式交付可查看报告，
+        // 因此前端一旦收到该终态事件，就要立即放开报告入口，避免用户误判为“没有产物”。
         canViewReport:
           state.task.canViewReport
           || nodes.some(
             (node) =>
-              (node.nodeName === 'write_report' || node.nodeName === 'rewrite_report') && node.status === 'SUCCESS',
+              (node.nodeName === 'write_report' || node.nodeName === 'rewrite_report')
+              && (node.status === 'SUCCESS' || node.status === 'SUCCESS_DEGRADED'),
           ),
       }
     : null
@@ -844,5 +849,11 @@ function isEvidenceIssue(item: { type?: string | null; sourceUrls?: string[] | n
 }
 
 function isTerminalNodeStatus(status: TaskNodeInfo['status']) {
-  return status === 'SUCCESS' || status === 'FAILED' || status === 'COMPENSATED' || status === 'SKIPPED'
+  return (
+    status === 'SUCCESS'
+    || status === 'SUCCESS_DEGRADED'
+    || status === 'FAILED'
+    || status === 'COMPENSATED'
+    || status === 'SKIPPED'
+  )
 }

@@ -83,6 +83,71 @@ class HeuristicSourceDiscoveryServiceTest {
     }
 
     @Test
+    void shouldPreferSearchDiscoveredDocsAndKeepTemplateFallbackAudit() {
+        HeuristicSourceDiscoveryService airtableService = new HeuristicSourceDiscoveryService(
+                (competitorName, requestedScopes) -> List.of(SourceCandidate.builder()
+                        .url("https://support.airtable.com/docs")
+                        .title("Airtable Support Docs")
+                        .sourceType("DOCS")
+                        .discoveryMethod("SEARCH")
+                        .reason("search discovered docs")
+                        .domain("support.airtable.com")
+                        .publishedAt("2026-05-18")
+                        .relevanceScore(0.84)
+                        .freshnessScore(0.72)
+                        .qualityScore(0.88)
+                        .build()),
+                candidateRanker
+        );
+
+        List<SourcePlan> plans = airtableService.discover(
+                "Airtable",
+                List.of("https://www.airtable.com"),
+                List.of("DOCS")
+        );
+
+        SourcePlan docsPlan = plans.stream()
+                .filter(plan -> "DOCS".equals(plan.getSourceType()))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals("https://support.airtable.com/docs", docsPlan.getCandidates().get(0).getUrl());
+        assertTrue(docsPlan.getCandidates().get(0).getQualitySignals()
+                .contains("DOCS_SEARCH_DISCOVERED_OFFICIAL_ADJACENT"));
+        assertTrue(docsPlan.getCandidates().stream()
+                .filter(candidate -> "https://www.airtable.com/docs".equals(candidate.getUrl()))
+                .allMatch(candidate -> Boolean.TRUE.equals(candidate.getTemplateFallback())
+                        && "no_verified_docs_candidate".equals(candidate.getFallbackReason())
+                        && candidate.getSourceUrls().contains(candidate.getUrl())));
+    }
+
+    @Test
+    void shouldKeepTemplateFallbackCandidateWhenNoSearchDiscoveredDocsExists() {
+        HeuristicSourceDiscoveryService fallbackService = new HeuristicSourceDiscoveryService(
+                (competitorName, requestedScopes) -> List.of(),
+                candidateRanker
+        );
+
+        List<SourcePlan> plans = fallbackService.discover(
+                "Airtable",
+                List.of("https://www.airtable.com"),
+                List.of("DOCS")
+        );
+
+        SourceCandidate fallbackCandidate = plans.stream()
+                .filter(plan -> "DOCS".equals(plan.getSourceType()))
+                .flatMap(plan -> plan.getCandidates().stream())
+                .filter(candidate -> "https://www.airtable.com/docs".equals(candidate.getUrl()))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals("DOCS", fallbackCandidate.getSourceType());
+        assertTrue(Boolean.TRUE.equals(fallbackCandidate.getTemplateFallback()));
+        assertEquals("no_discovered_docs_candidate", fallbackCandidate.getFallbackReason());
+        assertTrue(fallbackCandidate.getSourceUrls().contains("https://www.airtable.com/docs"));
+    }
+
+    @Test
     void shouldDeduplicateRepeatedUrlsAndKeepHigherScore() {
         List<SourceCandidate> ranked = candidateRanker.rankAndDeduplicate(List.of(
                 SourceCandidate.builder()

@@ -1,0 +1,11 @@
+﻿{
+    "code":  10007,
+    "message":  "ä»»å¡åæ­¢å¤±è´¥ï¼åªææ§è¡ä¸­çä»»å¡æè½åæ­¢",
+    "data":  {
+                 "errorType":  "TASK_STOP_FAILED",
+                 "errorCode":  10007,
+                 "detail":  "ä»»å¡åæ­¢å¤±è´¥ï¼åªææ§è¡ä¸­çä»»å¡æè½åæ­¢ â Only running tasks can be stopped. Current status: STOPPED"
+             },
+    "timestamp":  "2026-07-08T16:06:55.125032300",
+    "traceId":  "82a15fd64ad045c9bac6305a1625e095"
+}

@@ -24,6 +24,12 @@ public class SourceCandidateRanker {
 
     private static final double UTILITY_PAGE_SCORE_CAP = 0.05D;
     private static final List<String> HIGH_PRIORITY_DISCOVERY_METHODS = List.of("SEARCH", "BROWSER", "BROWSER_PREVIEW");
+    private static final Set<String> TEMPLATE_FALLBACK_DISCOVERY_METHODS = Set.of(
+            "FAMILY_TEMPLATE",
+            "FAMILY_SUBDOMAIN_TEMPLATE",
+            "HEURISTIC_TEMPLATE",
+            "SEARCH_ROOT_TEMPLATE"
+    );
     private static final List<String> UTILITY_PAGE_SIGNALS = List.of(
             "/login", "signin", "sign-in", "log in",
             "/careers", "/jobs", "career", "job opening"
@@ -162,7 +168,10 @@ public class SourceCandidateRanker {
         double freshness = clamp(candidate.getFreshnessScore() > 0 ? candidate.getFreshnessScore() : inferFreshness(candidate.getPublishedAt()));
         double quality = clamp(candidate.getQualityScore() > 0 ? candidate.getQualityScore() : inferQuality(normalizedDomain, candidate.getDiscoveryMethod()));
         List<String> qualitySignals = resolveQualitySignals(candidate, normalizedDomain);
-        double total = applyQualitySignalBoost(round(relevance * 0.5 + freshness * 0.2 + quality * 0.3), qualitySignals);
+        double total = applyTemplateFallbackPenalty(
+                candidate,
+                applyQualitySignalBoost(round(relevance * 0.5 + freshness * 0.2 + quality * 0.3), qualitySignals)
+        );
         SourceSelectionReason decisionReason = resolveDecisionReason(candidate);
         SourceTrustTier trustTier = resolveTrustTier(candidate, normalizedDomain);
         List<String> rankingReasons = buildRankingReasons(candidate, normalizedDomain, trustTier, freshness);
@@ -186,6 +195,8 @@ public class SourceCandidateRanker {
                 .sourceFamilyRole(candidate.getSourceFamilyRole())
                 .providerKey(candidate.getProviderKey())
                 .providerRole(candidate.getProviderRole())
+                .templateFallback(resolveTemplateFallback(candidate))
+                .fallbackReason(resolveFallbackReason(candidate))
                 .sourceUrls(resolveSourceUrls(candidate))
                 .relevanceScore(round(relevance))
                 .freshnessScore(round(freshness))
@@ -440,6 +451,11 @@ public class SourceCandidateRanker {
                 || url.contains("/reference"))) {
             signals.add("DOCS_EXACT_PATH_HIT");
         }
+        if ("DOCS".equals(sourceType)
+                && isSearchDiscoveredCandidate(candidate)
+                && isOfficialAdjacentDocsEntry(domain, url, defaultText(candidate.getTitle()).toLowerCase(Locale.ROOT))) {
+            signals.add("DOCS_SEARCH_DISCOVERED_OFFICIAL_ADJACENT");
+        }
         if ("PRICING".equals(sourceType) && (url.contains("/pricing") || url.contains("/plans")
                 || url.contains("价格") || url.contains("定价"))) {
             signals.add("PRICING_HIGH_VALUE_PATH");
@@ -458,6 +474,67 @@ public class SourceCandidateRanker {
         return Math.min(1.0D, round(total + qualitySignals.size() * 0.08D));
     }
 
+    private double applyTemplateFallbackPenalty(SourceCandidate candidate, double total) {
+        if (!resolveTemplateFallback(candidate)) {
+            return total;
+        }
+        return Math.max(0.0D, round(total - 0.14D));
+    }
+
+    private boolean resolveTemplateFallback(SourceCandidate candidate) {
+        if (candidate == null) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(candidate.getTemplateFallback())) {
+            return true;
+        }
+        String method = defaultText(candidate.getDiscoveryMethod()).toUpperCase(Locale.ROOT);
+        return TEMPLATE_FALLBACK_DISCOVERY_METHODS.contains(method);
+    }
+
+    private String resolveFallbackReason(SourceCandidate candidate) {
+        if (candidate == null || !resolveTemplateFallback(candidate)) {
+            return candidate == null ? null : candidate.getFallbackReason();
+        }
+        if (StringUtils.hasText(candidate.getFallbackReason())) {
+            return candidate.getFallbackReason();
+        }
+        return "DOCS".equalsIgnoreCase(candidate.getSourceType())
+                ? "no_verified_docs_candidate"
+                : "template_candidate_low_trust_fallback";
+    }
+
+    private boolean isSearchDiscoveredCandidate(SourceCandidate candidate) {
+        String method = defaultText(candidate.getDiscoveryMethod()).toUpperCase(Locale.ROOT);
+        return HIGH_PRIORITY_DISCOVERY_METHODS.contains(method)
+                || "TAVILY_PHASE1_BOOTSTRAP".equals(method)
+                || "TAVILY_FIELD_EVIDENCE".equals(method)
+                || "HTTP_SEARCH".equals(method);
+    }
+
+    private boolean isOfficialAdjacentDocsEntry(String domain, String url, String title) {
+        String normalizedDomain = defaultText(domain).toLowerCase(Locale.ROOT);
+        String normalizedUrl = defaultText(url).toLowerCase(Locale.ROOT);
+        String normalizedTitle = defaultText(title).toLowerCase(Locale.ROOT);
+        return normalizedDomain.startsWith("docs.")
+                || normalizedDomain.startsWith("help.")
+                || normalizedDomain.startsWith("support.")
+                || normalizedDomain.startsWith("developer.")
+                || normalizedDomain.startsWith("developers.")
+                || normalizedUrl.contains("/docs")
+                || normalizedUrl.contains("/documentation")
+                || normalizedUrl.contains("/help")
+                || normalizedUrl.contains("/support")
+                || normalizedUrl.contains("/knowledge-base")
+                || normalizedUrl.contains("/guide")
+                || normalizedTitle.contains("docs")
+                || normalizedTitle.contains("documentation")
+                || normalizedTitle.contains("help center")
+                || normalizedTitle.contains("support")
+                || normalizedTitle.contains("knowledge base")
+                || normalizedTitle.contains("guide");
+    }
+
     private List<String> buildQualitySignalRankingReasons(List<String> qualitySignals) {
         if (qualitySignals == null || qualitySignals.isEmpty()) {
             return List.of();
@@ -467,6 +544,7 @@ public class SourceCandidateRanker {
             switch (signal) {
                 case "DOCS_HIGH_VALUE_PATH" -> reasons.add("命中文档高价值路径，优先级高于泛官网首页");
                 case "DOCS_EXACT_PATH_HIT" -> reasons.add("命中明确文档路径，优先级高于开放平台根页");
+                case "DOCS_SEARCH_DISCOVERED_OFFICIAL_ADJACENT" -> reasons.add("搜索发现官方相邻文档入口，优先级高于模板兜底 URL");
                 case "PRICING_HIGH_VALUE_PATH" -> reasons.add("命中定价高价值路径，适合优先采集价格与套餐信息");
                 case "NEWS_HIGH_VALUE_PATH" -> reasons.add("命中新闻高价值路径，适合优先采集发布、更新与动态信息");
                 default -> reasons.add("命中质量信号：" + signal);
@@ -511,6 +589,10 @@ public class SourceCandidateRanker {
             reasons.add("搜索补源命中，优先级高于纯启发式候选");
         } else if ("HEURISTIC".equalsIgnoreCase(candidate.getDiscoveryMethod())) {
             reasons.add("启发式候选作为站内结构补充，优先级低于搜索直命中");
+        }
+
+        if (resolveTemplateFallback(candidate)) {
+            reasons.add("模板兜底候选仅在缺少真实发现入口时参与排序");
         }
 
         if (freshness >= 0.80D) {
@@ -561,6 +643,9 @@ public class SourceCandidateRanker {
         String normalizedMethod = discoveryMethod.toUpperCase(Locale.ROOT);
         if (HIGH_PRIORITY_DISCOVERY_METHODS.contains(normalizedMethod)) {
             return 3;
+        }
+        if (TEMPLATE_FALLBACK_DISCOVERY_METHODS.contains(normalizedMethod)) {
+            return 0;
         }
         if ("HEURISTIC".equals(normalizedMethod)) {
             return 1;

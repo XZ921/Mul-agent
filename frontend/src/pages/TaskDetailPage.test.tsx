@@ -302,6 +302,22 @@ describe('TaskDetailPage report gating', () => {
     expect(shouldFetchTaskReport(task, nodes)).toBe(true)
   })
 
+  it('fetches report after writer node degrades successfully even if task is not finished', () => {
+    const task = buildTask({ status: 'RUNNING', canViewReport: false })
+    const nodes = [
+      buildNode({
+        id: 3,
+        nodeName: 'rewrite_report',
+        displayName: '改写分析报告',
+        agentType: 'WRITER',
+        status: 'SUCCESS_DEGRADED' as never,
+        completedAt: '2026-06-03 13:12:00',
+      }),
+    ]
+
+    expect(shouldFetchTaskReport(task, nodes)).toBe(true)
+  })
+
   it('falls back to replay search audit when the collector node itself has no runtime search context', async () => {
     const user = userEvent.setup()
     vi.mocked(taskEventStreamHook.useTaskEventStream).mockReturnValue({

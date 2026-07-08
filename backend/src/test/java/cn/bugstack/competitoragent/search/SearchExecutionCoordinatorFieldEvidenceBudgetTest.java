@@ -391,6 +391,7 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
     /**
      * 这个计划专门复刻 task84 的量级特征：
      * planned query 很多，但经过字段闸门后每个字段只能留下 3 条，总执行量应稳定收敛到 21。
+     * field-* 是预算压测用的合成字段，显式标为首报关键，避免被阶段1非关键字段延期规则拦截。
      */
     private DimensionEvidencePlan task84ScaledFieldPlan() {
         List<FieldEvidenceCoverage> fieldCoverages = new ArrayList<>();
@@ -413,6 +414,7 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
             fieldCoverages.add(FieldEvidenceCoverage.builder()
                     .fieldName(fieldName)
                     .status(FieldEvidenceCoverageStatus.NOT_STARTED)
+                    .criticalForFirstReport(true)
                     .minimumAttemptedPaths(1)
                     .completedPaths(List.of())
                     .plannedQueries(plannedQueries)
@@ -451,6 +453,7 @@ class SearchExecutionCoordinatorFieldEvidenceBudgetTest {
                 .queryFingerprint(fingerprint)
                 .priority(priority)
                 .reason("task84 字段配额回归")
+                .criticalForFirstReport(true)
                 .build();
     }
 

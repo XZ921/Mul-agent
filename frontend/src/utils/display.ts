@@ -17,6 +17,7 @@ const nodeStatusTextMap: Record<NodeStatus, string> = {
   COMPENSATED: '已补偿',
   PAUSED: '已暂停',
   SUCCESS: '已完成',
+  SUCCESS_DEGRADED: '节点降级成功',
   FAILED: '失败',
   SKIPPED: '已跳过',
 }

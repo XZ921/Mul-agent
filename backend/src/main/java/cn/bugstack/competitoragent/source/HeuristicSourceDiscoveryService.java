@@ -254,7 +254,7 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
                     root + path,
                     scope,
                     competitorName,
-                    "HEURISTIC",
+                    "HEURISTIC_TEMPLATE",
                     "根据根域名自动拼接 " + scope + " 入口",
                     null,
                     providedUrls
@@ -321,6 +321,7 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
 
     private boolean isSearchLikeDiscoveryMethod(String discoveryMethod) {
         return "SEARCH".equalsIgnoreCase(discoveryMethod)
+                || "BROWSER".equalsIgnoreCase(discoveryMethod)
                 || "BROWSER_PREVIEW".equalsIgnoreCase(discoveryMethod);
     }
 
@@ -433,8 +434,45 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
         if (searchCandidates != null) {
             merged.addAll(searchCandidates);
         }
+        if (containsSearchDiscoveredCandidate(searchCandidates)) {
+            merged = merged.stream()
+                    .map(candidate -> rewriteTemplateFallbackReason(candidate, "no_verified_docs_candidate"))
+                    .toList();
+        }
         List<SourceCandidate> ranked = candidateRanker.rankAndDeduplicate(merged);
         return ranked.size() > MAX_CANDIDATES_PER_SCOPE ? ranked.subList(0, MAX_CANDIDATES_PER_SCOPE) : ranked;
+    }
+
+    private boolean containsSearchDiscoveredCandidate(List<SourceCandidate> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return false;
+        }
+        return candidates.stream()
+                .anyMatch(candidate -> candidate != null
+                        && "DOCS".equals(candidate.getSourceType())
+                        && isSearchLikeDiscoveryMethod(candidate.getDiscoveryMethod()));
+    }
+
+    private SourceCandidate rewriteTemplateFallbackReason(SourceCandidate candidate, String fallbackReason) {
+        if (candidate == null || !isTemplateFallbackCandidate(candidate)) {
+            return candidate;
+        }
+        return candidate.toBuilder()
+                .templateFallback(Boolean.TRUE)
+                .fallbackReason(fallbackReason)
+                .build();
+    }
+
+    private boolean isTemplateFallbackCandidate(SourceCandidate candidate) {
+        if (candidate == null) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(candidate.getTemplateFallback())) {
+            return true;
+        }
+        return "FAMILY_TEMPLATE".equalsIgnoreCase(candidate.getDiscoveryMethod())
+                || "FAMILY_SUBDOMAIN_TEMPLATE".equalsIgnoreCase(candidate.getDiscoveryMethod())
+                || "HEURISTIC_TEMPLATE".equalsIgnoreCase(candidate.getDiscoveryMethod());
     }
 
     private SourceCandidate buildCandidate(String url,
@@ -463,11 +501,26 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
                 .discoveryMethod(discoveryMethod)
                 .reason(reason)
                 .domain(domain)
+                .templateFallback(isTemplateFallbackDiscoveryMethod(discoveryMethod))
+                .fallbackReason(resolveTemplateFallbackReason(scope, discoveryMethod))
                 .publishedAt(publishedAt)
                 .relevanceScore(relevanceScore)
                 .freshnessScore(freshnessScore)
                 .qualityScore(qualityScore)
                 .build();
+    }
+
+    private boolean isTemplateFallbackDiscoveryMethod(String discoveryMethod) {
+        return "HEURISTIC_TEMPLATE".equalsIgnoreCase(discoveryMethod);
+    }
+
+    private String resolveTemplateFallbackReason(String scope, String discoveryMethod) {
+        if (!isTemplateFallbackDiscoveryMethod(discoveryMethod)) {
+            return null;
+        }
+        return "DOCS".equalsIgnoreCase(scope)
+                ? "no_discovered_docs_candidate"
+                : "no_discovered_candidate";
     }
 
     private String buildTitle(String url, String scope, String competitorName) {

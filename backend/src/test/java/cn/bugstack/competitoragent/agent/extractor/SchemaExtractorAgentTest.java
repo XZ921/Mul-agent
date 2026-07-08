@@ -329,6 +329,87 @@ class SchemaExtractorAgentTest {
     }
 
     @Test
+    void shouldPropagateCollectorReadinessIssueFlagsIntoExtractorOutput() throws Exception {
+        SchemaExtractorAgent providerOnlyAgent = new SchemaExtractorAgent(
+                logRepository,
+                knowledgeRepository,
+                llmClient,
+                promptService,
+                agentContextAssembler,
+                objectMapper,
+                inputProvider
+        );
+        ExtractorEvidenceInput officialEvidence = ExtractorEvidenceInput.builder()
+                .evidenceId("R001")
+                .competitorName("Linear")
+                .sourceType("OFFICIAL")
+                .title("Linear homepage")
+                .content("Linear is a product development platform for modern teams.")
+                .sourceUrls(List.of("https://www.linear.app"))
+                .qualitySignals(List.of("LIGHTWEIGHT_CONTENT_READY"))
+                .issueFlags(List.of())
+                .build()
+                .normalized();
+        when(inputProvider.provide(any(AgentContext.class))).thenReturn(ExtractorInputPackage.builder()
+                .taskId(10L)
+                .nodeName("extract_schema")
+                .inputSource("REPOSITORY_BACKED_PORT")
+                .auditRefs(Map.of("collectorEvidenceReadiness", Map.of(
+                        "reason", "STAGE1_COLLECTOR_QUORUM_READY",
+                        "missingFamilies", List.of("DOCS"),
+                        "auditFlags", List.of("HARD_DEADLINE_REACHED")
+                )))
+                .competitors(List.of(ExtractorCompetitorInput.builder()
+                        .competitorName("Linear")
+                        .evidenceCatalog(List.of(officialEvidence))
+                        .structuredEvidence(List.of())
+                        .readableEvidence(List.of(officialEvidence))
+                        .skippedEvidence(List.of())
+                        .sourceUrls(List.of("https://www.linear.app"))
+                        .issueFlags(List.of(
+                                "COLLECTOR_QUORUM_DEGRADED",
+                                "COLLECTOR_FAMILY_MISSING_DOCS",
+                                "HARD_DEADLINE_REACHED"
+                        ))
+                        .budget(Map.of("maxPromptEvidenceChars", 4000))
+                        .build()))
+                .build());
+        when(promptService.render(eq("extractor"), any())).thenReturn("prompt");
+        when(llmClient.chatForJson(any(), any(), eq("ExtractedSchema"))).thenReturn("""
+                {
+                  "officialUrl": "https://www.linear.app",
+                  "summary": "Linear is a product development platform.",
+                  "positioning": "modern product development",
+                  "targetUsers": ["product teams"],
+                  "coreFeatures": [],
+                  "pricing": {},
+                  "strengths": [],
+                  "weaknesses": [],
+                  "sources": [],
+                  "sourceUrls": ["https://www.linear.app"]
+                }
+                """);
+
+        AgentResult result = providerOnlyAgent.execute(AgentContext.builder()
+                .taskId(10L)
+                .taskName("task")
+                .currentNodeName("extract_schema")
+                .build());
+
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(output.path("issueFlags").toString().contains("COLLECTOR_FAMILY_MISSING_DOCS"));
+        assertTrue(output.path("issueFlags").toString().contains("HARD_DEADLINE_REACHED"));
+        assertTrue(output.path("drafts").get(0).path("issueFlags").toString().contains("COLLECTOR_QUORUM_DEGRADED"));
+        assertTrue(output.path("extractorInput").path("auditRefs").path("collectorEvidenceReadiness").toString()
+                .contains("STAGE1_COLLECTOR_QUORUM_READY"));
+        verify(promptService).render(eq("extractor"), argThat(variables ->
+                variables.get("qualitySignalGuidance") != null
+                        && variables.get("qualitySignalGuidance").contains("COLLECTOR_FAMILY_MISSING_DOCS")
+        ));
+    }
+
+    @Test
     void shouldPassUnifiedTaskRagContextIntoExtractorPrompt() throws Exception {
         // 统一上下文由基类入口注入，提取阶段只验证 prompt 消费到同一份检索摘要。
         when(agentContextAssembler.assemble(any(AgentContext.class))).thenAnswer(invocation -> {

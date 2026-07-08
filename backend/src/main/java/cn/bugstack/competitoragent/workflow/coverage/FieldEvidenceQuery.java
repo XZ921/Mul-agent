@@ -29,6 +29,11 @@ public class FieldEvidenceQuery {
     private String reason;
     private String queryFingerprint;
     private Integer priority;
+    /**
+     * 标记该 query 是否服务阶段1首版报告关键字段。
+     * provider 只负责执行，不重新判断字段优先级，因此规划层需要把这个口径随 query 一起传递。
+     */
+    private Boolean criticalForFirstReport;
 
     @Builder.Default
     private List<String> includeDomains = new ArrayList<>();

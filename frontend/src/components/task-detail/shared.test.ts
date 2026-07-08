@@ -153,6 +153,10 @@ describe('isTerminalNodeStatus', () => {
   it('treats compensated nodes as completed terminal states', () => {
     expect(isTerminalNodeStatus('COMPENSATED')).toBe(true)
   })
+
+  it('treats success degraded nodes as completed terminal states', () => {
+    expect(isTerminalNodeStatus('SUCCESS_DEGRADED' as never)).toBe(true)
+  })
 })
 
 describe('phase 3 productization freeze', () => {
@@ -161,5 +165,9 @@ describe('phase 3 productization freeze', () => {
     const directColorMatches = cssWithoutRootTokens.match(/#[0-9A-Fa-f]{3,8}\b|rgba?\([^)]+\)|hsla?\([^)]+\)/gu)
 
     expect(directColorMatches).toBeNull()
+  })
+
+  it('keeps a dedicated dag pill style for success degraded nodes', () => {
+    expect(stylesSource).toContain('.dag-node-pill-success_degraded')
   })
 })

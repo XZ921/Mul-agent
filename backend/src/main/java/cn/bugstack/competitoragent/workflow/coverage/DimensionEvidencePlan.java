@@ -9,7 +9,9 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -23,6 +25,14 @@ import java.util.stream.Stream;
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class DimensionEvidencePlan {
+
+    private static final Set<String> STAGE_ONE_FIRST_REPORT_FIELDS = Set.of(
+            "summary",
+            "positioning",
+            "targetusers",
+            "corefeatures",
+            "pricing"
+    );
 
     private String competitorName;
     private String contractVersion;
@@ -81,6 +91,48 @@ public class DimensionEvidencePlan {
                 && field.getPlannedQueries() != null
                 && !field.getPlannedQueries().isEmpty()
                 && !isFieldCoverageSatisfied(field));
+    }
+
+    /**
+     * 阶段1首报只让关键字段缺口触发字段级 supplement。
+     * 这样 weaknesses / strengths 等增强字段仍可被审计追踪，但不会因为 pending query 阻塞首版报告。
+     */
+    public boolean hasPendingCriticalFieldEvidenceQueries() {
+        if (fieldCoverages == null || fieldCoverages.isEmpty()) {
+            return false;
+        }
+        return fieldCoverages.stream().anyMatch(field -> field != null
+                && isCriticalForFirstReport(field)
+                && field.getPlannedQueries() != null
+                && !field.getPlannedQueries().isEmpty()
+                && !isFieldCoverageSatisfied(field));
+    }
+
+    public static boolean isCriticalForFirstReport(FieldEvidenceCoverage field) {
+        if (field == null) {
+            return false;
+        }
+        if (field.getCriticalForFirstReport() != null) {
+            return Boolean.TRUE.equals(field.getCriticalForFirstReport());
+        }
+        return isFirstReportCriticalField(field.getFieldName());
+    }
+
+    public static boolean isCriticalForFirstReport(FieldEvidenceQuery query) {
+        if (query == null) {
+            return false;
+        }
+        if (query.getCriticalForFirstReport() != null) {
+            return Boolean.TRUE.equals(query.getCriticalForFirstReport());
+        }
+        return isFirstReportCriticalField(query.getFieldName());
+    }
+
+    public static boolean isFirstReportCriticalField(String fieldName) {
+        if (!StringUtils.hasText(fieldName)) {
+            return false;
+        }
+        return STAGE_ONE_FIRST_REPORT_FIELDS.contains(fieldName.trim().toLowerCase(Locale.ROOT));
     }
 
     private boolean isFieldCoverageSatisfied(FieldEvidenceCoverage field) {

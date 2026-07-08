@@ -464,8 +464,11 @@ public class TaskRuntimeCommandAppService {
         boolean hasWorkToResume = false;
 
         for (TaskNode node : nodes) {
-            if (node.getStatus() == TaskNodeStatus.SUCCESS || node.getStatus() == TaskNodeStatus.COMPENSATED) {
-                if (node.getStatus() == TaskNodeStatus.SUCCESS) {
+            if (node.getStatus() == TaskNodeStatus.SUCCESS
+                    || node.getStatus() == TaskNodeStatus.SUCCESS_DEGRADED
+                    || node.getStatus() == TaskNodeStatus.COMPENSATED) {
+                if (node.getStatus() == TaskNodeStatus.SUCCESS
+                        || node.getStatus() == TaskNodeStatus.SUCCESS_DEGRADED) {
                     hasSuccessfulCheckpoint = true;
                 }
                 continue;

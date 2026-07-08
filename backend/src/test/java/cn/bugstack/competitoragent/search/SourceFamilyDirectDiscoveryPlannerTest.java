@@ -52,6 +52,27 @@ class SourceFamilyDirectDiscoveryPlannerTest {
     }
 
     @Test
+    void shouldMarkOfficialTemplateCandidatesAsLowTrustFallbacks() {
+        SourceFamilyDirectDiscoveryPlanner planner = new SourceFamilyDirectDiscoveryPlanner(new SearchPolicyResolver());
+
+        List<SourceCandidate> candidates = planner.buildInitialCandidates(
+                "Airtable",
+                "DOCS",
+                List.of("https://www.airtable.com")
+        );
+
+        assertThat(candidates)
+                .filteredOn(candidate -> "https://www.airtable.com/docs".equals(candidate.getUrl()))
+                .singleElement()
+                .satisfies(candidate -> {
+                    assertThat(candidate.getDiscoveryMethod()).isEqualTo("FAMILY_TEMPLATE");
+                    assertThat(candidate.getTemplateFallback()).isTrue();
+                    assertThat(candidate.getFallbackReason()).isEqualTo("no_discovered_docs_candidate");
+                    assertThat(candidate.getSourceUrls()).containsExactly("https://www.airtable.com/docs");
+                });
+    }
+
+    @Test
     void shouldKeepOpenPlatformSubdomainInOfficialCandidatePool() {
         SourceFamilyDirectDiscoveryPlanner planner = new SourceFamilyDirectDiscoveryPlanner(new SearchPolicyResolver());
 

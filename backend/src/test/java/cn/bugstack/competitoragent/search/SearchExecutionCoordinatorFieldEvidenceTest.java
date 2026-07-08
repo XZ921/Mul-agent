@@ -81,6 +81,38 @@ class SearchExecutionCoordinatorFieldEvidenceTest {
     }
 
     @Test
+    void shouldDeferNonCriticalPendingFieldEvidenceWhenVerifiedSourceQuorumReady() {
+        CapturingSearchSourceProvider provider = new CapturingSearchSourceProvider(List.of(), List.of());
+        SearchExecutionCoordinator coordinator = newCoordinator(provider, true);
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩")
+                .sourceCandidates(List.of(weakEntryCandidate()))
+                .sourceType("DOCS")
+                .verifyCandidates(true)
+                .searchMode("HTTP_ONLY")
+                .searchFallbackOrder(List.of("HTTP"))
+                .preferredSearchProvider("tavily")
+                .browserSearchEnabled(false)
+                .maxSearchResults(2)
+                .minVerifiedCandidates(1)
+                .dimensionEvidencePlan(nonCriticalFieldPlan())
+                .build());
+
+        assertThat(supplementRequests(provider)).isEmpty();
+        assertThat(result.getExecutionTrace().getSupplementMethod()).isEqualTo("NONE");
+        assertThat(result.getExecutionTrace().getFallbackDecision())
+                .isEqualTo("STAGE1_QUORUM_READY_DEFER_FIELD_EVIDENCE");
+        assertThat(result.getExecutionTrace().getFieldEvidenceQueryPlannedCount()).isEqualTo(1);
+        assertThat(result.getExecutionTrace().getFieldEvidenceQueryExecutedCount()).isZero();
+        assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkippedCount()).isEqualTo(1);
+        assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkipReasons())
+                .containsEntry("STAGE1_QUORUM_READY_DEFER_FIELD_EVIDENCE", 1);
+        assertThat(result.getAuditSnapshot().getSummary().getFieldEvidenceQuerySkipReasons())
+                .containsEntry("STAGE1_QUORUM_READY_DEFER_FIELD_EVIDENCE", 1);
+    }
+
+    @Test
     void shouldContinueToHttpSupplementWhenHybridBrowserStageAlreadyMeetsTargetButFieldQueriesPending() {
         CapturingSearchSourceProvider provider = new CapturingSearchSourceProvider(
                 List.of(),
@@ -618,6 +650,32 @@ class SearchExecutionCoordinatorFieldEvidenceTest {
                                         .reason("核心功能 SDK 文档")
                                         .build()
                         ))
+                        .build()))
+                .build();
+    }
+
+    /**
+     * weaknesses 是当前 schema 中已有的增强字段，不属于阶段1首报关键字段；
+     * 当基础来源已经可交付时，它的 pending query 应进入后续增强轮，而不是拉长首报 supplement。
+     */
+    private DimensionEvidencePlan nonCriticalFieldPlan() {
+        return DimensionEvidencePlan.builder()
+                .competitorName("哔哩哔哩")
+                .maxCollectionRounds(2)
+                .fieldCoverages(List.of(FieldEvidenceCoverage.builder()
+                        .fieldName("weaknesses")
+                        .status(FieldEvidenceCoverageStatus.NOT_STARTED)
+                        .minimumAttemptedPaths(1)
+                        .completedPaths(List.of())
+                        .plannedQueries(List.of(FieldEvidenceQuery.builder()
+                                .fieldName("weaknesses")
+                                .evidencePathKey("PUBLIC_REVIEW_OR_NEWS")
+                                .queryIntent("THIRD_PARTY_REVIEW")
+                                .sourceType("REVIEW")
+                                .query("哔哩哔哩 开放平台 使用限制 第三方评价")
+                                .queryFingerprint("q-weaknesses-review-1")
+                                .reason("增强字段第三方评价")
+                                .build()))
                         .build()))
                 .build();
     }

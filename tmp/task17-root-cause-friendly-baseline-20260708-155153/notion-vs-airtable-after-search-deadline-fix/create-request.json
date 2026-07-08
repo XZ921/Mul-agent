@@ -1,0 +1,25 @@
+﻿{
+    "taskName":  "阶段1友好基线：Notion vs Airtable 竞品分析（search deadline fix 后）",
+    "subjectProduct":  "Notion",
+    "competitorNames":  [
+                            "Airtable"
+                        ],
+    "competitorUrls":  [
+                           "https://www.airtable.com"
+                       ],
+    "analysisDimensions":  [
+                               "产品定位",
+                               "核心功能",
+                               "价格策略",
+                               "目标用户",
+                               "公开评价"
+                           ],
+    "sourceScope":  [
+                        "官网",
+                        "产品文档",
+                        "定价页",
+                        "公开测评"
+                    ],
+    "reportLanguage":  "中文",
+    "reportTemplate":  "标准版"
+}

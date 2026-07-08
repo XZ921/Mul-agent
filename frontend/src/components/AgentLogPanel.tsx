@@ -29,6 +29,7 @@ const statusColor: Record<NodeStatus, string> = {
   COMPENSATED: 'green',
   PAUSED: 'warning',
   SUCCESS: 'green',
+  SUCCESS_DEGRADED: 'orange',
   FAILED: 'red',
   SKIPPED: 'default',
 }
@@ -104,6 +105,7 @@ function searchModeText(mode?: string) {
 
 function stepStatusTag(status?: string) {
   if (status === 'SUCCESS') return <Tag color="green">已完成</Tag>
+  if (status === 'SUCCESS_DEGRADED') return <Tag color="gold">已降级完成</Tag>
   if (status === 'RUNNING') return <Tag color="blue">执行中</Tag>
   if (status === 'PAUSED') return <Tag color="orange">已暂停</Tag>
   if (status === 'SKIPPED') return <Tag color="gold">已跳过</Tag>
@@ -113,6 +115,7 @@ function stepStatusTag(status?: string) {
 
 function progressStatusTag(status?: string) {
   if (status === 'SUCCESS') return <Tag color="green">已完成</Tag>
+  if (status === 'SUCCESS_DEGRADED') return <Tag color="gold">已降级完成</Tag>
   if (status === 'RUNNING') return <Tag color="blue">执行中</Tag>
   if (status === 'PAUSED') return <Tag color="orange">已暂停</Tag>
   if (status === 'SKIPPED') return <Tag color="gold">已跳过</Tag>

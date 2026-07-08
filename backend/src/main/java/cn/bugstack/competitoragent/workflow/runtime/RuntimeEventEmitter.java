@@ -53,6 +53,7 @@ public class RuntimeEventEmitter {
         }
         String action = switch (node.getStatus()) {
             case SUCCESS -> "NODE_COMPLETED";
+            case SUCCESS_DEGRADED -> "NODE_COMPLETED";
             case WAITING_RETRY -> "NODE_WAITING_RETRY";
             case WAITING_INTERVENTION -> "NODE_WAITING_INTERVENTION";
             case COMPENSATED -> "NODE_COMPENSATED";
@@ -176,11 +177,20 @@ public class RuntimeEventEmitter {
             });
         }
 
+        boolean successLikeStatus = node.getStatus() == TaskNodeStatus.SUCCESS
+                || node.getStatus() == TaskNodeStatus.SUCCESS_DEGRADED;
         payload.setSearchProgress(SearchProgressSnapshot.builder()
-                .status(node.getStatus() == TaskNodeStatus.SUCCESS ? "SUCCESS" : "FAILED")
-                .currentStep(node.getStatus() == TaskNodeStatus.SUCCESS ? "完成补源" : "补源失败")
+                .status(successLikeStatus ? node.getStatus().name() : "FAILED")
+                .currentStep(successLikeStatus
+                        ? (node.getStatus() == TaskNodeStatus.SUCCESS_DEGRADED ? "降级完成补源" : "完成补源")
+                        : "补源失败")
                 .message(defaultIfBlank(node.getErrorMessage(),
-                        node.getStatus() == TaskNodeStatus.SUCCESS ? "采集节点已完成，使用最小事件兜底留痕。" : "采集节点执行失败，请查看节点详情。"))
+                        successLikeStatus
+                                ? (node.getStatus() == TaskNodeStatus.SUCCESS_DEGRADED
+                                ? "采集节点已降级成功，使用最小事件兜底留痕。"
+                                : "采集节点已完成，使用最小事件兜底留痕。")
+                                : "采集节点执行失败，请查看节点详情。"))
+                .degraded(node.getStatus() == TaskNodeStatus.SUCCESS_DEGRADED)
                 .updatedAt(node.getCompletedAt() == null ? LocalDateTime.now() : node.getCompletedAt())
                 .build());
         return objectMapper.convertValue(payload, new TypeReference<Map<String, Object>>() {

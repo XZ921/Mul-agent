@@ -43,6 +43,9 @@ public enum TaskNodeStatus {
     @Schema(description = "节点执行成功")
     SUCCESS("执行成功"),
 
+    @Schema(description = "节点已产出可交接结果但存在降级缺口")
+    SUCCESS_DEGRADED("降级成功"),
+
     @Schema(description = "失败后已执行补偿动作并完成收口")
     COMPENSATED("已补偿"),
 

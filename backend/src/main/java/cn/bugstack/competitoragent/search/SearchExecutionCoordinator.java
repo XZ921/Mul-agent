@@ -41,6 +41,7 @@ public class SearchExecutionCoordinator {
     private static final Logger log = LoggerFactory.getLogger(SearchExecutionCoordinator.class);
     private static final String EXPLICIT_URL_CANONICALIZE_FAILED = "EXPLICIT_URL_CANONICALIZE_FAILED";
     private static final String EXPLICIT_URL_DUPLICATE_CANONICAL = "EXPLICIT_URL_DUPLICATE_CANONICAL";
+    private static final String STAGE1_QUORUM_READY_DEFER_FIELD_EVIDENCE = "STAGE1_QUORUM_READY_DEFER_FIELD_EVIDENCE";
 
     private final CandidateVerifier candidateVerifier;
     private final BrowserSearchRuntimeService browserSearchRuntimeService;
@@ -417,9 +418,32 @@ public class SearchExecutionCoordinator {
         }
 
         // 闂傚倸鍊搁崐鎼佸磹閻戣姤鍤勯柛顐ｆ礀閸屻劎鎲稿澶嬪仼闁绘垹鐡旈弫鍡涙煕閺囥劌澧柛鎾诡潐缁绘盯骞橀弶鎴犲姲闂佺顑嗛幑鍥蓟閻旂⒈鏁嶆慨妯哄暱椤忣參鏌х紒妯煎ⅹ闂囧鏌ㄥ┑鍡樺櫤閻犳劧绱曠槐鎺撳緞婵犲嫬鐓熷┑顔硷攻濡炶棄螞閸愵喖鐓涘ù锝囧劋琚欓梻鍌欑閹诧繝鈥﹂崼婢盯宕熼姘卞幒?2闂傚倸鍊搁崐鎼佸磹閻戣姤鍊块柨鏃堟暜閸嬫挾绮☉妯诲櫧闁活厽鐟╅弻鐔兼倻濡鏆楅梺宕囨嚀缁夌鐏冮梺鎸庢濡嫰顢氬鍫熺叆婵炴垶锚閳ь剙婀遍幑銏犫攽鐎ｎ偄浠洪梻鍌氱墛娓氭顭囧鑸碘拺闁告稑锕ユ径鍕煕鐎ｎ亜顏柨婵堝仜閻ｆ繈宕熼鈧禒顓炩攽閻樿宸ラ悗姘煎墯閸庮偊姊绘担鍛婂暈濞撴碍顨婂畷浼村冀椤撗勬櫆闂佸綊妫块悞锕傚煕閹寸姷纾藉ù锝堝亗閹次诲宕卞▎灞戒壕閻熸瑥瀚粈鍫ユ煛娴ｅ壊鐓兼鐐插暣閺佹捇鎮╅懠顒夊悈闂備焦瀵у濠氬疾椤愶箑鍌ㄩ梺顒€绉甸埛鎴︽煙缁嬪灝顒㈤柣鎾卞劦閺岀喓鍠婇崡鐐扮凹婵烇絽娲ら敃顏堝箖濠婂牊鍤嶉柕澹啫绗氶梺鑽ゅ枑缁秶鍒掗幘宕囨殾婵犲﹤鍠氬鈺呮煕濡ゅ啫浠滈柣蹇擄躬濮婃椽鎮烽弶搴撴寖缂備緡鍣崹璺虹暦閹存惊鐔兼嚒閵堝浂鍟庨梻浣虹《閸撴繈鏁嬮梺璇查獜缁犳捇骞冨Δ鈧～婵嬵敇閳ユ剚妫熼梻鍌氭搐椤︾敻寮婚妸銉㈡斀闁糕檧鏅滈埢鎾斥攽閳藉棗浜濋柛銊ユ健瀵鏁愭径瀣簻闂佸憡绺块崕鎶芥偪閸曨垱鈷戦悹鍥ｂ偓铏亶濠碉紕鍋樼划娆撴偘椤曗偓楠炴帒螖閳ь剛绮绘繝姘€甸柣銏犳啞濞呮粎绱掓潏顭掕€挎慨濠勭帛缁楃喖鍩€椤掑嫬鐒垫い鎺戝€告禒婊堟煠濞茶鐏￠柡鍛埣椤㈡稑顭ㄩ崨顖ょ床闂佽崵濮村ú锕併亹閸愵喖姹查柨婵嗘礌閸嬫挾鎲撮崟顒傤槬缂傚倸绉撮敃銉︾┍婵犲洤绠瑰ù锝呮憸閸樺憡绻涙潏鍓хК婵℃ぜ鍔庡Σ鎰煥閸曨厾鐦堥梺姹囧灲濞佳冪摥闂備焦瀵уú蹇涘磹濠靛棛鏆︽い鏍仦閸嬫劙鎮归崶顏勭毢闁挎稒鐩娲捶椤撶偘澹曢梺鍝勵儏閵堢顕ｉ崨濠冨劅闁靛濡囬崢鐢电磽閸屾瑩妾烽柛銊ョ秺閹﹢鎮╃憗浣烘嚀椤劑宕熼銏犘戞俊鐐€ら崣鈧繛澶嬫礋楠炴垿宕熼鍌滄嚌濡炪倖鐗楅懝鐐珶鐎ｎ偆绡€闁汇垽娼ф禒褎銇勯幋鐐寸鐎规洘绻傞悾婵嬪礋椤愩倕寮ㄥ┑鐘灱閸╂牠宕濋弴鐘典笉闁煎鍊愰崑鎾舵喆閸曨剛顦ュ┑鐐差檧缁犳挻淇婇悜钘夌厸闁稿本绮岄獮鍫ユ⒒娴ｅ摜绉洪柛瀣躬瀹曟粓鏁冮崒娑樹簵婵犻潧鍊搁幉锟犳偂閺囥垺鐓忓┑鐘茬箳閻ｉ亶鏌涢弬璇测偓婵嬪蓟瀹ュ洦鍠嗛柛鏇ㄥ亞娴煎矂鎮楃憴鍕闁绘牕銈搁崹楣冩晝閸屾氨顓洪梺缁樺姈閸旀牜鎹㈤崼婵愭綎缂備焦蓱婵挳鏌涘☉姗堥練缁绢厸鍋撳┑锛勫亼閸娧呭緤閼测晛鍨濇繛鍡楁禋閸ゆ洟鏌熺紒妯哄潑婵℃彃鐗撻弻鏇＄疀閺囩倫銏ゆ煕鐎ｎ亞效婵﹥妞藉畷顐﹀礋椤撴稒鐎遍梻浣告啞椤牓宕戦幇顓犵彾闁哄洨濮甸崰鍡涙煕閺囥劌骞樻い鏃€娲熷铏瑰寲閺囩偛鈷夐柦鍐憾閹绠涚€ｎ亜顫囬梺鍝勬湰缁嬫捇鍩€椤掑﹦绉甸柛瀣噽娴滄悂骞嶉鐟颁壕闁割煈鍋呯欢鏌ユ倵濮樼厧澧撮柛鈹垮劜瀵板嫭绻濇惔銏犲厞濠碘剝褰冮張顒勬偋濡も偓閺嗏晠姊婚崒姘偓宄懊归崶褏鏆﹂柣銏㈩焾绾惧鏌ｉ幇顔芥毄闁活厽鐟╅悡顐﹀炊閵娧€妲堢紒鐐劤濞硷繝寮婚悢灏佹灁闁割煈鍠楅悘鎾剁磽娴ｅ搫校闁哄被鍔戦垾锕傚锤濡や礁娈濋梻鍌氱墛缁嬫垿锝炲畝鈧槐鎾存媴閹绘帊澹曢梻浣虹《閸撴繈濡甸崒姘ｆ婵炲棙鐟ч惌妤佺箾鏉堝墽绉俊顐㈠瀹曘垽鏁撻悩鏂ユ嫼婵炴潙鍚嬮悷褔鎮炬潏鈺冪＜濠㈣泛锕︾粔娲煙椤曞棛绡€妞ゃ垺娲熼弫鍐焵椤掑嫭鍊峰┑鐘插閸犳劙骞栧ǎ顒€濡奸柛姘秺閺屾盯濡烽鐓庮潽闂佺粯鎸哥换姗€寮诲☉銏犵労闁告劗鍋撻悾鑲╃磽娴ｅ搫鞋閻忓繑鐟уΣ鎰板箳閺傜偓鍕冮梺鑺ッˇ鎶藉春閻愮儤鈷戦悗鍦濞兼劙鏌涢妸銉т虎闁伙綁鏀辩缓浠嬪川婵犲倷绨婚梻浣告啞缁哄潡宕曢幓鎺嗘灁妞ゆ洍鍋撴慨濠勭帛閹峰懘鎸婃径濠冨劒闂備礁鎽滄慨鐢稿礉濞嗘挸绠栭柣鎴ｆ鍞悷婊冾樀瀹曟垿骞橀幇浣瑰兊闂佺粯鎸告鎼佸煕鐎ｎ喗鍊甸悷娆忓缁€鍫ユ煙閾忣偅宕岄柛鈺冨仱楠炲鎮╅顫闂佹寧绻傜花鑲╄姳婵犳碍鐓熸繝闈涙祫閼版寧鎱ㄦ繝鍛仩缂佽鲸甯掕灒闁煎鍊曞鎶芥⒒娴ｅ湱婀介柛鏂跨Ф閹广垽宕煎┑鍫熸闂佺鎻粻鎴犵不婵犳碍鐓涢柛灞久崝婊堟煟鎼粹槅鐓兼慨濠冩そ瀹曠兘顢橀埄鍐锯偓妤呮⒑閹肩偛濡垮褎顨堢划瀣吋婢跺﹦鐣鹃悷婊勭矒閹垽宕卞☉娆忎化闁哄鍋炴刊浠嬵敆閻旈晲绻嗛柤鑹板煐椤忕姷绱掓潏銊ョ闁逞屽墾缂嶅棙绂嶅畡閭﹀晠闁靛鏅滈悡鍐煢濡警妯堟俊顖楀亾婵°倗濮烽崑鐐烘晝閵忋倕绠圭憸鐗堝俯閺佸啴鏌ㄥ┑鍡樺櫣濠㈢懓绉瑰濠氬磼濞嗘埈妲梺纭咁嚋缁绘繈鍨鹃敃鍌氶唶闁靛鍨崇粙蹇旂節閵忥絽鐓愰柛鏃€娲滅划璇差潩閼哥數鍘搁梺鍛婂姂閸斿孩鏅堕弴銏＄厱婵°倕瀚悵顏勄庨崶褝韬い銏＄☉椤繈顢楁担鍥ｆ櫆缁?
-        if (shouldSupplement(config, verifiedCount, minVerifiedCount, allCandidates.size(), effectiveTargetCount, resultPageVerificationEnabled)) {
-            boolean pendingFieldEvidenceQueries = hasPendingFieldEvidenceQueries(config);
-            if (isTimedOut(searchStartedAt, searchTimeoutMillis) && !pendingFieldEvidenceQueries) {
+        List<String> stageOneDeferredFieldEvidenceFingerprints =
+                fieldEvidenceQueryPlan.resolveStageOneDeferredExecutableFingerprints();
+        if (!stageOneDeferredFieldEvidenceFingerprints.isEmpty()) {
+            releaseFieldEvidenceClaims(fieldEvidenceFingerprintClaims, taskId, config, stageOneDeferredFieldEvidenceFingerprints);
+            fieldEvidenceQueryPlan = fieldEvidenceQueryPlan.deferStageOneNonCriticalExecutableQueries(
+                    STAGE1_QUORUM_READY_DEFER_FIELD_EVIDENCE
+            );
+        }
+        boolean candidateSupplementRequired = shouldSupplement(config,
+                verifiedCount,
+                minVerifiedCount,
+                allCandidates.size(),
+                effectiveTargetCount,
+                resultPageVerificationEnabled);
+        boolean fieldEvidenceSupplementRequired = shouldSupplementFieldEvidence(config,
+                fieldEvidenceQueryPlan,
+                verifiedCount,
+                minVerifiedCount,
+                allCandidates.size(),
+                effectiveTargetCount,
+                resultPageVerificationEnabled,
+                searchStartedAt,
+                searchTimeoutMillis);
+        if (candidateSupplementRequired || fieldEvidenceSupplementRequired) {
+            boolean pendingFieldEvidenceQueries = fieldEvidenceSupplementRequired;
+            if (isTimedOut(searchStartedAt, searchTimeoutMillis)) {
                 circuitBroken = true;
                 degradationReason = "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT";
                 supplementMethod = "TIMEOUT_FALLBACK";
@@ -517,10 +541,16 @@ public class SearchExecutionCoordinator {
                         progressListener, allCandidates, List.of(), null);
             }
         } else {
-            markStepSkipped(executionPlan, "BROWSER_SUPPLEMENT_SEARCH", "supplement skipped because verified candidates already satisfy the target");
+            boolean fieldEvidenceDeferredForStageOne = !stageOneDeferredFieldEvidenceFingerprints.isEmpty();
+            String skipMessage = fieldEvidenceDeferredForStageOne
+                    ? "supplement skipped because stage1 quorum is ready and non-critical field evidence is deferred"
+                    : "supplement skipped because verified candidates already satisfy the target";
+            markStepSkipped(executionPlan, "BROWSER_SUPPLEMENT_SEARCH", skipMessage);
             appendSnapshotAndPublish(progressSnapshots, executionPlan, "BROWSER_SUPPLEMENT_SEARCH",
-                    "supplement skipped because verified candidates already satisfy the target", false, null, progressListener, allCandidates, List.of(), null);
-            fallbackDecision = shouldSkipSupplementForDirectDiscovery(config, verifiedCount, minVerifiedCount)
+                    skipMessage, false, null, progressListener, allCandidates, List.of(), null);
+            fallbackDecision = fieldEvidenceDeferredForStageOne
+                    ? STAGE1_QUORUM_READY_DEFER_FIELD_EVIDENCE
+                    : shouldSkipSupplementForDirectDiscovery(config, verifiedCount, minVerifiedCount)
                     ? "SKIP_SUPPLEMENT_DIRECT_DISCOVERY_ENOUGH"
                     : "SKIP_SUPPLEMENT_ENOUGH_VERIFIED";
         }
@@ -1119,7 +1149,9 @@ public class SearchExecutionCoordinator {
         boolean browserExecuted = false;
         boolean httpExecuted = false;
         SearchSourceRequest sourceRequest = null;
-        boolean pendingFieldEvidenceQueries = hasPendingFieldEvidenceQueries(config);
+        boolean pendingFieldEvidenceQueries = fieldEvidenceQueryPlan != null
+                && fieldEvidenceQueryPlan.getExecutable() != null
+                && !fieldEvidenceQueryPlan.getExecutable().isEmpty();
 
         for (String stage : resolveSearchFallbackOrder(config)) {
             if (existingCandidates.size() + supplementedCandidates.size() >= targetPoolSize
@@ -1607,7 +1639,7 @@ public class SearchExecutionCoordinator {
                 Boolean.TRUE.equals(config.getBrowserSearchEnabled()),
                 config.getSearchFallbackOrder()
         );
-        if (!hasPendingFieldEvidenceQueries(config)
+        if (!hasPendingCriticalFieldEvidenceQueries(config)
                 || !resolvedOrder.contains("HTTP")
                 || !resolvedOrder.contains("BROWSER")) {
             return resolvedOrder;
@@ -1818,12 +1850,8 @@ public class SearchExecutionCoordinator {
                                      int candidateCount,
                                      int targetCount,
                                      boolean resultPageVerificationEnabled) {
-        boolean runtimeSearchEnabled = !"HEURISTIC_ONLY".equalsIgnoreCase(config.getSearchMode());
-        if (!runtimeSearchEnabled) {
+        if (!isRuntimeSearchEnabled(config)) {
             return false;
-        }
-        if (hasPendingFieldEvidenceQueries(config)) {
-            return true;
         }
         /*
          * official 闂傚倸鍊搁崐鎼佸磹閻戣姤鍤勯柛顐ｆ礀缁犵娀鏌熼幑鎰靛殭閻熸瑱绠撻幃妤呮晲鎼粹€愁潻闂佹悶鍔嶇换鍫ョ嵁閺嶎灔搴敆閳ь剚淇婇懖鈺冩／闁诡垎浣镐划闂佸搫鏈ú妯兼崲濠靛﹦鐤€闁哄洨濮靛▓鍛婁繆閻愵亜鈧牕煤濠靛洢浠堥柛娑橈功閳瑰秴鈹戦悩鍙夌ォ闁轰礁绉甸幈銊ヮ潨閸℃绠洪梺绋垮閹瑰洭寮婚敐澶婎潊闁宠桨鑳舵禒婊堟⒑缁嬫寧鎹ｉ柡浣筋嚙椤曪絿鎷犲ù瀣潔濠殿喗顨呭Λ娆撳磽闂堟侗娓婚柕鍫濇閸у﹪鏌涚€ｎ偅宕岄柡灞剧洴婵″爼宕煎鍐╁創缂傚倷娴囨ご鍝ユ暜濡も偓椤洩绠涘☉妯溾晝鎲稿鍥С妞ぱ咁殙petitorUrls 闂傚倸鍊搁崐宄懊归崶顒夋晪鐟滃繘骞戦姀銈呯婵°倐鍋撶痪鎯ь煼閺岋綁骞囬锝嗏挅濠电偛妯婃禍婊堝礃閳ь剙顪冮妶鍡楀Ё缂傚秴妫楅…鍥偄閸忓皷鎷虹紒缁㈠幖閹冲繗銇愯濮婂宕熼銏╀純閻庤娲樺ú鏍敇閸忕厧绶為悗锝庡墮楠炲牓姊绘担鍛婃儓婵炲眰鍨藉畷婵嗙暆閸曨厼绁﹀┑掳鍊曢崯鎵閼测晝纾藉ù锝夋涧閻忊晠鏌ｈ箛銉ヮ洭闁逞屽墯椤旀牠宕伴弽顓熷亯濠靛倻顭堥弰銉╂煥閻斿搫孝缂佲偓閸愵喗鐓忓┑鐐茬仢閳ь剚顨婇獮鎴﹀即閵忊檧鎷绘繛鎾村焹閸嬫捇鏌嶈閸撴盯宕戝☉銏″殣妞ゆ牗绋掑▍鐘炽亜閺嶎偄浠﹂柣鎾跺枛閺岋綁寮崹顔鹃獓濠电偛鎳庨敃顏堝蓟濞戙垹鐓橀柟顖嗗倸顥氭繝纰夌磿閸嬫垿宕愰弽褜鍟呭┑鐘宠壘绾惧鏌熼悙顒傛殬濞存粍绮撻弻銊╁籍閸ヨ泛娈梺璇茬箞閸庣敻寮婚弴銏犵倞闁靛鍎遍～鎴濐渻閵堝繒鐣辨繝鈧柆宥呯劦?seed闂?         * 闂傚倸鍊搁崐鎼佸磹妞嬪海鐭嗗〒姘ｅ亾妤犵偛顦甸弫鎾绘偐椤旂懓浜鹃柛鎰靛枛瀹告繈鏌℃径瀣仴闁稿绉瑰娲传閸曨厜鐘绘煕閺傛寧鎹ｇ紒顔剧帛閵堬綁宕橀埡鍐ㄥ箞闂備線娼ч¨鈧紒鑼跺Г娣囧﹪鎸婃竟婵堟嚀閳瑰啴宕归鐟颁壕闁哄稁鍋呭畷鍙夌箾閹存瑥鐏╂鐐灪娣囧﹪濡堕崟顓炲閻庤娲樻繛濠傤潖?seed 闂傚倸鍊峰ù鍥敋瑜嶉～婵嬫晝閸岋妇绋忔繝銏ｅ煐閸旀牠宕戦妶澶嬬厸闁搞儮鏅涘皬闂佺粯甯掗敃銉ф崲濞戙垹骞㈡俊顖濇娴犳挳姊洪幖鐐插缂佽鐗撳璇差吋婢跺﹦鍘告繛杈剧到閹诧繝鎮橀幘鏂ユ斀闁绘劘灏欐晶銏ゆ煛閸滀礁浜伴柛鈹惧亾濡炪倖宸婚崑鎾绘煕濡崵鐭掔€规洘鍨块獮妯肩磼濡厧骞堥梻浣筋潐濠㈡﹢宕ラ埀顒傜磼閵娿儱鎮戦柕鍥у椤㈡洟濮€閳跺灕鍕弿濠电姴瀚敮娑氱磼濡ゅ啫鏋涚€规洘鍎奸ˇ杈╃磼閵娿儱鎮戠紒缁樼洴閺佹劙宕ㄩ閿晬婵犵數鍋涢幏鎴犵礊娓氣偓閻涱噣骞嬮敃鈧～鍛存煏閸繃鍣芥い锔哄妼椤啴濡堕崱姗嗘⒖婵犳鍠撻崐鏇㈠煝瀹ュ鍐€妞ゆ挾鍠撻崢浠嬫椤愩垺澶勬繛鍙夌墬缁傛帡鍩￠崨顔惧幈闁诲函缍嗛崑鍕叏瀹ュ鐓欐い鏍ㄧ懅椤︼附銇勯幘鍐叉倯鐎垫澘瀚禒锕傛寠婢跺苯顕遍梻鍌氬€烽悞锕傚箖閸洖纾挎繝濠傜墕缁€瀣亜閹板墎鎮奸柡鍡╁墴濮婂宕掑▎鎴犵崲濠电偘鍖犻崗鐐☉铻栭柛鎰ㄦ櫅鎼村﹪姊洪崷顓炲妺妞ゃ劌鎳愮划?PUBLIC_SEARCH/Tavily 闂傚倸鍊搁崐鎼佸磹妞嬪海鐭嗗〒姘ｅ亾妤犵偞鐗犻、鏇㈡晜閽樺缃曢梻浣虹《閸撴繈鎽傜€ｎ喖鐐婃い鎺嗗亾缂佺嫏鍥х閻庢稒蓱鐏忎即鏌℃担鍝勨枅婵﹥妞介弻鍛存倷閼艰泛顏繝鈷€灞芥珝婵☆偂鐒﹀鍕箛椤撶姴骞堥梻濠庡亜濞诧妇绮欓幒妤佹櫖闁绘棁顔栭悷鎵虫敠闁割煈鍠氭导鍫ユ⒑閸︻収鐒鹃柨鏇ㄤ邯楠炲啴濮€閵堝懐顦ч梺鍏肩ゴ閺呮盯鐛崼銉︹拻濠电姴楠告禍婊勭箾鐠囇呯暤妤犵偞鍔栫换婵嗩潩椤掑嫭锛楅梻浣稿悑娴滀粙宕曢娑氼洸婵犲﹤鐗婇悡娆撴倵濞戞瑯鐒界紒鐘崇墪椤法鎹勯崫鍕典紑缂備浇椴哥敮鐐哄焵椤掑﹦绉靛ù婊嗘硾鍗遍柛锔诲幐閸嬫捇宕归锝囧嚒闁诲孩鍑归崳锝夊春閳ь剚銇勯幒鎴姛缂佸鏁婚弻娑氣偓锝庝簼椤ャ垻鈧娲忛崹钘夌暦瑜版帩鏁冮柕鍫濇祩閸熷酣姊绘担鐑樺殌妞ゆ洦鍙冨畷鎴︽倷閸忓摜鍓ㄥ銈嗘尪閸ㄦ椽宕愰崹顐ょ闁瑰鍋涚粭姘箾閸涱叏鏀婚柕鍥у婵偓闁宠棄妫欓悾璺侯渻閵堝骸骞戦柛鏃€鍨甸悾鐑芥偂鎼存ɑ鏂€闂佹悶鍎撮崺鏍夐妶澶嬧拻闁稿本鐟ч崝宥夋煙椤旇偐鍩ｇ€规洘娲熼、娑㈡倷閼碱剦妲烽柣搴＄畭閸庡崬煤閵娿儙娑㈩敍濞戞牔绨婚梺鍝勭Р閸斿矂鎮炵憴鍕箚闁圭粯甯炴晶锕傛煛瀹€鈧崰鏍嵁閸℃凹妲鹃梺鍦櫕婵妲愰幒妤佸殝闁汇垽娼у銊╂⒑閸濆嫮鐒跨紓宥勭窔瀵偊宕掗悙鏉戜患閻庡厜鍋撻柍褜鍓熼幃鈩冨緞閹邦厸鎷洪柣鐘叉礌閳ь剙纾禒鈺呮⒑閸濄儱鏋戞繛鍏肩懇閹箖鎮滈懞銉ヤ簻缂佺偓濯芥ご鎼佸疾閵忥紕绠鹃柟鐐綑閻掑綊鏌涚€ｎ偅灏板ǎ鍥э躬楠炲棜顦叉俊鎻掝煼閺屽秶鎲撮崟顐や紝闂佽鍠掗弲娑㈠煝鎼淬倗鐤€闁瑰灝鍟╅幃锝呪攽閻樻剚鍟忛柛鐘崇墵瀹曟劙宕稿Δ鈧拑?         */
@@ -1839,6 +1867,39 @@ public class SearchExecutionCoordinator {
         return candidateCount < targetCount;
     }
 
+    /**
+     * 字段级 supplement 只服务阶段1首报关键字段。
+     * 非关键字段会在执行计划里转为延期 skip reason，避免 pending field evidence 单独拖慢首报。
+     */
+    private boolean shouldSupplementFieldEvidence(CollectorNodeConfig config,
+                                                  ResolvedFieldEvidenceQueryPlan fieldEvidenceQueryPlan,
+                                                  int verifiedCount,
+                                                  int minVerifiedCount,
+                                                  int candidateCount,
+                                                  int targetCount,
+                                                  boolean resultPageVerificationEnabled,
+                                                  long searchStartedAt,
+                                                  long searchTimeoutMillis) {
+        if (!isRuntimeSearchEnabled(config)
+                || !hasPendingCriticalFieldEvidenceQueries(config)
+                || fieldEvidenceQueryPlan == null
+                || fieldEvidenceQueryPlan.getExecutable().isEmpty()
+                || isTimedOut(searchStartedAt, searchTimeoutMillis)) {
+            return false;
+        }
+        return hasUnmetCriticalRequiredFieldEvidencePath(config)
+                || shouldSupplement(config,
+                verifiedCount,
+                minVerifiedCount,
+                candidateCount,
+                targetCount,
+                resultPageVerificationEnabled);
+    }
+
+    private boolean isRuntimeSearchEnabled(CollectorNodeConfig config) {
+        return config != null && !"HEURISTIC_ONLY".equalsIgnoreCase(config.getSearchMode());
+    }
+
     private boolean isSearchFirstDirectDiscoverySeedMode(CollectorNodeConfig config) {
         return config != null
                 && searchPolicyResolver.isSearchFirstSourceFamilyForSourceType(config.getSourceType())
@@ -1851,6 +1912,41 @@ public class SearchExecutionCoordinator {
         return config != null
                 && config.getDimensionEvidencePlan() != null
                 && config.getDimensionEvidencePlan().hasPendingFieldEvidenceQueries();
+    }
+
+    private boolean hasPendingCriticalFieldEvidenceQueries(CollectorNodeConfig config) {
+        return config != null
+                && config.getDimensionEvidencePlan() != null
+                && config.getDimensionEvidencePlan().hasPendingCriticalFieldEvidenceQueries();
+    }
+
+    private boolean hasUnmetCriticalRequiredFieldEvidencePath(CollectorNodeConfig config) {
+        if (config == null
+                || config.getDimensionEvidencePlan() == null
+                || config.getDimensionEvidencePlan().getFieldCoverages() == null) {
+            return false;
+        }
+        return config.getDimensionEvidencePlan().getFieldCoverages().stream()
+                .filter(Objects::nonNull)
+                .filter(DimensionEvidencePlan::isCriticalForFirstReport)
+                .anyMatch(field -> !isFieldCoverageSatisfied(field));
+    }
+
+    private void releaseFieldEvidenceClaims(Map<String, Set<String>> fieldEvidenceFingerprintClaims,
+                                            Long taskId,
+                                            CollectorNodeConfig config,
+                                            List<String> fingerprints) {
+        if (fieldEvidenceFingerprintClaims == null || taskId == null || fingerprints == null || fingerprints.isEmpty()) {
+            return;
+        }
+        Set<String> claimSet = fieldEvidenceFingerprintClaims.get(buildFieldEvidenceFingerprintClaimStateKey(taskId, config));
+        if (claimSet == null || claimSet.isEmpty()) {
+            return;
+        }
+        fingerprints.stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .forEach(claimSet::remove);
     }
 
     /**
@@ -2860,6 +2956,53 @@ public class SearchExecutionCoordinator {
                     plan.getSkipped(),
                     plan.getSkipReasons(),
                     plan.getClaimedFingerprints()
+            );
+        }
+
+        private List<String> resolveStageOneDeferredExecutableFingerprints() {
+            if (executable.isEmpty()) {
+                return List.of();
+            }
+            return executable.stream()
+                    .filter(query -> !DimensionEvidencePlan.isCriticalForFirstReport(query))
+                    .map(SearchExecutionCoordinator::resolveFieldEvidenceFingerprint)
+                    .filter(StringUtils::hasText)
+                    .toList();
+        }
+
+        private ResolvedFieldEvidenceQueryPlan deferStageOneNonCriticalExecutableQueries(String reason) {
+            if (executable.isEmpty()) {
+                return this;
+            }
+            List<FieldEvidenceQuery> retainedExecutable = new ArrayList<>();
+            List<FieldEvidenceQuery> deferred = new ArrayList<>();
+            for (FieldEvidenceQuery query : executable) {
+                if (DimensionEvidencePlan.isCriticalForFirstReport(query)) {
+                    retainedExecutable.add(query);
+                } else {
+                    deferred.add(query);
+                }
+            }
+            if (deferred.isEmpty()) {
+                return this;
+            }
+            List<FieldEvidenceQuery> updatedSkipped = new ArrayList<>(skipped);
+            updatedSkipped.addAll(deferred);
+            Map<String, Integer> updatedSkipReasons = new LinkedHashMap<>(skipReasons);
+            updatedSkipReasons.merge(reason, deferred.size(), Integer::sum);
+            Set<String> deferredFingerprints = deferred.stream()
+                    .map(SearchExecutionCoordinator::resolveFieldEvidenceFingerprint)
+                    .filter(StringUtils::hasText)
+                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+            List<String> updatedClaimedFingerprints = claimedFingerprints.stream()
+                    .filter(fingerprint -> !deferredFingerprints.contains(fingerprint))
+                    .toList();
+            return new ResolvedFieldEvidenceQueryPlan(
+                    planned,
+                    retainedExecutable,
+                    updatedSkipped,
+                    updatedSkipReasons,
+                    updatedClaimedFingerprints
             );
         }
 

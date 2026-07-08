@@ -15,6 +15,7 @@ import cn.bugstack.competitoragent.collection.CollectionTaskPackage;
 import cn.bugstack.competitoragent.collection.CollectionTaskPackageBuilder;
 import cn.bugstack.competitoragent.collection.WebPageCollectionExecutor;
 import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
+import cn.bugstack.competitoragent.model.dto.CollectionAuditSummary;
 import cn.bugstack.competitoragent.collection.quality.EvidenceQualityGate;
 import cn.bugstack.competitoragent.collection.quality.EvidenceQualityGateProperties;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
@@ -42,6 +43,7 @@ import cn.bugstack.competitoragent.search.SearchPolicyResolver;
 import cn.bugstack.competitoragent.search.SearchExecutionCoordinator;
 import cn.bugstack.competitoragent.search.SearchExecutionResult;
 import cn.bugstack.competitoragent.search.SearchExecutionStep;
+import cn.bugstack.competitoragent.search.SearchExecutionTrace;
 import cn.bugstack.competitoragent.source.SearchSourceProvider;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
@@ -53,12 +55,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -1009,6 +1015,149 @@ class CollectorAgentTest {
     }
 
     @Test
+    void shouldReturnSuccessDegradedWhenHardDeadlineReachedAfterPartialEvidenceWasCaptured() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent deadlineAwareCollector = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchCoordinator,
+                collectionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper,
+                new DownstreamEvidenceViewAssembler(objectMapper),
+                new EvidenceQualityGate(new EvidenceQualityGateProperties()),
+                new EvidenceSourceSanitizer(),
+                null
+        ) {
+            long resolveCollectorHardDeadlineMillis(CollectorNodeConfig config, String sourceType) {
+                return 50L;
+            }
+        };
+        SearchCollectionTarget prefetchedTarget = SearchCollectionTarget.builder()
+                .candidate(buildSourceCandidate("https://example.com/docs"))
+                .collectedPage(successfulCollectedPage("https://example.com/docs", "Docs"))
+                .build();
+        SearchCollectionTarget pendingTarget = SearchCollectionTarget.builder()
+                .candidate(buildSourceCandidate("https://example.com/help"))
+                .build();
+        when(searchCoordinator.execute(any(), any(), any(), any()))
+                .thenReturn(buildSearchExecutionResult(prefetchedTarget, pendingTarget));
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    Thread.sleep(200L);
+                    return buildCollectionReport(List.of());
+                });
+        when(collectionCoordinator.summarize(any()))
+                .thenAnswer(invocation -> buildCollectionReport(invocation.getArgument(0)));
+
+        AgentResult result = deadlineAwareCollector.execute(
+                buildContextWithVerification("[\"https://example.com/docs\",\"https://example.com/help\"]"));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS_DEGRADED", result.getStatus().name(), result.getErrorMessage());
+        assertTrue(output.path("sourceUrls").isArray());
+        assertTrue(output.path("sourceUrls").size() > 0);
+        assertTrue(output.path("degradationReasons").toString().contains("HARD_DEADLINE_REACHED"));
+        assertEquals("HARD_DEADLINE_REACHED",
+                output.path("searchExecutionTrace").path("degradationReason").asText());
+        assertTrue(output.path("readyForQuorum").asBoolean());
+    }
+
+    @Test
+    void shouldFailWhenHardDeadlineReachedBeforeAnyUsableEvidenceWasCaptured() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent deadlineAwareCollector = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchCoordinator,
+                collectionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper,
+                new DownstreamEvidenceViewAssembler(objectMapper),
+                new EvidenceQualityGate(new EvidenceQualityGateProperties()),
+                new EvidenceSourceSanitizer(),
+                null
+        ) {
+            long resolveCollectorHardDeadlineMillis(CollectorNodeConfig config, String sourceType) {
+                return 50L;
+            }
+        };
+        SearchCollectionTarget pendingTarget = SearchCollectionTarget.builder()
+                .candidate(buildSourceCandidate("https://example.com/help"))
+                .build();
+        when(searchCoordinator.execute(any(), any(), any(), any()))
+                .thenReturn(buildSearchExecutionResult(pendingTarget));
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    Thread.sleep(200L);
+                    return buildCollectionReport(List.of());
+                });
+        when(collectionCoordinator.summarize(any()))
+                .thenAnswer(invocation -> buildCollectionReport(invocation.getArgument(0)));
+
+        AgentResult result = deadlineAwareCollector.execute(
+                buildContextWithVerification("[\"https://example.com/help\"]"));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("FAILED", result.getStatus().name());
+        assertTrue(output.path("degradationReasons").toString().contains("HARD_DEADLINE_REACHED"));
+        assertEquals("HARD_DEADLINE_REACHED",
+                output.path("searchExecutionTrace").path("degradationReason").asText());
+        assertTrue(output.path("sourceUrls").isArray());
+        assertFalse(output.path("readyForQuorum").asBoolean());
+    }
+
+    @Test
+    void shouldStopCollectorWhenSearchPhaseExceedsHardDeadline() {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent deadlineAwareCollector = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchCoordinator,
+                collectionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper,
+                new DownstreamEvidenceViewAssembler(objectMapper),
+                new EvidenceQualityGate(new EvidenceQualityGateProperties()),
+                new EvidenceSourceSanitizer(),
+                null
+        ) {
+            long resolveCollectorHardDeadlineMillis(CollectorNodeConfig config, String sourceType) {
+                return 50L;
+            }
+        };
+        when(searchCoordinator.execute(any(), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    Thread.sleep(5_000L);
+                    return buildSearchExecutionResult(SearchCollectionTarget.builder()
+                            .candidate(buildSourceCandidate("https://example.com/docs"))
+                            .build());
+                });
+        when(collectionCoordinator.summarize(any()))
+                .thenAnswer(invocation -> buildCollectionReport(invocation.getArgument(0)));
+
+        AgentResult result = assertTimeoutPreemptively(Duration.ofMillis(500),
+                () -> deadlineAwareCollector.execute(
+                        buildSingleCandidateContext("https://example.com/docs", "Docs", "DOCS")));
+
+        assertEquals("FAILED", result.getStatus().name());
+        assertTrue(result.getOutputData().contains("HARD_DEADLINE_REACHED"));
+        verify(collectionCoordinator, never()).execute(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void shouldMarkCheckpointReuseForPrefetchedSuccessWhenTargetOrderChanges() throws Exception {
         when(browserSearchRuntimeService.search(any())).thenReturn(BrowserSearchRuntimeResult.builder()
                 .candidates(List.of())
@@ -1208,6 +1357,73 @@ class CollectorAgentTest {
                           ]
                         }
                         """.formatted(competitorUrlsJson))
+                .build();
+    }
+
+    private SearchExecutionResult buildSearchExecutionResult(SearchCollectionTarget... targets) {
+        List<SearchCollectionTarget> selectedTargets = targets == null ? List.of() : List.of(targets);
+        return SearchExecutionResult.builder()
+                .executionPlan(SearchExecutionPlan.builder()
+                        .stage("COLLECT")
+                        .searchQueries(List.of("Feishu docs"))
+                        .steps(List.of(
+                                SearchExecutionStep.builder()
+                                        .stepCode("DISCOVER_SOURCES")
+                                        .goal("发现来源")
+                                        .status(SearchExecutionStep.StepStatus.SUCCESS)
+                                        .build(),
+                                SearchExecutionStep.builder()
+                                        .stepCode("COLLECT_PAGES")
+                                        .goal("采集页面")
+                                        .status(SearchExecutionStep.StepStatus.RUNNING)
+                                        .build()
+                        ))
+                        .build())
+                .sourceCandidates(selectedTargets.stream()
+                        .map(SearchCollectionTarget::getCandidate)
+                        .collect(Collectors.toList()))
+                .selectedTargets(selectedTargets)
+                .executionTrace(SearchExecutionTrace.builder()
+                        .searchMode("HTTP_ONLY")
+                        .selectedUrls(selectedTargets.stream()
+                                .map(SearchCollectionTarget::getCandidate)
+                                .filter(java.util.Objects::nonNull)
+                                .map(SourceCandidate::getUrl)
+                                .collect(Collectors.toList()))
+                        .build())
+                .reasoningSummary("test")
+                .build();
+    }
+
+    private CollectionExecutionReport buildCollectionReport(List<CollectionExecutionResult> results) {
+        List<CollectionExecutionResult> safeResults = results == null ? List.of() : results;
+        int successCount = (int) safeResults.stream().filter(CollectionExecutionResult::isSuccess).count();
+        int failedCount = safeResults.size() - successCount;
+        String status = safeResults.isEmpty()
+                ? "SUCCESS"
+                : failedCount == 0 ? "SUCCESS" : successCount == 0 ? "FAILED" : "PARTIAL_SUCCESS";
+        List<String> sourceUrls = safeResults.stream()
+                .flatMap(result -> result.getSourceUrls() == null ? java.util.stream.Stream.<String>empty() : result.getSourceUrls().stream())
+                .distinct()
+                .collect(Collectors.toList());
+        return CollectionExecutionReport.builder()
+                .status(status)
+                .results(safeResults)
+                .sourceUrls(sourceUrls)
+                .auditSnapshot(CollectionAuditSnapshot.builder()
+                        .status(status)
+                        .results(safeResults)
+                        .replayTimeline(List.of())
+                        .sourceUrls(sourceUrls)
+                        .summary(CollectionAuditSummary.builder()
+                                .totalPackages(safeResults.size())
+                                .successCount(successCount)
+                                .failedCount(failedCount)
+                                .reusedCount(0)
+                                .status(status)
+                                .sourceUrls(sourceUrls)
+                                .build())
+                        .build())
                 .build();
     }
 

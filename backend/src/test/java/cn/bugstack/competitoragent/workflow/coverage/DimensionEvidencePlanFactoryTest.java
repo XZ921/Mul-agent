@@ -33,4 +33,21 @@ class DimensionEvidencePlanFactoryTest {
             assertThat(field.getAttemptedPaths()).isEmpty();
         });
     }
+
+    @Test
+    void shouldMarkOnlyStageOneFirstReportFieldsAsCritical() {
+        CoverageContract contract = new CoverageContractResolver(new AnalysisDimensionMappingCatalog())
+                .resolve("standard_competitor_report",
+                        List.of("\u4ea7\u54c1\u529f\u80fd", "\u5b9a\u4ef7", "\u98ce\u9669"),
+                        List.of("\u5b98\u7f51", "\u4ea7\u54c1\u6587\u6863", "\u516c\u5f00\u6d4b\u8bc4"),
+                        null);
+
+        DimensionEvidencePlan plan = factory.create("\u54d4\u54e9\u54d4\u54e9", contract, List.of("open.bilibili.com"));
+
+        assertThat(plan.findField("coreFeatures").orElseThrow().getCriticalForFirstReport()).isTrue();
+        assertThat(plan.findField("pricing").orElseThrow().getCriticalForFirstReport()).isTrue();
+        assertThat(plan.findField("weaknesses").orElseThrow().getCriticalForFirstReport()).isFalse();
+        assertThat(plan.findField("weaknesses").orElseThrow().getPlannedQueries())
+                .allSatisfy(query -> assertThat(query.getCriticalForFirstReport()).isFalse());
+    }
 }

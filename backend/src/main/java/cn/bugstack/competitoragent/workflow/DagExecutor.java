@@ -96,6 +96,7 @@ public class DagExecutor {
     private final OrchestrationDecisionService orchestrationDecisionService;
     private final OrchestrationTraceService orchestrationTraceService;
     private final List<SharedNodeOutputProjector> sharedNodeOutputProjectors;
+    private final CollectorEvidenceReadinessPolicy collectorEvidenceReadinessPolicy;
 
     @Autowired
     public DagExecutor(TaskNodeRepository nodeRepository,
@@ -146,6 +147,7 @@ public class DagExecutor {
         this.orchestrationDecisionService = orchestrationDecisionService;
         this.orchestrationTraceService = orchestrationTraceService;
         this.sharedNodeOutputProjectors = sharedNodeOutputProjectors == null ? List.of() : List.copyOf(sharedNodeOutputProjectors);
+        this.collectorEvidenceReadinessPolicy = new CollectorEvidenceReadinessPolicy(objectMapper);
     }
 
     public DagExecutor(TaskNodeRepository nodeRepository,
@@ -394,7 +396,7 @@ public class DagExecutor {
         taskSnapshotCacheService.getCachedSharedOutputEnvelopes(context.getTaskId())
                 .forEach(context::putSharedOutputEnvelope);
         for (TaskNode node : nodes) {
-            if (node.getStatus() == TaskNodeStatus.SUCCESS
+            if (isReusableOutputStatus(node.getStatus())
                     && node.getOutputData() != null
                     && !node.getOutputData().isBlank()) {
                 projectSharedOutput(context.getTaskId(), node.getNodeName(), node.getPlanVersionId(), node.getOutputData())
@@ -432,6 +434,7 @@ public class DagExecutor {
         LocalDateTime now = LocalDateTime.now();
         for (TaskNode node : nodes) {
             if (node.getStatus() == TaskNodeStatus.SUCCESS
+                    || node.getStatus() == TaskNodeStatus.SUCCESS_DEGRADED
                     || node.getStatus() == TaskNodeStatus.COMPENSATED
                     || node.getStatus() == TaskNodeStatus.FAILED
                     || node.getStatus() == TaskNodeStatus.SKIPPED
@@ -459,7 +462,7 @@ public class DagExecutor {
                 continue;
             }
 
-            DependencyState dependencyState = resolveDependencyState(node, nodeMap);
+            DependencyState dependencyState = resolveDependencyState(node, nodeMap, sharedContext);
             if (dependencyState == DependencyState.BLOCKED) {
                 skipNode(node, buildDependencyFailureReason(node, nodeMap));
                 progressed = true;
@@ -604,7 +607,7 @@ public class DagExecutor {
             }
             runtimeStateRefresher.refreshRuntimeSnapshot(taskId);
             runtimeEventEmitter.publishNodeExecutionEvents(taskId, completedNode);
-            if (result.getStatus() == TaskNodeStatus.SUCCESS) {
+            if (isReusableOutputStatus(result.getStatus())) {
                 workflowEventPublisher.publishNodeCompleted(completedNode, extractSourceUrls(result.getOutputData()));
             } else {
                 workflowEventPublisher.publishNodeFailed(completedNode, extractSourceUrls(result.getOutputData()));
@@ -732,14 +735,19 @@ public class DagExecutor {
         node.setControlState(TaskNodeControlState.NONE);
         node.setInterventionReason(null);
 
-        if (result.getStatus() == TaskNodeStatus.SUCCESS) {
-            node.setStatus(TaskNodeStatus.SUCCESS);
+        /*
+         * SUCCESS_DEGRADED 代表节点已经收口并产出了可交接结果，
+         * 因此要和 SUCCESS 一样直接落库、缓存共享输出并允许下游消费，
+         * 不能再误走失败重试/人工介入链路。
+         */
+        if (isReusableOutputStatus(result.getStatus())) {
+            node.setStatus(result.getStatus());
             node.setOutputData(result.getOutputData());
-            node.setErrorMessage(null);
+            node.setErrorMessage(result.getErrorMessage());
             node.setFailureCategory(null);
             node.setNextRetryAt(null);
             TaskNode savedNode = nodeRepository.save(node);
-            recordExecutionAttempt(savedNode, attemptNo, TaskNodeStatus.SUCCESS, null, null);
+            recordExecutionAttempt(savedNode, attemptNo, result.getStatus(), null, result.getErrorMessage());
             projectSharedOutput(taskId, savedNode.getNodeName(), savedNode.getPlanVersionId(), result.getOutputData())
                     .ifPresentOrElse(envelope -> {
                         sharedContext.putSharedOutputEnvelope(savedNode.getNodeName(), envelope);
@@ -1043,6 +1051,7 @@ public class DagExecutor {
             }
 
             if (dependencyNode.getStatus() == TaskNodeStatus.SUCCESS
+                    || dependencyNode.getStatus() == TaskNodeStatus.SUCCESS_DEGRADED
                     || dependencyNode.getStatus() == TaskNodeStatus.COMPENSATED) {
                 continue;
             }
@@ -1057,10 +1066,14 @@ public class DagExecutor {
         return true;
     }
 
-    private DependencyState resolveDependencyState(TaskNode node, Map<String, TaskNode> nodeMap) {
+    private DependencyState resolveDependencyState(TaskNode node, Map<String, TaskNode> nodeMap, AgentContext sharedContext) {
         List<String> dependencyNames = parseDependencyNames(node.getDependsOn());
         if (dependencyNames.isEmpty()) {
             return DependencyState.READY;
+        }
+        DependencyState collectorQuorumState = resolveCollectorQuorumDependencyState(node, dependencyNames, nodeMap, sharedContext);
+        if (collectorQuorumState != null) {
+            return collectorQuorumState;
         }
         boolean waiting = false;
         for (String dependencyName : dependencyNames) {
@@ -1069,6 +1082,7 @@ public class DagExecutor {
                 return DependencyState.BLOCKED;
             }
             if (dependencyNode.getStatus() == TaskNodeStatus.SUCCESS
+                    || dependencyNode.getStatus() == TaskNodeStatus.SUCCESS_DEGRADED
                     || dependencyNode.getStatus() == TaskNodeStatus.COMPENSATED) {
                 continue;
             }
@@ -1090,6 +1104,57 @@ public class DagExecutor {
             return DependencyState.BLOCKED;
         }
         return waiting ? DependencyState.WAITING : DependencyState.READY;
+    }
+
+    private DependencyState resolveCollectorQuorumDependencyState(TaskNode node,
+                                                                  List<String> dependencyNames,
+                                                                  Map<String, TaskNode> nodeMap,
+                                                                  AgentContext sharedContext) {
+        if (node == null || !"extract_schema".equals(node.getNodeName())) {
+            return null;
+        }
+        List<TaskNode> collectorDependencies = dependencyNames.stream()
+                .map(nodeMap::get)
+                .filter(dependency -> dependency != null && dependency.getAgentType() == AgentType.COLLECTOR)
+                .toList();
+        if (collectorDependencies.size() != dependencyNames.size() || collectorDependencies.isEmpty()) {
+            return null;
+        }
+        /*
+         * quorum 只接管阶段1的多 family 采集分支。
+         * 历史上存在单个 collect_sources_web 直接驱动 extract_schema 的轻量 DAG，
+         * 这类链路仍应按普通依赖规则处理，避免被 OFFICIAL/PRICING/DOCS/REVIEW quorum 误拦截。
+         */
+        if (collectorDependencies.size() < 3) {
+            return null;
+        }
+        CollectorEvidenceReadiness readiness = collectorEvidenceReadinessPolicy.evaluate(collectorDependencies);
+        if (readiness.ready()) {
+            /*
+             * 阶段1把“下游能否开始”从“所有采集节点完全成功”调整为“采集证据是否足够首版交付”。
+             * 这里只在 collector 全部进入终态且 quorum 满足时放行，并把缺口审计写入共享上下文，
+             * 因此不是简单忽略失败依赖，也不会绕过 RUNNING / WAITING_RETRY 长尾节点。
+             */
+            writeCollectorEvidenceReadiness(sharedContext, readiness);
+            return DependencyState.READY;
+        }
+        if ("WAITING_COLLECTOR_TERMINAL_STATUS".equals(readiness.reason())) {
+            writeCollectorEvidenceReadiness(sharedContext, readiness);
+            return DependencyState.WAITING;
+        }
+        writeCollectorEvidenceReadiness(sharedContext, readiness);
+        return DependencyState.BLOCKED;
+    }
+
+    private void writeCollectorEvidenceReadiness(AgentContext sharedContext, CollectorEvidenceReadiness readiness) {
+        if (sharedContext == null || readiness == null) {
+            return;
+        }
+        try {
+            sharedContext.putSharedOutput("collector_evidence_readiness", objectMapper.writeValueAsString(readiness));
+        } catch (Exception e) {
+            log.warn("failed to serialize collector evidence readiness", e);
+        }
     }
 
     private List<String> parseDependencyNames(String dependsOn) {
@@ -1308,6 +1373,7 @@ public class DagExecutor {
                 continue;
             }
             if (candidate.getStatus() == TaskNodeStatus.SUCCESS
+                    || candidate.getStatus() == TaskNodeStatus.SUCCESS_DEGRADED
                     || candidate.getStatus() == TaskNodeStatus.FAILED
                     || candidate.getStatus() == TaskNodeStatus.SKIPPED) {
                 continue;
@@ -1428,7 +1494,9 @@ public class DagExecutor {
                 appended = true;
                 continue;
             }
-            if (dependencyNode.getStatus() == TaskNodeStatus.SUCCESS) {
+            if (dependencyNode.getStatus() == TaskNodeStatus.SUCCESS
+                    || dependencyNode.getStatus() == TaskNodeStatus.SUCCESS_DEGRADED
+                    || dependencyNode.getStatus() == TaskNodeStatus.COMPENSATED) {
                 continue;
             }
             if (node.isAllowFailedDependency()
@@ -1570,6 +1638,14 @@ public class DagExecutor {
             }
         }
         return false;
+    }
+
+    /**
+     * SUCCESS_DEGRADED 虽然不等于完全成功，
+     * 但它已经满足“有可交接输出”的终态语义。
+     */
+    private boolean isReusableOutputStatus(TaskNodeStatus status) {
+        return status == TaskNodeStatus.SUCCESS || status == TaskNodeStatus.SUCCESS_DEGRADED;
     }
 
     private JsonNode readJson(String raw) {

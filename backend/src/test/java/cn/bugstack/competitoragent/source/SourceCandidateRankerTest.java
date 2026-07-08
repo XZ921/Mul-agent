@@ -83,6 +83,22 @@ class SourceCandidateRankerTest {
     }
 
     @Test
+    void shouldPreferSearchDiscoveredDocsOverTemplateFallbackCandidate() {
+        List<SourceCandidate> ranked = ranker.rankAndDeduplicate(List.of(
+                candidate("https://www.airtable.com/docs", "Airtable Docs", "DOCS", "FAMILY_TEMPLATE",
+                        "2026-05-28", 0.95, 0.80, 0.92),
+                candidate("https://support.airtable.com/docs", "Airtable Support Docs", "DOCS", "SEARCH",
+                        "2026-05-18", 0.84, 0.72, 0.88)
+        ));
+
+        SourceCandidate firstCandidate = ranked.get(0);
+
+        assertEquals("https://support.airtable.com/docs", firstCandidate.getUrl());
+        assertEquals("DOCS", firstCandidate.getSourceType());
+        assertTrue(firstCandidate.getSourceUrls().contains("https://support.airtable.com/docs"));
+    }
+
+    @Test
     void shouldDemoteUtilityPagesEvenWhenRawScoresLookHigh() {
         // 这里先把“登录页、招聘页不应因为原始分高就排到前面”固化成红灯，
         // 后续实现时需要在排序器里补充页面价值识别与淘汰原因。
