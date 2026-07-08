@@ -53,6 +53,8 @@ public class QualityReviewAgent extends BaseAgent {
     private static final Pattern EVIDENCE_PATTERN = Pattern.compile("\\[证据[:：]\\s*([^\\]]+)]");
     private static final int MAX_CLAIM_AUDIT_ITEMS = 12;
     private static final int REVIEW_JSON_MAX_ATTEMPTS = 3;
+    private static final int STAGE_ONE_MVP_SCORE_FLOOR = 60;
+    private static final int STAGE_ONE_MIN_LLM_SCORE_FLOOR = 40;
     private static final List<CoverageFieldRule> COVERAGE_FIELD_RULES = List.of(
             new CoverageFieldRule("summary", "产品概览", List.of("产品概览", "内容结构", "证据完整性", "概览", "摘要")),
             new CoverageFieldRule("positioning", "市场定位", List.of("市场定位", "产品定位", "定位")),
@@ -203,7 +205,8 @@ public class QualityReviewAgent extends BaseAgent {
             List<RevisionDirective> revisionDirectives = buildRevisionDirectives(diagnoses, evidences);
             List<QualityDimension> dimensions = buildDimensions(llmScore, items, diagnoses, coverageSnapshot);
             int score = calculateDiagnosisDrivenScore(llmScore, dimensions);
-            boolean passed = isDiagnosisPassed(llmPassed, dimensions, diagnoses);
+            boolean passed = isDiagnosisPassed(llmPassed, dimensions, diagnoses)
+                    || isStageOneMvpPassingScore(llmScore, score, dimensions, diagnoses);
             boolean requiresHumanIntervention = requiresHumanIntervention(score, dimensions, diagnoses, finalPass);
             boolean autoRewriteAllowed = !passed && !requiresHumanIntervention;
 
@@ -671,6 +674,26 @@ public class QualityReviewAgent extends BaseAgent {
                         && "CRITICAL".equalsIgnoreCase(safeValue(dimension.getStatus(), "")));
         // coverage gap 即使不是阻断级，也说明报告仍需自动改写或标注不适用，不能直接放行为通过。
         return llmPassed && !hasBlocker && !hasCoverageGap && !hasCriticalCoreDimension;
+    }
+
+    /**
+     * 阶段1封版使用“及格可展示”口径：60 分以上允许作为降级报告进入交付链路。
+     * 这不是优秀报告标准；BLOCKER、核心证据维度 CRITICAL、LLM 原始分过低时仍必须阻断。
+     */
+    private boolean isStageOneMvpPassingScore(int llmScore,
+                                              int score,
+                                              List<QualityDimension> dimensions,
+                                              List<QualityDiagnosis> diagnoses) {
+        boolean hasBlocker = diagnoses.stream()
+                .anyMatch(diagnosis -> "BLOCKER".equalsIgnoreCase(safeValue(diagnosis.getLevel(), "")));
+        boolean hasCriticalCoreDimension = dimensions.stream()
+                .map(QualityDimension::normalized)
+                .anyMatch(dimension -> isCoreDimension(dimension.getCode())
+                        && "CRITICAL".equalsIgnoreCase(safeValue(dimension.getStatus(), "")));
+        return score >= STAGE_ONE_MVP_SCORE_FLOOR
+                && normalizeScore(llmScore) >= STAGE_ONE_MIN_LLM_SCORE_FLOOR
+                && !hasBlocker
+                && !hasCriticalCoreDimension;
     }
 
     /**

@@ -1,5 +1,0 @@
-﻿ evidence_rows | distinct_urls | full_content_gt_2000 
----------------+---------------+----------------------
-             1 |             1 |                    1
-(1 row)
-

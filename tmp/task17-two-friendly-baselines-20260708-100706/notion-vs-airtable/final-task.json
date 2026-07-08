@@ -1,0 +1,76 @@
+﻿{
+    "code":  200,
+    "message":  "æä½æå",
+    "data":  {
+                 "id":  96,
+                 "taskName":  "é¶æ®µ1åå¥½åºçº¿ï¼Notion ä¸ Airtable ç«ååæ",
+                 "subjectProduct":  "Notion",
+                 "competitorNames":  "[\"Airtable\"]",
+                 "competitorUrls":  "[\"https://www.airtable.com\"]",
+                 "analysisDimensions":  "[\"äº§åå®ä½\",\"æ ¸å¿åè½\",\"ä»·æ ¼ç­ç¥\",\"ç®æ ç¨æ·\",\"å\u0085¬å¼è¯ä»·\"]",
+                 "sourceScope":  "[\"å®ç½\",\"äº§åææ¡£\",\"å®ä»·é¡µ\",\"å\u0085¬å¼æµè¯\"]",
+                 "status":  "STOPPED",
+                 "errorMessage":  "ä»»å¡å·²ç±ç¨æ·ä¸»å¨åæ­¢",
+                 "statusSummary":  null,
+                 "currentPlanVersionId":  66,
+                 "currentPlanVersion":  1,
+                 "totalNodes":  12,
+                 "completedNodes":  12,
+                 "waitingRetryNodeCount":  0,
+                 "waitingInterventionNodeCount":  0,
+                 "compensatedNodeCount":  0,
+                 "createdAt":  [
+                                   2026,
+                                   7,
+                                   8,
+                                   10,
+                                   11,
+                                   49,
+                                   606921000
+                               ],
+                 "updatedAt":  [
+                                   2026,
+                                   7,
+                                   8,
+                                   10,
+                                   21,
+                                   43,
+                                   15798000
+                               ],
+                 "completedAt":  [
+                                     2026,
+                                     7,
+                                     8,
+                                     10,
+                                     21,
+                                     43,
+                                     13700000
+                                 ],
+                 "canExecute":  false,
+                 "canResume":  true,
+                 "canRetry":  false,
+                 "canStop":  false,
+                 "canViewReport":  false,
+                 "canViewDraftReport":  false,
+                 "interventionSummary":  "å½åæ¯æåºäºå·²ææ£æ¥ç¹æ¢å¤æ§è¡ï¼ä»¥åä»æå®èç¹åèµ·å±é¨éè·ï¼è¥æ¯èç¹æåå¯¼è´æ¶å£ï¼ä¹å¯ç´æ¥æ¢å¤å¯¹åºèç¹ç»§ç»­æ§è¡ã",
+                 "resumeAdvice":  "æ¢å¤æ§è¡ä¼åºäºå·²ææ£æ¥ç¹ç»§ç»­æ¨è¿ï¼å·²å®æèç¹éå¸¸ä¸ä¼éå¤æ§è¡ã",
+                 "retryAdvice":  null,
+                 "replayEntrySummary":  "å¯åå¾èç¹è¿½è¸ªä¸é«çº§è¯æ­æ¥çåå§æ§è¡è½¨è¿¹ãè¯æ®ä¸äºä»¶ççã",
+                 "currentStage":  "ç­å¾\u0085äººå·¥å¤ç",
+                 "activeNodeNames":  [
+
+                                     ],
+                 "snapshotUpdatedAt":  [
+                                           2026,
+                                           7,
+                                           8,
+                                           10,
+                                           21,
+                                           43,
+                                           139800600
+                                       ],
+                 "eventStreamPath":  "/api/task/96/events"
+             },
+    "timestamp":  "2026-07-08T10:21:47.627614400",
+    "traceId":  "a38fe949925e4a868c8156fe8e5bcd8f"
+}

@@ -1488,9 +1488,10 @@ public class DagExecutor {
                 boolean manualResumeApproved = isManualResumeApproved(node.getNodeConfig());
                 yield reviewOutput != null
                         && !reviewOutput.path("passed").asBoolean(true)
-                        && (manualResumeApproved
-                        || (!requiresHumanIntervention(context.getSharedOutput("quality_check"))
-                        && reviewOutput.path("autoRewriteAllowed").asBoolean(true)));
+                        // 阶段1收口允许“非阻断型初审失败”先进入一次静态 rewrite。
+                        // 这里不再把 requiresHumanIntervention 直接等同于“禁止改写”，
+                        // 只有 reviewer 明确产出了 BLOCKER 诊断，才阻断 rewrite 并要求人工先介入。
+                        && (manualResumeApproved || !hasBlockingReviewDiagnosis(reviewOutput));
             }
             case "rewrite_executed" -> allNodes.stream()
                     .anyMatch(current -> "rewrite_report".equals(current.getNodeName())
@@ -1506,7 +1507,7 @@ public class DagExecutor {
             if (reviewOutput == null) {
                 return "跳过修订：缺少有效的评审结果";
             }
-            if (requiresHumanIntervention(context.getSharedOutput("quality_check"))
+            if (hasBlockingReviewDiagnosis(reviewOutput)
                     && !isManualResumeApproved(node.getNodeConfig())) {
                 return "跳过修订：初审严重失败，需先人工补证据、调整搜索范围或重跑采集链路";
             }
@@ -1553,6 +1554,22 @@ public class DagExecutor {
     private boolean isManualResumeApproved(String nodeConfig) {
         JsonNode config = readJson(nodeConfig);
         return config != null && config.path("manualResumeApproved").asBoolean(false);
+    }
+
+    /**
+     * 初审只要没有明确 BLOCKER，就允许阶段1先尝试一次 rewrite。
+     * 这样缺证据但仍可降级交付的报告不会被过早拦停，最终是否可交付仍由终审和报告摘要兜底。
+     */
+    private boolean hasBlockingReviewDiagnosis(JsonNode reviewOutput) {
+        if (reviewOutput == null || !reviewOutput.has("diagnoses") || !reviewOutput.get("diagnoses").isArray()) {
+            return false;
+        }
+        for (JsonNode diagnosis : reviewOutput.get("diagnoses")) {
+            if ("BLOCKER".equalsIgnoreCase(diagnosis.path("level").asText(""))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private JsonNode readJson(String raw) {

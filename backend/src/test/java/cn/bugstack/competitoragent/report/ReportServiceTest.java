@@ -152,6 +152,131 @@ class ReportServiceTest {
     }
 
     @Test
+    void shouldMarkStageOneMvpReportAsDegradedReadyWhenScoreIsPassingWithLimitedEvidenceGaps() {
+        Report report = Report.builder()
+                .id(711L)
+                .taskId(711L)
+                .title("阶段1降级交付报告")
+                .content("# Report")
+                .summary("summary")
+                .qualityScore(65)
+                .qualityPassed(false)
+                .qualityIssues("""
+                        [
+                          {
+                            "type":"missing_evidence",
+                            "section":"pricing",
+                            "severity":"WARNING",
+                            "level":"WARNING",
+                            "evidenceBasis":"定价维度仍有证据缺口",
+                            "sourceUrls":["https://www.notion.so/pricing"],
+                            "suggestion":"补充 pricing 证据"
+                          },
+                          {
+                            "type":"missing_evidence",
+                            "section":"strengths",
+                            "severity":"WARNING",
+                            "level":"WARNING",
+                            "evidenceBasis":"优势维度仍有证据缺口",
+                            "sourceUrls":["https://www.notion.so/product/ai"],
+                            "suggestion":"补充 strengths 证据"
+                          },
+                          {
+                            "type":"missing_evidence",
+                            "section":"weaknesses",
+                            "severity":"WARNING",
+                            "level":"WARNING",
+                            "evidenceBasis":"短板维度仍有证据缺口",
+                            "sourceUrls":["https://www.notion.so/help"],
+                            "suggestion":"补充 weaknesses 证据"
+                          }
+                        ]
+                        """)
+                .evidenceCount(0)
+                .build();
+
+        when(reportRepository.findByTaskId(711L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(711L)).thenReturn(List.of());
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(711L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(711L)).thenReturn(List.of());
+
+        ReportResponse response = reportService.getReport(711L);
+
+        assertNotNull(response.getDeliverySummary());
+        assertEquals(Boolean.TRUE, response.getDeliverySummary().getReadyForDelivery());
+        assertEquals("DEGRADED_READY", response.getDeliverySummary().getDeliveryStatus());
+        assertTrue(response.getDeliverySummary().getSummary().contains("降级"));
+        assertTrue(response.getDeliverySummary().getSummary().contains("人工复核"));
+    }
+
+    @Test
+    void shouldNotMarkDegradedReadyWhenScoreIsBelowSixtyOrBlockerExists() {
+        Report belowFloorReport = Report.builder()
+                .id(712L)
+                .taskId(712L)
+                .title("未达到阶段1门槛")
+                .content("# Report")
+                .summary("summary")
+                .qualityScore(59)
+                .qualityPassed(false)
+                .qualityIssues("""
+                        [
+                          {
+                            "type":"missing_evidence",
+                            "section":"pricing",
+                            "severity":"WARNING",
+                            "level":"WARNING",
+                            "evidenceBasis":"定价维度仍有证据缺口",
+                            "sourceUrls":["https://www.notion.so/pricing"],
+                            "suggestion":"补充 pricing 证据"
+                          }
+                        ]
+                        """)
+                .evidenceCount(0)
+                .build();
+        Report blockerReport = Report.builder()
+                .id(713L)
+                .taskId(713L)
+                .title("存在阻断诊断的报告")
+                .content("# Report")
+                .summary("summary")
+                .qualityScore(65)
+                .qualityPassed(false)
+                .qualityIssues("""
+                        [
+                          {
+                            "type":"missing_evidence",
+                            "section":"conclusion",
+                            "severity":"ERROR",
+                            "level":"BLOCKER",
+                            "evidenceBasis":"关键结论缺少可追溯证据",
+                            "sourceUrls":["https://www.notion.so/security"],
+                            "suggestion":"补充 blocker 证据"
+                          }
+                        ]
+                        """)
+                .evidenceCount(0)
+                .build();
+
+        when(reportRepository.findByTaskId(712L)).thenReturn(Optional.of(belowFloorReport));
+        when(evidenceQueryService.listTaskEvidence(712L)).thenReturn(List.of());
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(712L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(712L)).thenReturn(List.of());
+        when(reportRepository.findByTaskId(713L)).thenReturn(Optional.of(blockerReport));
+        when(evidenceQueryService.listTaskEvidence(713L)).thenReturn(List.of());
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(713L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(713L)).thenReturn(List.of());
+
+        ReportResponse belowFloorResponse = reportService.getReport(712L);
+        ReportResponse blockerResponse = reportService.getReport(713L);
+
+        assertEquals(Boolean.FALSE, belowFloorResponse.getDeliverySummary().getReadyForDelivery());
+        assertEquals("NEEDS_EVIDENCE", belowFloorResponse.getDeliverySummary().getDeliveryStatus());
+        assertEquals(Boolean.FALSE, blockerResponse.getDeliverySummary().getReadyForDelivery());
+        assertEquals("BLOCKED", blockerResponse.getDeliverySummary().getDeliveryStatus());
+    }
+
+    @Test
     void shouldExposePersistedWriterEvidenceSummaryInReportMainPath() {
         Report report = Report.builder()
                 .id(910L)

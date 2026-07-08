@@ -780,6 +780,7 @@ public class SearchExecutionCoordinator {
                 .fieldEvidenceQueryExecutedCount(fieldEvidenceExecutionStats.getExecutedCount())
                 .fieldEvidenceQuerySkippedCount(fieldEvidenceExecutionStats.getSkippedCount())
                 .fieldEvidenceQuerySkipReasons(fieldEvidenceExecutionStats.getSkipReasons())
+                .fieldEvidenceClaimedFingerprints(fieldEvidenceQueryPlan.getClaimedFingerprints())
                 .fieldEvidenceFields(resolveDistinctFieldEvidenceFields(fieldEvidenceQueryPlan.getPlanned()))
                 .fieldEvidencePaths(resolveDistinctFieldEvidencePaths(fieldEvidenceQueryPlan.getPlanned()))
                 .evidenceRepairPlan(evidenceRepairPlanProjection)
@@ -2831,19 +2832,22 @@ public class SearchExecutionCoordinator {
         private final List<FieldEvidenceQuery> executable;
         private final List<FieldEvidenceQuery> skipped;
         private final Map<String, Integer> skipReasons;
+        private final List<String> claimedFingerprints;
 
         private ResolvedFieldEvidenceQueryPlan(List<FieldEvidenceQuery> planned,
                                                List<FieldEvidenceQuery> executable,
                                                List<FieldEvidenceQuery> skipped,
-                                               Map<String, Integer> skipReasons) {
+                                               Map<String, Integer> skipReasons,
+                                               List<String> claimedFingerprints) {
             this.planned = planned == null ? List.of() : List.copyOf(planned);
             this.executable = executable == null ? List.of() : List.copyOf(executable);
             this.skipped = skipped == null ? List.of() : List.copyOf(skipped);
             this.skipReasons = skipReasons == null || skipReasons.isEmpty() ? Map.of() : Map.copyOf(skipReasons);
+            this.claimedFingerprints = claimedFingerprints == null ? List.of() : List.copyOf(claimedFingerprints);
         }
 
         private static ResolvedFieldEvidenceQueryPlan empty() {
-            return new ResolvedFieldEvidenceQueryPlan(List.of(), List.of(), List.of(), Map.of());
+            return new ResolvedFieldEvidenceQueryPlan(List.of(), List.of(), List.of(), Map.of(), List.of());
         }
 
         private static ResolvedFieldEvidenceQueryPlan from(FieldEvidenceQueryExecutionPlan plan) {
@@ -2854,7 +2858,8 @@ public class SearchExecutionCoordinator {
                     plan.getPlanned(),
                     plan.getExecutable(),
                     plan.getSkipped(),
-                    plan.getSkipReasons()
+                    plan.getSkipReasons(),
+                    plan.getClaimedFingerprints()
             );
         }
 
@@ -2872,6 +2877,10 @@ public class SearchExecutionCoordinator {
 
         private Map<String, Integer> getSkipReasons() {
             return skipReasons;
+        }
+
+        private List<String> getClaimedFingerprints() {
+            return claimedFingerprints;
         }
     }
 }

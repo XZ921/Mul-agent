@@ -1,0 +1,1087 @@
+﻿{
+    "code":  200,
+    "message":  "æä½æå",
+    "data":  {
+                 "taskId":  97,
+                 "currentPlanVersionId":  67,
+                 "timeline":  [
+                                  {
+                                      "eventId":  "8462650c-2e13-40d5-be50-938c0e06e035",
+                                      "taskId":  97,
+                                      "planVersionId":  67,
+                                      "planVersion":  1,
+                                      "branchKey":  "root",
+                                      "nodeName":  "collaboration_plan",
+                                      "eventType":  "COLLABORATION_PLAN_RECORDED",
+                                      "summary":  "åä½è®¡åå·²è®°å½ï¼cp-task-97-v1",
+                                      "orchestrationDecision":  null,
+                                      "occurredAt":  [
+                                                         2026,
+                                                         7,
+                                                         8,
+                                                         10,
+                                                         22,
+                                                         17,
+                                                         960162000
+                                                     ],
+                                      "sourceUrls":  [
+                                                         "https://www.atlassian.com/software/jira"
+                                                     ]
+                                  },
+                                  {
+                                      "eventId":  "73a1e9d2-4fb8-4e7e-9ff0-fcf3bf2cdaa2",
+                                      "taskId":  97,
+                                      "planVersionId":  67,
+                                      "planVersion":  1,
+                                      "branchKey":  "root",
+                                      "nodeName":  "collaboration_checkpoint",
+                                      "eventType":  "COLLABORATION_CHECKPOINT_UPDATED",
+                                      "summary":  "åä½æ£æ¥ç¹å·²æ´æ°ï¼PLAN_APPROVED",
+                                      "orchestrationDecision":  null,
+                                      "occurredAt":  [
+                                                         2026,
+                                                         7,
+                                                         8,
+                                                         10,
+                                                         22,
+                                                         17,
+                                                         963053000
+                                                     ],
+                                      "sourceUrls":  [
+                                                         "https://www.atlassian.com/software/jira"
+                                                     ]
+                                  },
+                                  {
+                                      "eventId":  "ceb1ce41-473b-49e7-9ab5-c0e2e16498a1",
+                                      "taskId":  97,
+                                      "planVersionId":  67,
+                                      "planVersion":  1,
+                                      "branchKey":  "root",
+                                      "nodeName":  null,
+                                      "eventType":  "TASK_CREATED",
+                                      "summary":  "NODE_LIFECYCLE",
+                                      "orchestrationDecision":  null,
+                                      "occurredAt":  [
+                                                         2026,
+                                                         7,
+                                                         8,
+                                                         10,
+                                                         22,
+                                                         18,
+                                                         419000
+                                                     ],
+                                      "sourceUrls":  [
+                                                         "https://www.atlassian.com/software/jira"
+                                                     ]
+                                  },
+                                  {
+                                      "eventId":  "2ce982e9-fa0d-497b-a30b-f852ec6c1732",
+                                      "taskId":  97,
+                                      "planVersionId":  67,
+                                      "planVersion":  1,
+                                      "branchKey":  "root",
+                                      "nodeName":  null,
+                                      "eventType":  "TASK_EXECUTION_REQUESTED",
+                                      "summary":  "TASK_EXECUTION_REQUESTED",
+                                      "orchestrationDecision":  null,
+                                      "occurredAt":  [
+                                                         2026,
+                                                         7,
+                                                         8,
+                                                         10,
+                                                         22,
+                                                         18,
+                                                         62231000
+                                                     ],
+                                      "sourceUrls":  [
+                                                         "https://www.atlassian.com/software/jira"
+                                                     ]
+                                  },
+                                  {
+                                      "eventId":  "1b327e2e-5948-4bed-9cda-ad96d3e7606a",
+                                      "taskId":  97,
+                                      "planVersionId":  67,
+                                      "planVersion":  1,
+                                      "branchKey":  "root",
+                                      "nodeName":  "collect_sources_01_01",
+                                      "eventType":  "NODE_READY",
+                                      "summary":  "NODE_LIFECYCLE",
+                                      "orchestrationDecision":  null,
+                                      "occurredAt":  [
+                                                         2026,
+                                                         7,
+                                                         8,
+                                                         10,
+                                                         22,
+                                                         34,
+                                                         446211000
+                                                     ],
+                                      "sourceUrls":  [
+
+                                                     ]
+                                  },
+                                  {
+                                      "eventId":  "1f0945f1-7672-45e8-8e8a-a389fe4eacd3",
+                                      "taskId":  97,
+                                      "planVersionId":  67,
+                                      "planVersion":  1,
+                                      "branchKey":  "root",
+                                      "nodeName":  "collect_sources_01_02",
+                                      "eventType":  "NODE_READY",
+                                      "summary":  "NODE_LIFECYCLE",
+                                      "orchestrationDecision":  null,
+                                      "occurredAt":  [
+                                                         2026,
+                                                         7,
+                                                         8,
+                                                         10,
+                                                         22,
+                                                         34,
+                                                         474976000
+                                                     ],
+                                      "sourceUrls":  [
+
+                                                     ]
+                                  },
+                                  {
+                                      "eventId":  "0fbfd776-4c0f-44a4-8142-18d655723ca2",
+                                      "taskId":  97,
+                                      "planVersionId":  67,
+                                      "planVersion":  1,
+                                      "branchKey":  "root",
+                                      "nodeName":  "collect_sources_01_03",
+                                      "eventType":  "NODE_READY",
+                                      "summary":  "NODE_LIFECYCLE",
+                                      "orchestrationDecision":  null,
+                                      "occurredAt":  [
+                                                         2026,
+                                                         7,
+                                                         8,
+                                                         10,
+                                                         22,
+                                                         34,
+                                                         499672000
+                                                     ],
+                                      "sourceUrls":  [
+
+                                                     ]
+                                  },
+                                  {
+                                      "eventId":  "memory-345",
+                                      "taskId":  97,
+                                      "planVersionId":  null,
+                                      "planVersion":  null,
+                                      "branchKey":  null,
+                                      "nodeName":  "collect_sources_01_01",
+                                      "eventType":  "MEMORY_SNAPSHOT",
+                                      "summary":  "å½åä»»å¡è¿æ²¡æå¯ç¨æ£ç´¢ç´¢å¼ï¼éå\u0085è¡¥å\u0085\u0085ééè¯æ®æç­å¾\u0085ç´¢å¼å®æã",
+                                      "orchestrationDecision":  null,
+                                      "occurredAt":  [
+                                                         2026,
+                                                         7,
+                                                         8,
+                                                         10,
+                                                         22,
+                                                         34,
+                                                         508893000
+                                                     ],
+                                      "sourceUrls":  [
+
+                                                     ]
+                                  },
+                                  {
+                                      "eventId":  "9b470808-a6a8-4ed4-8734-8cddc8b2dee9",
+                                      "taskId":  97,
+                                      "planVersionId":  67,
+                                      "planVersion":  1,
+                                      "branchKey":  "root",
+                                      "nodeName":  "collect_sources_01_04",
+                                      "eventType":  "NODE_READY",
+                                      "summary":  "NODE_LIFECYCLE",
+                                      "orchestrationDecision":  null,
+                                      "occurredAt":  [
+                                                         2026,
+                                                         7,
+                                                         8,
+                                                         10,
+                                                         22,
+                                                         34,
+                                                         527238000
+                                                     ],
+                                      "sourceUrls":  [
+
+                                                     ]
+                                  },
+                                  {
+                                      "eventId":  "memory-346",
+                                      "taskId":  97,
+                                      "planVersionId":  null,
+                                      "planVersion":  null,
+                                      "branchKey":  null,
+                                      "nodeName":  "collect_sources_01_02",
+                                      "eventType":  "MEMORY_SNAPSHOT",
+                                      "summary":  "å½åä»»å¡è¿æ²¡æå¯ç¨æ£ç´¢ç´¢å¼ï¼éå\u0085è¡¥å\u0085\u0085ééè¯æ®æç­å¾\u0085ç´¢å¼å®æã",
+                                      "orchestrationDecision":  null,
+                                      "occurredAt":  [
+                                                         2026,
+                                                         7,
+                                                         8,
+                                                         10,
+                                                         22,
+                                                         34,
+                                                         540842000
+                                                     ],
+                                      "sourceUrls":  [
+
+                                                     ]
+                                  },
+                                  {
+                                      "eventId":  "memory-347",
+                                      "taskId":  97,
+                                      "planVersionId":  null,
+                                      "planVersion":  null,
+                                      "branchKey":  null,
+                                      "nodeName":  "collect_sources_01_03",
+                                      "eventType":  "MEMORY_SNAPSHOT",
+                                      "summary":  "å½åä»»å¡è¿æ²¡æå¯ç¨æ£ç´¢ç´¢å¼ï¼éå\u0085è¡¥å\u0085\u0085ééè¯æ®æç­å¾\u0085ç´¢å¼å®æã",
+                                      "orchestrationDecision":  null,
+                                      "occurredAt":  [
+                                                         2026,
+                                                         7,
+                                                         8,
+                                                         10,
+                                                         22,
+                                                         34,
+                                                         574231000
+                                                     ],
+                                      "sourceUrls":  [
+
+                                                     ]
+                                  },
+                                  {
+                                      "eventId":  "memory-348",
+                                      "taskId":  97,
+                                      "planVersionId":  null,
+                                      "planVersion":  null,
+                                      "branchKey":  null,
+                                      "nodeName":  "collect_sources_01_04",
+                                      "eventType":  "MEMORY_SNAPSHOT",
+                                      "summary":  "å½åä»»å¡è¿æ²¡æå¯ç¨æ£ç´¢ç´¢å¼ï¼éå\u0085è¡¥å\u0085\u0085ééè¯æ®æç­å¾\u0085ç´¢å¼å®æã",
+                                      "orchestrationDecision":  null,
+                                      "occurredAt":  [
+                                                         2026,
+                                                         7,
+                                                         8,
+                                                         10,
+                                                         22,
+                                                         34,
+                                                         612178000
+                                                     ],
+                                      "sourceUrls":  [
+
+                                                     ]
+                                  }
+                              ],
+                 "nodeSummaries":  [
+                                       {
+                                           "nodeId":  946,
+                                           "nodeName":  "collect_sources_01_01",
+                                           "displayName":  "Jira - OFFICIALéé",
+                                           "status":  "RUNNING",
+                                           "planVersionId":  67,
+                                           "branchKey":  "root",
+                                           "latestAttemptNo":  null,
+                                           "failureCategory":  null,
+                                           "issueSummary":  "å½åä»»å¡è¿æ²¡æå¯ç¨æ£ç´¢ç´¢å¼ï¼éå\u0085è¡¥å\u0085\u0085ééè¯æ®æç­å¾\u0085ç´¢å¼å®æã",
+                                           "recoveryHint":  "å½åææ é¢å¤æ¢å¤æç¤º",
+                                           "checkpointSummary":  null,
+                                           "sourceUrls":  [
+                                                              "https://www.atlassian.com",
+                                                              "https://www.atlassian.com/software/jira",
+                                                              "https://en.wikipedia.org/wiki/Jira_(software)",
+                                                              "https://www.atlassian.com/zh/software/jira/pricing",
+                                                              "https://confluence.atlassian.com/jira",
+                                                              "https://www.atlassian.com/zh/collections/service/pricing",
+                                                              "https://www.atlassian.com/zh/software/jira",
+                                                              "https://www.atlassian.com/zh/software/jira/capture/pricing",
+                                                              "https://www.atlassian.com/zh/software/jira/guides/getting-started/introduction",
+                                                              "https://www.atlassian.com/zh/software/jira/whats-new-overview",
+                                                              "https://www.atlassian.com/zh/agile/product-management/product-features",
+                                                              "https://events.atlassian.com/summit20_live_stream_customer_support/l/t?u=Lf2ie-olmOVX5jeRRpNGP_OR8CpTHVbBDZqm9beviVhFIgPiInSZRxILPmu-ZLkjtxmjiFbfzVnQB-uVOIhE_jSxah2as8oZZC1v9CG409eNjeEsMVI5zQ0D7jA8eFYPzQCXQNh0gfU%3D\u0026t=http%3A%2F%2Fwww.shdsd.com",
+                                                              "https://www.atlassian.com/zh/devops",
+                                                              "https://www.atlassian.com/zh/software/jira/features",
+                                                              "http://jira.51component.com/",
+                                                              "https://microsoftedge.microsoft.com/addons/detail/aoenpdbabcjnjbjpegeenodfknllmaoi?utm_source=jasite",
+                                                              "https://www.atlassian.com/software/jira.5",
+                                                              "https://www.youtube.com/watch?v=Z-a1RB9HvDI"
+                                                          ]
+                                       },
+                                       {
+                                           "nodeId":  947,
+                                           "nodeName":  "collect_sources_01_02",
+                                           "displayName":  "Jira - DOCSéé",
+                                           "status":  "RUNNING",
+                                           "planVersionId":  67,
+                                           "branchKey":  "root",
+                                           "latestAttemptNo":  null,
+                                           "failureCategory":  null,
+                                           "issueSummary":  "å½åä»»å¡è¿æ²¡æå¯ç¨æ£ç´¢ç´¢å¼ï¼éå\u0085è¡¥å\u0085\u0085ééè¯æ®æç­å¾\u0085ç´¢å¼å®æã",
+                                           "recoveryHint":  "å½åææ é¢å¤æ¢å¤æç¤º",
+                                           "checkpointSummary":  null,
+                                           "sourceUrls":  [
+                                                              "https://www.atlassian.com/docs",
+                                                              "https://www.atlassian.com/documentation",
+                                                              "https://www.atlassian.com/help",
+                                                              "https://www.atlassian.com/guide",
+                                                              "https://docs.atlassian.com/portfolio-for-jira-server/REST/2.12.0/",
+                                                              "https://docs.atlassian.com/software/jira/docs/api/REST/8.5.5/",
+                                                              "https://developer.atlassian.com/stash/docs/latest/",
+                                                              "https://developer.atlassian.com/cloud/jira/platform/integrating-with-jira-cloud/",
+                                                              "https://aiqicha.baidu.com/feedback/official?from=baidu\u0026type=gw"
+                                                          ]
+                                       },
+                                       {
+                                           "nodeId":  948,
+                                           "nodeName":  "collect_sources_01_03",
+                                           "displayName":  "Jira - PRICINGéé",
+                                           "status":  "RUNNING",
+                                           "planVersionId":  67,
+                                           "branchKey":  "root",
+                                           "latestAttemptNo":  null,
+                                           "failureCategory":  null,
+                                           "issueSummary":  "å½åä»»å¡è¿æ²¡æå¯ç¨æ£ç´¢ç´¢å¼ï¼éå\u0085è¡¥å\u0085\u0085ééè¯æ®æç­å¾\u0085ç´¢å¼å®æã",
+                                           "recoveryHint":  "å½åææ é¢å¤æ¢å¤æç¤º",
+                                           "checkpointSummary":  null,
+                                           "sourceUrls":  [
+                                                              "https://www.atlassian.com/software/jira/pricing",
+                                                              "https://atlassian.com/software/jira/pricing",
+                                                              "https://tech.co/project-management-software/jira-pricing",
+                                                              "https://unthread.io/blog/jira-service-management-pricing",
+                                                              "https://www.atlassian.com/pricing",
+                                                              "https://www.atlassian.com/plans",
+                                                              "https://www.atlassian.com/enterprise"
+                                                          ]
+                                       },
+                                       {
+                                           "nodeId":  949,
+                                           "nodeName":  "collect_sources_01_04",
+                                           "displayName":  "Jira - REVIEWéé",
+                                           "status":  "RUNNING",
+                                           "planVersionId":  67,
+                                           "branchKey":  "root",
+                                           "latestAttemptNo":  null,
+                                           "failureCategory":  null,
+                                           "issueSummary":  "å½åä»»å¡è¿æ²¡æå¯ç¨æ£ç´¢ç´¢å¼ï¼éå\u0085è¡¥å\u0085\u0085ééè¯æ®æç­å¾\u0085ç´¢å¼å®æã",
+                                           "recoveryHint":  "å½åææ é¢å¤æ¢å¤æç¤º",
+                                           "checkpointSummary":  null,
+                                           "sourceUrls":  [
+                                                              "https://www.atlassian.com/case-studies",
+                                                              "https://www.atlassian.com/compare",
+                                                              "https://www.atlassian.com/customers",
+                                                              "https://www.g2.com/search?query=Jira",
+                                                              "https://www.capterra.com/search/?query=Jira",
+                                                              "https://www.taskrhino.ca/blog/jira-review",
+                                                              "https://clearfeed.ai/blogs/jira-service-management-review-analysis-ratings",
+                                                              "https://www.softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                              "https://www.atlassian.com/work-management/project-management/goal-management-software",
+                                                              "https://www.enterpret.com/guides/g2-vs-capterra----the-6-top-rated-feedback-management-tools"
+                                                          ]
+                                       },
+                                       {
+                                           "nodeId":  950,
+                                           "nodeName":  "extract_schema",
+                                           "displayName":  "ç«åç»æåæå",
+                                           "status":  "PENDING",
+                                           "planVersionId":  67,
+                                           "branchKey":  "root",
+                                           "latestAttemptNo":  null,
+                                           "failureCategory":  null,
+                                           "issueSummary":  "ææ é¢å¤é®é¢æè¦",
+                                           "recoveryHint":  "å½åææ é¢å¤æ¢å¤æç¤º",
+                                           "checkpointSummary":  null,
+                                           "sourceUrls":  [
+                                                              "https://www.atlassian.com/software/jira"
+                                                          ]
+                                       },
+                                       {
+                                           "nodeId":  951,
+                                           "nodeName":  "analyze_competitors",
+                                           "displayName":  "ç«åç»¼ååæ",
+                                           "status":  "PENDING",
+                                           "planVersionId":  67,
+                                           "branchKey":  "root",
+                                           "latestAttemptNo":  null,
+                                           "failureCategory":  null,
+                                           "issueSummary":  "ææ é¢å¤é®é¢æè¦",
+                                           "recoveryHint":  "å½åææ é¢å¤æ¢å¤æç¤º",
+                                           "checkpointSummary":  null,
+                                           "sourceUrls":  [
+                                                              "https://www.atlassian.com/software/jira"
+                                                          ]
+                                       },
+                                       {
+                                           "nodeId":  952,
+                                           "nodeName":  "write_report",
+                                           "displayName":  "çæåææ¥å",
+                                           "status":  "PENDING",
+                                           "planVersionId":  67,
+                                           "branchKey":  "root",
+                                           "latestAttemptNo":  null,
+                                           "failureCategory":  null,
+                                           "issueSummary":  "ææ é¢å¤é®é¢æè¦",
+                                           "recoveryHint":  "å½åææ é¢å¤æ¢å¤æç¤º",
+                                           "checkpointSummary":  null,
+                                           "sourceUrls":  [
+                                                              "https://www.atlassian.com/software/jira"
+                                                          ]
+                                       },
+                                       {
+                                           "nodeId":  953,
+                                           "nodeName":  "citation_check",
+                                           "displayName":  "æ¥åå¼ç¨æ ¸æ¥",
+                                           "status":  "PENDING",
+                                           "planVersionId":  67,
+                                           "branchKey":  "root",
+                                           "latestAttemptNo":  null,
+                                           "failureCategory":  null,
+                                           "issueSummary":  "ææ é¢å¤é®é¢æè¦",
+                                           "recoveryHint":  "å½åææ é¢å¤æ¢å¤æç¤º",
+                                           "checkpointSummary":  null,
+                                           "sourceUrls":  [
+                                                              "https://www.atlassian.com/software/jira"
+                                                          ]
+                                       },
+                                       {
+                                           "nodeId":  954,
+                                           "nodeName":  "quality_check",
+                                           "displayName":  "æ¥åè´¨éåå®¡",
+                                           "status":  "PENDING",
+                                           "planVersionId":  67,
+                                           "branchKey":  "root",
+                                           "latestAttemptNo":  null,
+                                           "failureCategory":  null,
+                                           "issueSummary":  "ææ é¢å¤é®é¢æè¦",
+                                           "recoveryHint":  "å½åææ é¢å¤æ¢å¤æç¤º",
+                                           "checkpointSummary":  null,
+                                           "sourceUrls":  [
+
+                                                          ]
+                                       },
+                                       {
+                                           "nodeId":  955,
+                                           "nodeName":  "rewrite_report",
+                                           "displayName":  "æ ¹æ®è¯å®¡æ¹åæ¥å",
+                                           "status":  "PENDING",
+                                           "planVersionId":  67,
+                                           "branchKey":  "root",
+                                           "latestAttemptNo":  null,
+                                           "failureCategory":  null,
+                                           "issueSummary":  "ææ é¢å¤é®é¢æè¦",
+                                           "recoveryHint":  "å½åææ é¢å¤æ¢å¤æç¤º",
+                                           "checkpointSummary":  null,
+                                           "sourceUrls":  [
+                                                              "https://www.atlassian.com/software/jira"
+                                                          ]
+                                       },
+                                       {
+                                           "nodeId":  956,
+                                           "nodeName":  "citation_check_revision",
+                                           "displayName":  "ä¿®è®¢æ¥åå¼ç¨å¤æ ¸",
+                                           "status":  "PENDING",
+                                           "planVersionId":  67,
+                                           "branchKey":  "root",
+                                           "latestAttemptNo":  null,
+                                           "failureCategory":  null,
+                                           "issueSummary":  "ææ é¢å¤é®é¢æè¦",
+                                           "recoveryHint":  "å½åææ é¢å¤æ¢å¤æç¤º",
+                                           "checkpointSummary":  null,
+                                           "sourceUrls":  [
+                                                              "https://www.atlassian.com/software/jira"
+                                                          ]
+                                       },
+                                       {
+                                           "nodeId":  957,
+                                           "nodeName":  "quality_check_final",
+                                           "displayName":  "æ¥åç»å®¡å¤æ ¸",
+                                           "status":  "PENDING",
+                                           "planVersionId":  67,
+                                           "branchKey":  "root",
+                                           "latestAttemptNo":  null,
+                                           "failureCategory":  null,
+                                           "issueSummary":  "ææ é¢å¤é®é¢æè¦",
+                                           "recoveryHint":  "å½åææ é¢å¤æ¢å¤æç¤º",
+                                           "checkpointSummary":  null,
+                                           "sourceUrls":  [
+
+                                                          ]
+                                       }
+                                   ],
+                 "recoveryAdvice":  {
+                                        "recommendedAction":  "FULL_RETRY",
+                                        "summary":  "å½åèç¹å·²è¿å\u0085¥ä¸å¯èªå¨æ¢å¤çå¤±è´¥ç»æ",
+                                        "blockingNodeNames":  [
+
+                                                              ],
+                                        "recommendedCheckpointId":  null,
+                                        "recommendedCheckpointKey":  null,
+                                        "resumeSupported":  false,
+                                        "recoveryWindow":  {
+                                                               "windowScope":  "ACTIVE_PLAN_VERSION",
+                                                               "planVersionId":  67,
+                                                               "branchKey":  "root",
+                                                               "boundaryNodeNames":  [
+                                                                                         "collect_sources_01_01"
+                                                                                     ],
+                                                               "replayableEventIds":  [
+                                                                                          "8462650c-2e13-40d5-be50-938c0e06e035",
+                                                                                          "73a1e9d2-4fb8-4e7e-9ff0-fcf3bf2cdaa2",
+                                                                                          "ceb1ce41-473b-49e7-9ab5-c0e2e16498a1",
+                                                                                          "2ce982e9-fa0d-497b-a30b-f852ec6c1732",
+                                                                                          "1b327e2e-5948-4bed-9cda-ad96d3e7606a",
+                                                                                          "1f0945f1-7672-45e8-8e8a-a389fe4eacd3",
+                                                                                          "0fbfd776-4c0f-44a4-8142-18d655723ca2",
+                                                                                          "9b470808-a6a8-4ed4-8734-8cddc8b2dee9"
+                                                                                      ],
+                                                               "windowStartAt":  [
+                                                                                     2026,
+                                                                                     7,
+                                                                                     8,
+                                                                                     10,
+                                                                                     22,
+                                                                                     17,
+                                                                                     960162000
+                                                                                 ],
+                                                               "windowEndAt":  [
+                                                                                   2026,
+                                                                                   7,
+                                                                                   8,
+                                                                                   10,
+                                                                                   22,
+                                                                                   34,
+                                                                                   527238000
+                                                                               ]
+                                                           },
+                                        "releasePolicy":  {
+                                                              "releaseTaskExecutionLock":  true,
+                                                              "releaseNodeExecutionLocks":  true,
+                                                              "releaseReason":  "å¤±è´¥ç»æéè¦éæ¾å ä½ï¼é¿å\u0085ç³»ç»è¯¯å¤ä»å¨æ§è¡"
+                                                          },
+                                        "auditTrail":  {
+                                                           "decisionSource":  "RECOVERY_ENGINE",
+                                                           "planVersionId":  67,
+                                                           "triggerEventId":  "8462650c-2e13-40d5-be50-938c0e06e035",
+                                                           "latestAttemptId":  null,
+                                                           "latestAttemptNo":  null
+                                                       },
+                                        "sourceUrls":  [
+                                                           "https://www.atlassian.com/software/jira"
+                                                       ]
+                                    },
+                 "recoveryCheckpoints":  [
+
+                                         ],
+                 "planVersions":  [
+                                      {
+                                          "planVersionId":  67,
+                                          "planVersion":  1,
+                                          "parentPlanId":  null,
+                                          "branchKey":  "root",
+                                          "planType":  "INITIAL",
+                                          "triggerNodeName":  null,
+                                          "active":  true,
+                                          "createdAt":  [
+                                                            2026,
+                                                            7,
+                                                            8,
+                                                            10,
+                                                            22,
+                                                            17,
+                                                            951977000
+                                                        ],
+                                          "sourceUrls":  [
+                                                             "https://www.atlassian.com/software/jira"
+                                                         ]
+                                      }
+                                  ],
+                 "searchReplays":  [
+                                       {
+                                           "nodeName":  "collect_sources_01_01",
+                                           "planVersionId":  67,
+                                           "planVersion":  1,
+                                           "branchKey":  "root",
+                                           "latestProgress":  {
+                                                                  "currentStep":  "åå¹¶åéå¹¶éåºæç»ééç®æ ",
+                                                                  "currentStepCode":  "SELECT_TARGETS",
+                                                                  "completedSteps":  5,
+                                                                  "totalSteps":  6,
+                                                                  "progressPercent":  83,
+                                                                  "status":  "DEGRADED",
+                                                                  "message":  "selected 2 final targets",
+                                                                  "degraded":  true,
+                                                                  "degradationReason":  "SEARCH_TIMEOUT_AFTER_SUPPLEMENT",
+                                                                  "updatedAt":  [
+                                                                                    2026,
+                                                                                    7,
+                                                                                    8,
+                                                                                    10,
+                                                                                    25,
+                                                                                    31,
+                                                                                    279480500
+                                                                                ]
+                                                              },
+                                           "timeline":  [
+
+                                                        ],
+                                           "searchAuditSummary":  {
+                                                                      "candidateCount":  0,
+                                                                      "selectedCount":  0,
+                                                                      "discardedCount":  0,
+                                                                      "attemptedCount":  0,
+                                                                      "sourceUrls":  [
+
+                                                                                     ]
+                                                                  },
+                                           "attemptedTargets":  [
+
+                                                                ],
+                                           "discardedCandidates":  [
+
+                                                                   ],
+                                           "selectedTargets":  [
+                                                                   {
+                                                                       "url":  "https://atlassian.com/docs",
+                                                                       "title":  "Jira - DOCS direct entry: https://atlassian.com/docs",
+                                                                       "verified":  null,
+                                                                       "browserTraceId":  null,
+                                                                       "selectionStage":  "SELECTED",
+                                                                       "selectionReason":  "å­æ®µåç°åéå·²å\u0085¥éï¼ä»éåç»­æ­£æéé",
+                                                                       "discoveryMethod":  "SEARCH_ROOT_TEMPLATE",
+                                                                       "tavilyQueryMode":  null,
+                                                                       "qualityTier":  null,
+                                                                       "fastLaneUsable":  null,
+                                                                       "prefetchedRawContentLength":  null,
+                                                                       "skipNetworkVerification":  null,
+                                                                       "targetSelectionSummary":  "å­æ®µåç°åéå¯ç»§ç»­è¿å\u0085¥æ­£æééé¾è·¯",
+                                                                       "selectionSummary":  "å­æ®µåç°åéå¯ç»§ç»­è¿å\u0085¥æ­£æééé¾è·¯",
+                                                                       "trustTier":  "HIGH",
+                                                                       "trustTierLabel":  "é«å¯ä¿¡",
+                                                                       "totalScore":  0.88,
+                                                                       "rankingReasons":  [
+                                                                                              "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡",
+                                                                                              "å½ä¸­ææ¡£é«ä»·å¼è·¯å¾ï¼ä¼å\u0085çº§é«äºæ³å®ç½é¦é¡µ",
+                                                                                              "å½ä¸­æç¡®ææ¡£è·¯å¾ï¼ä¼å\u0085çº§é«äºå¼æ¾å¹³å°æ ¹é¡µ"
+                                                                                          ],
+                                                                       "rankingSummary":  "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡ï¼å½ä¸­ææ¡£é«ä»·å¼è·¯å¾ï¼ä¼å\u0085çº§é«äºæ³å®ç½é¦é¡µï¼å½ä¸­æç¡®ææ¡£è·¯å¾ï¼ä¼å\u0085çº§é«äºå¼æ¾å¹³å°æ ¹é¡µ",
+                                                                       "hasPrefetchedPage":  false
+                                                                   },
+                                                                   {
+                                                                       "url":  "https://confluence.atlassian.com/docs",
+                                                                       "title":  "Jira - DOCS direct entry: https://confluence.atlassian.com/docs",
+                                                                       "verified":  null,
+                                                                       "browserTraceId":  null,
+                                                                       "selectionStage":  "SELECTED",
+                                                                       "selectionReason":  "å­æ®µåç°åéå·²å\u0085¥éï¼ä»éåç»­æ­£æéé",
+                                                                       "discoveryMethod":  "SEARCH_ROOT_TEMPLATE",
+                                                                       "tavilyQueryMode":  null,
+                                                                       "qualityTier":  null,
+                                                                       "fastLaneUsable":  null,
+                                                                       "prefetchedRawContentLength":  null,
+                                                                       "skipNetworkVerification":  null,
+                                                                       "targetSelectionSummary":  "å­æ®µåç°åéå¯ç»§ç»­è¿å\u0085¥æ­£æééé¾è·¯",
+                                                                       "selectionSummary":  "å­æ®µåç°åéå¯ç»§ç»­è¿å\u0085¥æ­£æééé¾è·¯",
+                                                                       "trustTier":  "HIGH",
+                                                                       "trustTierLabel":  "é«å¯ä¿¡",
+                                                                       "totalScore":  0.88,
+                                                                       "rankingReasons":  [
+                                                                                              "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡",
+                                                                                              "å½ä¸­ææ¡£é«ä»·å¼è·¯å¾ï¼ä¼å\u0085çº§é«äºæ³å®ç½é¦é¡µ",
+                                                                                              "å½ä¸­æç¡®ææ¡£è·¯å¾ï¼ä¼å\u0085çº§é«äºå¼æ¾å¹³å°æ ¹é¡µ"
+                                                                                          ],
+                                                                       "rankingSummary":  "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡ï¼å½ä¸­ææ¡£é«ä»·å¼è·¯å¾ï¼ä¼å\u0085çº§é«äºæ³å®ç½é¦é¡µï¼å½ä¸­æç¡®ææ¡£è·¯å¾ï¼ä¼å\u0085çº§é«äºå¼æ¾å¹³å°æ ¹é¡µ",
+                                                                       "hasPrefetchedPage":  false
+                                                                   }
+                                                               ],
+                                           "sourceUrls":  [
+                                                              "https://www.atlassian.com",
+                                                              "https://www.atlassian.com/software/jira"
+                                                          ]
+                                       },
+                                       {
+                                           "nodeName":  "collect_sources_01_02",
+                                           "planVersionId":  67,
+                                           "planVersion":  1,
+                                           "branchKey":  "root",
+                                           "latestProgress":  {
+                                                                  "currentStep":  "åéä¸è¶³æ¶æ§è¡è¿è¡æè¡¥æº",
+                                                                  "currentStepCode":  "BROWSER_SUPPLEMENT_SEARCH",
+                                                                  "completedSteps":  4,
+                                                                  "totalSteps":  6,
+                                                                  "progressPercent":  67,
+                                                                  "status":  "DEGRADED",
+                                                                  "message":  "supplement added 7 candidates; method=HTTP_FALLBACK; planned candidates only; field query plan 59, executed 0, skipped 59, elapsed 0ms, skipReasons={SKIPPED_FIELD_SOURCE_QUOTA_EXHAUSTED=38, SKIPPED_CROSS_NODE_DEDUP=21}; timed out before post-supplement verification",
+                                                                  "degraded":  true,
+                                                                  "degradationReason":  "SEARCH_TIMEOUT_AFTER_SUPPLEMENT",
+                                                                  "updatedAt":  [
+                                                                                    2026,
+                                                                                    7,
+                                                                                    8,
+                                                                                    10,
+                                                                                    25,
+                                                                                    12,
+                                                                                    105555700
+                                                                                ]
+                                                              },
+                                           "timeline":  [
+
+                                                        ],
+                                           "searchAuditSummary":  {
+                                                                      "candidateCount":  0,
+                                                                      "selectedCount":  0,
+                                                                      "discardedCount":  0,
+                                                                      "attemptedCount":  0,
+                                                                      "sourceUrls":  [
+
+                                                                                     ]
+                                                                  },
+                                           "attemptedTargets":  [
+
+                                                                ],
+                                           "discardedCandidates":  [
+
+                                                                   ],
+                                           "selectedTargets":  [
+
+                                                               ],
+                                           "sourceUrls":  [
+                                                              "https://www.atlassian.com/docs",
+                                                              "https://www.atlassian.com/documentation",
+                                                              "https://www.atlassian.com/help",
+                                                              "https://www.atlassian.com/guide"
+                                                          ]
+                                       },
+                                       {
+                                           "nodeName":  "collect_sources_01_03",
+                                           "planVersionId":  67,
+                                           "planVersion":  1,
+                                           "branchKey":  "root",
+                                           "latestProgress":  {
+                                                                  "currentStep":  "åéä¸è¶³æ¶æ§è¡è¿è¡æè¡¥æº",
+                                                                  "currentStepCode":  "BROWSER_SUPPLEMENT_SEARCH",
+                                                                  "completedSteps":  3,
+                                                                  "totalSteps":  6,
+                                                                  "progressPercent":  50,
+                                                                  "status":  "RUNNING",
+                                                                  "message":  "run field-evidence supplement with 59 queries; firstField=summary, firstQuery=Jira äº§åæ¦è¿° OFFICIAL DOCS åè½ è½å ç¹æ§ å®æ¹èµæ å®ç½",
+                                                                  "degraded":  false,
+                                                                  "degradationReason":  null,
+                                                                  "updatedAt":  [
+                                                                                    2026,
+                                                                                    7,
+                                                                                    8,
+                                                                                    10,
+                                                                                    23,
+                                                                                    34,
+                                                                                    375341000
+                                                                                ]
+                                                              },
+                                           "timeline":  [
+
+                                                        ],
+                                           "searchAuditSummary":  {
+                                                                      "candidateCount":  0,
+                                                                      "selectedCount":  0,
+                                                                      "discardedCount":  0,
+                                                                      "attemptedCount":  0,
+                                                                      "sourceUrls":  [
+
+                                                                                     ]
+                                                                  },
+                                           "attemptedTargets":  [
+
+                                                                ],
+                                           "discardedCandidates":  [
+
+                                                                   ],
+                                           "selectedTargets":  [
+
+                                                               ],
+                                           "sourceUrls":  [
+                                                              "https://www.atlassian.com/software/jira/pricing",
+                                                              "https://atlassian.com/software/jira/pricing",
+                                                              "https://tech.co/project-management-software/jira-pricing",
+                                                              "https://unthread.io/blog/jira-service-management-pricing"
+                                                          ]
+                                       },
+                                       {
+                                           "nodeName":  "collect_sources_01_04",
+                                           "planVersionId":  67,
+                                           "planVersion":  1,
+                                           "branchKey":  "root",
+                                           "latestProgress":  {
+                                                                  "currentStep":  "åéä¸è¶³æ¶æ§è¡è¿è¡æè¡¥æº",
+                                                                  "currentStepCode":  "BROWSER_SUPPLEMENT_SEARCH",
+                                                                  "completedSteps":  3,
+                                                                  "totalSteps":  6,
+                                                                  "progressPercent":  50,
+                                                                  "status":  "RUNNING",
+                                                                  "message":  "run field-evidence supplement with 59 queries; firstField=summary, firstQuery=Jira äº§åæ¦è¿° OFFICIAL DOCS åè½ è½å ç¹æ§ å®æ¹èµæ å®ç½",
+                                                                  "degraded":  false,
+                                                                  "degradationReason":  null,
+                                                                  "updatedAt":  [
+                                                                                    2026,
+                                                                                    7,
+                                                                                    8,
+                                                                                    10,
+                                                                                    23,
+                                                                                    3,
+                                                                                    533544900
+                                                                                ]
+                                                              },
+                                           "timeline":  [
+
+                                                        ],
+                                           "searchAuditSummary":  {
+                                                                      "candidateCount":  0,
+                                                                      "selectedCount":  0,
+                                                                      "discardedCount":  0,
+                                                                      "attemptedCount":  0,
+                                                                      "sourceUrls":  [
+
+                                                                                     ]
+                                                                  },
+                                           "attemptedTargets":  [
+
+                                                                ],
+                                           "discardedCandidates":  [
+
+                                                                   ],
+                                           "selectedTargets":  [
+
+                                                               ],
+                                           "sourceUrls":  [
+                                                              "https://www.atlassian.com/case-studies",
+                                                              "https://www.atlassian.com/compare",
+                                                              "https://www.atlassian.com/customers",
+                                                              "https://www.g2.com/search?query=Jira",
+                                                              "https://www.capterra.com/search/?query=Jira"
+                                                          ]
+                                       }
+                                   ],
+                 "collectionReplays":  [
+                                           {
+                                               "nodeName":  "collect_sources_01_01",
+                                               "planVersionId":  67,
+                                               "planVersion":  1,
+                                               "branchKey":  "root",
+                                               "timeline":  [
+
+                                                            ],
+                                               "sourceUrls":  [
+                                                                  "https://www.atlassian.com",
+                                                                  "https://www.atlassian.com/software/jira"
+                                                              ]
+                                           },
+                                           {
+                                               "nodeName":  "collect_sources_01_02",
+                                               "planVersionId":  67,
+                                               "planVersion":  1,
+                                               "branchKey":  "root",
+                                               "timeline":  [
+
+                                                            ],
+                                               "sourceUrls":  [
+                                                                  "https://www.atlassian.com/docs",
+                                                                  "https://www.atlassian.com/documentation",
+                                                                  "https://www.atlassian.com/help",
+                                                                  "https://www.atlassian.com/guide"
+                                                              ]
+                                           },
+                                           {
+                                               "nodeName":  "collect_sources_01_03",
+                                               "planVersionId":  67,
+                                               "planVersion":  1,
+                                               "branchKey":  "root",
+                                               "timeline":  [
+
+                                                            ],
+                                               "sourceUrls":  [
+                                                                  "https://www.atlassian.com/software/jira/pricing",
+                                                                  "https://atlassian.com/software/jira/pricing",
+                                                                  "https://tech.co/project-management-software/jira-pricing",
+                                                                  "https://unthread.io/blog/jira-service-management-pricing"
+                                                              ]
+                                           },
+                                           {
+                                               "nodeName":  "collect_sources_01_04",
+                                               "planVersionId":  67,
+                                               "planVersion":  1,
+                                               "branchKey":  "root",
+                                               "timeline":  [
+
+                                                            ],
+                                               "sourceUrls":  [
+                                                                  "https://www.atlassian.com/case-studies",
+                                                                  "https://www.atlassian.com/compare",
+                                                                  "https://www.atlassian.com/customers",
+                                                                  "https://www.g2.com/search?query=Jira",
+                                                                  "https://www.capterra.com/search/?query=Jira"
+                                                              ]
+                                           }
+                                       ],
+                 "integrationEntryPoints":  [
+                                                {
+                                                    "entryKey":  "CONVERSATION_ACTION_REPLAY",
+                                                    "readinessStatus":  "RESERVED_FOR_TASK_5_9",
+                                                    "targetTaskKey":  "Task 5.9",
+                                                    "summary":  "é¢çç» Task 5.9 æ¥å\u0085¥å¯¹è¯ç¡®è®¤ãå¨ä½é¢è§ä¸æ§è¡ç»æåæ¾ï¼å½åé¶æ®µåªéå®ä»»å¡ / èç¹ / å®¡è®¡ä¸»é¾è·¯ã",
+                                                    "sourceUrls":  [
+                                                                       "https://www.atlassian.com/software/jira",
+                                                                       "https://www.atlassian.com",
+                                                                       "https://en.wikipedia.org/wiki/Jira_(software)",
+                                                                       "https://www.atlassian.com/zh/software/jira/pricing",
+                                                                       "https://confluence.atlassian.com/jira",
+                                                                       "https://www.atlassian.com/zh/collections/service/pricing",
+                                                                       "https://www.atlassian.com/zh/software/jira",
+                                                                       "https://www.atlassian.com/zh/software/jira/capture/pricing",
+                                                                       "https://www.atlassian.com/zh/software/jira/guides/getting-started/introduction",
+                                                                       "https://www.atlassian.com/zh/software/jira/whats-new-overview",
+                                                                       "https://www.atlassian.com/zh/agile/product-management/product-features",
+                                                                       "https://events.atlassian.com/summit20_live_stream_customer_support/l/t?u=Lf2ie-olmOVX5jeRRpNGP_OR8CpTHVbBDZqm9beviVhFIgPiInSZRxILPmu-ZLkjtxmjiFbfzVnQB-uVOIhE_jSxah2as8oZZC1v9CG409eNjeEsMVI5zQ0D7jA8eFYPzQCXQNh0gfU%3D\u0026t=http%3A%2F%2Fwww.shdsd.com",
+                                                                       "https://www.atlassian.com/zh/devops",
+                                                                       "https://www.atlassian.com/zh/software/jira/features",
+                                                                       "http://jira.51component.com/",
+                                                                       "https://microsoftedge.microsoft.com/addons/detail/aoenpdbabcjnjbjpegeenodfknllmaoi?utm_source=jasite",
+                                                                       "https://www.atlassian.com/software/jira.5",
+                                                                       "https://www.youtube.com/watch?v=Z-a1RB9HvDI",
+                                                                       "https://www.atlassian.com/docs",
+                                                                       "https://www.atlassian.com/documentation",
+                                                                       "https://www.atlassian.com/help",
+                                                                       "https://www.atlassian.com/guide",
+                                                                       "https://docs.atlassian.com/portfolio-for-jira-server/REST/2.12.0/",
+                                                                       "https://docs.atlassian.com/software/jira/docs/api/REST/8.5.5/",
+                                                                       "https://developer.atlassian.com/stash/docs/latest/",
+                                                                       "https://developer.atlassian.com/cloud/jira/platform/integrating-with-jira-cloud/",
+                                                                       "https://aiqicha.baidu.com/feedback/official?from=baidu\u0026type=gw",
+                                                                       "https://www.atlassian.com/software/jira/pricing",
+                                                                       "https://atlassian.com/software/jira/pricing",
+                                                                       "https://tech.co/project-management-software/jira-pricing",
+                                                                       "https://unthread.io/blog/jira-service-management-pricing",
+                                                                       "https://www.atlassian.com/pricing",
+                                                                       "https://www.atlassian.com/plans",
+                                                                       "https://www.atlassian.com/enterprise",
+                                                                       "https://www.atlassian.com/case-studies",
+                                                                       "https://www.atlassian.com/compare",
+                                                                       "https://www.atlassian.com/customers",
+                                                                       "https://www.g2.com/search?query=Jira",
+                                                                       "https://www.capterra.com/search/?query=Jira",
+                                                                       "https://www.taskrhino.ca/blog/jira-review",
+                                                                       "https://clearfeed.ai/blogs/jira-service-management-review-analysis-ratings",
+                                                                       "https://www.softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                       "https://www.atlassian.com/work-management/project-management/goal-management-software",
+                                                                       "https://www.enterpret.com/guides/g2-vs-capterra----the-6-top-rated-feedback-management-tools"
+                                                                   ]
+                                                },
+                                                {
+                                                    "entryKey":  "REPORT_EXPORT_REPLAY",
+                                                    "readinessStatus":  "RESERVED_FOR_TASK_5_7",
+                                                    "targetTaskKey":  "Task 5.7",
+                                                    "summary":  "é¢çç» Task 5.7 æ¥å\u0085¥æ­£å¼å¯¼åºè®°å½åæ¾ï¼å½åé¶æ®µä¸ç´æ¥æ¿è½½å¯¼åºåå²ã",
+                                                    "sourceUrls":  [
+                                                                       "https://www.atlassian.com/software/jira",
+                                                                       "https://www.atlassian.com",
+                                                                       "https://en.wikipedia.org/wiki/Jira_(software)",
+                                                                       "https://www.atlassian.com/zh/software/jira/pricing",
+                                                                       "https://confluence.atlassian.com/jira",
+                                                                       "https://www.atlassian.com/zh/collections/service/pricing",
+                                                                       "https://www.atlassian.com/zh/software/jira",
+                                                                       "https://www.atlassian.com/zh/software/jira/capture/pricing",
+                                                                       "https://www.atlassian.com/zh/software/jira/guides/getting-started/introduction",
+                                                                       "https://www.atlassian.com/zh/software/jira/whats-new-overview",
+                                                                       "https://www.atlassian.com/zh/agile/product-management/product-features",
+                                                                       "https://events.atlassian.com/summit20_live_stream_customer_support/l/t?u=Lf2ie-olmOVX5jeRRpNGP_OR8CpTHVbBDZqm9beviVhFIgPiInSZRxILPmu-ZLkjtxmjiFbfzVnQB-uVOIhE_jSxah2as8oZZC1v9CG409eNjeEsMVI5zQ0D7jA8eFYPzQCXQNh0gfU%3D\u0026t=http%3A%2F%2Fwww.shdsd.com",
+                                                                       "https://www.atlassian.com/zh/devops",
+                                                                       "https://www.atlassian.com/zh/software/jira/features",
+                                                                       "http://jira.51component.com/",
+                                                                       "https://microsoftedge.microsoft.com/addons/detail/aoenpdbabcjnjbjpegeenodfknllmaoi?utm_source=jasite",
+                                                                       "https://www.atlassian.com/software/jira.5",
+                                                                       "https://www.youtube.com/watch?v=Z-a1RB9HvDI",
+                                                                       "https://www.atlassian.com/docs",
+                                                                       "https://www.atlassian.com/documentation",
+                                                                       "https://www.atlassian.com/help",
+                                                                       "https://www.atlassian.com/guide",
+                                                                       "https://docs.atlassian.com/portfolio-for-jira-server/REST/2.12.0/",
+                                                                       "https://docs.atlassian.com/software/jira/docs/api/REST/8.5.5/",
+                                                                       "https://developer.atlassian.com/stash/docs/latest/",
+                                                                       "https://developer.atlassian.com/cloud/jira/platform/integrating-with-jira-cloud/",
+                                                                       "https://aiqicha.baidu.com/feedback/official?from=baidu\u0026type=gw",
+                                                                       "https://www.atlassian.com/software/jira/pricing",
+                                                                       "https://atlassian.com/software/jira/pricing",
+                                                                       "https://tech.co/project-management-software/jira-pricing",
+                                                                       "https://unthread.io/blog/jira-service-management-pricing",
+                                                                       "https://www.atlassian.com/pricing",
+                                                                       "https://www.atlassian.com/plans",
+                                                                       "https://www.atlassian.com/enterprise",
+                                                                       "https://www.atlassian.com/case-studies",
+                                                                       "https://www.atlassian.com/compare",
+                                                                       "https://www.atlassian.com/customers",
+                                                                       "https://www.g2.com/search?query=Jira",
+                                                                       "https://www.capterra.com/search/?query=Jira",
+                                                                       "https://www.taskrhino.ca/blog/jira-review",
+                                                                       "https://clearfeed.ai/blogs/jira-service-management-review-analysis-ratings",
+                                                                       "https://www.softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                       "https://www.atlassian.com/work-management/project-management/goal-management-software",
+                                                                       "https://www.enterpret.com/guides/g2-vs-capterra----the-6-top-rated-feedback-management-tools"
+                                                                   ]
+                                                }
+                                            ],
+                 "latestOrchestrationDecision":  null,
+                 "sourceUrls":  [
+                                    "https://www.atlassian.com/software/jira",
+                                    "https://www.atlassian.com",
+                                    "https://en.wikipedia.org/wiki/Jira_(software)",
+                                    "https://www.atlassian.com/zh/software/jira/pricing",
+                                    "https://confluence.atlassian.com/jira",
+                                    "https://www.atlassian.com/zh/collections/service/pricing",
+                                    "https://www.atlassian.com/zh/software/jira",
+                                    "https://www.atlassian.com/zh/software/jira/capture/pricing",
+                                    "https://www.atlassian.com/zh/software/jira/guides/getting-started/introduction",
+                                    "https://www.atlassian.com/zh/software/jira/whats-new-overview",
+                                    "https://www.atlassian.com/zh/agile/product-management/product-features",
+                                    "https://events.atlassian.com/summit20_live_stream_customer_support/l/t?u=Lf2ie-olmOVX5jeRRpNGP_OR8CpTHVbBDZqm9beviVhFIgPiInSZRxILPmu-ZLkjtxmjiFbfzVnQB-uVOIhE_jSxah2as8oZZC1v9CG409eNjeEsMVI5zQ0D7jA8eFYPzQCXQNh0gfU%3D\u0026t=http%3A%2F%2Fwww.shdsd.com",
+                                    "https://www.atlassian.com/zh/devops",
+                                    "https://www.atlassian.com/zh/software/jira/features",
+                                    "http://jira.51component.com/",
+                                    "https://microsoftedge.microsoft.com/addons/detail/aoenpdbabcjnjbjpegeenodfknllmaoi?utm_source=jasite",
+                                    "https://www.atlassian.com/software/jira.5",
+                                    "https://www.youtube.com/watch?v=Z-a1RB9HvDI",
+                                    "https://www.atlassian.com/docs",
+                                    "https://www.atlassian.com/documentation",
+                                    "https://www.atlassian.com/help",
+                                    "https://www.atlassian.com/guide",
+                                    "https://docs.atlassian.com/portfolio-for-jira-server/REST/2.12.0/",
+                                    "https://docs.atlassian.com/software/jira/docs/api/REST/8.5.5/",
+                                    "https://developer.atlassian.com/stash/docs/latest/",
+                                    "https://developer.atlassian.com/cloud/jira/platform/integrating-with-jira-cloud/",
+                                    "https://aiqicha.baidu.com/feedback/official?from=baidu\u0026type=gw",
+                                    "https://www.atlassian.com/software/jira/pricing",
+                                    "https://atlassian.com/software/jira/pricing",
+                                    "https://tech.co/project-management-software/jira-pricing",
+                                    "https://unthread.io/blog/jira-service-management-pricing",
+                                    "https://www.atlassian.com/pricing",
+                                    "https://www.atlassian.com/plans",
+                                    "https://www.atlassian.com/enterprise",
+                                    "https://www.atlassian.com/case-studies",
+                                    "https://www.atlassian.com/compare",
+                                    "https://www.atlassian.com/customers",
+                                    "https://www.g2.com/search?query=Jira",
+                                    "https://www.capterra.com/search/?query=Jira",
+                                    "https://www.taskrhino.ca/blog/jira-review",
+                                    "https://clearfeed.ai/blogs/jira-service-management-review-analysis-ratings",
+                                    "https://www.softwaresuggest.com/compare/capterra-vs-g2-com",
+                                    "https://www.atlassian.com/work-management/project-management/goal-management-software",
+                                    "https://www.enterpret.com/guides/g2-vs-capterra----the-6-top-rated-feedback-management-tools"
+                                ]
+             },
+    "timestamp":  "2026-07-08T10:25:31.729951300",
+    "traceId":  "e759134d1d8245d1ab4de16b849cf364"
+}

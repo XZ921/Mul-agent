@@ -1,5 +1,0 @@
-﻿ illegal_topic_rows | dead_letter_rows 
---------------------+------------------
-                  0 |                0
-(1 row)
-

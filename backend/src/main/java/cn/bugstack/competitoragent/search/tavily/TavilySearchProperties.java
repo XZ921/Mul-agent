@@ -57,13 +57,16 @@ public class TavilySearchProperties {
 
     /**
      * 进入 Fast Lane 质量门禁前要求的最小 raw_content 长度。
+     * 阶段1收口优先保证正常竞品能拿到可追溯正文，因此默认门槛从 500 降到 300；
+     * 质量真实性仍由 pageType、qualityTier、sourceUrls 和 Reviewer 继续兜底。
      */
-    private int minRawContentChars = 500;
+    private int minRawContentChars = 300;
 
     /**
      * Tavily 原始得分下限。
+     * 阶段1只降低搜索结果可进入 fast-lane 的初筛门槛，不降低最终报告评分红线。
      */
-    private double minTavilyScore = 0.45D;
+    private double minTavilyScore = 0.35D;
 
     /**
      * 判断 Tavily 是否具备最小配置条件。

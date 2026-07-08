@@ -1,0 +1,68 @@
+﻿{
+    "code":  200,
+    "message":  "Task created",
+    "data":  {
+                 "id":  97,
+                 "taskName":  "é¶æ®µ1åå¥½åºçº¿ï¼Linear ä¸ Jira ç«ååæ",
+                 "subjectProduct":  "Linear",
+                 "competitorNames":  "[\"Jira\"]",
+                 "competitorUrls":  "[\"https://www.atlassian.com/software/jira\"]",
+                 "analysisDimensions":  "[\"äº§åå®ä½\",\"æ ¸å¿åè½\",\"ä»·æ ¼ç­ç¥\",\"ç®æ ç¨æ·\",\"å\u0085¬å¼è¯ä»·\"]",
+                 "sourceScope":  "[\"å®ç½\",\"äº§åææ¡£\",\"å®ä»·é¡µ\",\"å\u0085¬å¼æµè¯\"]",
+                 "status":  "PENDING",
+                 "errorMessage":  null,
+                 "statusSummary":  null,
+                 "currentPlanVersionId":  67,
+                 "currentPlanVersion":  1,
+                 "totalNodes":  12,
+                 "completedNodes":  0,
+                 "waitingRetryNodeCount":  0,
+                 "waitingInterventionNodeCount":  0,
+                 "compensatedNodeCount":  0,
+                 "createdAt":  [
+                                   2026,
+                                   7,
+                                   8,
+                                   10,
+                                   22,
+                                   17,
+                                   562542200
+                               ],
+                 "updatedAt":  [
+                                   2026,
+                                   7,
+                                   8,
+                                   10,
+                                   22,
+                                   18,
+                                   13410100
+                               ],
+                 "completedAt":  null,
+                 "canExecute":  true,
+                 "canResume":  false,
+                 "canRetry":  false,
+                 "canStop":  false,
+                 "canViewReport":  false,
+                 "canViewDraftReport":  false,
+                 "interventionSummary":  "ä»»å¡å°æªå¼å§ï¼å¯ç´æ¥å¯å¨æ§è¡ï¼èç¹çº§æ¯ææåå¾\u0085æ§è¡èç¹ãæå¨è·³è¿å¾\u0085æ§è¡èç¹ï¼ä»¥åä»æå®èç¹éè·ã",
+                 "resumeAdvice":  null,
+                 "retryAdvice":  null,
+                 "replayEntrySummary":  null,
+                 "currentStage":  "Jira - OFFICIALéé",
+                 "activeNodeNames":  [
+
+                                     ],
+                 "snapshotUpdatedAt":  [
+                                           2026,
+                                           7,
+                                           8,
+                                           10,
+                                           22,
+                                           18,
+                                           16134900
+                                       ],
+                 "eventStreamPath":  "/api/task/97/events"
+             },
+    "timestamp":  "2026-07-08T10:22:18.024378100",
+    "traceId":  "8e3e8ace9bbc477f8626453ea510bcaa"
+}

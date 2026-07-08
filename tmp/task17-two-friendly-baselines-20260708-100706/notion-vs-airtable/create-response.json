@@ -1,0 +1,68 @@
+﻿{
+    "code":  200,
+    "message":  "Task created",
+    "data":  {
+                 "id":  96,
+                 "taskName":  "é¶æ®µ1åå¥½åºçº¿ï¼Notion ä¸ Airtable ç«ååæ",
+                 "subjectProduct":  "Notion",
+                 "competitorNames":  "[\"Airtable\"]",
+                 "competitorUrls":  "[\"https://www.airtable.com\"]",
+                 "analysisDimensions":  "[\"äº§åå®ä½\",\"æ ¸å¿åè½\",\"ä»·æ ¼ç­ç¥\",\"ç®æ ç¨æ·\",\"å\u0085¬å¼è¯ä»·\"]",
+                 "sourceScope":  "[\"å®ç½\",\"äº§åææ¡£\",\"å®ä»·é¡µ\",\"å\u0085¬å¼æµè¯\"]",
+                 "status":  "PENDING",
+                 "errorMessage":  null,
+                 "statusSummary":  null,
+                 "currentPlanVersionId":  66,
+                 "currentPlanVersion":  1,
+                 "totalNodes":  12,
+                 "completedNodes":  0,
+                 "waitingRetryNodeCount":  0,
+                 "waitingInterventionNodeCount":  0,
+                 "compensatedNodeCount":  0,
+                 "createdAt":  [
+                                   2026,
+                                   7,
+                                   8,
+                                   10,
+                                   11,
+                                   49,
+                                   606920700
+                               ],
+                 "updatedAt":  [
+                                   2026,
+                                   7,
+                                   8,
+                                   10,
+                                   11,
+                                   50,
+                                   755984300
+                               ],
+                 "completedAt":  null,
+                 "canExecute":  true,
+                 "canResume":  false,
+                 "canRetry":  false,
+                 "canStop":  false,
+                 "canViewReport":  false,
+                 "canViewDraftReport":  false,
+                 "interventionSummary":  "ä»»å¡å°æªå¼å§ï¼å¯ç´æ¥å¯å¨æ§è¡ï¼èç¹çº§æ¯ææåå¾\u0085æ§è¡èç¹ãæå¨è·³è¿å¾\u0085æ§è¡èç¹ï¼ä»¥åä»æå®èç¹éè·ã",
+                 "resumeAdvice":  null,
+                 "retryAdvice":  null,
+                 "replayEntrySummary":  null,
+                 "currentStage":  "Airtable - OFFICIALéé",
+                 "activeNodeNames":  [
+
+                                     ],
+                 "snapshotUpdatedAt":  [
+                                           2026,
+                                           7,
+                                           8,
+                                           10,
+                                           11,
+                                           50,
+                                           764105800
+                                       ],
+                 "eventStreamPath":  "/api/task/96/events"
+             },
+    "timestamp":  "2026-07-08T10:11:50.786016700",
+    "traceId":  "2352c278856c46c9877eac024011e12c"
+}

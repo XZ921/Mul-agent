@@ -1,0 +1,154 @@
+﻿[
+    {
+        "Baseline":  "notion-vs-airtable",
+        "TaskId":  96,
+        "FinalStatus":  "STOPPED",
+        "CompletedNodes":  12,
+        "TotalNodes":  12,
+        "SuccessfulCollectors":  "collect_sources_01_01,collect_sources_01_03",
+        "SkippedCollectors":  "collect_sources_01_02,collect_sources_01_04",
+        "ReportProduced":  false,
+        "SourceUrls":  17,
+        "DistinctSourceDomains":  6,
+        "Domains":  "www.airtable.com,airtable.com,thedigitalprojectmanager.com,noloco.io,en.wikipedia.org,support.airtable.com",
+        "OfficialLikeSource":  true,
+        "NodeRows":  [
+                         {
+                             "nodeName":  "collect_sources_01_01",
+                             "status":  "SUCCESS",
+                             "errorMessage":  null
+                         },
+                         {
+                             "nodeName":  "collect_sources_01_02",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "collect_sources_01_03",
+                             "status":  "SUCCESS",
+                             "errorMessage":  null
+                         },
+                         {
+                             "nodeName":  "collect_sources_01_04",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "extract_schema",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "analyze_competitors",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "write_report",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "citation_check",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "quality_check",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "rewrite_report",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "citation_check_revision",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "quality_check_final",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         }
+                     ]
+    },
+    {
+        "Baseline":  "linear-vs-jira",
+        "TaskId":  97,
+        "FinalStatus":  "STOPPED",
+        "CompletedNodes":  12,
+        "TotalNodes":  12,
+        "SuccessfulCollectors":  "collect_sources_01_01,collect_sources_01_03,collect_sources_01_04",
+        "SkippedCollectors":  "collect_sources_01_02",
+        "ReportProduced":  false,
+        "SourceUrls":  33,
+        "DistinctSourceDomains":  14,
+        "Domains":  "www.atlassian.com,atlassian.com,tech.co,unthread.io,confluence.atlassian.com,events.atlassian.com,en.wikipedia.org,www.taskrhino.ca,taskrhino.ca,clearfeed.ai,www.softwaresuggest.com,softwaresuggest.com,www.enterpret.com,enterpret.com",
+        "OfficialLikeSource":  true,
+        "NodeRows":  [
+                         {
+                             "nodeName":  "collect_sources_01_01",
+                             "status":  "SUCCESS",
+                             "errorMessage":  null
+                         },
+                         {
+                             "nodeName":  "collect_sources_01_02",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "collect_sources_01_03",
+                             "status":  "SUCCESS",
+                             "errorMessage":  null
+                         },
+                         {
+                             "nodeName":  "collect_sources_01_04",
+                             "status":  "SUCCESS",
+                             "errorMessage":  null
+                         },
+                         {
+                             "nodeName":  "extract_schema",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "analyze_competitors",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "write_report",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "citation_check",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "quality_check",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "rewrite_report",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "citation_check_revision",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         },
+                         {
+                             "nodeName":  "quality_check_final",
+                             "status":  "SKIPPED",
+                             "errorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+                         }
+                     ]
+    }
+]

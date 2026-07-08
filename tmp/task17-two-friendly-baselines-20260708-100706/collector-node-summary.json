@@ -1,0 +1,74 @@
+﻿[
+    {
+        "Baseline":  "notion-vs-airtable",
+        "Node":  "collect_sources_01_01",
+        "Status":  "SUCCESS",
+        "SourceUrlCount":  20,
+        "SourceUrls":  "https://en.wikipedia.org/wiki/Airtable; https://airtable.com/documentation; https://www.airtable.com/; https://airtable.com/; https://airtable.com/home; https://airtable.com/invite/r/sDSlcMPU; https://www.airtable.com/developers/web/api; https://airtable.com/pricing; https://www.airtable.com/company/developer-terms; https://support.airtable.com/docs/airtable-ai; https://support.airtable.com/docs/general-enterprise-information; https://support.airtable.com/docs/introduction-to-airtable-basics; https://www.airtable.com/developers; https://www.linkedin.com/company/airtable; https://x.com/airtable?lang=en; https://x.com/airtable; https://play.google.com/store/apps/details?id=com.formagrid.airtable; https://www.finebi.com/blog/article/68c133a628946ecca8ee3f7f; https://www.jodoo.com/blog/zh-tw/airtable%E5%AE%9A%E5%83%B9%E8%AE%8A%E5%8C%96%E5%8F%8A%E6%9B%BF%E4%BB%A3%E6%96%B9%E6%A1%88; https://www.airtable.com",
+        "OutputSummary":  "Airtable / OFFICIALï¼éä¸­ 1 æ¡ï¼ééæå 2/2 æ¡ï¼è¡¥æºæ¹å¼=HTTP_FALLBACKï¼è¿åº¦ç¶æ=SUCCESS",
+        "ErrorMessage":  null
+    },
+    {
+        "Baseline":  "notion-vs-airtable",
+        "Node":  "collect_sources_01_02",
+        "Status":  "SKIPPED",
+        "SourceUrlCount":  21,
+        "SourceUrls":  "https://www.airtable.com/docs; https://www.airtable.com/documentation; https://www.airtable.com/help; https://www.airtable.com/guide; https://pyairtable.readthedocs.io/en/stable/api.html; https://support.airtable.com/docs/api; https://www.airtable.com/guides/scale/using-airtable-api; https://community.airtable.com/other-questions-13/public-view-of-base-s-api-documentation-8823; https://airtable.com/developers/web/api/changelog; https://community.airtable.com/robots.txt; https://community.airtable.com/sitemap.xml; https://community.airtable.com/sitemap-topics-1.xml; https://community.airtable.com/development-apis-11/api-404-inconsistency-3374; https://support.airtable.com/robots.txt; https://support.airtable.com/sitemap.xml.en; https://support.airtable.com/docs/3d-space-extension; https://experienceleague.adobe.com/zh-hans/docs/workfront/using/adobe-workfront-fusion/fusion-apps-and-modules/airtable-modules; https://www.finebi.com/blog/article/68c133a628946ecca8ee3f7f; https://www.jodoo.com/blog/zh-tw/airtable%E5%AE%9A%E5%83%B9%E8%AE%8A%E5%8C%96%E5%8F%8A%E6%9B%BF%E4%BB%A3%E6%96%B9%E6%A1%88; https://docs.cloud.google.com/integration-connectors/docs/connectors/airtable/configure?hl=zh-tw; https://www.youtube.com/watch?v=ncuVAqfNvAM",
+        "OutputSummary":  "Airtable / DOCSï¼éä¸­ 4 æ¡ï¼ééæå 0/0 æ¡ï¼è¡¥æºæ¹å¼=HTTP_FALLBACKï¼è¿åº¦ç¶æ=DEGRADEDï¼éçº§åå =SEARCH_TIMEOUT_AFTER_SUPPLEMENT",
+        "ErrorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+    },
+    {
+        "Baseline":  "notion-vs-airtable",
+        "Node":  "collect_sources_01_03",
+        "Status":  "SUCCESS",
+        "SourceUrlCount":  8,
+        "SourceUrls":  "https://airtable.com/pricing; https://www.airtable.com/pricing; https://thedigitalprojectmanager.com/tools/airtable-pricing; https://noloco.io/blog/airtable-pricing; https://baserow.io/blog/airtable-pricing; https://www.smartsuite.com/blog/airtable-pricing?338ea48f_page=8; https://www.airtable.com/plans; https://www.airtable.com/enterprise",
+        "OutputSummary":  "Airtable / PRICINGï¼éä¸­ 3 æ¡ï¼ééæå 3/6 æ¡ï¼è¡¥æºæ¹å¼=NONEï¼è¿åº¦ç¶æ=SUCCESS",
+        "ErrorMessage":  null
+    },
+    {
+        "Baseline":  "notion-vs-airtable",
+        "Node":  "collect_sources_01_04",
+        "Status":  "SKIPPED",
+        "SourceUrlCount":  14,
+        "SourceUrls":  "https://checkthat.ai/brands/airtable/reviews; https://www.copy.ai/go-to-market-tools/airtable-review; https://copy.ai/go-to-market-tools/airtable-review; https://www.zite.com/blog/airtable-reviews; https://zite.com/blog/airtable-reviews; https://www.smartsuite.com/blog/airtable-review?338ea48f_page=8; https://www.smartsuite.com/blog/airtable-review; https://smartsuite.com/blog/airtable-review?338ea48f_page=8; https://airtable.com/compare; https://www.airtable.com/compare; https://www.airtable.com/case-studies; https://www.g2.com/search?query=Airtable; https://www.capterra.com/search/?query=Airtable; https://www.airtable.com/customers",
+        "OutputSummary":  "Airtable / REVIEWï¼éä¸­ 0 æ¡ï¼ééæå 5/5 æ¡ï¼è¿åº¦ç¶æ=RUNNING",
+        "ErrorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+    },
+    {
+        "Baseline":  "linear-vs-jira",
+        "Node":  "collect_sources_01_01",
+        "Status":  "SUCCESS",
+        "SourceUrlCount":  24,
+        "SourceUrls":  "https://www.atlassian.com/zh/software/jira/pricing; https://confluence.atlassian.com/jira; https://www.atlassian.com/zh/collections/service/pricing; https://www.atlassian.com/zh/software/jira; https://www.atlassian.com/zh/software/jira/capture/pricing; https://www.atlassian.com/zh/software/jira/guides/getting-started/introduction; https://www.atlassian.com/zh/software/jira/whats-new-overview; https://www.atlassian.com/zh/agile/product-management/product-features; https://events.atlassian.com/summit20_live_stream_customer_support/l/t?u=Lf2ie-olmOVX5jeRRpNGP_OR8CpTHVbBDZqm9beviVhFIgPiInSZRxILPmu-ZLkjtxmjiFbfzVnQB-uVOIhE_jSxah2as8oZZC1v9CG409eNjeEsMVI5zQ0D7jA8eFYPzQCXQNh0gfU%3D\u0026t=http%3A%2F%2Fwww.shdsd.com; https://www.atlassian.com/zh/devops; https://www.atlassian.com/zh/software/jira/features; https://atlassian.com/docs; https://confluence.atlassian.com/docs; https://en.wikipedia.org/wiki/Jira_(software); https://atlassian.com/robots.txt; https://www.atlassian.com/blog/post-sitemap.xml; https://atlassian.com/blog/archives/applinks_connects_your_atlassi; https://www.atlassian.com/software/jira/guides/getting-started/introduction; https://www.youtube.com/watch?v=Z-a1RB9HvDI; https://atlassian.com/download; https://www.atlassian.com/software/jira.5; https://www.atlassian.com/software/jira/service-management; https://www.atlassian.com; https://www.atlassian.com/software/jira",
+        "OutputSummary":  "Jira / OFFICIALï¼éä¸­ 2 æ¡ï¼ééæå 3/4 æ¡ï¼è¡¥æºæ¹å¼=HTTP_FALLBACKï¼è¿åº¦ç¶æ=SUCCESS",
+        "ErrorMessage":  null
+    },
+    {
+        "Baseline":  "linear-vs-jira",
+        "Node":  "collect_sources_01_02",
+        "Status":  "SKIPPED",
+        "SourceUrlCount":  19,
+        "SourceUrls":  "https://docs.atlassian.com/portfolio-for-jira-server/REST/2.12.0/; https://docs.atlassian.com/portfolio-for-jira-server/REST/2.12.0; https://docs.atlassian.com/software/jira/docs/api/REST/8.5.5/; https://docs.atlassian.com/software/jira/docs/api/REST/8.5.5; https://www.atlassian.com/docs; https://atlassian.com/docs; https://www.atlassian.com/documentation; https://atlassian.com/documentation; https://jira.atlassian.com/rest/api/latest/issue/JRA-9; https://jira.atlassian.com/rest/api/latest/issue/JRA-9?expand=names,renderedFields; https://docs.atlassian.com/software/jira/docs/api/REST/jira-rest-plugin.wadl; https://developer.atlassian.com/static/javadoc/jira/6.0/reference/com/atlassian/jira/security/Permissions.Permission.html; https://developer.atlassian.com/stash/docs/latest/; https://developer.atlassian.com/cloud/jira/platform/integrating-with-jira-cloud/; https://aiqicha.baidu.com/feedback/official?from=baidu\u0026type=gw; https://atlassian.com/robots.txt; https://www.atlassian.com/sitemap.xml; https://www.atlassian.com/help; https://www.atlassian.com/guide",
+        "OutputSummary":  "Jira / DOCSï¼éä¸­ 4 æ¡ï¼ééæå 8/8 æ¡ï¼è¡¥æºæ¹å¼=HTTP_FALLBACKï¼è¿åº¦ç¶æ=DEGRADEDï¼éçº§åå =SEARCH_TIMEOUT_AFTER_SUPPLEMENT",
+        "ErrorMessage":  "ä»»å¡å·²è¢«ç¨æ·ä¸»å¨åæ­¢"
+    },
+    {
+        "Baseline":  "linear-vs-jira",
+        "Node":  "collect_sources_01_03",
+        "Status":  "SUCCESS",
+        "SourceUrlCount":  39,
+        "SourceUrls":  "https://www.atlassian.com/software/jira/pricing; https://atlassian.com/software/jira/pricing; https://tech.co/project-management-software/jira-pricing; https://unthread.io/blog/jira-service-management-pricing; https://atlassian.com/robots.txt; https://www.atlassian.com/sitemap.xml; https://www.atlassian.com/software/jira/pricing?tab=cloud; https://www.atlassian.com/ja/software/jira/pricing; https://www.atlassian.com/zh/software/jira/pricing; https://www.atlassian.com/zh/software/jira/enterprise; https://www.atlassian.com/software/jira/guides/more/jira-editions; https://www.atlassian.com/blog/jira-software/introducing-jira-software-8-0; https://www.atlassian.com/software/jira; https://www.atlassian.com/pl/blog/announcements/jsm-cloud-pricing-packaging-update; https://confluence.atlassian.com/jira; https://www.atlassian.com/zh/collections/service/pricing; https://www.atlassian.com/zh/software/jira; https://www.atlassian.com/zh/software/jira/capture/pricing; https://www.atlassian.com/zh/software/jira/guides/getting-started/introduction; https://www.atlassian.com/zh/software/jira/whats-new-overview; https://www.atlassian.com/zh/agile/product-management/product-features; https://confluence.atlassian.com; https://www.atlassian.com/zh/agile/product-management; https://www.atlassian.com/zh/agile/product-management/product-launch-timeline; https://www.atlassian.com/zh/agile/product-management/product-planning; https://www.atlassian.com/zh/agile/project-management/risk-analysis; https://www.atlassian.com/zh/devops; https://www.atlassian.com/zh/migration/plan/upgrade-to-data-center-guide; https://www.atlassian.com/zh/roadmap/cloud/focus-asks; https://www.atlassian.com/zh/software/confluence/features; https://www.atlassian.com/zh/software/jira/features; https://www.atlassian.com/zh/software/jira/features/reports; https://www.atlassian.com/zh/software/jira/service-management/resources/insight-data-center-get-started-guide; https://www.atlassian.com/zh/work-management/project-management/project-objectives; https://developer.atlassian.com/server/jira/platform/rest/v10000/intro; https://docs.developer.tech.gov.sg/docs/ship-hats-docs/tools/jira/jira-overview; https://www.atlassian.com/pricing; https://www.atlassian.com/plans; https://www.atlassian.com/enterprise",
+        "OutputSummary":  "Jira / PRICINGï¼éä¸­ 3 æ¡ï¼ééæå 3/6 æ¡ï¼è¡¥æºæ¹å¼=HTTP_FALLBACKï¼è¿åº¦ç¶æ=DEGRADEDï¼éçº§åå =SEARCH_TIMEOUT_AFTER_SUPPLEMENT",
+        "ErrorMessage":  null
+    },
+    {
+        "Baseline":  "linear-vs-jira",
+        "Node":  "collect_sources_01_04",
+        "Status":  "SUCCESS",
+        "SourceUrlCount":  14,
+        "SourceUrls":  "https://www.taskrhino.ca/blog/jira-review; https://taskrhino.ca/blog/jira-review; https://clearfeed.ai/blogs/jira-service-management-review-analysis-ratings; https://www.softwaresuggest.com/compare/capterra-vs-g2-com; https://softwaresuggest.com/compare/capterra-vs-g2-com; https://www.atlassian.com/work-management/project-management/goal-management-software; https://atlassian.com/work-management/project-management/goal-management-software; https://www.enterpret.com/guides/g2-vs-capterra----the-6-top-rated-feedback-management-tools; https://enterpret.com/guides/g2-vs-capterra----the-6-top-rated-feedback-management-tools; https://www.atlassian.com/case-studies; https://www.g2.com/search?query=Jira; https://www.capterra.com/search/?query=Jira; https://www.atlassian.com/compare; https://www.atlassian.com/customers",
+        "OutputSummary":  "Jira / REVIEWï¼éä¸­ 5 æ¡ï¼ééæå 5/10 æ¡ï¼è¡¥æºæ¹å¼=NONEï¼è¿åº¦ç¶æ=SUCCESS",
+        "ErrorMessage":  null
+    }
+]

@@ -1,0 +1,12 @@
+﻿
+Baseline           Url                                                     Status  Length FinalUri                     
+--------           ---                                                     ------  ------ --------                     
+notion-vs-airtable https://www.airtable.com                                   200  442814 https://www.airtable.com/    
+notion-vs-airtable https://www.airtable.com/pricing                           200  325967 https://airtable.com/pricing 
+notion-vs-airtable https://support.airtable.com/docs                          200 2930722 https://support.airtable.c...
+linear-vs-jira     https://www.atlassian.com/software/jira                    200  870193 https://www.atlassian.com/...
+linear-vs-jira     https://www.atlassian.com/software/jira/pricing            200 1296099 https://www.atlassian.com/...
+linear-vs-jira     https://support.atlassian.com/jira-software-cloud/docs/ FAILED       0                              
+
+
+

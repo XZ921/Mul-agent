@@ -127,6 +127,10 @@ public class NodeExecutionRecoveryPolicy {
         boolean initialReviewPassed = nodes.stream()
                 .filter(node -> "quality_check".equals(node.getNodeName()))
                 .anyMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && isPassedReview(node.getOutputData()));
+        boolean revisionFlowSucceeded = hasRevisionFlowSucceeded(nodes);
+        boolean finalReviewPresent = nodes.stream()
+                .anyMatch(node -> "quality_check_final".equals(node.getNodeName())
+                        || (node.getNodeName() != null && node.getNodeName().startsWith("quality_check_revision_patch_v")));
         boolean finalReviewPassed = nodes.stream()
                 .filter(node -> "quality_check_final".equals(node.getNodeName()))
                 .anyMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && isPassedReview(node.getOutputData()));
@@ -136,7 +140,12 @@ public class NodeExecutionRecoveryPolicy {
                 .filter(node -> node.getNodeName() != null && node.getNodeName().startsWith("quality_check_revision_patch_v"))
                 .anyMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && isPassedReview(node.getOutputData()));
 
-        if (finalReviewPassed || dynamicPatchReviewPassed || (!initialReviewPresent && allRequiredSucceeded) || initialReviewPassed) {
+        // 阶段1允许最小闭环 DAG 在“初审失败 -> 完成一次 rewrite”后直接收口，
+        // 前提是当前流程里本来就没有终审节点；如果终审节点存在，仍以终审结果为准。
+        boolean rewriteOnlyFlowPassed = !finalReviewPresent && revisionFlowSucceeded;
+
+        if (finalReviewPassed || dynamicPatchReviewPassed || (!initialReviewPresent && allRequiredSucceeded)
+                || initialReviewPassed || rewriteOnlyFlowPassed) {
             return TaskExecutionResolution.builder()
                     .status(AnalysisTaskStatus.SUCCESS)
                     .errorMessage(null)
@@ -165,7 +174,7 @@ public class NodeExecutionRecoveryPolicy {
                     .build();
         }
 
-        if (initialReviewPresent || hasRevisionFlowSucceeded(nodes)) {
+        if (initialReviewPresent || revisionFlowSucceeded) {
             return TaskExecutionResolution.builder()
                     .status(AnalysisTaskStatus.FAILED)
                     .errorMessage("质量闭环未达到通过条件，请检查评审结果")

@@ -82,6 +82,7 @@ public class CollectionTargetSelector {
         Map<String, SearchCollectionTarget> normalizedAttemptedTargets = normalizeAttemptedTargets(attemptedTargets);
         List<SearchCollectionTarget> selectedTargets = new ArrayList<>();
         Set<String> selectedUrls = new LinkedHashSet<>();
+        Set<String> selectedSnapshotUrls = new LinkedHashSet<>();
         List<SourceCandidate> rejectedByEligibility = new ArrayList<>();
 
         List<SourceCandidate> rankedCandidates = candidates.stream()
@@ -110,6 +111,9 @@ public class CollectionTargetSelector {
                     SearchCollectionTarget.builder().candidate(candidate).build()
             );
             selectedTargets.add(target);
+            if (target.getCandidate() != null && StringUtils.hasText(target.getCandidate().getUrl())) {
+                selectedSnapshotUrls.add(target.getCandidate().getUrl());
+            }
             if (selectedTargets.size() >= targetCount) {
                 break;
             }
@@ -117,7 +121,12 @@ public class CollectionTargetSelector {
 
         Map<String, SourceCandidate> rejectedByUrl = indexCandidatesByNormalizedUrl(rejectedByEligibility);
         List<SourceCandidate> updatedCandidates = candidates.stream()
-                .map(candidate -> mergeSelectionResult(config, candidate, selectedUrls, normalizedAttemptedTargets, rejectedByUrl))
+                .map(candidate -> mergeSelectionResult(config,
+                        candidate,
+                        selectedUrls,
+                        selectedSnapshotUrls,
+                        normalizedAttemptedTargets,
+                        rejectedByUrl))
                 .toList();
         List<SourceCandidate> discardedCandidates = resolveDiscardedCandidates(updatedCandidates,
                 selectedUrls,
@@ -338,6 +347,7 @@ public class CollectionTargetSelector {
     private SourceCandidate mergeSelectionResult(CollectorNodeConfig config,
                                                  SourceCandidate candidate,
                                                  Set<String> selectedUrls,
+                                                 Set<String> selectedSnapshotUrls,
                                                  Map<String, SearchCollectionTarget> attemptedTargets,
                                                  Map<String, SourceCandidate> rejectedByUrl) {
         if (candidate == null) {
@@ -348,7 +358,9 @@ public class CollectionTargetSelector {
         if (rejected != null) {
             return annotateSelectionAudit(config, rejected, attemptedTargets);
         }
-        return annotateSelectionAudit(config, applySelectionResult(candidate, selectedUrls, attemptedTargets), attemptedTargets);
+        return annotateSelectionAudit(config,
+                applySelectionResult(candidate, selectedUrls, selectedSnapshotUrls, attemptedTargets),
+                attemptedTargets);
     }
 
     /**
@@ -671,6 +683,7 @@ public class CollectionTargetSelector {
      */
     private SourceCandidate applySelectionResult(SourceCandidate candidate,
                                                  Set<String> selectedUrls,
+                                                 Set<String> selectedSnapshotUrls,
                                                  Map<String, SearchCollectionTarget> attemptedTargets) {
         if (candidate == null) {
             return null;
@@ -679,7 +692,12 @@ public class CollectionTargetSelector {
         if (!selectedUrls.contains(normalizedUrl)) {
             return candidate;
         }
-        if (!candidate.getUrl().equals(normalizedUrl)) {
+        /**
+         * 这里优先看“真正被选中的候选快照 URL”，而不是只看归一化 URL。
+         * 否则单个 www/utm 变体虽然已被 selector 选中，也会因为不等于 canonical URL 而无法回填 SELECTED；
+         * 同时保留 canonical 去重，避免同一页面的多个变体都被标记成已选中。
+         */
+        if (!selectedSnapshotUrls.contains(candidate.getUrl()) && !candidate.getUrl().equals(normalizedUrl)) {
             return candidate;
         }
         SearchCollectionTarget attemptedTarget = attemptedTargets.get(normalizedUrl);

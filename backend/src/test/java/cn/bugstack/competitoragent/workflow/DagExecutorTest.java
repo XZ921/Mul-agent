@@ -1447,7 +1447,7 @@ class DagExecutorTest {
     }
 
     @Test
-    void shouldClassifyInitialReviewHumanInterventionStopAsDownstreamConsumptionGap() {
+    void shouldAllowRewriteWhenInitialReviewRequiresHumanInterventionButHasNoBlockingDiagnosis() {
         Long taskId = 1003L;
         AnalysisTask task = AnalysisTask.builder()
                 .id(taskId)
@@ -1512,7 +1512,79 @@ class DagExecutorTest {
 
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("initial-review-human-test").build());
 
+        assertEquals(AnalysisTaskStatus.SUCCESS, task.getStatus());
+        assertEquals(TaskNodeStatus.SUCCESS, rewriteReport.getStatus());
+        assertNull(initialReview.getFailureCategory());
+        assertNull(initialReview.getInterventionReason());
+    }
+
+    @Test
+    void shouldStillSkipRewriteWhenInitialReviewHasBlockingDiagnosis() {
+        Long taskId = 10031L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+
+        TaskNode writeReport = TaskNode.builder()
+                .id(311L)
+                .taskId(taskId)
+                .nodeName("write_report")
+                .agentType(AgentType.WRITER)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+        TaskNode initialReview = TaskNode.builder()
+                .id(312L)
+                .taskId(taskId)
+                .nodeName("quality_check")
+                .agentType(AgentType.REVIEWER)
+                .dependsOn("[\"write_report\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .build();
+        TaskNode rewriteReport = TaskNode.builder()
+                .id(313L)
+                .taskId(taskId)
+                .nodeName("rewrite_report")
+                .agentType(AgentType.WRITER)
+                .dependsOn("[\"quality_check\"]")
+                .nodeConfig("{\"trigger\":\"review_failed\"}")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(2)
+                .build();
+        List<TaskNode> nodes = List.of(writeReport, initialReview, rewriteReport);
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(nodes);
+        when(nodeRepository.findById(any())).thenAnswer(invocation -> {
+            Long nodeId = invocation.getArgument(0);
+            return nodes.stream().filter(node -> node.getId().equals(nodeId)).findFirst();
+        });
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new DynamicRewriteAgent(), new InitialReviewBlockingDiagnosisReviewerAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("initial-review-blocker-test").build());
+
         assertEquals(AnalysisTaskStatus.STOPPED, task.getStatus());
+        assertEquals(TaskNodeStatus.SKIPPED, rewriteReport.getStatus());
         assertEquals(NodeFailureCategory.DOWNSTREAM_CONSUMPTION_GAP, initialReview.getFailureCategory());
         assertTrue(initialReview.getInterventionReason().contains("下游消费"));
         assertTrue(task.getErrorMessage().contains("人工介入"));
@@ -2378,6 +2450,29 @@ class DagExecutorTest {
                     .status(TaskNodeStatus.SUCCESS)
                     .outputData("""
                             {"reviewStage":"initial","passed":false,"requiresHumanIntervention":true,"autoRewriteAllowed":false,"diagnoses":[{"dimensionCode":"EVIDENCE_TRACEABILITY","type":"missing_evidence"}]}
+                            """.trim())
+                    .build();
+        }
+    }
+
+    private static final class InitialReviewBlockingDiagnosisReviewerAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.REVIEWER;
+        }
+
+        @Override
+        public String getName() {
+            return "initial-review-blocking-diagnosis-reviewer";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("""
+                            {"reviewStage":"initial","passed":false,"requiresHumanIntervention":true,"autoRewriteAllowed":false,"diagnoses":[{"dimensionCode":"EVIDENCE_TRACEABILITY","type":"missing_evidence","level":"BLOCKER"}]}
                             """.trim())
                     .build();
         }

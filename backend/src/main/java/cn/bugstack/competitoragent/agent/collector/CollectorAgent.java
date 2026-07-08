@@ -40,6 +40,7 @@ import cn.bugstack.competitoragent.search.SearchProgressSnapshot;
 import cn.bugstack.competitoragent.search.SearchExecutionResult;
 import cn.bugstack.competitoragent.search.SearchExecutionStep;
 import cn.bugstack.competitoragent.search.SearchExecutionUpdate;
+import cn.bugstack.competitoragent.search.tavily.FieldEvidenceQueryExecutionAudit;
 import cn.bugstack.competitoragent.source.SourceCollector;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.workflow.contract.CollectResult;
@@ -67,6 +68,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 采集 Agent。
@@ -244,6 +246,7 @@ public class CollectorAgent extends BaseAgent {
 
         String sourceType = !StringUtils.hasText(config.getSourceType()) ? "OFFICIAL" : config.getSourceType();
         List<Map<String, Object>> results = new ArrayList<>();
+        List<FieldEvidenceClaimCleanup> fieldEvidenceClaimCleanups = new ArrayList<>();
         int[] successCounterRef = new int[] {0};
         SearchExecutionResult searchExecutionResult = searchExecutionCoordinator.execute(
                 config,
@@ -251,6 +254,7 @@ public class CollectorAgent extends BaseAgent {
                 context.getFieldEvidenceFingerprintClaims(),
                 update ->
                 persistRunningOutput(context, config, sourceType, update, results, successCounterRef[0]));
+        registerFieldEvidenceClaimCleanup(context, config, searchExecutionResult, fieldEvidenceClaimCleanups);
         SearchExecutionPlan executionPlan = searchExecutionResult.getExecutionPlan();
         List<SearchProgressSnapshot> progressSnapshots = searchExecutionResult.getProgressSnapshots() == null
                 ? new ArrayList<>()
@@ -270,7 +274,8 @@ public class CollectorAgent extends BaseAgent {
                     progressSnapshots,
                     failedPrefetchedAttemptTargets,
                     results,
-                    successCounterRef
+                    successCounterRef,
+                    fieldEvidenceClaimCleanups
             );
         }
         if (targets.isEmpty()) {
@@ -295,13 +300,14 @@ public class CollectorAgent extends BaseAgent {
                 outputJson = null;
             }
             String actionableError = buildNoTargetFailureMessage(config, sourceType, searchExecutionResult);
-            return AgentResult.builder()
-                    .status(TaskNodeStatus.FAILED)
-                    .outputData(outputJson)
-                    .outputSummary(actionableError)
-                    .reasoningSummary(searchExecutionResult.getReasoningSummary())
-                    .errorMessage(actionableError)
-                    .build();
+            return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
+                    AgentResult.builder()
+                            .status(TaskNodeStatus.FAILED)
+                            .outputData(outputJson)
+                            .outputSummary(actionableError)
+                            .reasoningSummary(searchExecutionResult.getReasoningSummary())
+                            .errorMessage(actionableError)
+                            .build());
         }
 
         if (useRecursiveCollectionResultConsumption()) {
@@ -314,7 +320,8 @@ public class CollectorAgent extends BaseAgent {
                     progressSnapshots,
                     targets,
                     results,
-                    successCounterRef
+                    successCounterRef,
+                    fieldEvidenceClaimCleanups
             );
         }
 
@@ -523,7 +530,8 @@ public class CollectorAgent extends BaseAgent {
                 auditResults,
                 targets,
                 results,
-                successCounterRef
+                successCounterRef,
+                fieldEvidenceClaimCleanups
         );
         collectionReport = fieldEvidenceLoopOutcome.collectionReport();
         searchExecutionResult = fieldEvidenceLoopOutcome.searchExecutionResult();
@@ -548,16 +556,18 @@ public class CollectorAgent extends BaseAgent {
                 String actionableError = hasIssueFlag(results, "EVIDENCE_PERSIST_FAILED")
                         ? "证据落库失败，已保留 collection audit 诊断，请检查字段长度或数据库迁移"
                         : buildNoContentFailureMessage(config, sourceType, searchExecutionResult.getExecutionTrace(), results);
-                return AgentResult.builder()
-                        .status(TaskNodeStatus.FAILED)
-                        .outputData(outputJson)
-                        .outputSummary(actionableError)
-                        .reasoningSummary(searchExecutionResult.getReasoningSummary())
-                        .errorMessage(actionableError)
-                        .build();
+                return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
+                        AgentResult.builder()
+                                .status(TaskNodeStatus.FAILED)
+                                .outputData(outputJson)
+                                .outputSummary(actionableError)
+                                .reasoningSummary(searchExecutionResult.getReasoningSummary())
+                                .errorMessage(actionableError)
+                                .build());
             }
             if (!hasFormalSelectedTargets) {
-                return buildMissingFormalTargetsFailure(
+                return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
+                        buildMissingFormalTargetsFailure(
                         context,
                         config,
                         sourceType,
@@ -569,7 +579,7 @@ public class CollectorAgent extends BaseAgent {
                         successCounterRef[0],
                         targets,
                         fieldEvidenceLoopRounds
-                );
+                ));
             }
 
             markCollectStep(executionPlan, SearchExecutionStep.StepStatus.SUCCESS,
@@ -589,8 +599,104 @@ public class CollectorAgent extends BaseAgent {
                     .reasoningSummary(searchExecutionResult.getReasoningSummary())
                     .build();
         } catch (JsonProcessingException e) {
-            return AgentResult.failed("采集结果序列化失败：" + e.getMessage());
+            return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
+                    AgentResult.failed("采集结果序列化失败：" + e.getMessage()));
         }
+    }
+
+    private void registerFieldEvidenceClaimCleanup(AgentContext context,
+                                                   CollectorNodeConfig config,
+                                                   SearchExecutionResult searchExecutionResult,
+                                                   List<FieldEvidenceClaimCleanup> claimCleanups) {
+        if (claimCleanups == null) {
+            return;
+        }
+        String stateKey = buildFieldEvidenceFingerprintClaimStateKey(context == null ? null : context.getTaskId(), config);
+        List<String> claimedFingerprints = resolveFieldEvidenceClaimedFingerprints(searchExecutionResult);
+        if (!StringUtils.hasText(stateKey) || claimedFingerprints.isEmpty()) {
+            return;
+        }
+        claimCleanups.add(new FieldEvidenceClaimCleanup(stateKey, claimedFingerprints));
+    }
+
+    private AgentResult releaseFieldEvidenceClaimsAndReturn(AgentContext context,
+                                                            List<FieldEvidenceClaimCleanup> claimCleanups,
+                                                            AgentResult result) {
+        if (result != null && result.getStatus() == TaskNodeStatus.FAILED) {
+            releaseFailedAttemptFieldEvidenceClaims(context, claimCleanups);
+        }
+        return result;
+    }
+
+    private void releaseFailedAttemptFieldEvidenceClaims(AgentContext context,
+                                                         List<FieldEvidenceClaimCleanup> claimCleanups) {
+        if (context == null || context.getFieldEvidenceFingerprintClaims() == null
+                || claimCleanups == null || claimCleanups.isEmpty()) {
+            return;
+        }
+        Map<String, Set<String>> claimRegistry = context.getFieldEvidenceFingerprintClaims();
+        for (FieldEvidenceClaimCleanup cleanup : claimCleanups) {
+            if (cleanup == null || !StringUtils.hasText(cleanup.stateKey())
+                    || cleanup.claimedFingerprints() == null || cleanup.claimedFingerprints().isEmpty()) {
+                continue;
+            }
+            Set<String> claimSet = claimRegistry.get(cleanup.stateKey());
+            if (claimSet == null || claimSet.isEmpty()) {
+                continue;
+            }
+            /*
+             * claim 是“计划执行权”，不是“成功产物”。当前采集尝试失败时必须释放本尝试拿到的指纹，
+             * 否则 DAG 自动 retry 会在同一 task/competitor/scope 下被上一轮自己写入的 claim 饿死。
+             */
+            for (String fingerprint : cleanup.claimedFingerprints()) {
+                if (StringUtils.hasText(fingerprint)) {
+                    claimSet.remove(fingerprint.trim());
+                }
+            }
+            if (claimSet.isEmpty()) {
+                claimRegistry.remove(cleanup.stateKey(), claimSet);
+            }
+        }
+    }
+
+    private List<String> resolveFieldEvidenceClaimedFingerprints(SearchExecutionResult searchExecutionResult) {
+        if (searchExecutionResult == null || searchExecutionResult.getExecutionTrace() == null) {
+            return List.of();
+        }
+        LinkedHashSet<String> fingerprints = new LinkedHashSet<>();
+        SearchExecutionTrace trace = searchExecutionResult.getExecutionTrace();
+        appendFieldEvidenceFingerprints(fingerprints, trace.getFieldEvidenceClaimedFingerprints());
+        if (trace.getTavilyFastLaneAudit() != null
+                && trace.getTavilyFastLaneAudit().getFieldEvidenceQueryExecutions() != null) {
+            for (FieldEvidenceQueryExecutionAudit audit : trace.getTavilyFastLaneAudit().getFieldEvidenceQueryExecutions()) {
+                if (audit != null && StringUtils.hasText(audit.getQueryFingerprint())) {
+                    fingerprints.add(audit.getQueryFingerprint().trim());
+                }
+            }
+        }
+        return fingerprints.isEmpty() ? List.of() : new ArrayList<>(fingerprints);
+    }
+
+    private void appendFieldEvidenceFingerprints(LinkedHashSet<String> target, List<String> fingerprints) {
+        if (target == null || fingerprints == null) {
+            return;
+        }
+        for (String fingerprint : fingerprints) {
+            if (StringUtils.hasText(fingerprint)) {
+                target.add(fingerprint.trim());
+            }
+        }
+    }
+
+    private String buildFieldEvidenceFingerprintClaimStateKey(Long taskId, CollectorNodeConfig config) {
+        if (taskId == null || config == null || !StringUtils.hasText(config.getCompetitorName())) {
+            return null;
+        }
+        String baseKey = "fieldEvidence.executedFingerprints::" + taskId + "::" + config.getCompetitorName().trim();
+        if (!StringUtils.hasText(config.getFieldEvidenceClaimScope())) {
+            return baseKey;
+        }
+        return baseKey + "::" + config.getFieldEvidenceClaimScope().trim();
     }
 
     private void persistRunningOutput(AgentContext context,
@@ -625,11 +731,12 @@ public class CollectorAgent extends BaseAgent {
                                                              CollectorNodeConfig config,
                                                              String sourceType,
                                                              SearchExecutionResult searchExecutionResult,
-                                                             SearchExecutionPlan executionPlan,
-                                                             List<SearchProgressSnapshot> progressSnapshots,
-                                                             List<SearchCollectionTarget> failedPrefetchedAttemptTargets,
-                                                             List<Map<String, Object>> results,
-                                                             int[] successCounterRef) {
+                                                              SearchExecutionPlan executionPlan,
+                                                              List<SearchProgressSnapshot> progressSnapshots,
+                                                              List<SearchCollectionTarget> failedPrefetchedAttemptTargets,
+                                                              List<Map<String, Object>> results,
+                                                              int[] successCounterRef,
+                                                              List<FieldEvidenceClaimCleanup> fieldEvidenceClaimCleanups) {
         List<CollectionExecutionResult> auditResults = new ArrayList<>();
         int[] evidenceCounterRef = new int[] {0};
         int[] processedPageCounterRef = new int[] {0};
@@ -682,15 +789,17 @@ public class CollectorAgent extends BaseAgent {
             String actionableError = hasIssueFlag(results, "EVIDENCE_PERSIST_FAILED")
                     ? "证据落库失败，已保留 collection audit 诊断，请检查字段长度或数据库迁移"
                     : buildNoContentFailureMessage(config, sourceType, searchExecutionResult.getExecutionTrace(), results);
-            return AgentResult.builder()
-                    .status(TaskNodeStatus.FAILED)
-                    .outputData(outputJson)
-                    .outputSummary(actionableError)
-                    .reasoningSummary(searchExecutionResult.getReasoningSummary())
-                    .errorMessage(actionableError)
-                    .build();
+            return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
+                    AgentResult.builder()
+                            .status(TaskNodeStatus.FAILED)
+                            .outputData(outputJson)
+                            .outputSummary(actionableError)
+                            .reasoningSummary(searchExecutionResult.getReasoningSummary())
+                            .errorMessage(actionableError)
+                            .build());
         } catch (JsonProcessingException e) {
-            return AgentResult.failed("采集结果序列化失败：" + e.getMessage());
+            return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
+                    AgentResult.failed("采集结果序列化失败：" + e.getMessage()));
         }
     }
 
@@ -703,10 +812,11 @@ public class CollectorAgent extends BaseAgent {
                                                                   String sourceType,
                                                                   SearchExecutionResult searchExecutionResult,
                                                                   SearchExecutionPlan executionPlan,
-                                                                  List<SearchProgressSnapshot> progressSnapshots,
-                                                                  List<SearchCollectionTarget> targets,
-                                                                  List<Map<String, Object>> results,
-                                                                  int[] successCounterRef) {
+                                                                   List<SearchProgressSnapshot> progressSnapshots,
+                                                                   List<SearchCollectionTarget> targets,
+                                                                   List<Map<String, Object>> results,
+                                                                   int[] successCounterRef,
+                                                                   List<FieldEvidenceClaimCleanup> fieldEvidenceClaimCleanups) {
         if (targets.isEmpty()) {
             markCollectStep(executionPlan, SearchExecutionStep.StepStatus.SKIPPED, "未选出可采集来源，跳过页面抓取");
             progressSnapshots.add(buildProgressSnapshot(executionPlan,
@@ -727,15 +837,17 @@ public class CollectorAgent extends BaseAgent {
                         targets
                 );
                 String actionableError = buildNoTargetFailureMessage(config, sourceType, searchExecutionResult);
-                return AgentResult.builder()
-                        .status(TaskNodeStatus.FAILED)
-                        .outputData(outputJson)
-                        .outputSummary(actionableError)
-                        .reasoningSummary(searchExecutionResult.getReasoningSummary())
-                        .errorMessage(actionableError)
-                        .build();
+                return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
+                        AgentResult.builder()
+                                .status(TaskNodeStatus.FAILED)
+                                .outputData(outputJson)
+                                .outputSummary(actionableError)
+                                .reasoningSummary(searchExecutionResult.getReasoningSummary())
+                                .errorMessage(actionableError)
+                                .build());
             } catch (JsonProcessingException e) {
-                return AgentResult.failed("采集结果序列化失败：" + e.getMessage());
+                return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
+                        AgentResult.failed("采集结果序列化失败：" + e.getMessage()));
             }
         }
 
@@ -885,7 +997,8 @@ public class CollectorAgent extends BaseAgent {
                 auditResults,
                 targets,
                 results,
-                successCounterRef
+                successCounterRef,
+                fieldEvidenceClaimCleanups
         );
         collectionReport = fieldEvidenceLoopOutcome.collectionReport();
         searchExecutionResult = fieldEvidenceLoopOutcome.searchExecutionResult();
@@ -910,17 +1023,19 @@ public class CollectorAgent extends BaseAgent {
                 String actionableError = hasIssueFlag(results, "EVIDENCE_PERSIST_FAILED")
                         ? "证据落库失败，已保留 collection audit 诊断，请检查字段长度或数据库迁移"
                         : buildNoContentFailureMessage(config, sourceType, searchExecutionResult.getExecutionTrace(), results);
-                return AgentResult.builder()
-                        .status(TaskNodeStatus.FAILED)
-                        .outputData(outputJson)
-                        .outputSummary(actionableError)
-                        .reasoningSummary(searchExecutionResult.getReasoningSummary())
-                        .errorMessage(actionableError)
-                        .build();
+                return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
+                        AgentResult.builder()
+                                .status(TaskNodeStatus.FAILED)
+                                .outputData(outputJson)
+                                .outputSummary(actionableError)
+                                .reasoningSummary(searchExecutionResult.getReasoningSummary())
+                                .errorMessage(actionableError)
+                                .build());
             }
 
             if (!hasFormalSelectedTargets) {
-                return buildMissingFormalTargetsFailure(
+                return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
+                        buildMissingFormalTargetsFailure(
                         context,
                         config,
                         sourceType,
@@ -932,7 +1047,7 @@ public class CollectorAgent extends BaseAgent {
                         successCounterRef[0],
                         targets,
                         fieldEvidenceLoopRounds
-                );
+                ));
             }
             markCollectStep(executionPlan, SearchExecutionStep.StepStatus.SUCCESS,
                     "页面采集完成，可用来源 " + successCounterRef[0] + "/" + results.size() + " 条");
@@ -952,7 +1067,8 @@ public class CollectorAgent extends BaseAgent {
                     .reasoningSummary(searchExecutionResult.getReasoningSummary())
                     .build();
         } catch (JsonProcessingException e) {
-            return AgentResult.failed("采集结果序列化失败：" + e.getMessage());
+            return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
+                    AgentResult.failed("采集结果序列化失败：" + e.getMessage()));
         }
     }
 
@@ -1923,7 +2039,8 @@ public class CollectorAgent extends BaseAgent {
                                                                     List<CollectionExecutionResult> auditResults,
                                                                     List<SearchCollectionTarget> targets,
                                                                     List<Map<String, Object>> results,
-                                                                    int[] successCounterRef) {
+                                                                    int[] successCounterRef,
+                                                                    List<FieldEvidenceClaimCleanup> fieldEvidenceClaimCleanups) {
         DimensionEvidencePlan updatedPlan = fieldEvidenceCoverageAggregator.applyCollectionResults(
                 config.getDimensionEvidencePlan(),
                 auditResults
@@ -1951,6 +2068,7 @@ public class CollectorAgent extends BaseAgent {
                     context.getFieldEvidenceFingerprintClaims(),
                     update ->
                     persistRunningOutput(context, config, sourceType, update, results, successCounterRef[0]));
+            registerFieldEvidenceClaimCleanup(context, config, secondRoundSearchResult, fieldEvidenceClaimCleanups);
         } finally {
             config.setFieldEvidenceClaimScope(previousClaimScope);
         }
@@ -2122,6 +2240,9 @@ public class CollectorAgent extends BaseAgent {
                                             SearchExecutionResult searchExecutionResult,
                                             List<SearchCollectionTarget> targets,
                                             int rounds) {
+    }
+
+    private record FieldEvidenceClaimCleanup(String stateKey, List<String> claimedFingerprints) {
     }
 
     private SourceCandidate enrichMatchedCandidate(SourceCandidate matchedCandidate,

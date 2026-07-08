@@ -16,6 +16,10 @@ import cn.bugstack.competitoragent.search.EvidenceRepairState;
 import cn.bugstack.competitoragent.search.SearchCollectionTarget;
 import cn.bugstack.competitoragent.search.SearchExecutionCoordinator;
 import cn.bugstack.competitoragent.search.SearchExecutionResult;
+import cn.bugstack.competitoragent.search.SearchExecutionTrace;
+import cn.bugstack.competitoragent.search.tavily.FieldEvidenceQueryExecutionAudit;
+import cn.bugstack.competitoragent.search.tavily.TavilyFastLaneAudit;
+import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCollector;
 import cn.bugstack.competitoragent.workflow.coverage.DimensionEvidencePlan;
@@ -25,6 +29,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -32,6 +40,8 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class CollectorAgentFieldEvidenceLoopTest {
@@ -45,6 +55,97 @@ class CollectorAgentFieldEvidenceLoopTest {
     private final SearchExecutionCoordinator searchExecutionCoordinator = mock(SearchExecutionCoordinator.class);
     private final CollectionExecutionCoordinator collectionExecutionCoordinator = mock(CollectionExecutionCoordinator.class);
     private final TaskRetrievalIndexService taskRetrievalIndexService = mock(TaskRetrievalIndexService.class);
+
+    @Test
+    void shouldReleaseFieldEvidenceClaimsWhenCollectorAttemptFailsBeforeRetry() {
+        String claimKey = "fieldEvidence.executedFingerprints::94::bilibili-open-platform";
+        String queryFingerprint = "q-retry";
+        AtomicInteger searchAttempts = new AtomicInteger();
+        doAnswer(invocation -> {
+            Map<String, Set<String>> claimRegistry = invocation.getArgument(2);
+            boolean claimed = claimRegistry
+                    .computeIfAbsent(claimKey, ignored -> ConcurrentHashMap.newKeySet())
+                    .add(queryFingerprint);
+            searchAttempts.incrementAndGet();
+            if (!claimed) {
+                return SearchExecutionResult.builder()
+                        .selectedTargets(List.of())
+                        .executionTrace(SearchExecutionTrace.builder()
+                                .fieldEvidenceQueryPlannedCount(1)
+                                .fieldEvidenceQueryExecutedCount(0)
+                                .fieldEvidenceQuerySkippedCount(1)
+                                .fieldEvidenceQuerySkipReasons(Map.of("SKIPPED_CROSS_NODE_DEDUP", 1))
+                                .build())
+                        .reasoningSummary("deduped by previous failed attempt")
+                        .build();
+            }
+            SourceCandidate candidate = SourceCandidate.builder()
+                    .url("https://open.bilibili.com")
+                    .title("bilibili open platform")
+                    .sourceType("OFFICIAL")
+                    .sourceUrls(List.of("https://open.bilibili.com"))
+                    .fieldEvidenceQueryFingerprint(queryFingerprint)
+                    .build();
+            return SearchExecutionResult.builder()
+                    .sourceCandidates(List.of(candidate))
+                    .selectedTargets(List.of(SearchCollectionTarget.builder()
+                            .candidate(candidate)
+                            .build()))
+                    .executionTrace(SearchExecutionTrace.builder()
+                            .fieldEvidenceQueryPlannedCount(1)
+                            .fieldEvidenceQueryExecutedCount(1)
+                            .fieldEvidenceQuerySkippedCount(0)
+                            .tavilyFastLaneAudit(TavilyFastLaneAudit.builder()
+                                    .fieldEvidenceQueryExecutions(List.of(FieldEvidenceQueryExecutionAudit.builder()
+                                            .queryFingerprint(queryFingerprint)
+                                            .status("SUCCESS")
+                                            .build()))
+                                    .build())
+                            .build())
+                    .reasoningSummary("claimed q-retry")
+                    .build();
+        }).when(searchExecutionCoordinator).execute(any(CollectorNodeConfig.class), eq(94L), any(), any());
+        when(collectionExecutionCoordinator.execute(any(), any(), any(), eq("bilibili-open-platform"), anyList(), any()))
+                .thenReturn(CollectionExecutionReport.builder()
+                        .status("FAILED")
+                        .results(List.of(CollectionExecutionResult.builder()
+                                .success(false)
+                                .status("FAILED")
+                                .resourceLocator("https://open.bilibili.com")
+                                .sourceUrls(List.of("https://open.bilibili.com"))
+                                .errorMessage("NAVIGATION_SHELL")
+                                .build()))
+                        .build());
+        when(collectionExecutionCoordinator.summarize(anyList())).thenAnswer(invocation -> CollectionExecutionReport.builder()
+                .status("FAILED")
+                .results(invocation.getArgument(0))
+                .sourceUrls(List.of("https://open.bilibili.com"))
+                .build());
+
+        CollectorAgent agent = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchExecutionCoordinator,
+                collectionExecutionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper
+        );
+        AgentContext context = contextForRetryClaimRelease();
+
+        AgentResult firstAttempt = agent.execute(context);
+        AgentResult secondAttempt = agent.execute(context);
+
+        assertThat(firstAttempt.getStatus()).isEqualTo(TaskNodeStatus.FAILED);
+        assertThat(secondAttempt.getStatus()).isEqualTo(TaskNodeStatus.FAILED);
+        assertThat(context.getFieldEvidenceFingerprintClaims().getOrDefault(claimKey, Set.of()))
+                .doesNotContain(queryFingerprint);
+        assertThat(searchAttempts).hasValue(2);
+        verify(collectionExecutionCoordinator, times(2))
+                .execute(any(), any(), any(), eq("bilibili-open-platform"), anyList(), any());
+    }
 
     @Test
     void shouldRunSecondRoundOnlyForUnfinishedFieldEvidencePlan() throws Exception {
@@ -190,6 +291,23 @@ class CollectorAgentFieldEvidenceLoopTest {
                               }
                             ]
                           }
+                        }
+                        """)
+                .build();
+    }
+
+    private AgentContext contextForRetryClaimRelease() {
+        return AgentContext.builder()
+                .taskId(94L)
+                .taskName("Task94 retry claim release")
+                .currentNodeName("collect_sources_02_01")
+                .currentNodeConfig("""
+                        {
+                          "competitorName": "bilibili-open-platform",
+                          "competitorUrls": ["https://open.bilibili.com"],
+                          "sourceType": "OFFICIAL",
+                          "verifyCandidates": false,
+                          "browserSearchEnabled": false
                         }
                         """)
                 .build();

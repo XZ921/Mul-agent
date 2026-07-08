@@ -784,6 +784,72 @@ class CollectionTargetSelectorTest {
     }
 
     @Test
+    void shouldSelectSearchCandidateWithoutNetworkVerificationWhenNotRejected() {
+        CollectorNodeConfig config = CollectorNodeConfig.builder()
+                .competitorName("Airtable")
+                .competitorUrls(List.of("https://www.airtable.com"))
+                .sourceType("REVIEW")
+                .build();
+        SourceCandidate article = SourceCandidate.builder()
+                .url("https://www.g2.com/compare/notion-vs-airtable")
+                .title("Notion vs Airtable comparison")
+                .domain("www.g2.com")
+                .sourceType("REVIEW")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_FAST_LANE")
+                .selectionStage("CANDIDATE")
+                .verified(Boolean.FALSE)
+                .sourceUrls(List.of("https://www.g2.com/compare/notion-vs-airtable"))
+                .totalScore(0.74)
+                .build();
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                config,
+                List.of(article),
+                Map.of(),
+                1
+        );
+
+        assertEquals(1, decision.getSelectedTargets().size());
+        assertEquals(article.getUrl(), decision.getSelectedTargets().get(0).getCandidate().getUrl());
+        assertTrue(decision.getUpdatedCandidates().stream()
+                .anyMatch(candidate -> article.getUrl().equals(candidate.getUrl())
+                        && "SELECTED".equals(candidate.getSelectionStage())));
+    }
+
+    @Test
+    void shouldStillRejectMediatorPageWhenVerificationIsSkipped() {
+        CollectorNodeConfig config = CollectorNodeConfig.builder()
+                .competitorName("Airtable")
+                .competitorUrls(List.of("https://www.airtable.com"))
+                .sourceType("OFFICIAL")
+                .build();
+        SourceCandidate mediator = SourceCandidate.builder()
+                .url("https://aiqicha.baidu.com/feedback/official?from=baidu&type=gw")
+                .title("官网认证")
+                .domain("aiqicha.baidu.com")
+                .reason("官网认证是百度对网站在强关联关系触发词下展示官方标识的增值服务认证")
+                .sourceType("OFFICIAL")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_FAST_LANE")
+                .selectionStage("CANDIDATE")
+                .verified(Boolean.FALSE)
+                .totalScore(0.96)
+                .build();
+
+        SearchSelectionDecision decision = selector.selectTargets(
+                config,
+                List.of(mediator),
+                Map.of(),
+                1
+        );
+
+        assertEquals(0, decision.getSelectedTargets().size());
+        assertTrue(decision.getDiscardedCandidates().stream()
+                .anyMatch(candidate -> mediator.getUrl().equals(candidate.getUrl())));
+    }
+
+    @Test
     void shouldKeepOfficialSearchRootTemplateAsSupplementContinuationNotPrimaryEvidence() {
         CollectorNodeConfig config = CollectorNodeConfig.builder()
                 .competitorName("Douyin")

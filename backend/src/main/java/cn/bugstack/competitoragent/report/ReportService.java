@@ -69,6 +69,7 @@ public class ReportService {
     private final ReportDiagnosisAssembler reportDiagnosisAssembler;
     private final ObjectMapper objectMapper;
     private TaskWorkflowEventRepository taskWorkflowEventRepository;
+    private static final int STAGE_ONE_MVP_SCORE_FLOOR = 60;
     private static final List<CoverageFieldDefinition> COVERAGE_FIELD_DEFINITIONS = List.of(
             new CoverageFieldDefinition("summary", "overview", "产品概览"),
             new CoverageFieldDefinition("positioning", "positioning", "市场定位"),
@@ -206,13 +207,24 @@ public class ReportService {
                                                                     ReportDiagnosisInfo reportDiagnosis) {
         int blockerCount = resolveBlockerCount(issues, reportDiagnosis);
         int evidenceGapCount = resolveEvidenceGapCount(issues, reportDiagnosis);
-        boolean readyForDelivery = report.isQualityPassed() && blockerCount == 0 && evidenceGapCount == 0;
+        int qualityScore = report.getQualityScore() == null ? 0 : report.getQualityScore();
+        // 阶段1允许“60 分达标、无 blocker、少量证据缺口”的报告以降级态交付，
+        // 这样既不伪装成高质量通过，也不会把可演示的 MVP 报告一刀切拦下。
+        boolean degradedDelivery = !report.isQualityPassed()
+                && qualityScore >= STAGE_ONE_MVP_SCORE_FLOOR
+                && blockerCount == 0
+                && evidenceGapCount <= 3;
+        boolean readyForDelivery = (report.isQualityPassed() && blockerCount == 0 && evidenceGapCount == 0)
+                || degradedDelivery;
         String deliveryStatus = readyForDelivery
-                ? "READY"
+                ? degradedDelivery ? "DEGRADED_READY" : "READY"
                 : blockerCount > 0 ? "BLOCKED" : evidenceGapCount > 0 ? "NEEDS_EVIDENCE" : "REVIEW_REQUIRED";
         String summary = readyForDelivery
                 ? "当前报告已满足交付条件，可进入正式导出。"
                 : "当前报告暂不可交付，存在 %d 个阻塞问题和 %d 个证据缺口。".formatted(blockerCount, evidenceGapCount);
+        if (degradedDelivery) {
+            summary = "当前报告达到阶段1最低可交付标准，可作为降级报告交付；建议人工复核后再正式使用。";
+        }
 
         return ReportResponse.DeliverySummaryInfo.builder()
                 .readyForDelivery(readyForDelivery)

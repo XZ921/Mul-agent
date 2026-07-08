@@ -1,0 +1,50 @@
+﻿[
+    {
+        "Baseline":  "notion-vs-airtable",
+        "Url":  "https://www.airtable.com",
+        "Status":  200,
+        "Length":  442814,
+        "FinalUri":  "https://www.airtable.com/",
+        "Error":  ""
+    },
+    {
+        "Baseline":  "notion-vs-airtable",
+        "Url":  "https://www.airtable.com/pricing",
+        "Status":  200,
+        "Length":  325967,
+        "FinalUri":  "https://airtable.com/pricing",
+        "Error":  ""
+    },
+    {
+        "Baseline":  "notion-vs-airtable",
+        "Url":  "https://support.airtable.com/docs",
+        "Status":  200,
+        "Length":  2930722,
+        "FinalUri":  "https://support.airtable.com/docs",
+        "Error":  ""
+    },
+    {
+        "Baseline":  "linear-vs-jira",
+        "Url":  "https://www.atlassian.com/software/jira",
+        "Status":  200,
+        "Length":  870193,
+        "FinalUri":  "https://www.atlassian.com/software/jira",
+        "Error":  ""
+    },
+    {
+        "Baseline":  "linear-vs-jira",
+        "Url":  "https://www.atlassian.com/software/jira/pricing",
+        "Status":  200,
+        "Length":  1296099,
+        "FinalUri":  "https://www.atlassian.com/software/jira/pricing",
+        "Error":  ""
+    },
+    {
+        "Baseline":  "linear-vs-jira",
+        "Url":  "https://support.atlassian.com/jira-software-cloud/docs/",
+        "Status":  "FAILED",
+        "Length":  0,
+        "FinalUri":  "",
+        "Error":  "远程服务器返回错误: (404) 未找到。"
+    }
+]

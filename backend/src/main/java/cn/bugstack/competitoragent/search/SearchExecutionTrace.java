@@ -97,6 +97,11 @@ public class SearchExecutionTrace {
     private Integer fieldEvidenceQueryExecutedCount;
     private Integer fieldEvidenceQuerySkippedCount;
     private Map<String, Integer> fieldEvidenceQuerySkipReasons;
+    /**
+     * 本轮 query gate 实际 claim 成功的 fingerprint。
+     * 采集节点失败并进入自动重试时，Collector 会用它精准释放本轮占用，避免同节点 retry 被自己上一轮饿死。
+     */
+    private List<String> fieldEvidenceClaimedFingerprints;
     private List<String> fieldEvidenceFields;
     private List<String> fieldEvidencePaths;
     /**

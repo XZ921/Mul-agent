@@ -32,6 +32,14 @@ class TavilySearchPropertiesTest {
     }
 
     @Test
+    void shouldDefaultToStageOneFriendlyThresholds() {
+        TavilySearchProperties properties = new TavilySearchProperties();
+
+        assertThat(properties.getMinRawContentChars()).isEqualTo(300);
+        assertThat(properties.getMinTavilyScore()).isEqualTo(0.35D);
+    }
+
+    @Test
     void shouldBindTavilySearchPropertiesAndExposeReadinessHelpers() {
         contextRunner.run(context -> {
             TavilySearchProperties properties = context.getBean(TavilySearchProperties.class);
