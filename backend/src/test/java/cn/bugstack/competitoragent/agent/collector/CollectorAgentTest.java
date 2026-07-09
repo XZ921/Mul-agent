@@ -64,6 +64,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -1068,7 +1069,7 @@ class CollectorAgentTest {
     }
 
     @Test
-    void shouldFailWhenHardDeadlineReachedBeforeAnyUsableEvidenceWasCaptured() throws Exception {
+    void shouldReturnSuccessDegradedWhenHardDeadlineReachedBeforeAnyUsableEvidenceWasCaptured() throws Exception {
         SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
         CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
         CollectorAgent deadlineAwareCollector = new CollectorAgent(
@@ -1107,7 +1108,8 @@ class CollectorAgentTest {
                 buildContextWithVerification("[\"https://example.com/help\"]"));
         JsonNode output = objectMapper.readTree(result.getOutputData());
 
-        assertEquals("FAILED", result.getStatus().name());
+        assertEquals("SUCCESS_DEGRADED", result.getStatus().name());
+        assertNull(result.getErrorMessage());
         assertTrue(output.path("degradationReasons").toString().contains("HARD_DEADLINE_REACHED"));
         assertEquals("HARD_DEADLINE_REACHED",
                 output.path("searchExecutionTrace").path("degradationReason").asText());
@@ -1116,7 +1118,7 @@ class CollectorAgentTest {
     }
 
     @Test
-    void shouldStopCollectorWhenSearchPhaseExceedsHardDeadline() {
+    void shouldStopCollectorWhenSearchPhaseExceedsHardDeadline() throws Exception {
         SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
         CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
         CollectorAgent deadlineAwareCollector = new CollectorAgent(
@@ -1152,8 +1154,12 @@ class CollectorAgentTest {
                 () -> deadlineAwareCollector.execute(
                         buildSingleCandidateContext("https://example.com/docs", "Docs", "DOCS")));
 
-        assertEquals("FAILED", result.getStatus().name());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS_DEGRADED", result.getStatus().name());
+        assertNull(result.getErrorMessage());
         assertTrue(result.getOutputData().contains("HARD_DEADLINE_REACHED"));
+        assertFalse(output.path("readyForQuorum").asBoolean());
         verify(collectionCoordinator, never()).execute(any(), any(), any(), any(), any(), any());
     }
 

@@ -166,32 +166,53 @@ public class CoverageContractResolver {
                                                         AnalysisDimensionMapping mapping,
                                                         String taskMode) {
         List<CoverageEvidencePath> evidencePaths = buildEvidencePaths(fieldName, mapping);
+        boolean firstReportCritical = StageOneFirstReportPolicy.isFirstReportCriticalField(fieldName);
+        boolean enhancementField = StageOneFirstReportPolicy.isFirstReportEnhancementField(fieldName);
+        CoverageFieldStatus status = firstReportCritical ? CoverageFieldStatus.REQUIRED : CoverageFieldStatus.OPTIONAL;
+        CoverageBlockingLevel blockingLevel = firstReportCritical
+                ? CoverageBlockingLevel.BLOCKER
+                : CoverageBlockingLevel.WARNING;
         return CoverageFieldContract.builder()
                 .field(fieldName)
-                .status(mapping.isRequiredByDefault() ? CoverageFieldStatus.REQUIRED : CoverageFieldStatus.OPTIONAL)
-                .blockingLevel(mapping.isRequiredByDefault() ? CoverageBlockingLevel.BLOCKER : CoverageBlockingLevel.WARNING)
+                .status(status)
+                .blockingLevel(blockingLevel)
                 .targetEvidenceTypes(new ArrayList<>(defaultIfNull(mapping.getEvidencePathKeys())))
                 .queryIntents(new ArrayList<>(defaultIfNull(mapping.getQueryIntents())))
                 .evidencePaths(evidencePaths)
-                .minimumAttemptedPaths(resolveMinimumAttemptedPaths(fieldName, evidencePaths))
-                .minDistinctEvidenceCount(Math.min(2, Math.max(1, evidencePaths.size())))
+                .minimumAttemptedPaths(firstReportCritical ? resolveMinimumAttemptedPaths(fieldName, evidencePaths) : 0)
+                .minDistinctEvidenceCount(firstReportCritical ? Math.min(2, Math.max(1, evidencePaths.size())) : 0)
                 .allowOfficialOnly(!"weaknesses".equalsIgnoreCase(fieldName))
-                .overrideReason("显式维度命中 " + mapping.getDimensionKey() + "，覆盖默认 taskMode=" + taskMode + " 契约")
+                .overrideReason(resolveFieldOverrideReason(mapping, taskMode, enhancementField))
                 .build();
     }
 
     /**
-     * 标准报告模式直接提升定价、优势和短板为强检字段。
-     * 这是规格里“显式模板优先级最高”的落地实现。
+     * 统一生成字段覆盖原因。
+     * 核心字段继续强调“显式维度覆盖默认契约”，增强字段则额外写明阶段1只做审计保留，
+     * 避免下游再把 optional 字段误读成 blocker。
+     */
+    private String resolveFieldOverrideReason(AnalysisDimensionMapping mapping,
+                                              String taskMode,
+                                              boolean enhancementField) {
+        if (mapping == null) {
+            return "coverage mapping missing, taskMode=" + taskMode;
+        }
+        if (enhancementField) {
+            return mapping.getReason() + "；阶段1增强字段按审计保留，不阻塞交付";
+        }
+        return "显式维度命中 " + mapping.getDimensionKey() + "，覆盖默认 taskMode=" + taskMode + " 契约";
+    }
+
+    /**
+     * 标准版模板只保留增强字段的输出结构和证据路径，
+     * 不再把 pricing / strengths / weaknesses 升级为阶段1首报 blocker。
      */
     private void upgradeStandardReportFields(Map<String, CoverageFieldContract> fields) {
-        fields.put("pricing", CoverageFieldContract.builder()
-                .field("pricing")
-                .status(CoverageFieldStatus.REQUIRED)
-                .blockingLevel(CoverageBlockingLevel.BLOCKER)
-                .targetEvidenceTypes(List.of("OFFICIAL_PRICING_PAGE", "DOCS_BILLING_OR_LIMITS", "PUBLIC_REVIEW_OR_NEWS"))
-                .queryIntents(List.of("OFFICIAL_PRICING", "DOCS_BILLING"))
-                .evidencePaths(List.of(
+        fields.put("pricing", enhancementField(
+                "pricing",
+                List.of("OFFICIAL_PRICING_PAGE", "DOCS_BILLING_OR_LIMITS", "PUBLIC_REVIEW_OR_NEWS"),
+                List.of("OFFICIAL_PRICING", "DOCS_BILLING"),
+                List.of(
                         evidencePath("OFFICIAL_PRICING_PAGE",
                                 unlockOfficialPathSourceTypes("PRICING", "OFFICIAL"),
                                 List.of("OFFICIAL_PRICING"),
@@ -202,37 +223,27 @@ public class CoverageContractResolver {
                                 List.of("DOCS_BILLING"),
                                 List.of("PRICING_BLOCK", "LIMITATION_OR_POLICY_BLOCK"),
                                 true),
-                        thirdPartyPath(true, "PRICING_BLOCK")))
-                .minimumAttemptedPaths(1)
-                .minDistinctEvidenceCount(2)
-                .allowOfficialOnly(true)
-                .overrideReason("显式模板要求标准版报告必须覆盖定价字段")
-                .build());
-        fields.put("strengths", CoverageFieldContract.builder()
-                .field("strengths")
-                .status(CoverageFieldStatus.REQUIRED)
-                .blockingLevel(CoverageBlockingLevel.BLOCKER)
-                .targetEvidenceTypes(List.of("FEATURE_BLOCK", "ECOSYSTEM_BLOCK"))
-                .queryIntents(List.of("OFFICIAL_DOCS"))
-                .evidencePaths(List.of(
+                        thirdPartyPath(true, "PRICING_BLOCK")),
+                true,
+                "标准版输出保留增强字段；阶段1首报不以该字段阻塞交付"));
+        fields.put("strengths", enhancementField(
+                "strengths",
+                List.of("FEATURE_BLOCK", "ECOSYSTEM_BLOCK"),
+                List.of("OFFICIAL_DOCS"),
+                List.of(
                         evidencePath("OFFICIAL_PUBLIC_PROFILE",
                                 unlockOfficialPathSourceTypes("OFFICIAL", "DOCS"),
                                 List.of("OFFICIAL_DOCS"),
                                 List.of("FEATURE_BLOCK", "ECOSYSTEM_BLOCK"),
                                 true),
-                        thirdPartyPath(true, "FEATURE_BLOCK", "ECOSYSTEM_BLOCK")))
-                .minimumAttemptedPaths(1)
-                .minDistinctEvidenceCount(1)
-                .allowOfficialOnly(true)
-                .overrideReason("显式模板要求标准版报告必须覆盖优势字段")
-                .build());
-        fields.put("weaknesses", CoverageFieldContract.builder()
-                .field("weaknesses")
-                .status(CoverageFieldStatus.REQUIRED)
-                .blockingLevel(CoverageBlockingLevel.BLOCKER)
-                .targetEvidenceTypes(List.of("TERMS_OR_SERVICE_AGREEMENT", "POLICY_LIMITATION", "PUBLIC_REVIEW_OR_NEWS"))
-                .queryIntents(List.of("POLICY", "RISK", "THIRD_PARTY_REVIEW"))
-                .evidencePaths(List.of(
+                        thirdPartyPath(true, "FEATURE_BLOCK", "ECOSYSTEM_BLOCK")),
+                true,
+                "标准版输出保留增强字段；阶段1首报不以该字段阻塞交付"));
+        fields.put("weaknesses", enhancementField(
+                "weaknesses",
+                List.of("TERMS_OR_SERVICE_AGREEMENT", "POLICY_LIMITATION", "PUBLIC_REVIEW_OR_NEWS"),
+                List.of("POLICY", "RISK", "THIRD_PARTY_REVIEW"),
+                List.of(
                         evidencePath("TERMS_OR_SERVICE_AGREEMENT",
                                 unlockOfficialPathSourceTypes("TERMS", "POLICY"),
                                 List.of("POLICY"),
@@ -242,12 +253,34 @@ public class CoverageContractResolver {
                                 List.of("REVIEW", "NEWS"),
                                 List.of("THIRD_PARTY_REVIEW", "RISK"),
                                 List.of("PUBLIC_RISK_BLOCK"),
-                                true)))
-                .minimumAttemptedPaths(1)
-                .minDistinctEvidenceCount(2)
-                .allowOfficialOnly(false)
-                .overrideReason("显式模板要求标准版报告必须覆盖短板字段")
-                .build());
+                                true)),
+                false,
+                "标准版输出保留增强字段；阶段1首报不以该字段阻塞交付"));
+    }
+
+    /**
+     * 增强字段工厂方法。
+     * 它统一保留字段的证据路径和查询意图，但明确把状态降为 OPTIONAL/WARNING，
+     * 避免标准版模板再次把增强字段重新抬成首报 blocker。
+     */
+    private CoverageFieldContract enhancementField(String fieldName,
+                                                   List<String> targetEvidenceTypes,
+                                                   List<String> queryIntents,
+                                                   List<CoverageEvidencePath> evidencePaths,
+                                                   boolean allowOfficialOnly,
+                                                   String overrideReason) {
+        return CoverageFieldContract.builder()
+                .field(fieldName)
+                .status(CoverageFieldStatus.OPTIONAL)
+                .blockingLevel(CoverageBlockingLevel.WARNING)
+                .targetEvidenceTypes(new ArrayList<>(defaultIfNull(targetEvidenceTypes)))
+                .queryIntents(new ArrayList<>(defaultIfNull(queryIntents)))
+                .evidencePaths(evidencePaths == null ? List.of() : evidencePaths)
+                .minimumAttemptedPaths(0)
+                .minDistinctEvidenceCount(0)
+                .allowOfficialOnly(allowOfficialOnly)
+                .overrideReason(overrideReason)
+                .build();
     }
 
     /**

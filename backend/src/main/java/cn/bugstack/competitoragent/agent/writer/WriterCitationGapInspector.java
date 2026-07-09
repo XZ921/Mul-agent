@@ -2,6 +2,7 @@ package cn.bugstack.competitoragent.agent.writer;
 
 import cn.bugstack.competitoragent.workflow.contract.SectionEvidenceBundle;
 import cn.bugstack.competitoragent.workflow.contract.WriterCitationGap;
+import cn.bugstack.competitoragent.workflow.coverage.StageOneFirstReportPolicy;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -10,7 +11,7 @@ import java.util.List;
 
 /**
  * Writer 章节引用缺口检测器。
- * 它只基于 Writer 可见的章节证据束和来源列表生成缺口事实，不做 Citation Agent 级别的逐句真伪核验。
+ * 它只基于 Writer 可见的章节证据束和来源列表生成缺口事实，不做 Citation Agent 级别的逐句真伪校验。
  */
 @Component
 public class WriterCitationGapInspector {
@@ -42,14 +43,82 @@ public class WriterCitationGapInspector {
     }
 
     /**
-     * 只要章节显式暴露了证据缺口、缺字段或完全没有来源，就应进入 Writer citation gap 轨道。
+     * Writer 需要区分两类问题：
+     * 1. 首报核心字段的真缺口，仍然应该进入高优先级 citation gap 轨道；
+     * 2. 定价/优势/短板这类增强字段缺口，只保留 optional 审计，不再冒充 blocker。
      */
     private boolean hasCitationGap(SectionEvidenceBundle bundle) {
-        return contains(bundle.getIssueFlags(), "SECTION_EVIDENCE_GAP")
-                || contains(bundle.getIssueFlags(), "NO_USABLE_EVIDENCE")
-                || (bundle.getMissingFields() != null && !bundle.getMissingFields().isEmpty())
+        return hasBlockingCitationGap(bundle) || hasOptionalCitationGap(bundle);
+    }
+
+    private boolean hasBlockingCitationGap(SectionEvidenceBundle bundle) {
+        if (isOptionalOnlyGap(bundle)) {
+            return false;
+        }
+        return contains(bundle.getIssueFlags(), "NO_USABLE_EVIDENCE")
                 || bundle.getSourceUrls() == null
-                || bundle.getSourceUrls().isEmpty();
+                || bundle.getSourceUrls().isEmpty()
+                || hasBlockingMissingFields(bundle)
+                || (contains(bundle.getIssueFlags(), "SECTION_EVIDENCE_GAP") && !hasOnlyOptionalMissingFields(bundle));
+    }
+
+    private boolean hasOptionalCitationGap(SectionEvidenceBundle bundle) {
+        return isOptionalOnlyGap(bundle)
+                || contains(bundle.getIssueFlags(), "OPTIONAL_SECTION_EVIDENCE_GAP");
+    }
+
+    private boolean hasBlockingMissingFields(SectionEvidenceBundle bundle) {
+        List<String> missingFields = normalize(bundle == null ? null : bundle.getMissingFields());
+        return missingFields.stream().anyMatch(StageOneFirstReportPolicy::isFirstReportCriticalField);
+    }
+
+    private boolean hasOnlyOptionalMissingFields(SectionEvidenceBundle bundle) {
+        List<String> missingFields = normalize(bundle == null ? null : bundle.getMissingFields());
+        return !missingFields.isEmpty()
+                && missingFields.stream().allMatch(StageOneFirstReportPolicy::isFirstReportEnhancementField);
+    }
+
+    /**
+     * Writer 需要兼容 Analyzer/旧 bundle 的字段命名漂移。
+     * 只要章节自身能稳定映射回 pricing / strengths / weaknesses，就应继续按 optional gap 处理，
+     * 不能因为中间层仍带着 SECTION_EVIDENCE_GAP 旧标记就把增强字段重新抬成 blocker。
+     */
+    private boolean isOptionalOnlyGap(SectionEvidenceBundle bundle) {
+        boolean hasGapSignal = contains(bundle == null ? null : bundle.getIssueFlags(), "SECTION_EVIDENCE_GAP")
+                || contains(bundle == null ? null : bundle.getIssueFlags(), "OPTIONAL_SECTION_EVIDENCE_GAP")
+                || !(normalize(bundle == null ? null : bundle.getMissingFields())).isEmpty();
+        return hasGapSignal
+                && (hasOnlyOptionalMissingFields(bundle)
+                || (isOptionalSection(bundle) && !hasBlockingMissingFields(bundle)));
+    }
+
+    private boolean isOptionalSection(SectionEvidenceBundle bundle) {
+        String stageOneField = resolveStageOneField(bundle);
+        return StageOneFirstReportPolicy.isFirstReportEnhancementField(stageOneField);
+    }
+
+    private String resolveStageOneField(SectionEvidenceBundle bundle) {
+        if (bundle == null) {
+            return null;
+        }
+        List<String> candidates = new ArrayList<>();
+        candidates.add(bundle.getSectionKey());
+        candidates.add(bundle.getSectionTitle());
+        candidates.addAll(bundle.getFieldNames() == null ? List.of() : bundle.getFieldNames());
+        candidates.addAll(bundle.getMissingFields() == null ? List.of() : bundle.getMissingFields());
+        for (String candidate : candidates) {
+            String normalizedField = StageOneFirstReportPolicy.normalizeFieldName(candidate);
+            if (StageOneFirstReportPolicy.isFirstReportCriticalField(normalizedField)
+                    || StageOneFirstReportPolicy.isFirstReportEnhancementField(normalizedField)) {
+                return normalizedField;
+            }
+            String sectionField = StageOneFirstReportPolicy.fieldForSection(candidate);
+            if (StageOneFirstReportPolicy.isFirstReportCriticalField(sectionField)
+                    || StageOneFirstReportPolicy.isFirstReportEnhancementField(sectionField)) {
+                return StageOneFirstReportPolicy.normalizeFieldName(sectionField);
+            }
+        }
+        return null;
     }
 
     /**
@@ -62,12 +131,13 @@ public class WriterCitationGapInspector {
             sectionSources = normalize(fallbackSourceUrls);
         }
         String sectionKey = firstNonBlank(bundle.getSectionKey(), "report");
+        boolean optionalGap = !sectionSources.isEmpty() && isOptionalOnlyGap(bundle);
         return WriterCitationGap.builder()
                 .targetSection(sectionKey)
                 .sectionTitle(firstNonBlank(bundle.getSectionTitle(), sectionKey))
                 .summary(firstNonBlank(bundle.getGapSummary(),
                         "Writer 章节缺少可回指引用：" + firstNonBlank(bundle.getSectionTitle(), sectionKey)))
-                .severity(sectionSources.isEmpty() ? "ERROR" : "HIGH")
+                .severity(sectionSources.isEmpty() ? "ERROR" : optionalGap ? "WARNING" : "HIGH")
                 .sourceUrls(sectionSources)
                 .evidenceState(sectionSources.isEmpty() ? "MISSING_SOURCE" : "PARTIAL_SOURCE")
                 .missingFields(normalize(bundle.getMissingFields()))
@@ -94,9 +164,13 @@ public class WriterCitationGapInspector {
         if (gaps == null || gaps.isEmpty()) {
             return "NONE";
         }
-        return gaps.stream().anyMatch(gap -> "MISSING_SOURCE".equals(gap.getEvidenceState()))
-                ? "ERROR"
-                : "HIGH";
+        if (gaps.stream().anyMatch(gap -> "MISSING_SOURCE".equals(gap.getEvidenceState()))) {
+            return "ERROR";
+        }
+        if (gaps.stream().anyMatch(gap -> "HIGH".equals(gap.getSeverity()))) {
+            return "HIGH";
+        }
+        return "WARNING";
     }
 
     private String resolveEvidenceState(List<WriterCitationGap> gaps, List<String> fallbackSourceUrls) {
@@ -109,7 +183,8 @@ public class WriterCitationGapInspector {
     }
 
     /**
-     * Writer 缺口一律打上统一 issue flag；只有出现完全无来源章节时，才额外打上 WRITER_MISSING_SOURCE。
+     * Writer 缺口统一保留 WRITER_CITATION_GAP；
+     * 若当前仅存在增强字段缺口，则额外打上 OPTIONAL_CITATION_GAP，供报告层做降级说明。
      */
     private List<String> buildIssueFlags(List<WriterCitationGap> gaps) {
         if (gaps == null || gaps.isEmpty()) {
@@ -119,6 +194,9 @@ public class WriterCitationGapInspector {
         flags.add("WRITER_CITATION_GAP");
         if (gaps.stream().anyMatch(gap -> "MISSING_SOURCE".equals(gap.getEvidenceState()))) {
             flags.add("WRITER_MISSING_SOURCE");
+        }
+        if (gaps.stream().anyMatch(gap -> "WARNING".equals(gap.getSeverity()))) {
+            flags.add("OPTIONAL_CITATION_GAP");
         }
         return new ArrayList<>(flags);
     }
@@ -155,7 +233,7 @@ public class WriterCitationGapInspector {
     }
 
     /**
-     * 这里返回纯事实视图，供 Writer、Assembler 和测试复用，避免把决策语义提前揉进检测器。
+     * 这里返回纯事实视图，便于 Writer、Assembler 和测试复用，避免把决策语义提前揉进检测器。
      */
     public record InspectionResult(List<WriterCitationGap> gaps,
                                    String severity,

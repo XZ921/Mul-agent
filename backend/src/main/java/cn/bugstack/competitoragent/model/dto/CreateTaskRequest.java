@@ -42,8 +42,8 @@ public class CreateTaskRequest {
     @Schema(description = "报告语言", example = "中文")
     private String reportLanguage = "中文";
 
-    @Schema(description = "报告模板类型", example = "标准版")
-    private String reportTemplate = "标准版";
+    @Schema(description = "报告模板类型", example = "阶段1首报")
+    private String reportTemplate = "阶段1首报";
 
     @Schema(description = "分析模板 ID（不填则使用默认维度）", example = "1")
     private Long schemaId;

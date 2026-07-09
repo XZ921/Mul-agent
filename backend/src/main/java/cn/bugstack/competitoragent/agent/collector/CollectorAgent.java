@@ -2038,12 +2038,17 @@ public class CollectorAgent extends BaseAgent {
                                                          int successCounter,
                                                          List<SearchCollectionTarget> targets,
                                                          int fieldEvidenceLoopRounds) {
-        boolean hasUsableEvidence = successCounter > 0 && hasFormalSelectedTargetsInResults(results);
-        String progressMessage = hasUsableEvidence
+        boolean hasCollectableProgress = hasCollectorHandoffProgress(
+                successCounter,
+                results,
+                targets,
+                searchExecutionResult
+        );
+        String progressMessage = hasCollectableProgress
                 ? "达到采集节点硬截止，已停止补采并交接已有证据"
                 : "达到采集节点硬截止前未形成可交接证据";
         markCollectStep(executionPlan,
-                hasUsableEvidence ? SearchExecutionStep.StepStatus.SUCCESS : SearchExecutionStep.StepStatus.FAILED,
+                hasCollectableProgress ? SearchExecutionStep.StepStatus.SUCCESS : SearchExecutionStep.StepStatus.FAILED,
                 progressMessage);
         progressSnapshots.add(buildProgressSnapshot(
                 executionPlan,
@@ -2064,25 +2069,35 @@ public class CollectorAgent extends BaseAgent {
                     targets,
                     fieldEvidenceLoopRounds
             );
-            if (hasUsableEvidence) {
-                return AgentResult.builder()
-                        .status(TaskNodeStatus.SUCCESS_DEGRADED)
-                        .outputData(outputJson)
-                        .outputSummary("达到采集节点硬截止，已交接 " + config.getCompetitorName() + " 的 "
-                                + sourceType + " 部分证据")
-                        .reasoningSummary(searchExecutionResult == null ? null : searchExecutionResult.getReasoningSummary())
-                        .build();
-            }
             return AgentResult.builder()
-                    .status(TaskNodeStatus.FAILED)
+                    .status(TaskNodeStatus.SUCCESS_DEGRADED)
                     .outputData(outputJson)
-                    .outputSummary("达到采集节点硬截止前未形成可交接证据")
+                    .outputSummary(progressMessage)
                     .reasoningSummary(searchExecutionResult == null ? null : searchExecutionResult.getReasoningSummary())
-                    .errorMessage("达到采集节点硬截止前未形成可交接证据")
                     .build();
         } catch (JsonProcessingException e) {
             return AgentResult.failed("采集结果序列化失败：" + e.getMessage());
         }
+    }
+
+    /**
+     * 阶段1硬截止只判断是否存在可交接进展，不再要求页面正文已经全部落库。
+     * selectedTargets / attemptedTargets 可以让下游 quorum 明确知道该分支已降级终止，
+     * 避免节点先进入 FAILED，再被 retry / recovery 错误升级成 WAITING_INTERVENTION。
+     */
+    private boolean hasCollectorHandoffProgress(int successCounter,
+                                                List<Map<String, Object>> results,
+                                                List<SearchCollectionTarget> targets,
+                                                SearchExecutionResult searchExecutionResult) {
+        if (successCounter > 0 && hasFormalSelectedTargetsInResults(results)) {
+            return true;
+        }
+        if (targets != null && targets.stream().anyMatch(target -> target != null && target.getCandidate() != null)) {
+            return true;
+        }
+        return searchExecutionResult != null
+                && searchExecutionResult.getSelectedTargets() != null
+                && !searchExecutionResult.getSelectedTargets().isEmpty();
     }
 
     private List<String> resolveDegradationReasons(SearchExecutionTrace executionTrace) {

@@ -31,9 +31,9 @@ public class AnalysisDimensionMappingCatalog {
                             "TERMS_OR_SERVICE_AGREEMENT", "PUBLIC_REVIEW_OR_NEWS"))
                     .sourceTypes(List.of("PRICING", "DOCS", "OFFICIAL", "REVIEW", "NEWS"))
                     .queryIntents(List.of("OFFICIAL_PRICING", "DOCS_BILLING", "TERMS_BILLING", "THIRD_PARTY_REVIEW"))
-                    .requiredByDefault(true)
+                    .requiredByDefault(false)
                     .priority(100)
-                    .reason("显式分析维度要求定价字段")
+                    .reason("显式分析维度要求定价字段；阶段1增强字段按审计保留，不阻塞交付")
                     .build());
         }
         if (matches(analysisDimensions, "风险", "短板", "劣势", "限制", "合规", "协议", "审核", "规则")) {
@@ -44,9 +44,9 @@ public class AnalysisDimensionMappingCatalog {
                     .evidencePathKeys(List.of("TERMS_OR_SERVICE_AGREEMENT", "POLICY_LIMITATION", "PUBLIC_REVIEW_OR_NEWS"))
                     .sourceTypes(List.of("TERMS", "POLICY", "REVIEW", "NEWS"))
                     .queryIntents(List.of("POLICY", "RISK", "THIRD_PARTY_REVIEW"))
-                    .requiredByDefault(true)
+                    .requiredByDefault(false)
                     .priority(90)
-                    .reason("显式分析维度要求风险或短板字段")
+                    .reason("显式分析维度要求风险或短板字段；阶段1增强字段按审计保留，不阻塞交付")
                     .build());
         }
         if (matches(analysisDimensions, "产品功能", "开放平台", "开发者生态", "API", "SDK", "文档", "能力")) {

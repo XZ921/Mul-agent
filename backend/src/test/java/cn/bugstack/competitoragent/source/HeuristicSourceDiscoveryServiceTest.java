@@ -316,4 +316,31 @@ class HeuristicSourceDiscoveryServiceTest {
                 "FAMILY_TEMPLATE".equals(candidate.getDiscoveryMethod())
                         && "https://www.acme.ai/pricing".equals(candidate.getUrl())));
     }
+
+    @Test
+    void shouldNotCreatePricingPlanWhenSourceScopeIsEmptyInStageOneDefault() {
+        List<SourcePlan> plans = service.discover(
+                "Linear",
+                List.of("https://www.linear.app"),
+                List.of()
+        );
+
+        List<String> sourceTypes = plans.stream().map(SourcePlan::getSourceType).toList();
+        assertTrue(sourceTypes.contains("OFFICIAL"));
+        assertTrue(sourceTypes.contains("DOCS"));
+        assertTrue(sourceTypes.contains("NEWS"));
+        assertTrue(sourceTypes.contains("REVIEW"));
+        assertFalse(sourceTypes.contains("PRICING"));
+    }
+
+    @Test
+    void shouldStillCreatePricingPlanWhenPricingScopeIsExplicit() {
+        List<SourcePlan> plans = service.discover(
+                "Linear",
+                List.of("https://www.linear.app"),
+                List.of("定价页")
+        );
+
+        assertTrue(plans.stream().map(SourcePlan::getSourceType).toList().contains("PRICING"));
+    }
 }

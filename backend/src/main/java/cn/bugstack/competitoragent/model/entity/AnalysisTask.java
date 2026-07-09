@@ -75,9 +75,9 @@ public class AnalysisTask {
     private String reportLanguage = "中文";
 
     @Column(length = 50)
-    @Schema(description = "报告模板类型", example = "标准版")
+    @Schema(description = "报告模板类型", example = "阶段1首报")
     @Builder.Default
-    private String reportTemplate = "标准版";
+    private String reportTemplate = "阶段1首报";
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

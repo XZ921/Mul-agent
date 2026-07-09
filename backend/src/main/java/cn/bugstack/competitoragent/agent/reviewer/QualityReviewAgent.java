@@ -21,6 +21,7 @@ import cn.bugstack.competitoragent.workflow.coverage.CoverageBlockingLevel;
 import cn.bugstack.competitoragent.workflow.coverage.CoverageContract;
 import cn.bugstack.competitoragent.workflow.coverage.CoverageContractProvider;
 import cn.bugstack.competitoragent.workflow.coverage.CoverageFieldContract;
+import cn.bugstack.competitoragent.workflow.coverage.StageOneFirstReportPolicy;
 import cn.bugstack.competitoragent.workflow.contract.QualityDiagnosis;
 import cn.bugstack.competitoragent.workflow.contract.QualityDimension;
 import cn.bugstack.competitoragent.workflow.contract.QualityIssue;
@@ -65,7 +66,7 @@ public class QualityReviewAgent extends BaseAgent {
             new CoverageFieldRule("weaknesses", "短板与风险", List.of("短板", "风险", "不足", "劣势"))
     );
     private static final List<SectionRule> CLAIM_AUDIT_RULES = List.of(
-            new SectionRule("结论", List.of("产品概览", "市场定位", "目标用户", "核心能力", "定价策略", "优势判断", "短板与风险"), "ERROR"),
+            new SectionRule("结论", List.of("产品概览", "市场定位", "目标用户", "核心能力"), "ERROR"),
             new SectionRule("建议", List.of("市场定位", "目标用户", "核心能力", "定价策略", "优势判断", "短板与风险"), "WARNING"),
             new SectionRule("风险点", List.of("短板与风险"), "WARNING"),
             new SectionRule("机会点", List.of("优势判断", "核心能力", "市场定位"), "WARNING"),
@@ -449,6 +450,8 @@ public class QualityReviewAgent extends BaseAgent {
         }
         LinkedHashSet<String> requiredNotCoveringSections = filterRequiredSections(notCoveringSections, requiredCoverageSections);
         LinkedHashSet<String> requiredRefusedSections = filterRequiredSections(refusedSections, requiredCoverageSections);
+        LinkedHashSet<String> requiredMissingSections = filterRequiredSections(missingSections, requiredCoverageSections);
+        LinkedHashSet<String> requiredEmptySections = filterRequiredSections(emptySections, requiredCoverageSections);
         return new CoverageSnapshot(
                 traceableSections,
                 structuredDirectSections,
@@ -456,6 +459,8 @@ public class QualityReviewAgent extends BaseAgent {
                 notCoveringSections,
                 refusedSections,
                 emptySections,
+                requiredMissingSections,
+                requiredEmptySections,
                 requiredNotCoveringSections,
                 requiredRefusedSections
         );
@@ -895,14 +900,15 @@ public class QualityReviewAgent extends BaseAgent {
         long blockerCount = diagnoses.stream()
                 .filter(diagnosis -> "BLOCKER".equalsIgnoreCase(safeValue(diagnosis.getLevel(), "")))
                 .count();
-        int missingCoverageCount = coverageSnapshot.missingSections().size()
-                + coverageSnapshot.notCoveringSections().size()
-                + coverageSnapshot.refusedSections().size();
-        int emptyCoverageCount = coverageSnapshot.emptySections().size();
+        int requiredCoverageGapCount = coverageSnapshot.requiredMissingSections().size()
+                + coverageSnapshot.requiredEmptySections().size()
+                + coverageSnapshot.requiredNotCoveringSections().size()
+                + coverageSnapshot.requiredRefusedSections().size();
+        int optionalCoverageGapCount = countAllCoverageSignals(coverageSnapshot) - requiredCoverageGapCount;
 
-        int evidenceScore = normalizeScore(100 - (int) evidenceIssueCount * 22 - missingCoverageCount * 12 - emptyCoverageCount * 6 - (int) searchIssueCount * 10);
+        int evidenceScore = normalizeScore(100 - (int) evidenceIssueCount * 22 - requiredCoverageGapCount * 12 - optionalCoverageGapCount * 4 - (int) searchIssueCount * 10);
         int claimScore = normalizeScore(100 - (int) claimIssueCount * 20 - (int) blockerCount * 12);
-        int structureScore = normalizeScore(100 - missingCoverageCount * 14 - emptyCoverageCount * 16);
+        int structureScore = normalizeScore(100 - requiredCoverageGapCount * 14 - optionalCoverageGapCount * 6);
         int actionabilityScore = normalizeScore(100 - Math.max(0, items.size() - 1) * 10 - (blockerCount > 0 ? 25 : 0) - (int) searchIssueCount * 8);
 
         return List.of(
@@ -1118,20 +1124,28 @@ public class QualityReviewAgent extends BaseAgent {
     private Set<String> resolveRequiredCoverageSections(String analysisDimensions) {
         LinkedHashSet<String> requiredSections = new LinkedHashSet<>();
         if (analysisDimensions == null || analysisDimensions.isBlank()) {
-            for (CoverageFieldRule rule : COVERAGE_FIELD_RULES) {
-                requiredSections.add(rule.sectionTitle());
-            }
-            return requiredSections;
+            return defaultRequiredCoverageSections();
         }
         List<String> dimensions = parseAnalysisDimensions(analysisDimensions);
         if (dimensions.isEmpty()) {
-            for (CoverageFieldRule rule : COVERAGE_FIELD_RULES) {
-                requiredSections.add(rule.sectionTitle());
-            }
-            return requiredSections;
+            return defaultRequiredCoverageSections();
         }
         for (CoverageFieldRule rule : COVERAGE_FIELD_RULES) {
             if (matchesAnalysisDimension(rule, dimensions)) {
+                requiredSections.add(rule.sectionTitle());
+            }
+        }
+        return requiredSections;
+    }
+
+    /**
+     * analysisDimensions 缺失时，Reviewer 不能再回退到历史上的“7 字段全阻断”。
+     * 这里直接复用阶段1首报契约，只把核心首报章节视为默认必检范围。
+     */
+    private LinkedHashSet<String> defaultRequiredCoverageSections() {
+        LinkedHashSet<String> requiredSections = new LinkedHashSet<>();
+        for (CoverageFieldRule rule : COVERAGE_FIELD_RULES) {
+            if (StageOneFirstReportPolicy.isFirstReportBlockingSection(rule.sectionTitle())) {
                 requiredSections.add(rule.sectionTitle());
             }
         }
@@ -1199,6 +1213,13 @@ public class QualityReviewAgent extends BaseAgent {
             }
         }
         return result;
+    }
+
+    private int countAllCoverageSignals(CoverageSnapshot coverageSnapshot) {
+        return coverageSnapshot.missingSections().size()
+                + coverageSnapshot.emptySections().size()
+                + coverageSnapshot.notCoveringSections().size()
+                + coverageSnapshot.refusedSections().size();
     }
 
     private boolean requiresEvidenceCitation(RevisionPlan.RevisionItem item) {
@@ -1845,6 +1866,8 @@ public class QualityReviewAgent extends BaseAgent {
                                     LinkedHashSet<String> notCoveringSections,
                                     LinkedHashSet<String> refusedSections,
                                     LinkedHashSet<String> emptySections,
+                                    LinkedHashSet<String> requiredMissingSections,
+                                    LinkedHashSet<String> requiredEmptySections,
                                     LinkedHashSet<String> requiredNotCoveringSections,
                                     LinkedHashSet<String> requiredRefusedSections) {
     }

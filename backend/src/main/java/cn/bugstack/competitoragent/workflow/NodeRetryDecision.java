@@ -126,6 +126,13 @@ public class NodeRetryDecision {
         }
         String normalized = errorMessage.toLowerCase(Locale.ROOT);
         if (containsAny(normalized,
+                "hard deadline",
+                "deadline reached",
+                "硬截止",
+                "达到采集节点硬截止")) {
+            return NodeFailureCategory.DEADLINE_EXHAUSTED;
+        }
+        if (containsAny(normalized,
                 "permission denied",
                 "forbidden",
                 "unauthorized",

@@ -5,6 +5,7 @@ import cn.bugstack.competitoragent.search.SearchPolicyResolver;
 import cn.bugstack.competitoragent.search.SearchProviderRole;
 import cn.bugstack.competitoragent.search.SearchSourceCatalogProperties;
 import cn.bugstack.competitoragent.search.SourceFamilyDirectDiscoveryPlanner;
+import cn.bugstack.competitoragent.workflow.coverage.StageOneFirstReportPolicy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -25,7 +26,7 @@ import java.util.Set;
 @Component
 public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
 
-    private static final List<String> DEFAULT_SCOPES = List.of("OFFICIAL", "DOCS", "PRICING", "NEWS", "REVIEW");
+    private static final List<String> DEFAULT_SCOPES = StageOneFirstReportPolicy.defaultSourceScopes();
     private static final int MAX_CANDIDATES_PER_SCOPE = 5;
 
     private final SearchSourceProvider searchSourceProvider;
@@ -205,18 +206,11 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
 
     // 采集范围支持中英文别名输入，最终统一映射成系统内部固定 scope。
     private List<String> normalizeScopes(List<String> requestedScopes) {
-        if (requestedScopes == null || requestedScopes.isEmpty()) {
-            return DEFAULT_SCOPES;
-        }
-
-        LinkedHashSet<String> scopes = new LinkedHashSet<>();
-        for (String rawScope : requestedScopes) {
-            String normalized = canonicalScope(rawScope);
-            if (StringUtils.hasText(normalized)) {
-                scopes.add(normalized);
-            }
-        }
-        return scopes.isEmpty() ? DEFAULT_SCOPES : new ArrayList<>(scopes);
+        /*
+         * 阶段1默认来源只覆盖首报核心认知闭环；PRICING 只有用户显式选择定价页时才进入。
+         * 这里直接复用统一策略，避免 preview / create / runtime 各自维护一套默认 scope。
+         */
+        return StageOneFirstReportPolicy.normalizeRequestedSourceScopes(requestedScopes);
     }
 
     // 每种 scope 都先构建启发式候选项，再由统一排序器做去重和优先级计算。
@@ -323,39 +317,6 @@ public class HeuristicSourceDiscoveryService implements SourceDiscoveryService {
         return "SEARCH".equalsIgnoreCase(discoveryMethod)
                 || "BROWSER".equalsIgnoreCase(discoveryMethod)
                 || "BROWSER_PREVIEW".equalsIgnoreCase(discoveryMethod);
-    }
-
-    // 兼容中文关键词、英文关键词与常见站点名，降低前端传参复杂度。
-    private String canonicalScope(String rawScope) {
-        if (!StringUtils.hasText(rawScope)) {
-            return null;
-        }
-        String scope = rawScope.toLowerCase(Locale.ROOT);
-        if (containsAny(scope, List.of("官网", "official", "home"))) {
-            return "OFFICIAL";
-        }
-        if (containsAny(scope, List.of("文档", "doc", "help", "guide"))) {
-            return "DOCS";
-        }
-        if (containsAny(scope, List.of("价格", "定价", "pricing", "plan"))) {
-            return "PRICING";
-        }
-        if (containsAny(scope, List.of("博客", "新闻", "blog", "news", "changelog"))) {
-            return "NEWS";
-        }
-        if (containsAny(scope, List.of("测评", "review", "g2", "capterra"))) {
-            return "REVIEW";
-        }
-        return "OFFICIAL";
-    }
-
-    private boolean containsAny(String value, List<String> candidates) {
-        for (String candidate : candidates) {
-            if (value.contains(candidate)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     // 统一裁剪到协议 + host，避免后续拼接 path 时重复叠加原始路径。

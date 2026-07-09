@@ -41,7 +41,7 @@ public class TaskDefinitionMapper {
                 .analysisDimensions(normalizeList(request.getAnalysisDimensions()))
                 .sourceScope(normalizeList(request.getSourceScope()))
                 .reportLanguage(trimOrDefault(request.getReportLanguage(), "中文"))
-                .reportTemplate(trimOrDefault(request.getReportTemplate(), "标准版"))
+                .reportTemplate(trimOrDefault(request.getReportTemplate(), "阶段1首报"))
                 .schemaId(request.getSchemaId())
                 .sourceUrls(List.of())
                 .build();
@@ -68,7 +68,7 @@ public class TaskDefinitionMapper {
                 .analysisDimensions(draft == null ? List.of() : defaultList(draft.getAnalysisDimensions()))
                 .sourceScope(draft == null ? List.of() : defaultList(draft.getSourceScope()))
                 .reportLanguage(draft == null ? "中文" : trimOrDefault(draft.getReportLanguage(), "中文"))
-                .reportTemplate(draft == null ? "标准版" : trimOrDefault(draft.getReportTemplate(), "标准版"))
+                .reportTemplate(draft == null ? "阶段1首报" : trimOrDefault(draft.getReportTemplate(), "阶段1首报"))
                 .schemaId(draft == null ? null : draft.getSchemaId())
                 .qualityPolicy("score>=80 and no ERROR issues")
                 .contractVersion("TASK_DEFINITION_V1")

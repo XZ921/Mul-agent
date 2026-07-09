@@ -52,7 +52,7 @@ class CollaborationGoalAssemblerTest {
 
         CollaborationGoal goal = assembler.assemble(task);
 
-        assertThat(goal.getAnalysisDimensions()).contains("产品功能", "目标用户", "价格策略");
+        assertThat(goal.getAnalysisDimensions()).containsExactly("产品功能", "目标用户", "市场定位");
         assertThat(goal.getSourceUrls()).isEmpty();
         assertThat(goal.getEvidenceState()).isEqualTo(EvidenceState.MISSING_SOURCE);
     }

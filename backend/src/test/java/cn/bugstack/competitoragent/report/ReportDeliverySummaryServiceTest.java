@@ -48,6 +48,159 @@ class ReportDeliverySummaryServiceTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
+    void shouldExposeDegradedReadyForOptionalCoverageGapWithEnoughTraceableSources() throws Exception {
+        ReportService reportService = instantiateReportService();
+        List<String> traceableSourceUrls = List.of(
+                "https://www.notion.so/product/ai",
+                "https://www.notion.so/security",
+                "https://docs.notion.so/ai",
+                "https://docs.notion.so/admins",
+                "https://www.g2.com/products/notion-ai/reviews"
+        );
+
+        Report report = Report.builder()
+                .id(72L)
+                .taskId(720L)
+                .title("阶段1降级交付报告")
+                .content("# Report")
+                .summary("summary")
+                .qualityScore(65)
+                .qualityPassed(false)
+                .evidenceCount(traceableSourceUrls.size())
+                .build();
+        List<ReportResponse.EvidenceInfo> evidenceInfos = traceableSourceUrls.stream()
+                .map(url -> new ReportResponse.EvidenceInfo(
+                        "E-" + Math.abs(url.hashCode()),
+                        "Traceable source",
+                        url,
+                        "snippet",
+                        "Notion AI",
+                        LocalDateTime.of(2026, 7, 8, 12, 0, 0),
+                        "DOCS",
+                        "SEARCH",
+                        null,
+                        null,
+                        null,
+                        0.9,
+                        true,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of(),
+                        java.util.Map.of()))
+                .toList();
+        ReportResponse.ReportDiagnosisInfo reportDiagnosis = ReportResponse.ReportDiagnosisInfo.builder()
+                .diagnosisCount(0)
+                .blockerCount(0)
+                .evidenceGapCount(0)
+                .sourceUrls(traceableSourceUrls)
+                .sections(List.of(ReportResponse.DiagnosisSection.builder()
+                        .section("定价策略")
+                        .evidenceInsufficient(true)
+                        .sourceUrls(List.of("https://www.notion.so/product/ai"))
+                        .repairSuggestions(List.of("补充 pricing 证据"))
+                        .diagnoses(List.of())
+                        .build()))
+                .nextActions(List.of())
+                .build();
+
+        when(reportRepository.findByTaskId(720L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(720L)).thenReturn(evidenceInfos);
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(720L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(720L)).thenReturn(List.of());
+        when(reportDiagnosisAssembler.assemble(anyList(), anyList(), any(), any(), any(), anyList()))
+                .thenReturn(reportDiagnosis);
+
+        ReportResponse response = reportService.getReport(720L);
+
+        Object deliverySummary = readField(response, "deliverySummary");
+        assertNotNull(deliverySummary);
+        assertEquals(Boolean.TRUE, readField(deliverySummary, "readyForDelivery"));
+        assertEquals("DEGRADED_READY", readField(deliverySummary, "deliveryStatus"));
+        assertEquals(0, readField(deliverySummary, "evidenceGapCount"));
+        assertTrue(String.valueOf(readField(deliverySummary, "summary")).contains("定价"));
+        assertTrue(String.valueOf(readField(deliverySummary, "summary")).contains("延期"));
+    }
+
+    @Test
+    void shouldNotExposeDegradedReadyWhenTraceableSourceRedlineIsNotMet() throws Exception {
+        ReportService reportService = instantiateReportService();
+        List<String> insufficientSourceUrls = List.of(
+                "https://www.notion.so/product/ai",
+                "https://www.notion.so/security",
+                "https://www.notion.so/pricing"
+        );
+
+        Report report = Report.builder()
+                .id(73L)
+                .taskId(730L)
+                .title("未满足红线的降级报告")
+                .content("# Report")
+                .summary("summary")
+                .qualityScore(65)
+                .qualityPassed(false)
+                .evidenceCount(insufficientSourceUrls.size())
+                .build();
+        List<ReportResponse.EvidenceInfo> evidenceInfos = insufficientSourceUrls.stream()
+                .map(url -> new ReportResponse.EvidenceInfo(
+                        "E-" + Math.abs(url.hashCode()),
+                        "Traceable source",
+                        url,
+                        "snippet",
+                        "Notion AI",
+                        LocalDateTime.of(2026, 7, 8, 12, 0, 0),
+                        "OFFICIAL",
+                        "SEARCH",
+                        null,
+                        null,
+                        null,
+                        0.9,
+                        true,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of(),
+                        java.util.Map.of()))
+                .toList();
+        ReportResponse.ReportDiagnosisInfo reportDiagnosis = ReportResponse.ReportDiagnosisInfo.builder()
+                .diagnosisCount(0)
+                .blockerCount(0)
+                .evidenceGapCount(0)
+                .sourceUrls(insufficientSourceUrls)
+                .sections(List.of(ReportResponse.DiagnosisSection.builder()
+                        .section("定价策略")
+                        .evidenceInsufficient(true)
+                        .sourceUrls(insufficientSourceUrls)
+                        .repairSuggestions(List.of("补充 pricing 证据"))
+                        .diagnoses(List.of())
+                        .build()))
+                .nextActions(List.of())
+                .build();
+
+        when(reportRepository.findByTaskId(730L)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(730L)).thenReturn(evidenceInfos);
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(730L)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(730L)).thenReturn(List.of());
+        when(reportDiagnosisAssembler.assemble(anyList(), anyList(), any(), any(), any(), anyList()))
+                .thenReturn(reportDiagnosis);
+
+        ReportResponse response = reportService.getReport(730L);
+
+        Object deliverySummary = readField(response, "deliverySummary");
+        assertNotNull(deliverySummary);
+        assertEquals(Boolean.FALSE, readField(deliverySummary, "readyForDelivery"));
+        assertEquals("NEEDS_EVIDENCE", readField(deliverySummary, "deliveryStatus"));
+    }
+
+    @Test
     void shouldExposeDeliveryCenterSummaryFieldsForDefaultReportPath() throws Exception {
         ReportService reportService = instantiateReportService();
         String sourceUrl = "https://docs.notion.so/security";

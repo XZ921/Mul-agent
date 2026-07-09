@@ -110,7 +110,8 @@ public class ExecutionPlanDefinitionBuilder {
                 collectorNodeConfig.setDimensionEvidencePlan(dimensionEvidencePlanFactory.create(
                         competitorName,
                         coverageContract,
-                        preferredDomainsForFieldEvidence(providedUrls, sourcePlan)
+                        preferredDomainsForFieldEvidence(providedUrls, sourcePlan),
+                        requestedScopes
                 ));
 
                 collectNodeNames.add(nodeName);
@@ -523,7 +524,7 @@ public class ExecutionPlanDefinitionBuilder {
     }
 
     private String buildExtractSummary(List<String> dimensions) {
-        List<String> effectiveDimensions = defaultIfEmpty(dimensions, List.of("产品功能", "目标用户", "价格策略"));
+        List<String> effectiveDimensions = defaultIfEmpty(dimensions, List.of("产品功能", "目标用户", "市场定位"));
         return "将采集结果整理为结构化字段，重点覆盖 " + summarizeValues(effectiveDimensions, 3);
     }
 
@@ -604,8 +605,6 @@ public class ExecutionPlanDefinitionBuilder {
         return List.of(
                 "产品功能",
                 "目标用户",
-                "价格策略",
-                "技术能力",
                 "市场定位"
         );
     }

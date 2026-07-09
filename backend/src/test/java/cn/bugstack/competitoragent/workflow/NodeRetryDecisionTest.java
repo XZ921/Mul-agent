@@ -6,6 +6,7 @@ import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NodeRetryDecisionTest {
@@ -94,5 +95,26 @@ class NodeRetryDecisionTest {
         assertEquals(TaskNodeStatus.WAITING_INTERVENTION, decision.getNextStatus());
         assertTrue(decision.requiresManualIntervention());
         assertTrue(decision.shouldEnterDlq());
+    }
+
+    @Test
+    void shouldNotRetryOrRequireManualInterventionWhenCollectorHardDeadlineIsReached() {
+        TaskNode node = TaskNode.builder()
+                .taskId(5L)
+                .nodeName("collect_sources_docs")
+                .displayName("collect_sources_docs")
+                .agentType(AgentType.COLLECTOR)
+                .retryable(true)
+                .maxRetries(3)
+                .retryCount(2)
+                .status(TaskNodeStatus.RUNNING)
+                .build();
+
+        NodeRetryDecision decision = NodeRetryDecision.evaluate(node, "达到采集节点硬截止前未形成可交接证据");
+
+        assertEquals(NodeFailureCategory.DEADLINE_EXHAUSTED, decision.getFailureCategory());
+        assertEquals(TaskNodeStatus.FAILED, decision.getNextStatus());
+        assertFalse(decision.isRetryPlanned());
+        assertFalse(decision.requiresManualIntervention());
     }
 }

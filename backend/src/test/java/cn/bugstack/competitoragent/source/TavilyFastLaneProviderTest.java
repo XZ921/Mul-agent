@@ -684,6 +684,52 @@ class TavilyFastLaneProviderTest {
     }
 
     @Test
+    void shouldUseStageOneDefaultScopesWithoutPricingWhenRequestedScopesAreEmpty() {
+        StubTavilySearchClient client = new StubTavilySearchClient();
+        TavilyFastLaneProvider provider = new TavilyFastLaneProvider(
+                properties(),
+                client,
+                new TavilySearchProfileResolver(properties()),
+                new TavilyPrefetchedContentRegistry(),
+                new ObjectMapper()
+        );
+
+        provider.search(SearchSourceRequest.builder()
+                .competitorName("Linear")
+                .requestedScopes(List.of())
+                .preferredProviderKey("tavily")
+                .build());
+
+        assertThat(client.executedProfiles)
+                .extracting(TavilySearchProfile::getFamily)
+                .contains("OFFICIAL", "DOCS", "NEWS", "REVIEW")
+                .doesNotContain("PRICING");
+    }
+
+    @Test
+    void shouldNormalizeChinesePricingScopeToPricingFamily() {
+        StubTavilySearchClient client = new StubTavilySearchClient();
+        TavilyFastLaneProvider provider = new TavilyFastLaneProvider(
+                properties(),
+                client,
+                new TavilySearchProfileResolver(properties()),
+                new TavilyPrefetchedContentRegistry(),
+                new ObjectMapper()
+        );
+
+        provider.search(SearchSourceRequest.builder()
+                .competitorName("Linear")
+                .requestedScopes(List.of("定价页"))
+                .preferredProviderKey("tavily")
+                .build());
+
+        assertThat(client.executedProfiles)
+                .extracting(TavilySearchProfile::getFamily)
+                .contains("PRICING")
+                .doesNotContain("OFFICIAL", "DOCS", "NEWS", "REVIEW");
+    }
+
+    @Test
     void shouldSkipRemainingQueriesAfterFieldCandidateCoverageMet() {
         TavilyPrefetchedContentRegistry registry = new TavilyPrefetchedContentRegistry();
         StubTavilySearchClient client = new StubTavilySearchClient();

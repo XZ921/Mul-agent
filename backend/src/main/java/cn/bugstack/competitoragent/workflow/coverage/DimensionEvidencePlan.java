@@ -9,9 +9,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -25,14 +23,6 @@ import java.util.stream.Stream;
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class DimensionEvidencePlan {
-
-    private static final Set<String> STAGE_ONE_FIRST_REPORT_FIELDS = Set.of(
-            "summary",
-            "positioning",
-            "targetusers",
-            "corefeatures",
-            "pricing"
-    );
 
     private String competitorName;
     private String contractVersion;
@@ -129,10 +119,7 @@ public class DimensionEvidencePlan {
     }
 
     public static boolean isFirstReportCriticalField(String fieldName) {
-        if (!StringUtils.hasText(fieldName)) {
-            return false;
-        }
-        return STAGE_ONE_FIRST_REPORT_FIELDS.contains(fieldName.trim().toLowerCase(Locale.ROOT));
+        return StageOneFirstReportPolicy.isFirstReportCriticalField(fieldName);
     }
 
     private boolean isFieldCoverageSatisfied(FieldEvidenceCoverage field) {

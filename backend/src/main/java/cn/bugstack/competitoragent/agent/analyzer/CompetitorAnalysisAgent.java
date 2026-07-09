@@ -11,6 +11,7 @@ import cn.bugstack.competitoragent.model.entity.CompetitorKnowledge;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
+import cn.bugstack.competitoragent.workflow.coverage.StageOneFirstReportPolicy;
 import cn.bugstack.competitoragent.workflow.contract.AnalysisResult;
 import cn.bugstack.competitoragent.workflow.contract.CompetitorKnowledgeDraft;
 import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceBlock;
@@ -315,12 +316,16 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         }
         List<String> missingDimensions = collectMissingAnalysisDimensions(analysisResult);
         String gapSeverity = resolveAnalysisGapSeverity(missingDimensions);
+        LinkedHashSet<String> normalizedIssueFlags = new LinkedHashSet<>(
+                analysisResult.getIssueFlags() == null ? List.of() : analysisResult.getIssueFlags());
+        normalizedIssueFlags.addAll(collectOptionalAnalysisGapFlags(analysisResult));
         analysisResult.setMissingAnalysisDimensions(missingDimensions);
         analysisResult.setAnalysisGapSeverity(gapSeverity);
         analysisResult.setAnalysisConfidence(resolveAnalysisConfidence(gapSeverity));
         analysisResult.setAnalysisEvidenceState(resolveAnalysisEvidenceState(
                 analysisResult.getSourceUrls(),
                 missingDimensions));
+        analysisResult.setIssueFlags(new ArrayList<>(normalizedIssueFlags));
     }
 
     /**
@@ -334,19 +339,28 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         if (!hasText(analysisResult.getPositioningComparison())) {
             missing.add("positioningComparison");
         }
-        if (!hasText(analysisResult.getPricingComparison())) {
-            missing.add("pricingComparison");
-        }
         if (!hasText(analysisResult.getTargetUserComparison())) {
             missing.add("targetUserComparison");
         }
+        return missing;
+    }
+
+    /**
+     * 阶段1里定价、优势、短板属于增强分析维度。
+     * 它们缺失时需要保留审计标记，供 Writer/Reviewer 解释，但不能再抬高核心 gapSeverity。
+     */
+    private List<String> collectOptionalAnalysisGapFlags(AnalysisResult analysisResult) {
+        LinkedHashSet<String> optionalFlags = new LinkedHashSet<>();
+        if (!hasText(analysisResult.getPricingComparison())) {
+            optionalFlags.add("OPTIONAL_PRICING_ANALYSIS_DEFERRED");
+        }
         if (!hasText(analysisResult.getStrengthsSummary())) {
-            missing.add("strengthsSummary");
+            optionalFlags.add("OPTIONAL_STRENGTHS_ANALYSIS_DEFERRED");
         }
         if (!hasText(analysisResult.getWeaknessesSummary())) {
-            missing.add("weaknessesSummary");
+            optionalFlags.add("OPTIONAL_WEAKNESSES_ANALYSIS_DEFERRED");
         }
-        return missing;
+        return new ArrayList<>(optionalFlags);
     }
 
     /**
@@ -356,10 +370,10 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         if (missingDimensions == null || missingDimensions.isEmpty()) {
             return "NONE";
         }
-        if (missingDimensions.size() >= 6) {
+        if (missingDimensions.size() >= 3) {
             return "HIGH";
         }
-        return missingDimensions.size() >= 3 ? "MEDIUM" : "LOW";
+        return missingDimensions.size() >= 2 ? "MEDIUM" : "LOW";
     }
 
     /**
@@ -396,10 +410,7 @@ public class CompetitorAnalysisAgent extends BaseAgent {
         }
         return !hasText(analysisResult.getFeatureComparison())
                 && !hasText(analysisResult.getPositioningComparison())
-                && !hasText(analysisResult.getPricingComparison())
-                && !hasText(analysisResult.getTargetUserComparison())
-                && !hasText(analysisResult.getStrengthsSummary())
-                && !hasText(analysisResult.getWeaknessesSummary());
+                && !hasText(analysisResult.getTargetUserComparison());
     }
 
     private boolean hasText(String value) {

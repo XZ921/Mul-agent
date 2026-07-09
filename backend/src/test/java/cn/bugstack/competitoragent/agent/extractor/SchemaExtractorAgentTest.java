@@ -31,6 +31,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -1303,7 +1304,9 @@ class SchemaExtractorAgentTest {
 
         assertEquals("SUCCESS", result.getStatus().name());
         assertEquals("pricing", pricingBundle.path("sectionKey").asText());
-        assertTrue(pricingBundle.path("issueFlags").toString().contains("SECTION_EVIDENCE_GAP"));
+        assertTrue(output.path("issueFlags").toString().contains("OPTIONAL_FIELD_DEFERRED"));
+        assertTrue(pricingBundle.path("issueFlags").toString().contains("\"OPTIONAL_SECTION_EVIDENCE_GAP\""));
+        assertFalse(pricingBundle.path("issueFlags").toString().contains("\"SECTION_EVIDENCE_GAP\""));
         assertTrue(pricingBundle.path("evidenceFragments").get(0).path("coverageStatus").asText().contains("MISSING_EVIDENCE"));
         assertTrue(pricingBundle.path("gapSummary").asText().contains("pricing"));
     }

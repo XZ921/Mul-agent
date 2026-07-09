@@ -18,6 +18,7 @@ import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.workflow.contract.EvidenceFragment;
 import cn.bugstack.competitoragent.workflow.contract.QualityDiagnosis;
 import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
+import cn.bugstack.competitoragent.workflow.coverage.StageOneFirstReportPolicy;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -76,7 +77,11 @@ public class ReportDiagnosisAssembler {
 
             String sectionName = normalizeSection(diagnosis.getSection());
             SectionAccumulator accumulator = sections.computeIfAbsent(sectionName, key -> new SectionAccumulator(sectionName));
-            accumulator.evidenceInsufficient = accumulator.evidenceInsufficient || isEvidenceInsufficient(diagnosis, references);
+            boolean evidenceInsufficient = isEvidenceInsufficient(diagnosis, references);
+            accumulator.evidenceInsufficient = accumulator.evidenceInsufficient || evidenceInsufficient;
+            if (evidenceInsufficient) {
+                markEvidenceGapScope(accumulator, diagnosis.getSection());
+            }
             if (diagnosis.getRepairSuggestion() != null && !diagnosis.getRepairSuggestion().isBlank()) {
                 accumulator.repairSuggestions.add(diagnosis.getRepairSuggestion().trim());
             }
@@ -113,7 +118,10 @@ public class ReportDiagnosisAssembler {
 
         int diagnosisCount = stagedDiagnoses.size();
         int evidenceGapCount = (int) diagnosisSections.stream()
-                .filter(section -> Boolean.TRUE.equals(section.getEvidenceInsufficient()))
+                .filter(section -> {
+                    SectionAccumulator accumulator = sections.get(section.getSection());
+                    return accumulator != null && accumulator.coreEvidenceGap;
+                })
                 .count();
 
         return ReportDiagnosisInfo.builder()
@@ -262,8 +270,55 @@ public class ReportDiagnosisAssembler {
             String sectionName = normalizeSection(coverage.getSectionTitle());
             SectionAccumulator accumulator = sections.computeIfAbsent(sectionName, key -> new SectionAccumulator(sectionName));
             accumulator.evidenceInsufficient = true;
+            markCoverageGapScope(accumulator, coverage);
             accumulator.repairSuggestions.add(buildCoverageSuggestion(coverage));
         }
+    }
+
+    /**
+     * reportDiagnosis 需要同时保留两层语义：
+     * 1. 章节是否真的存在证据缺口，供前端展示；
+     * 2. 该缺口是否属于阶段1首报核心阻断，供 evidenceGapCount 统计。
+     * 这里统一委托 StageOneFirstReportPolicy 做字段归一，避免诊断层再长出第二套口径。
+     */
+    private void markCoverageGapScope(SectionAccumulator accumulator, SectionEvidenceCoverage coverage) {
+        String fieldName = resolveCoverageFieldName(coverage);
+        if (StageOneFirstReportPolicy.isFirstReportCriticalField(fieldName)) {
+            accumulator.coreEvidenceGap = true;
+            return;
+        }
+        accumulator.optionalEvidenceGap = true;
+    }
+
+    private void markEvidenceGapScope(SectionAccumulator accumulator, String sectionOrField) {
+        String fieldName = resolveStageOneFieldName(sectionOrField);
+        if (StageOneFirstReportPolicy.isFirstReportCriticalField(fieldName)) {
+            accumulator.coreEvidenceGap = true;
+            return;
+        }
+        accumulator.optionalEvidenceGap = true;
+    }
+
+    private String resolveCoverageFieldName(SectionEvidenceCoverage coverage) {
+        if (coverage == null) {
+            return null;
+        }
+        String fieldName = resolveStageOneFieldName(coverage.getSectionKey());
+        if (fieldName != null) {
+            return fieldName;
+        }
+        return resolveStageOneFieldName(coverage.getSectionTitle());
+    }
+
+    private String resolveStageOneFieldName(String sectionOrField) {
+        String normalizedField = StageOneFirstReportPolicy.normalizeFieldName(sectionOrField);
+        if (StageOneFirstReportPolicy.isFirstReportCriticalField(normalizedField)
+                || StageOneFirstReportPolicy.isFirstReportEnhancementField(normalizedField)) {
+            return normalizedField;
+        }
+        return StageOneFirstReportPolicy.normalizeFieldName(
+                StageOneFirstReportPolicy.fieldForSection(sectionOrField)
+        );
     }
 
     private String buildCoverageSuggestion(SectionEvidenceCoverage coverage) {
@@ -470,6 +525,8 @@ public class ReportDiagnosisAssembler {
     private static final class SectionAccumulator {
         private final String section;
         private boolean evidenceInsufficient;
+        private boolean coreEvidenceGap;
+        private boolean optionalEvidenceGap;
         private final LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
         private final LinkedHashSet<String> repairSuggestions = new LinkedHashSet<>();
         private final List<DiagnosisItem> diagnoses = new ArrayList<>();

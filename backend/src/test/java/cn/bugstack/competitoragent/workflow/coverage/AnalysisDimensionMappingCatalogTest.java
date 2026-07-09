@@ -21,7 +21,22 @@ class AnalysisDimensionMappingCatalogTest {
             assertThat(mapping.getTargetFields()).contains("pricing");
             assertThat(mapping.getEvidencePathKeys()).contains("OFFICIAL_PRICING_PAGE", "DOCS_BILLING_OR_LIMITS");
             assertThat(mapping.getSourceTypes()).contains("PRICING", "DOCS", "OFFICIAL");
-            assertThat(mapping.getReason()).contains("显式分析维度");
+            assertThat(mapping.isRequiredByDefault()).isFalse();
+            assertThat(mapping.getReason()).contains("阶段1增强字段");
+        });
+    }
+
+    @Test
+    void shouldMapWeaknessDimensionToOptionalEnhancementFieldForStageOne() {
+        List<AnalysisDimensionMapping> mappings = catalog.resolve(
+                List.of("风险评估", "短板分析"),
+                List.of("官网", "公开测评"));
+
+        assertThat(mappings).anySatisfy(mapping -> {
+            assertThat(mapping.getDimensionKey()).isEqualTo("WEAKNESS_ANALYSIS");
+            assertThat(mapping.getTargetFields()).contains("weaknesses");
+            assertThat(mapping.isRequiredByDefault()).isFalse();
+            assertThat(mapping.getReason()).contains("阶段1增强字段");
         });
     }
 

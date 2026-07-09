@@ -14,6 +14,7 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 节点执行恢复策略。
@@ -67,7 +68,7 @@ public class NodeExecutionRecoveryPolicy {
                     .build();
         }
 
-        boolean hasWaitingInterventionNode = nodes.stream().anyMatch(this::isWaitingInterventionStatus);
+        boolean hasWaitingInterventionNode = nodes.stream().anyMatch(this::isBlockingWaitingInterventionNode);
         boolean hasPausedNode = nodes.stream().anyMatch(node -> node.getStatus() == TaskNodeStatus.PAUSED);
         boolean initialReviewRequiresHumanIntervention = nodes.stream()
                 .filter(node -> "quality_check".equals(node.getNodeName()))
@@ -295,7 +296,7 @@ public class NodeExecutionRecoveryPolicy {
         if (nodes == null || nodes.isEmpty()) {
             return false;
         }
-        boolean hasManualBlock = nodes.stream().anyMatch(this::isWaitingInterventionStatus);
+        boolean hasManualBlock = nodes.stream().anyMatch(this::isBlockingWaitingInterventionNode);
         if (hasManualBlock) {
             return false;
         }
@@ -320,6 +321,72 @@ public class NodeExecutionRecoveryPolicy {
         }
         return node.getStatus() == TaskNodeStatus.WAITING_INTERVENTION
                 || node.getStatus() == TaskNodeStatus.PAUSED;
+    }
+
+    /**
+     * collector 的 WAITING_INTERVENTION 主要用于兼容旧的硬截止失败链路。
+     * 阶段1首报里，这类 collector 节点不应再把整个任务提前打成 STOPPED；
+     * 但这个豁免只适用于“硬截止降级兼容”本身，不能把真实的重试耗尽/人工介入 collector 也一起放过去。
+     */
+    private boolean isBlockingWaitingInterventionNode(TaskNode node) {
+        if (node == null) {
+            return false;
+        }
+        if (node.getStatus() == TaskNodeStatus.PAUSED) {
+            return true;
+        }
+        if (node.getStatus() != TaskNodeStatus.WAITING_INTERVENTION) {
+            return false;
+        }
+        if (node.getAgentType() != AgentType.COLLECTOR) {
+            return true;
+        }
+        return !isCollectorDeadlineCompatibilityIntervention(node);
+    }
+
+    /**
+     * 这里兼容的是“历史上 collector 硬截止先落成 WAITING_INTERVENTION”的旧状态，
+     * 而不是所有 collector 的人工介入态。
+     * 只有明确带着 deadline exhaustion / HARD_DEADLINE_REACHED 信号时，才允许任务继续按 stage1 降级链路推进。
+     */
+    private boolean isCollectorDeadlineCompatibilityIntervention(TaskNode node) {
+        if (node == null) {
+            return false;
+        }
+        if (node.getFailureCategory() == NodeFailureCategory.DEADLINE_EXHAUSTED) {
+            return true;
+        }
+        if (containsDeadlineSignal(node.getErrorMessage())) {
+            return true;
+        }
+        JsonNode outputNode = readJson(node.getOutputData());
+        if (outputNode == null) {
+            return false;
+        }
+        if (containsDeadlineSignal(outputNode.path("degradationReason").asText(null))) {
+            return true;
+        }
+        JsonNode degradationReasons = outputNode.path("degradationReasons");
+        if (!degradationReasons.isArray()) {
+            return false;
+        }
+        for (JsonNode degradationReason : degradationReasons) {
+            if (containsDeadlineSignal(degradationReason == null ? null : degradationReason.asText(null))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsDeadlineSignal(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        return normalized.contains("hard_deadline_reached")
+                || normalized.contains("hard deadline")
+                || normalized.contains("deadline reached")
+                || normalized.contains("达到采集节点硬截止");
     }
 
     private void resetNodeForInterruptedRestart(TaskNode node) {

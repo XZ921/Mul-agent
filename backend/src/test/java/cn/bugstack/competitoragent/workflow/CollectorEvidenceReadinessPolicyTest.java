@@ -53,6 +53,52 @@ class CollectorEvidenceReadinessPolicyTest {
         assertThat(readiness.sourceUrls()).hasSizeGreaterThanOrEqualTo(5);
     }
 
+    @Test
+    void shouldAllowStageOneQuorumWithoutPricingWhenCoreSourceEvidenceIsEnough() {
+        CollectorEvidenceReadiness readiness = policy.evaluate(List.of(
+                collector("collect_sources_01_01", TaskNodeStatus.SUCCESS, "OFFICIAL",
+                        List.of(
+                                "https://www.linear.app",
+                                "https://linear.app/features",
+                                "https://linear.app/customers"
+                        ), true),
+                collector("collect_sources_01_04", TaskNodeStatus.SUCCESS_DEGRADED, "REVIEW",
+                        List.of(
+                                "https://www.g2.com/products/linear/reviews",
+                                "https://www.capterra.com/p/linear"
+                        ), true)
+        ));
+
+        assertThat(readiness.ready()).isTrue();
+        assertThat(readiness.degraded()).isTrue();
+        assertThat(readiness.reason()).isEqualTo("STAGE1_COLLECTOR_QUORUM_READY");
+        assertThat(readiness.satisfiedFamilies()).containsExactly("OFFICIAL", "REVIEW");
+        assertThat(readiness.missingFamilies()).contains("PRICING", "DOCS");
+        assertThat(readiness.auditFlags()).contains("OPTIONAL_PRICING_NOT_READY");
+    }
+
+    @Test
+    void shouldRejectQuorumWhenTraceableUrlsCollapseToSingleDomain() {
+        CollectorEvidenceReadiness readiness = policy.evaluate(List.of(
+                collector("collect_sources_01_01", TaskNodeStatus.SUCCESS, "OFFICIAL",
+                        List.of(
+                                "https://www.linear.app",
+                                "https://linear.app/features"
+                        ), true),
+                collector("collect_sources_01_03", TaskNodeStatus.SUCCESS, "PRICING",
+                        List.of("https://www.linear.app/pricing"), true),
+                collector("collect_sources_01_04", TaskNodeStatus.SUCCESS, "REVIEW",
+                        List.of(
+                                "https://linear.app/reviews",
+                                "https://www.linear.app/customers"
+                        ), true)
+        ));
+
+        assertThat(readiness.ready()).isFalse();
+        assertThat(readiness.reason()).isEqualTo("STAGE1_COLLECTOR_QUORUM_NOT_READY");
+        assertThat(readiness.auditFlags()).contains("SOURCE_URLS_REDLINE_NOT_READY");
+    }
+
     private TaskNode collector(String nodeName,
                                TaskNodeStatus status,
                                String sourceType,

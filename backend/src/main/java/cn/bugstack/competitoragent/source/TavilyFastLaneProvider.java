@@ -13,6 +13,7 @@ import cn.bugstack.competitoragent.search.tavily.TavilySearchProfile;
 import cn.bugstack.competitoragent.search.tavily.TavilySearchProfileResolver;
 import cn.bugstack.competitoragent.search.tavily.TavilySearchProperties;
 import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
+import cn.bugstack.competitoragent.workflow.coverage.StageOneFirstReportPolicy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -37,7 +38,7 @@ import java.util.Set;
 @Component
 public class TavilyFastLaneProvider implements SearchSourceProvider {
 
-    private static final List<String> DEFAULT_SCOPES = List.of("OFFICIAL", "DOCS", "PRICING", "NEWS", "REVIEW");
+    private static final List<String> DEFAULT_SCOPES = StageOneFirstReportPolicy.defaultSourceScopes();
     private static final long FIELD_QUERY_MIN_START_BUDGET_MILLIS = 1_000L;
 
     private final TavilySearchProperties properties;
@@ -789,10 +790,7 @@ public class TavilyFastLaneProvider implements SearchSourceProvider {
     }
 
     private String normalizeScope(String scope) {
-        if (!StringUtils.hasText(scope)) {
-            return "OPEN_WEB";
-        }
-        return scope.trim().toUpperCase(Locale.ROOT);
+        return StageOneFirstReportPolicy.normalizeSourceScope(scope);
     }
 
     private Set<String> resolveOfficialDomains(TavilySearchProfile profile) {

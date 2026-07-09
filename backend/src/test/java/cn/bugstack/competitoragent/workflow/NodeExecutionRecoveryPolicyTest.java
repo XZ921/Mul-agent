@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -226,5 +227,74 @@ class NodeExecutionRecoveryPolicyTest {
         assertTrue(updatedConfig.path("searchAuditCheckpoint").isNull());
         assertTrue(updatedConfig.has("collectionAuditCheckpoint"));
         assertTrue(updatedConfig.path("collectionAuditCheckpoint").isNull());
+    }
+
+    @Test
+    void shouldNotStopTaskWhenOnlyCollectorWaitsForInterventionButDownstreamCanContinue() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(4L)
+                .status(AnalysisTaskStatus.RUNNING)
+                .build();
+
+        TaskNode degradedCollector = TaskNode.builder()
+                .taskId(4L)
+                .nodeName("collect_sources_pricing")
+                .displayName("collect_sources_pricing")
+                .agentType(AgentType.COLLECTOR)
+                .status(TaskNodeStatus.WAITING_INTERVENTION)
+                .failureCategory(NodeFailureCategory.DEADLINE_EXHAUSTED)
+                .outputData("""
+                        {
+                          "degradationReasons":["HARD_DEADLINE_REACHED"]
+                        }
+                        """)
+                .build();
+        TaskNode extractor = TaskNode.builder()
+                .taskId(4L)
+                .nodeName("extract_schema")
+                .displayName("extract_schema")
+                .agentType(AgentType.EXTRACTOR)
+                .status(TaskNodeStatus.READY)
+                .required(true)
+                .build();
+
+        NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
+                recoveryPolicy.resolveTaskExecution(task, List.of(degradedCollector, extractor));
+
+        assertEquals(AnalysisTaskStatus.RUNNING, resolution.getStatus());
+        assertTrue(recoveryPolicy.canAutoContinue(List.of(degradedCollector, extractor)));
+    }
+
+    @Test
+    void shouldStopTaskWhenCollectorWaitsForInterventionBecauseRetryWasExhausted() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(5L)
+                .status(AnalysisTaskStatus.RUNNING)
+                .build();
+
+        TaskNode blockedCollector = TaskNode.builder()
+                .taskId(5L)
+                .nodeName("collect_sources_docs")
+                .displayName("collect_sources_docs")
+                .agentType(AgentType.COLLECTOR)
+                .status(TaskNodeStatus.WAITING_INTERVENTION)
+                .failureCategory(NodeFailureCategory.TRANSIENT_INFRASTRUCTURE)
+                .errorMessage("自动重试次数已耗尽，等待人工决定是否继续")
+                .build();
+        TaskNode analyzer = TaskNode.builder()
+                .taskId(5L)
+                .nodeName("analyze_competitors")
+                .displayName("analyze_competitors")
+                .agentType(AgentType.ANALYZER)
+                .status(TaskNodeStatus.SUCCESS)
+                .required(true)
+                .build();
+
+        NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
+                recoveryPolicy.resolveTaskExecution(task, List.of(blockedCollector, analyzer));
+
+        assertEquals(AnalysisTaskStatus.STOPPED, resolution.getStatus());
+        assertTrue(resolution.isWaitingManualIntervention());
+        assertFalse(recoveryPolicy.canAutoContinue(List.of(blockedCollector, analyzer)));
     }
 }

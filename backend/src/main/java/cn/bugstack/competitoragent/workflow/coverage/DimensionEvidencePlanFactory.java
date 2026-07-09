@@ -5,6 +5,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 字段证据计划工厂。
@@ -27,14 +28,31 @@ public class DimensionEvidencePlanFactory {
     public DimensionEvidencePlan create(String competitorName,
                                         CoverageContract contract,
                                         List<String> preferredDomains) {
+        return create(competitorName, contract, preferredDomains, List.of());
+    }
+
+    /**
+     * 根据字段契约与显式来源 scope 生成运行态计划。
+     * 阶段1核心字段仍按必填路径进入计划；增强字段只有命中用户显式选择的来源 scope 时才生成 query，
+     * 避免默认 OFFICIAL/DOCS collector 又把 pricing / weaknesses 的长尾 query 偷偷带回来。
+     */
+    public DimensionEvidencePlan create(String competitorName,
+                                        CoverageContract contract,
+                                        List<String> preferredDomains,
+                                        List<String> requestedScopes) {
         List<FieldEvidenceCoverage> fieldCoverages = new ArrayList<>();
+        Set<String> explicitScopes = Set.copyOf(StageOneFirstReportPolicy.normalizeExplicitSourceScopes(requestedScopes));
         if (contract != null && contract.getFields() != null) {
             for (CoverageFieldContract field : contract.getFields()) {
-                if (!shouldPlan(field)) {
+                List<CoverageEvidencePath> plannableEvidencePaths = resolvePlannableEvidencePaths(field, explicitScopes);
+                if (plannableEvidencePaths.isEmpty()) {
                     continue;
                 }
                 boolean criticalForFirstReport = DimensionEvidencePlan.isFirstReportCriticalField(field.getField());
-                List<FieldEvidenceQuery> queries = queryPlanner.plan(competitorName, field, preferredDomains).stream()
+                CoverageFieldContract plannableField = field.toBuilder()
+                        .evidencePaths(plannableEvidencePaths)
+                        .build();
+                List<FieldEvidenceQuery> queries = queryPlanner.plan(competitorName, plannableField, preferredDomains).stream()
                         .map(query -> query == null ? null : query.toBuilder()
                                 .criticalForFirstReport(criticalForFirstReport)
                                 .build())
@@ -67,16 +85,40 @@ public class DimensionEvidencePlanFactory {
     }
 
     /**
-     * 判断字段是否需要进入运行态计划。
-     * 只有明确 REQUIRED、存在 evidence path，且至少一条路径标记为 required 的字段，
-     * 才值得在 Collector 阶段投入字段级 query 预算。
+     * 解析字段可进入运行态计划的证据路径。
+     * 核心字段沿用必填路径语义；增强字段只保留与用户显式来源 scope 对齐的路径，
+     * 这样 plannedQueries 既可审计，又不会因为系统默认 scope 把增强长尾重新抬成首报成本。
      */
-    private boolean shouldPlan(CoverageFieldContract field) {
-        return field != null
-                && StringUtils.hasText(field.getField())
-                && field.getStatus() == CoverageFieldStatus.REQUIRED
-                && field.getEvidencePaths() != null
-                && !field.getEvidencePaths().isEmpty()
-                && field.getEvidencePaths().stream().anyMatch(CoverageEvidencePath::isRequired);
+    private List<CoverageEvidencePath> resolvePlannableEvidencePaths(CoverageFieldContract field,
+                                                                     Set<String> explicitScopes) {
+        if (field == null || !StringUtils.hasText(field.getField())) {
+            return List.of();
+        }
+        List<CoverageEvidencePath> evidencePaths = field.getEvidencePaths() == null ? List.of() : field.getEvidencePaths();
+        if (evidencePaths.isEmpty()) {
+            return List.of();
+        }
+        if (StageOneFirstReportPolicy.isFirstReportCriticalField(field.getField())) {
+            return evidencePaths.stream().anyMatch(CoverageEvidencePath::isRequired)
+                    ? evidencePaths
+                    : List.of();
+        }
+        if (!StageOneFirstReportPolicy.isFirstReportEnhancementField(field.getField())
+                || explicitScopes == null
+                || explicitScopes.isEmpty()) {
+            return List.of();
+        }
+        return evidencePaths.stream()
+                .filter(path -> shouldPlanEnhancementPath(path, explicitScopes))
+                .toList();
+    }
+
+    private boolean shouldPlanEnhancementPath(CoverageEvidencePath path, Set<String> explicitScopes) {
+        if (path == null || path.getSourceTypes() == null || path.getSourceTypes().isEmpty()) {
+            return false;
+        }
+        return path.getSourceTypes().stream()
+                .map(StageOneFirstReportPolicy::normalizeSourceScope)
+                .anyMatch(explicitScopes::contains);
     }
 }

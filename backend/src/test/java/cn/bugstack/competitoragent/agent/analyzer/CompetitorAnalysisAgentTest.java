@@ -86,11 +86,13 @@ class CompetitorAnalysisAgentTest {
         assertEquals("PARTIAL_SOURCE", output.path("analysisEvidenceState").asText());
         assertThat(output.path("missingAnalysisDimensions"))
                 .extracting(JsonNode::asText)
-                .contains("featureComparison", "positioningComparison", "pricingComparison",
-                        "targetUserComparison", "strengthsSummary", "weaknessesSummary");
+                .containsExactly("featureComparison", "positioningComparison", "targetUserComparison");
         assertThat(output.path("issueFlags"))
                 .extracting(JsonNode::asText)
-                .contains("ANALYSIS_CORE_FIELDS_EMPTY");
+                .contains("ANALYSIS_CORE_FIELDS_EMPTY",
+                        "OPTIONAL_PRICING_ANALYSIS_DEFERRED",
+                        "OPTIONAL_STRENGTHS_ANALYSIS_DEFERRED",
+                        "OPTIONAL_WEAKNESSES_ANALYSIS_DEFERRED");
     }
 
     @Test

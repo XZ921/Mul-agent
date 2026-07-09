@@ -1,9 +1,10 @@
 package cn.bugstack.competitoragent.workflow.contract;
 
+import cn.bugstack.competitoragent.workflow.coverage.StageOneFirstReportPolicy;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -13,7 +14,7 @@ import java.util.List;
  * 章节级证据束契约。
  * 这个对象负责把“字段证据片段 -> 章节证据聚合 -> 结论级引用”之间的语义边界稳定下来：
  * 1. evidenceFragments 保留字段级片段，继续携带 evidenceId / sourceUrl / coverageStatus；
- * 2. sourceUrls 与 fieldNames 是章节级汇总视图，便于报告接口直接展示“这一段内容主要来自哪里”；
+ * 2. sourceUrls 与 fieldNames 是章节级汇总视图，便于接口直接展示“这段内容主要来自哪里”；
  * 3. missingFields / gapSummary / issueFlags 显式描述证据缺口，避免章节只有文本没有缺口说明。
  */
 @Data
@@ -52,7 +53,7 @@ public class SectionEvidenceBundle {
     @Builder.Default
     private List<String> sourceUrls = List.of();
 
-    /** 章节级问题标记，例如 SECTION_EVIDENCE_GAP / NO_USABLE_EVIDENCE */
+    /** 章节级问题标记，例如 SECTION_EVIDENCE_GAP / OPTIONAL_SECTION_EVIDENCE_GAP / NO_USABLE_EVIDENCE */
     @Builder.Default
     private List<String> issueFlags = List.of();
 
@@ -64,7 +65,7 @@ public class SectionEvidenceBundle {
      * 统一规范化章节证据束：
      * 1. 去重并清洗字段、URL、问题标记；
      * 2. 自动从 evidenceFragments 回填字段名与 sourceUrls；
-     * 3. 当缺口存在但描述缺失时，生成稳定的 gapSummary；
+     * 3. 缺口标记根据阶段1首报契约区分 core gap 与 optional gap；
      * 4. 当整个章节没有任何可用来源时，显式补上 NO_USABLE_EVIDENCE。
      */
     public SectionEvidenceBundle normalized() {
@@ -83,8 +84,11 @@ public class SectionEvidenceBundle {
             }
         }
 
+        // 章节缺口标记必须以当前 missingFields 重新归一，避免旧链路遗留的 blocker flag 混入首报降级语义。
+        removeIssueFlag(normalizedIssueFlags, "SECTION_EVIDENCE_GAP");
+        removeIssueFlag(normalizedIssueFlags, "OPTIONAL_SECTION_EVIDENCE_GAP");
         if (!normalizedMissingFields.isEmpty()) {
-            normalizedIssueFlags.add("SECTION_EVIDENCE_GAP");
+            normalizedIssueFlags.add(resolveGapFlag(normalizedMissingFields));
         }
         if (normalizedSourceUrls.isEmpty()) {
             normalizedIssueFlags.add("NO_USABLE_EVIDENCE");
@@ -111,6 +115,20 @@ public class SectionEvidenceBundle {
                 .issueFlags(new ArrayList<>(normalizedIssueFlags))
                 .evidenceFragments(normalizedFragments)
                 .build();
+    }
+
+    /**
+     * 阶段1里只有首报核心字段缺失才是 blocker；
+     * 定价、优势、短板这类增强字段缺失必须沉淀为 optional gap，不能在 bundle 规范化时被重新升级。
+     */
+    private String resolveGapFlag(LinkedHashSet<String> normalizedMissingFields) {
+        for (String missingField : normalizedMissingFields) {
+            if (StageOneFirstReportPolicy.isFirstReportCriticalField(
+                    StageOneFirstReportPolicy.normalizeFieldName(missingField))) {
+                return "SECTION_EVIDENCE_GAP";
+            }
+        }
+        return "OPTIONAL_SECTION_EVIDENCE_GAP";
     }
 
     private List<EvidenceFragment> normalizeEvidenceFragments(List<EvidenceFragment> fragments) {
@@ -143,5 +161,12 @@ public class SectionEvidenceBundle {
         }
         String normalized = value.trim();
         return normalized.isBlank() ? null : normalized;
+    }
+
+    private void removeIssueFlag(LinkedHashSet<String> issueFlags, String expectedFlag) {
+        if (issueFlags == null || issueFlags.isEmpty() || expectedFlag == null || expectedFlag.isBlank()) {
+            return;
+        }
+        issueFlags.removeIf(flag -> expectedFlag.equalsIgnoreCase(flag == null ? null : flag.trim()));
     }
 }

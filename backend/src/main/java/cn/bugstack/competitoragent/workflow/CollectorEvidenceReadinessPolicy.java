@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.workflow;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.workflow.coverage.StageOneFirstReportPolicy;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,7 +11,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -18,11 +18,10 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * 阶段1采集分支 quorum 策略。
+ * 阶段1采集分支的 quorum 判定策略。
  * <p>
- * 这里不是忽略失败 collector，而是在所有 collector 都进入终态后，
- * 判断已有证据是否足够交付首版抽取。失败、跳过、降级节点仍会进入
- * degraded / missingFamilies / auditFlags，供后续 Writer 和 Reviewer 写入降级说明。
+ * 这里的职责不是简单忽略失败 collector，而是在所有 collector 进入终态后，
+ * 统一判断现有证据是否已经满足“阶段1首报可交付”的最低契约，并把缺口审计信息交给下游节点消费。
  */
 @Component
 @RequiredArgsConstructor
@@ -79,16 +78,30 @@ public class CollectorEvidenceReadinessPolicy {
                     new ArrayList<>(sourceUrls));
         }
 
-        boolean hasOfficial = satisfiedFamilies.contains("OFFICIAL");
-        boolean hasPricing = satisfiedFamilies.contains("PRICING");
-        boolean hasDocsOrReview = satisfiedFamilies.contains("DOCS") || satisfiedFamilies.contains("REVIEW");
-        boolean sourceQuotaReady = sourceUrls.size() >= 5 && distinctDomainCount(sourceUrls) >= 2;
-        boolean ready = hasPricing && hasDocsOrReview && sourceQuotaReady && hasOfficial;
+        /*
+         * 阶段1首报的 collector quorum 必须完全委托给统一契约，
+         * 这样 pricing 是否阻断、sourceUrls 红线怎么算，才不会在 workflow 层再长出第二套规则。
+         */
+        boolean ready = StageOneFirstReportPolicy.isQuorumReady(
+                new ArrayList<>(satisfiedFamilies),
+                new ArrayList<>(sourceUrls));
 
-        if (!hasOfficial && hasPricing && hasDocsOrReview && sourceQuotaReady) {
+        /*
+         * pricing 在阶段1中属于增强信息。
+         * 缺失时必须进入审计，供后续 Writer/Reviewer 解释，但不能再把 extractor 卡死。
+         */
+        if (!satisfiedFamilies.contains("PRICING")) {
             degraded = true;
-            auditFlags.add("OFFICIAL_FAILED_DEGRADED_QUORUM");
-            ready = true;
+            auditFlags.add("OPTIONAL_PRICING_NOT_READY");
+        }
+
+        /*
+         * 当已经具备 OFFICIAL/DOCS 这类首报主来源，却仍未达到 quorum 时，
+         * 失败原因应该稳定收敛到 sourceUrls 红线，而不是再次回退成 pricing 不足。
+         */
+        if (!ready && StageOneFirstReportPolicy.hasPrimarySourceFamily(satisfiedFamilies)) {
+            degraded = true;
+            auditFlags.add("SOURCE_URLS_REDLINE_NOT_READY");
         }
 
         for (String family : TERMINAL_FAMILIES) {
@@ -163,52 +176,20 @@ public class CollectorEvidenceReadinessPolicy {
         if (!StringUtils.hasText(nodeName)) {
             return "UNKNOWN";
         }
-        String normalized = nodeName.toUpperCase(Locale.ROOT);
-        if (normalized.contains("DOC")) {
-            return "DOCS";
-        }
-        if (normalized.contains("PRICE")) {
-            return "PRICING";
-        }
-        if (normalized.contains("REVIEW")) {
-            return "REVIEW";
-        }
-        return "OFFICIAL";
+        String normalized = normalizeFamily(nodeName);
+        return StringUtils.hasText(normalized) ? normalized : "OFFICIAL";
     }
 
     private String normalizeFamily(String family) {
         if (!StringUtils.hasText(family)) {
             return "UNKNOWN";
         }
-        String normalized = family.trim().toUpperCase(Locale.ROOT);
-        if (normalized.contains("DOC")) {
-            return "DOCS";
-        }
-        if (normalized.contains("PRICE")) {
-            return "PRICING";
-        }
-        if (normalized.contains("REVIEW")) {
-            return "REVIEW";
-        }
-        if (normalized.contains("OFFICIAL") || normalized.contains("HOME") || normalized.contains("ROOT")) {
-            return "OFFICIAL";
-        }
-        return normalized;
-    }
-
-    private int distinctDomainCount(Set<String> urls) {
-        LinkedHashSet<String> domains = new LinkedHashSet<>();
-        for (String url : urls) {
-            try {
-                String host = URI.create(url).getHost();
-                if (StringUtils.hasText(host)) {
-                    domains.add(host.toLowerCase(Locale.ROOT));
-                }
-            } catch (Exception ignored) {
-                // URL 解析失败时不计入域名 quorum，避免无效来源撑过红线。
-            }
-        }
-        return domains.size();
+        /*
+         * readiness 侧必须与 DagExecutor 共享同一套 source family 归一化语义，
+         * 否则一边把 PRICING 识别成合法 family，另一边却把它当成未知值，
+         * 会让 quorum 判定、缺口审计和任务视图再次出现“同一次采集结果多种解释”的接缝问题。
+         */
+        return StageOneFirstReportPolicy.normalizeSourceScope(family);
     }
 
     private String firstNonBlank(String first, String fallback) {

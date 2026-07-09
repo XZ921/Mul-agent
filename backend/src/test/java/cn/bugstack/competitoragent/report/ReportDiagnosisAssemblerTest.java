@@ -218,6 +218,38 @@ class ReportDiagnosisAssemblerTest {
     }
 
     @Test
+    void shouldNotCountOptionalCoverageGapIntoEvidenceGapCount() {
+        EvidenceCoverageOverview coverageOverview = EvidenceCoverageOverview.builder()
+                .sections(List.of(SectionEvidenceCoverage.builder()
+                        .sectionKey("pricing")
+                        .sectionTitle("定价策略")
+                        .totalFields(1)
+                        .traceableFields(0)
+                        .missingEvidenceFields(1)
+                        .emptyFields(0)
+                        .missingFields(List.of("pricing"))
+                        .build()))
+                .build();
+
+        ReportResponse.ReportDiagnosisInfo diagnosis = assembler.assemble(
+                List.of(),
+                List.of(),
+                null,
+                null,
+                coverageOverview,
+                List.of()
+        );
+
+        assertNotNull(diagnosis);
+        assertEquals(0, diagnosis.getEvidenceGapCount());
+        DiagnosisSection pricing = diagnosis.getSections().stream()
+                .filter(section -> "定价策略".equals(section.getSection()))
+                .findFirst()
+                .orElseThrow();
+        assertTrue(pricing.getEvidenceInsufficient());
+    }
+
+    @Test
     void shouldBackfillDirectiveSourceUrlsFromMatchingDiagnosisSection() {
         List<EvidenceInfo> evidences = List.of(new EvidenceInfo(
                 "E-010",
@@ -348,7 +380,7 @@ class ReportDiagnosisAssemblerTest {
         );
 
         assertNotNull(diagnosis);
-        assertEquals(1, diagnosis.getEvidenceGapCount());
+        assertEquals(0, diagnosis.getEvidenceGapCount());
         DiagnosisSection section = diagnosis.getSections().stream()
                 .filter(item -> "定价对比".equals(item.getSection()))
                 .findFirst()

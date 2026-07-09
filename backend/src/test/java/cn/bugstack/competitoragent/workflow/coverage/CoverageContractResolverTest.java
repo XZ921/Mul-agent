@@ -60,30 +60,30 @@ class CoverageContractResolverTest {
     }
 
     @Test
-    void explicitPricingDimensionShouldOverrideOfficialOnlyScope() {
+    void explicitPricingDimensionShouldBeAuditedButNotBlockStageOneFirstReport() {
         CoverageContractResolver resolver = new CoverageContractResolver(new AnalysisDimensionMappingCatalog());
 
         CoverageContract contract = resolver.resolve(
                 null,
-                List.of("\u5b9a\u4ef7"),
-                List.of("\u5b98\u7f51"),
+                List.of("\u4ea7\u54c1\u529f\u80fd", "\u4ef7\u683c\u7b56\u7565"),
+                List.of("\u5b98\u7f51", "\u4ea7\u54c1\u6587\u6863", "\u5b9a\u4ef7\u9875"),
                 null);
 
         CoverageFieldContract pricing = contract.findField("pricing").orElseThrow();
-        assertThat(pricing.getStatus()).isEqualTo(CoverageFieldStatus.REQUIRED);
-        assertThat(pricing.getBlockingLevel()).isEqualTo(CoverageBlockingLevel.BLOCKER);
+        assertThat(pricing.getStatus()).isEqualTo(CoverageFieldStatus.OPTIONAL);
+        assertThat(pricing.getBlockingLevel()).isEqualTo(CoverageBlockingLevel.WARNING);
         assertThat(pricing.getQueryIntents()).contains("OFFICIAL_PRICING");
-        assertThat(pricing.getMinimumAttemptedPaths()).isEqualTo(1);
+        assertThat(pricing.getMinimumAttemptedPaths()).isZero();
         assertThat(pricing.getEvidencePaths()).extracting(CoverageEvidencePath::getPathKey)
                 .contains("OFFICIAL_PRICING_PAGE", "DOCS_BILLING_OR_LIMITS", "PUBLIC_REVIEW_OR_NEWS");
         assertThat(pathByKey(pricing, "OFFICIAL_PRICING_PAGE").getSourceTypes()).contains("REVIEW", "NEWS");
         assertThat(pathByKey(pricing, "DOCS_BILLING_OR_LIMITS").getSourceTypes()).contains("REVIEW", "NEWS");
         assertThat(pathByKey(pricing, "PUBLIC_REVIEW_OR_NEWS").isRequired()).isTrue();
-        assertThat(pricing.getOverrideReason()).contains("\u663e\u5f0f\u7ef4\u5ea6");
+        assertThat(pricing.getOverrideReason()).contains("\u9636\u6bb51\u589e\u5f3a\u5b57\u6bb5");
     }
 
     @Test
-    void explicitStandardTemplateShouldRequireWeaknessesAndPricing() {
+    void standardTemplateShouldKeepEnhancementFieldsNonBlockingForStageOneFirstReport() {
         CoverageContractResolver resolver = new CoverageContractResolver(new AnalysisDimensionMappingCatalog());
 
         CoverageContract contract = resolver.resolve(
@@ -93,8 +93,14 @@ class CoverageContractResolverTest {
                 null);
 
         assertThat(contract.getTaskMode()).isEqualTo("STANDARD_COMPETITOR_REPORT");
-        assertThat(contract.findField("pricing").orElseThrow().getStatus()).isEqualTo(CoverageFieldStatus.REQUIRED);
-        assertThat(contract.findField("weaknesses").orElseThrow().getStatus()).isEqualTo(CoverageFieldStatus.REQUIRED);
+        assertThat(contract.findField("summary").orElseThrow().getBlockingLevel())
+                .isEqualTo(CoverageBlockingLevel.BLOCKER);
+        assertThat(contract.findField("coreFeatures").orElseThrow().getBlockingLevel())
+                .isEqualTo(CoverageBlockingLevel.BLOCKER);
+        assertThat(contract.findField("pricing").orElseThrow().getBlockingLevel())
+                .isEqualTo(CoverageBlockingLevel.WARNING);
+        assertThat(contract.findField("weaknesses").orElseThrow().getBlockingLevel())
+                .isEqualTo(CoverageBlockingLevel.WARNING);
     }
 
     @Test
@@ -113,16 +119,19 @@ class CoverageContractResolverTest {
         CoverageFieldContract summary = contract.findField("summary").orElseThrow();
         CoverageFieldContract coreFeatures = contract.findField("coreFeatures").orElseThrow();
 
-        assertThat(pricing.getMinimumAttemptedPaths()).isEqualTo(1);
+        assertThat(pricing.getMinimumAttemptedPaths()).isZero();
+        assertThat(pricing.getBlockingLevel()).isEqualTo(CoverageBlockingLevel.WARNING);
         assertThat(pathByKey(pricing, "OFFICIAL_PRICING_PAGE").getSourceTypes()).contains("REVIEW", "NEWS");
         assertThat(pathByKey(pricing, "DOCS_BILLING_OR_LIMITS").getSourceTypes()).contains("REVIEW", "NEWS");
         assertThat(pathByKey(pricing, "PUBLIC_REVIEW_OR_NEWS").isRequired()).isTrue();
 
-        assertThat(strengths.getMinimumAttemptedPaths()).isEqualTo(1);
+        assertThat(strengths.getMinimumAttemptedPaths()).isZero();
+        assertThat(strengths.getBlockingLevel()).isEqualTo(CoverageBlockingLevel.WARNING);
         assertThat(pathByKey(strengths, "OFFICIAL_PUBLIC_PROFILE").getSourceTypes()).contains("REVIEW", "NEWS");
         assertThat(pathByKey(strengths, "PUBLIC_REVIEW_OR_NEWS").isRequired()).isTrue();
 
-        assertThat(weaknesses.getMinimumAttemptedPaths()).isEqualTo(1);
+        assertThat(weaknesses.getMinimumAttemptedPaths()).isZero();
+        assertThat(weaknesses.getBlockingLevel()).isEqualTo(CoverageBlockingLevel.WARNING);
         assertThat(pathByKey(weaknesses, "TERMS_OR_SERVICE_AGREEMENT").getSourceTypes()).contains("REVIEW", "NEWS");
         assertThat(pathByKey(weaknesses, "PUBLIC_REVIEW_OR_NEWS").isRequired()).isTrue();
 

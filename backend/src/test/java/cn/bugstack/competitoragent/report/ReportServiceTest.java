@@ -153,6 +153,7 @@ class ReportServiceTest {
 
     @Test
     void shouldMarkStageOneMvpReportAsDegradedReadyWhenScoreIsPassingWithLimitedEvidenceGaps() {
+        List<ReportResponse.EvidenceInfo> traceableEvidenceInfos = stageOneTraceableEvidenceInfos();
         Report report = Report.builder()
                 .id(711L)
                 .taskId(711L)
@@ -192,11 +193,11 @@ class ReportServiceTest {
                           }
                         ]
                         """)
-                .evidenceCount(0)
+                .evidenceCount(traceableEvidenceInfos.size())
                 .build();
 
         when(reportRepository.findByTaskId(711L)).thenReturn(Optional.of(report));
-        when(evidenceQueryService.listTaskEvidence(711L)).thenReturn(List.of());
+        when(evidenceQueryService.listTaskEvidence(711L)).thenReturn(traceableEvidenceInfos);
         when(knowledgeRepository.findByTaskIdOrderByIdAsc(711L)).thenReturn(List.of());
         when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(711L)).thenReturn(List.of());
 
@@ -1430,6 +1431,50 @@ class ReportServiceTest {
         } catch (NoSuchFieldException ignored) {
             // Red 阶段允许字段尚未落地；断言会通过缺失投影继续失败。
         }
+    }
+
+    /**
+     * 闃舵 1 闄嶇骇棣栨姤鍦ㄦ祴璇曢噷涔熷繀椤诲拰鐢熶骇绾㈢嚎淇濇寔涓€鑷达細
+     * 鑷冲皯 5 鏉″彲杩芥函 URL锛屽苟涓旀潵鑷充笉灏戜簬 2 涓綊涓€鍩熷悕銆?
+     */
+    private List<ReportResponse.EvidenceInfo> stageOneTraceableEvidenceInfos() {
+        return List.of(
+                traceableEvidence("E711-1", "https://www.notion.so/product/ai", "OFFICIAL", "www.notion.so"),
+                traceableEvidence("E711-2", "https://www.notion.so/security", "OFFICIAL", "www.notion.so"),
+                traceableEvidence("E711-3", "https://docs.notion.so/ai", "DOCS", "docs.notion.so"),
+                traceableEvidence("E711-4", "https://docs.notion.so/admins", "DOCS", "docs.notion.so"),
+                traceableEvidence("E711-5", "https://www.g2.com/products/notion-ai/reviews", "REVIEW", "www.g2.com")
+        );
+    }
+
+    private ReportResponse.EvidenceInfo traceableEvidence(String evidenceId,
+                                                          String url,
+                                                          String sourceType,
+                                                          String domain) {
+        return new ReportResponse.EvidenceInfo(
+                evidenceId,
+                "Traceable source",
+                url,
+                "snippet",
+                "Notion AI",
+                null,
+                sourceType,
+                "SEARCH",
+                domain,
+                null,
+                null,
+                0.92,
+                true,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                java.util.Map.of()
+        );
     }
 
     private Report reportWithPersistedWriterEvidenceSnapshot(Long taskId) {

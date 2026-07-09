@@ -38,6 +38,7 @@ import cn.bugstack.competitoragent.task.SharedNodeOutputEnvelope;
 import cn.bugstack.competitoragent.task.SharedNodeOutputProjector;
 import cn.bugstack.competitoragent.task.TaskSnapshotCacheService;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
+import cn.bugstack.competitoragent.workflow.coverage.StageOneFirstReportPolicy;
 import cn.bugstack.competitoragent.workflow.runtime.DynamicPlanAppender;
 import cn.bugstack.competitoragent.workflow.runtime.RuntimeEventEmitter;
 import cn.bugstack.competitoragent.workflow.runtime.RuntimeStateRefresher;
@@ -53,10 +54,13 @@ import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.concurrent.CompletionService;
@@ -72,6 +76,9 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @Component
 public class DagExecutor {
+
+    private static final Set<String> STAGE_ONE_COLLECTOR_SOURCE_FAMILIES =
+            Set.of("OFFICIAL", "DOCS", "PRICING", "REVIEW");
 
     private final TaskNodeRepository nodeRepository;
     private final AnalysisTaskRepository taskRepository;
@@ -1125,7 +1132,9 @@ public class DagExecutor {
          * 历史上存在单个 collect_sources_web 直接驱动 extract_schema 的轻量 DAG，
          * 这类链路仍应按普通依赖规则处理，避免被 OFFICIAL/PRICING/DOCS/REVIEW quorum 误拦截。
          */
-        if (collectorDependencies.size() < 3) {
+        // 只有真正命中阶段1 source family 分支时才启用 quorum。
+        // 否则像 collect_sources_web、collect_a/collect_b 这种普通 DAG 会被错误拦截。
+        if (!isStageOneCollectorQuorumBranch(collectorDependencies)) {
             return null;
         }
         CollectorEvidenceReadiness readiness = collectorEvidenceReadinessPolicy.evaluate(collectorDependencies);
@@ -1144,6 +1153,83 @@ public class DagExecutor {
         }
         writeCollectorEvidenceReadiness(sharedContext, readiness);
         return DependencyState.BLOCKED;
+    }
+
+    /**
+     * quorum 只服务于阶段1“多 source family collector -> extract_schema”的首报降级链路。
+     * 这里必须显式识别 family 边界，避免把普通单 collector 或通用并行 collector DAG 误纳入 stage1 特判。
+     */
+    private boolean isStageOneCollectorQuorumBranch(List<TaskNode> collectorDependencies) {
+        if (collectorDependencies == null || collectorDependencies.size() < 2) {
+            return false;
+        }
+        LinkedHashSet<String> families = new LinkedHashSet<>();
+        for (TaskNode collectorDependency : collectorDependencies) {
+            String family = resolveCollectorSourceFamily(collectorDependency);
+            if (family == null) {
+                return false;
+            }
+            families.add(family);
+        }
+        return families.size() >= 2;
+    }
+
+    private String resolveCollectorSourceFamily(TaskNode node) {
+        if (node == null) {
+            return null;
+        }
+        String familyFromOutput = readCollectorSourceFamily(readJson(node.getOutputData()));
+        if (familyFromOutput != null) {
+            return familyFromOutput;
+        }
+        String familyFromConfig = readCollectorSourceFamily(readJson(node.getNodeConfig()));
+        if (familyFromConfig != null) {
+            return familyFromConfig;
+        }
+        return inferCollectorSourceFamilyFromNodeName(node.getNodeName());
+    }
+
+    private String readCollectorSourceFamily(JsonNode jsonNode) {
+        if (jsonNode == null || jsonNode.isMissingNode() || jsonNode.isNull()) {
+            return null;
+        }
+        String sourceType = firstNonBlank(
+                jsonNode.path("sourceType").asText(null),
+                jsonNode.path("sourceFamily").asText(null)
+        );
+        return normalizeCollectorSourceFamily(sourceType);
+    }
+
+    private String inferCollectorSourceFamilyFromNodeName(String nodeName) {
+        if (nodeName == null || nodeName.isBlank()) {
+            return null;
+        }
+        return normalizeCollectorSourceFamily(nodeName);
+    }
+
+    private String normalizeCollectorSourceFamily(String sourceFamily) {
+        if (sourceFamily == null || sourceFamily.isBlank()) {
+            return null;
+        }
+        /*
+         * collector family 的语义必须和 StageOneFirstReportPolicy 共用同一套归一化规则，
+         * 否则像 PRICING 这类合法 family 会在 workflow 层被误判成“未知来源”，
+         * 进而导致 stage1 quorum 根本不生效，extract_schema 又退回旧的“全依赖必须成功”阻断路径。
+         */
+        String normalized = StageOneFirstReportPolicy.normalizeSourceScope(sourceFamily);
+        return STAGE_ONE_COLLECTOR_SOURCE_FAMILIES.contains(normalized) ? normalized : null;
+    }
+
+    private String firstNonBlank(String... candidates) {
+        if (candidates == null) {
+            return null;
+        }
+        for (String candidate : candidates) {
+            if (candidate != null && !candidate.isBlank()) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     private void writeCollectorEvidenceReadiness(AgentContext sharedContext, CollectorEvidenceReadiness readiness) {

@@ -31,6 +31,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -178,6 +179,9 @@ class TaskDefinitionAppServiceTest {
         assertEquals("AI 知识库竞品分析", response.getTaskName());
         assertEquals(AnalysisTaskStatus.PENDING, response.getStatus());
         assertEquals(21L, response.getCurrentPlanVersionId());
+        ArgumentCaptor<AnalysisTask> taskCaptor = ArgumentCaptor.forClass(AnalysisTask.class);
+        verify(taskRepository, times(2)).save(taskCaptor.capture());
+        assertEquals("阶段1首报", taskCaptor.getAllValues().get(0).getReportTemplate());
         verify(organizationQuotaPolicy, times(1))
                 .checkAndReserve(any(), any(), any(), any(Integer.class), any());
         verify(workflowFactory).createWorkflow(any(AnalysisTask.class));

@@ -49,13 +49,75 @@ class TaskNodeViewAssemblerTest {
                 .errorMessage("初审未通过且需要人工介入，请补充证据或调整策略后继续")
                 .build();
         TaskNode writerNode = node("write_report", AgentType.WRITER, TaskNodeStatus.SUCCESS, 3);
+        writerNode.setOutputData("""
+                {
+                  "content": "# Draft Report",
+                  "sourceUrls": ["https://www.notion.so/product/ai"]
+                }
+                """);
         TaskNode reviewNode = node("quality_check", AgentType.REVIEWER, TaskNodeStatus.SUCCESS, 4);
         TaskNode rewriteNode = node("rewrite_report", AgentType.WRITER, TaskNodeStatus.SKIPPED, 5);
         rewriteNode.setErrorMessage("跳过修订：初审严重失败，需先人工补证据、调整搜索范围或重跑采集链路");
 
         TaskResponse response = assembler.toTaskResponse(task, List.of(writerNode, reviewNode, rewriteNode));
 
+        assertThat(response.getCanViewReport()).isTrue();
+        assertThat(response.getCanViewDraftReport()).isTrue();
+    }
+
+    @Test
+    void shouldNotExposeDraftReportWhenWriterHasNoTraceableDraftEvidence() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(61L)
+                .status(AnalysisTaskStatus.STOPPED)
+                .build();
+        TaskNode writerNode = node("write_report", AgentType.WRITER, TaskNodeStatus.SUCCESS, 3);
+        writerNode.setOutputData("""
+                {
+                  "content": "# Draft Report"
+                }
+                """);
+        TaskNode reviewNode = node("quality_check", AgentType.REVIEWER, TaskNodeStatus.SUCCESS, 4);
+        reviewNode.setOutputData("""
+                {
+                  "passed": false,
+                  "requiresHumanIntervention": true
+                }
+                """);
+        TaskNode rewriteNode = node("rewrite_report", AgentType.WRITER, TaskNodeStatus.SKIPPED, 5);
+
+        TaskResponse response = assembler.toTaskResponse(task, List.of(writerNode, reviewNode, rewriteNode));
+
         assertThat(response.getCanViewReport()).isFalse();
+        assertThat(response.getCanViewDraftReport()).isFalse();
+    }
+
+    @Test
+    void shouldExposeDraftReportWhenWriterKeepsRecoverableEvidenceSummary() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(62L)
+                .status(AnalysisTaskStatus.STOPPED)
+                .build();
+        TaskNode writerNode = node("rewrite_report", AgentType.WRITER, TaskNodeStatus.SUCCESS_DEGRADED, 4);
+        writerNode.setOutputData("""
+                {
+                  "writerEvidenceState":"PARTIAL_SOURCE",
+                  "citationGapSeverity":"HIGH",
+                  "sectionCitationGaps":[
+                    {
+                      "targetSection":"pricing",
+                      "sectionTitle":"定价策略",
+                      "summary":"pricing 段落缺逐句引用",
+                      "severity":"HIGH",
+                      "evidenceState":"PARTIAL_SOURCE"
+                    }
+                  ]
+                }
+                """);
+
+        TaskResponse response = assembler.toTaskResponse(task, List.of(writerNode));
+
+        assertThat(response.getCanViewReport()).isTrue();
         assertThat(response.getCanViewDraftReport()).isTrue();
     }
 

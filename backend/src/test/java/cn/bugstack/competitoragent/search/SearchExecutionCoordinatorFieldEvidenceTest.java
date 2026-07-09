@@ -113,6 +113,34 @@ class SearchExecutionCoordinatorFieldEvidenceTest {
     }
 
     @Test
+    void shouldKeepCandidateSupplementButDropNonCriticalFieldQueriesFromSupplementRequest() {
+        CapturingSearchSourceProvider provider = new CapturingSearchSourceProvider(
+                List.of(),
+                List.of(browserCandidate("https://docs.bilibili.com/product/guide"))
+        );
+        SearchExecutionCoordinator coordinator = newCoordinator(provider, false);
+
+        SearchExecutionResult result = coordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("哔哩哔哩")
+                .sourceType("DOCS")
+                .verifyCandidates(false)
+                .searchMode("HTTP_ONLY")
+                .searchFallbackOrder(List.of("HTTP"))
+                .preferredSearchProvider("tavily")
+                .browserSearchEnabled(false)
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .dimensionEvidencePlan(nonCriticalFieldPlan())
+                .build());
+
+        List<SearchSourceRequest> supplementRequests = supplementRequests(provider);
+        assertThat(supplementRequests).hasSize(1);
+        assertThat(supplementRequests.get(0).getFieldEvidenceQueries()).isEmpty();
+        assertThat(result.getExecutionTrace().getFieldEvidenceQuerySkipReasons())
+                .containsEntry("STAGE1_QUORUM_READY_DEFER_FIELD_EVIDENCE", 1);
+    }
+
+    @Test
     void shouldContinueToHttpSupplementWhenHybridBrowserStageAlreadyMeetsTargetButFieldQueriesPending() {
         CapturingSearchSourceProvider provider = new CapturingSearchSourceProvider(
                 List.of(),

@@ -23,6 +23,7 @@ import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.workflow.coverage.CoverageContract;
 import cn.bugstack.competitoragent.workflow.coverage.CoverageContractProvider;
+import cn.bugstack.competitoragent.workflow.coverage.StageOneFirstReportPolicy;
 import cn.bugstack.competitoragent.workflow.contract.CompetitorKnowledgeDraft;
 import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceBlock;
 import cn.bugstack.competitoragent.workflow.contract.DownstreamEvidenceView;
@@ -405,7 +406,7 @@ public class SchemaExtractorAgent extends BaseAgent {
             throws LlmException, JsonProcessingException {
         JsonProcessingException lastParseException = null;
         String businessRetryInstruction = strictBusinessRetry
-                ? "\n\n【业务字段补抽要求】上一轮 JSON 合法但没有抽出任何业务字段。请优先根据结构化证据和可读正文补出 summary、positioning、targetUsers、coreFeatures、pricing、strengths、weaknesses 中至少一个非空字段。sourceUrls 只能作为追溯信息，不能算作业务字段。"
+                ? "\n\n【业务字段补抽要求】上一轮 JSON 合法但没有抽出任何业务字段。请优先补出 summary、positioning、targetUsers、coreFeatures 这 4 个首报核心字段中至少一个非空字段。pricing、strengths、weaknesses 属于增强字段，证据不足时允许保留空对象或空数组，但禁止编造内容。sourceUrls 只能作为追溯信息，不能算作业务字段。"
                 : "";
 
         for (int attempt = 1; attempt <= EXTRACT_JSON_MAX_ATTEMPTS; attempt++) {
@@ -1198,13 +1199,14 @@ public class SchemaExtractorAgent extends BaseAgent {
      */
     private String buildFieldExtractionGuidance() {
         return """
-                summary: 从全部证据归纳产品概述，不超过 200 字，必须有 sourceUrls。
-                positioning: 提取市场定位、产品定位或核心价值主张，禁止凭空总结。
-                targetUsers: 从用户角色、行业、团队规模和使用场景中提取，返回数组。
-                coreFeatures: 每项功能必须带 name、description、evidenceIds 或 sourceUrls。
-                pricing: 优先使用 PRICING_BLOCK，提取价格数字、计费周期、免费额度和企业版线索。
-                strengths: 只提取证据明确支持的优势判断，不能把营销语直接当事实。
-                weaknesses: 只提取证据明确支持的短板、限制或风险，证据不足时返回空数组。
+                summary: 阶段1首报核心字段；从全部证据归纳产品概述，不超过 200 字，必须可回指 sourceUrls。
+                positioning: 阶段1首报核心字段；提取市场定位、产品定位或核心价值主张，禁止凭空总结。
+                targetUsers: 阶段1首报核心字段；从用户角色、行业、团队规模和使用场景中提取，返回数组。
+                coreFeatures: 阶段1首报核心字段；每项功能必须带 name、description、evidenceIds 或 sourceUrls。
+                pricing: 阶段1增强字段；优先使用 PRICING_BLOCK，证据不足时允许返回空对象，不要为了模板完整性硬补价格。
+                strengths: 阶段1增强字段；只提取证据明确支持的优势判断，证据不足时返回空数组。
+                weaknesses: 阶段1增强字段；只提取证据明确支持的短板、限制或风险，证据不足时返回空数组。
+                sourceUrls: 仅用于追溯，不计入业务字段完成度。
                 """;
     }
 
@@ -1410,9 +1412,14 @@ public class SchemaExtractorAgent extends BaseAgent {
             return List.of();
         }
         coverage.fields().forEachRemaining(entry -> {
+            String fieldName = entry.getKey();
             String status = entry.getValue().path("status").asText("");
             if (isGapCoverageStatus(status)) {
-                issueFlags.add(status.toUpperCase());
+                if (StageOneFirstReportPolicy.isFirstReportCriticalField(fieldName)) {
+                    issueFlags.add(status.toUpperCase());
+                } else {
+                    issueFlags.add("OPTIONAL_FIELD_DEFERRED");
+                }
             }
         });
         return new ArrayList<>(issueFlags);
@@ -1624,6 +1631,9 @@ public class SchemaExtractorAgent extends BaseAgent {
     private int countExtractedFields(ObjectNode schemaJson) {
         int count = 0;
         for (String field : COVERAGE_FIELDS) {
+            if (!StageOneFirstReportPolicy.isFirstReportCriticalField(field)) {
+                continue;
+            }
             if (hasMeaningfulValue(schemaJson.path(field))) {
                 count++;
             }
@@ -1733,12 +1743,29 @@ public class SchemaExtractorAgent extends BaseAgent {
                     .fieldNames(List.of(definition.fieldKey()))
                     .missingFields(missingFields)
                     .sourceUrls(sourceUrls)
-                    .issueFlags(missingFields.isEmpty() ? List.of() : List.of("SECTION_EVIDENCE_GAP"))
+                    // 章节级缺口要在抽取阶段就与阶段1首报契约对齐，避免 optional 字段被旧标记误升格为 blocker。
+                    .issueFlags(resolveSectionIssueFlags(missingFields))
                     .evidenceFragments(fieldFragments)
                     .build()
                     .normalized());
         }
         return bundles;
+    }
+
+    /**
+     * Extractor 先按阶段1契约给出原始章节缺口标记，
+     * 后续再由 SectionEvidenceBundle.normalized() 做最终统一规整，避免下游看到旧语义。
+     */
+    private List<String> resolveSectionIssueFlags(List<String> missingFields) {
+        if (missingFields == null || missingFields.isEmpty()) {
+            return List.of();
+        }
+        for (String missingField : missingFields) {
+            if (StageOneFirstReportPolicy.isFirstReportCriticalField(missingField)) {
+                return List.of("SECTION_EVIDENCE_GAP");
+            }
+        }
+        return List.of("OPTIONAL_SECTION_EVIDENCE_GAP");
     }
 
     private List<EvidenceFragment> buildFieldEvidenceFragments(String stage,

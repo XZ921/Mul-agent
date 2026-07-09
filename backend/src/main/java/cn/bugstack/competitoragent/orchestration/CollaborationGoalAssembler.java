@@ -17,7 +17,7 @@ import java.util.Map;
 @Component
 public class CollaborationGoalAssembler {
 
-    private static final List<String> DEFAULT_DIMENSIONS = List.of("产品功能", "目标用户", "价格策略", "技术能力", "市场定位");
+    private static final List<String> DEFAULT_DIMENSIONS = List.of("产品功能", "目标用户", "市场定位");
     private static final Map<String, Object> DEFAULT_BUDGET = Map.of(
             "maxSearchQueries", 20,
             "maxModelCalls", 12,

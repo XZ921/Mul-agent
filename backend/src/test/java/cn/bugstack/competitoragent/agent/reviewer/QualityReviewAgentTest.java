@@ -1272,6 +1272,69 @@ class QualityReviewAgentTest {
     }
 
     @Test
+    void shouldFallbackToCoreCoverageSectionsWhenAnalysisDimensionsMissing() throws Exception {
+        when(reportRepository.findByTaskId(119L)).thenReturn(Optional.of(
+                Report.builder()
+                        .taskId(119L)
+                        .content("""
+                                # 产品概览
+                                Notion AI 面向团队知识协作场景，提供知识问答与内容整理能力。[证据:E119]
+                                """)
+                        .build()
+        ));
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(119L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(119L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E119")
+                        .title("Notion AI Product")
+                        .url("https://www.notion.so/product/ai")
+                        .build()
+        ));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(119L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .taskId(119L)
+                        .competitorName("Notion AI")
+                        .evidenceCoverage("""
+                                {
+                                  "summary": {"status":"TRACEABLE","hasValue":true},
+                                  "positioning": {"status":"TRACEABLE","hasValue":true},
+                                  "targetUsers": {"status":"TRACEABLE","hasValue":true},
+                                  "coreFeatures": {"status":"TRACEABLE","hasValue":true},
+                                  "pricing": {"status":"EVIDENCE_NOT_COVERING","hasValue":false},
+                                  "strengths": {"status":"TRACEABLE","hasValue":true},
+                                  "weaknesses": {"status":"EVIDENCE_NOT_COVERING","hasValue":false}
+                                }
+                                """)
+                        .build()
+        ));
+        when(promptService.render(eq("reviewer"), any())).thenReturn("review-prompt");
+        when(llmClient.chatForJson(any(), any(), eq("QualityReview"))).thenReturn("""
+                {
+                  "score": 91,
+                  "passed": true,
+                  "issues": [],
+                  "summary": "核心章节已经满足可追溯要求"
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentResult result = agent.execute(AgentContext.builder()
+                .taskId(119L)
+                .taskName("stage-one-core-fallback")
+                .currentNodeName("quality_check")
+                .build());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(output.path("passed").asBoolean(), result.getOutputData());
+        assertFalse(output.path("requiresHumanIntervention").asBoolean(), result.getOutputData());
+        assertTrue(output.path("diagnoses").toString().contains("coverage_gap"));
+        assertFalse(output.path("diagnoses").toString().contains("BLOCKER"));
+    }
+
+    @Test
     void shouldNotPassStageOneMvpWhenLlmScoreIsTooLowEvenIfDimensionAverageIsPulledUp() throws Exception {
         when(reportRepository.findByTaskId(20L)).thenReturn(Optional.of(
                 Report.builder()

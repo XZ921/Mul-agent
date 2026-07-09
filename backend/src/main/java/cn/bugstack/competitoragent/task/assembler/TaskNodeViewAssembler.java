@@ -100,7 +100,7 @@ public class TaskNodeViewAssembler {
                 .canResume(canResumeTask(resolvedStatus))
                 .canRetry(canRetryTask(resolvedStatus))
                 .canStop(canStopTask(resolvedStatus))
-                .canViewReport(resolvedStatus == AnalysisTaskStatus.SUCCESS)
+                .canViewReport(resolvedStatus == AnalysisTaskStatus.SUCCESS || hasDraftReport(nodes))
                 .canViewDraftReport(hasDraftReport(nodes))
                 .interventionSummary(buildTaskInterventionSummary(resolvedStatus))
                 .resumeAdvice(buildTaskResumeAdvice(resolvedStatus))
@@ -260,11 +260,47 @@ public class TaskNodeViewAssembler {
             if (node == null || !isReusableOutputStatus(node.getStatus())) {
                 continue;
             }
-            if (node.getAgentType() == AgentType.WRITER || isReportWriterNode(node.getNodeName())) {
+            if ((node.getAgentType() == AgentType.WRITER || isReportWriterNode(node.getNodeName()))
+                    && hasTraceableWriterDraft(node)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * 草稿报告的可见性不能只看 writer 节点是否跑过，
+     * 还要确认当前输出里已经留下了“可追溯来源”或“可恢复证据摘要”，
+     * 避免只有 content 的空壳报告被前端误判成可查看成品。
+     */
+    private boolean hasTraceableWriterDraft(TaskNode node) {
+        if (node == null || node.getOutputData() == null || node.getOutputData().isBlank()) {
+            return false;
+        }
+        JsonNode output = readJson(node.getOutputData());
+        if (output == null || output.isMissingNode() || output.isNull()) {
+            return false;
+        }
+        LinkedHashSet<String> runtimeSourceUrls = new LinkedHashSet<>();
+        collectNestedSourceUrls(output, runtimeSourceUrls);
+        if (!runtimeSourceUrls.isEmpty()) {
+            return true;
+        }
+        return hasRecoverableWriterEvidenceSummary(output);
+    }
+
+    private boolean hasRecoverableWriterEvidenceSummary(JsonNode output) {
+        if (output == null || !output.isObject()) {
+            return false;
+        }
+        if (hasText(textOrNull(output, "writerEvidenceState"))
+                || hasText(textOrNull(output, "citationGapSeverity"))) {
+            return true;
+        }
+        if (output.path("sectionCitationGaps").isArray() && !output.path("sectionCitationGaps").isEmpty()) {
+            return true;
+        }
+        return output.path("missingCitationSections").isArray() && !output.path("missingCitationSections").isEmpty();
     }
 
     private boolean isReportWriterNode(String nodeName) {

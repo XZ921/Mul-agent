@@ -36,6 +36,7 @@ import cn.bugstack.competitoragent.workflow.contract.QualityDiagnosis;
 import cn.bugstack.competitoragent.workflow.contract.QualityDimension;
 import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
 import cn.bugstack.competitoragent.workflow.contract.SectionEvidenceBundle;
+import cn.bugstack.competitoragent.workflow.coverage.StageOneFirstReportPolicy;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -136,11 +137,17 @@ public class ReportService {
                 finalReview,
                 reportDiagnosis
         );
+        List<String> deliveryGateSourceUrls = collectStageOneDeliverySourceUrls(
+                evidenceInfos,
+                reportDiagnosis,
+                sectionEvidenceBundles
+        );
         ReportResponse.DeliverySummaryInfo deliverySummary = buildDeliverySummary(
                 report,
                 issues,
                 revisionPlan,
-                reportDiagnosis
+                reportDiagnosis,
+                deliveryGateSourceUrls
         );
         ReportResponse.EvidenceEntryPointInfo evidenceEntryPoint =
                 resolveEvidenceEntryPoint(evidenceInfos, sectionEvidenceBundles);
@@ -206,21 +213,27 @@ public class ReportService {
     private ReportResponse.DeliverySummaryInfo buildDeliverySummary(Report report,
                                                                     List<QualityIssue> issues,
                                                                     RevisionPlan revisionPlan,
-                                                                    ReportDiagnosisInfo reportDiagnosis) {
+                                                                    ReportDiagnosisInfo reportDiagnosis,
+                                                                    List<String> reportSourceUrls) {
         int blockerCount = resolveBlockerCount(issues, reportDiagnosis);
         int evidenceGapCount = resolveEvidenceGapCount(issues, reportDiagnosis);
         int qualityScore = report.getQualityScore() == null ? 0 : report.getQualityScore();
+        boolean hasEnoughTraceableSources = StageOneFirstReportPolicy.hasEnoughTraceableSources(reportSourceUrls);
         // 阶段1允许“60 分达标、无 blocker、少量证据缺口”的报告以降级态交付，
         // 这样既不伪装成高质量通过，也不会把可演示的 MVP 报告一刀切拦下。
         boolean degradedDelivery = !report.isQualityPassed()
                 && qualityScore >= STAGE_ONE_MVP_SCORE_FLOOR
                 && blockerCount == 0
-                && evidenceGapCount <= 3;
-        boolean readyForDelivery = (report.isQualityPassed() && blockerCount == 0 && evidenceGapCount == 0)
+                && evidenceGapCount == 0
+                && hasEnoughTraceableSources;
+        boolean readyForDelivery = (report.isQualityPassed()
+                && blockerCount == 0
+                && evidenceGapCount == 0
+                && hasEnoughTraceableSources)
                 || degradedDelivery;
         String deliveryStatus = readyForDelivery
                 ? degradedDelivery ? "DEGRADED_READY" : "READY"
-                : blockerCount > 0 ? "BLOCKED" : evidenceGapCount > 0 ? "NEEDS_EVIDENCE" : "REVIEW_REQUIRED";
+                : blockerCount > 0 ? "BLOCKED" : evidenceGapCount > 0 || !hasEnoughTraceableSources ? "NEEDS_EVIDENCE" : "REVIEW_REQUIRED";
         String summary = readyForDelivery
                 ? "当前报告已满足交付条件，可进入正式导出。"
                 : "当前报告暂不可交付，存在 %d 个阻塞问题和 %d 个证据缺口。".formatted(blockerCount, evidenceGapCount);
@@ -228,10 +241,17 @@ public class ReportService {
             summary = "当前报告达到阶段1最低可交付标准，可作为降级报告交付；建议人工复核后再正式使用。";
         }
 
+        if (!readyForDelivery) {
+            summary = buildDeliverySummaryText(blockerCount, evidenceGapCount, reportDiagnosis, hasEnoughTraceableSources);
+        }
+        if (degradedDelivery) {
+            summary = buildDegradedDeliverySummary(reportDiagnosis);
+        }
+
         return ReportResponse.DeliverySummaryInfo.builder()
                 .readyForDelivery(readyForDelivery)
                 .deliveryStatus(deliveryStatus)
-                .summary(readyForDelivery ? summary : buildDeliverySummaryText(blockerCount, evidenceGapCount, reportDiagnosis))
+                .summary(summary)
                 .primaryIssue(resolvePrimaryIssue(issues, reportDiagnosis))
                 .recommendedAction(resolveRecommendedAction(revisionPlan, reportDiagnosis))
                 .blockerCount(blockerCount)
@@ -328,7 +348,11 @@ public class ReportService {
      */
     private String buildDeliverySummaryText(int blockerCount,
                                             int evidenceGapCount,
-                                            ReportDiagnosisInfo reportDiagnosis) {
+                                            ReportDiagnosisInfo reportDiagnosis,
+                                            boolean hasEnoughTraceableSources) {
+        if (!hasEnoughTraceableSources && blockerCount == 0 && evidenceGapCount == 0) {
+            return "当前报告暂不可交付，去重后的可追溯 sourceUrls 尚未达到阶段1红线。";
+        }
         if (reportDiagnosis == null || reportDiagnosis.getSections() == null || reportDiagnosis.getSections().isEmpty()) {
             return "当前报告暂不可交付，存在 %d 个阻塞问题和 %d 个证据缺口。".formatted(blockerCount, evidenceGapCount);
         }
@@ -364,6 +388,20 @@ public class ReportService {
                 .formatted(blockerCount, evidenceGapCount, String.join(" / ", gapKinds));
     }
 
+    /**
+     * 阶段1降级交付必须明确告诉用户“哪些字段是被延期的增强项”，
+     * 这样交付摘要才能体现 friendly baseline，而不是把 optional gap 伪装成已经完成。
+     */
+    private String buildDegradedDeliverySummary(ReportDiagnosisInfo reportDiagnosis) {
+        List<String> deferredSections = resolveDeferredOptionalSections(reportDiagnosis);
+        if (deferredSections.isEmpty()) {
+            return "当前报告达到阶段1最低可交付标准，可作为降级报告交付；建议人工复核后再正式使用。";
+        }
+        return "当前报告达到阶段1最低可交付标准；"
+                + String.join("、", deferredSections)
+                + "等增强字段仍存在公开证据缺口，已按增强字段延期，可先交付降级报告，建议人工复核后再正式使用。";
+    }
+
     private int resolveBlockerCount(List<QualityIssue> issues, ReportDiagnosisInfo reportDiagnosis) {
         if (reportDiagnosis != null && reportDiagnosis.getBlockerCount() != null) {
             return reportDiagnosis.getBlockerCount();
@@ -396,9 +434,8 @@ public class ReportService {
             }
             String type = defaultText(issue.getType(), null);
             String basis = defaultText(issue.getEvidenceBasis(), null);
-            if ("MISSING_EVIDENCE".equalsIgnoreCase(type)
-                    || "EVIDENCE_GAP".equalsIgnoreCase(type)
-                    || (basis != null && basis.contains("证据"))) {
+            if (isEvidenceGapIssue(type, basis)
+                    && StageOneFirstReportPolicy.isFirstReportCriticalField(resolveStageOneFieldName(issue.getSection()))) {
                 count++;
             }
         }
@@ -508,6 +545,38 @@ public class ReportService {
                     : writerEvidenceSummary.getSectionCitationGaps()) {
                 if (gap != null) {
                     appendSourceUrls(sourceUrls, gap.getSourceUrls());
+                }
+            }
+        }
+        return new ArrayList<>(sourceUrls);
+    }
+
+    /**
+     * 阶段1交付红线只看“已经回流到报告层”的可追溯来源，
+     * 不使用 nodeConfig 入口 URL 去虚增 sourceUrls 数量，避免把未落地证据误判成可交付。
+     */
+    private List<String> collectStageOneDeliverySourceUrls(List<ReportResponse.EvidenceInfo> evidenceInfos,
+                                                           ReportDiagnosisInfo reportDiagnosis,
+                                                           List<SectionEvidenceBundleInfo> sectionEvidenceBundles) {
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        for (ReportResponse.EvidenceInfo evidenceInfo : evidenceInfos == null ? List.<ReportResponse.EvidenceInfo>of() : evidenceInfos) {
+            if (evidenceInfo != null) {
+                appendSourceUrl(sourceUrls, evidenceInfo.getUrl());
+            }
+        }
+        if (reportDiagnosis != null) {
+            appendSourceUrls(sourceUrls, reportDiagnosis.getSourceUrls());
+        }
+        for (SectionEvidenceBundleInfo bundle : sectionEvidenceBundles == null ? List.<SectionEvidenceBundleInfo>of() : sectionEvidenceBundles) {
+            if (bundle == null) {
+                continue;
+            }
+            appendSourceUrls(sourceUrls, bundle.getSourceUrls());
+            for (ReportResponse.EvidenceReference evidenceReference : bundle.getEvidenceReferences() == null
+                    ? List.<ReportResponse.EvidenceReference>of()
+                    : bundle.getEvidenceReferences()) {
+                if (evidenceReference != null) {
+                    appendSourceUrl(sourceUrls, evidenceReference.getUrl());
                 }
             }
         }
@@ -661,6 +730,69 @@ public class ReportService {
      * 检索审计摘要压缩成一句业务可读描述，
      * 让用户先知道这份报告的来源是否稳定，而不是先读完整 collector trace。
      */
+    private boolean isEvidenceGapIssue(String type, String evidenceBasis) {
+        return "MISSING_EVIDENCE".equalsIgnoreCase(type)
+                || "EVIDENCE_GAP".equalsIgnoreCase(type)
+                || (evidenceBasis != null && evidenceBasis.contains("证据"));
+    }
+
+    private List<String> resolveDeferredOptionalSections(ReportDiagnosisInfo reportDiagnosis) {
+        LinkedHashSet<String> deferredSections = new LinkedHashSet<>();
+        if (reportDiagnosis == null || reportDiagnosis.getSections() == null) {
+            return List.of();
+        }
+        for (ReportResponse.DiagnosisSection section : reportDiagnosis.getSections()) {
+            if (section == null || !Boolean.TRUE.equals(section.getEvidenceInsufficient())) {
+                continue;
+            }
+            if (StageOneFirstReportPolicy.isFirstReportEnhancementField(resolveStageOneFieldName(section.getSection()))) {
+                deferredSections.add(defaultText(section.getSection(), "增强章节"));
+            }
+        }
+        return new ArrayList<>(deferredSections);
+    }
+
+    private String resolveCoverageFieldName(SectionEvidenceCoverage coverage) {
+        if (coverage == null) {
+            return null;
+        }
+        String fieldName = resolveStageOneFieldName(coverage.getSectionKey());
+        if (fieldName != null) {
+            return fieldName;
+        }
+        return resolveStageOneFieldName(coverage.getSectionTitle());
+    }
+
+    private String resolveStageOneFieldName(String sectionOrField) {
+        String normalizedField = StageOneFirstReportPolicy.normalizeFieldName(sectionOrField);
+        if (StageOneFirstReportPolicy.isFirstReportCriticalField(normalizedField)
+                || StageOneFirstReportPolicy.isFirstReportEnhancementField(normalizedField)) {
+            return normalizedField;
+        }
+        return StageOneFirstReportPolicy.normalizeFieldName(
+                StageOneFirstReportPolicy.fieldForSection(sectionOrField)
+        );
+    }
+
+    private List<String> resolveFallbackSectionIssueFlags(String fieldName, boolean hasCoverageGap) {
+        if (!hasCoverageGap) {
+            return List.of();
+        }
+        return List.of(StageOneFirstReportPolicy.isFirstReportCriticalField(fieldName)
+                ? "SECTION_EVIDENCE_GAP"
+                : "OPTIONAL_SECTION_EVIDENCE_GAP");
+    }
+
+    private String buildFallbackSectionGapSummary(SectionEvidenceCoverage coverage, boolean hasCoverageGap) {
+        if (!hasCoverageGap) {
+            return null;
+        }
+        return defaultText(coverage.getSectionTitle(), "当前章节")
+                + "仍有 "
+                + defaultNumber(coverage.getMissingEvidenceFields())
+                + " 个字段证据缺口，需要继续补齐。";
+    }
+
     private String buildSearchAuditSummary(SearchAuditOverview searchAuditOverview) {
         if (searchAuditOverview == null) {
             return null;
@@ -1188,15 +1320,17 @@ public class ReportService {
         }
         List<SectionEvidenceBundle> bundles = new ArrayList<>();
         for (SectionEvidenceCoverage coverage : coverageOverview.getSections()) {
-            List<String> missingFields = coverage.getMissingFields() == null ? List.of() : coverage.getMissingFields();
+            String fieldName = resolveCoverageFieldName(coverage);
+            boolean hasCoverageGap = defaultNumber(coverage.getMissingEvidenceFields()) > 0;
+            List<String> missingFields = hasCoverageGap && fieldName != null ? List.of(fieldName) : List.of();
             bundles.add(SectionEvidenceBundle.builder()
                     .stage("REPORT")
                     .sectionType("SECTION")
                     .sectionKey(coverage.getSectionKey())
                     .sectionTitle(coverage.getSectionTitle())
                     .missingFields(missingFields)
-                    .issueFlags(missingFields.isEmpty() ? List.of() : List.of("SECTION_EVIDENCE_GAP"))
-                    .gapSummary(missingFields.isEmpty() ? null : "缺少字段证据：" + String.join(", ", missingFields))
+                    .issueFlags(resolveFallbackSectionIssueFlags(fieldName, hasCoverageGap))
+                    .gapSummary(buildFallbackSectionGapSummary(coverage, hasCoverageGap))
                     .build()
                     .normalized());
         }

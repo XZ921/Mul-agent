@@ -214,7 +214,8 @@ public class TaskDefinitionAppService {
                 .analysisDimensions(toJson(definition.getAnalysisDimensions()))
                 .sourceScope(toJson(definition.getSourceScope()))
                 .reportLanguage(defaultIfBlank(definition.getReportLanguage(), "中文"))
-                .reportTemplate(defaultIfBlank(definition.getReportTemplate(), "标准版"))
+                // 阶段1默认模板只代表首报交付口径，不把 pricing / weaknesses 等增强字段升为阻断项。
+                .reportTemplate(defaultIfBlank(definition.getReportTemplate(), "阶段1首报"))
                 .schemaId(definition.getSchemaId())
                 .status(AnalysisTaskStatus.PENDING)
                 .build();

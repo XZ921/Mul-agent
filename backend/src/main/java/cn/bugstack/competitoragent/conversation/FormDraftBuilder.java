@@ -118,7 +118,8 @@ public class FormDraftBuilder {
         }
         if (dimensions.isEmpty()) {
             dimensions.add("产品功能");
-            dimensions.add("价格策略");
+            dimensions.add("目标用户");
+            dimensions.add("市场定位");
         }
         return new ArrayList<>(dimensions);
     }

@@ -56,10 +56,11 @@ class WriterCitationGapInspectorTest {
                 List.of(bundle),
                 List.of("https://www.notion.so/pricing"));
 
-        assertThat(result.severity()).isEqualTo("HIGH");
+        assertThat(result.severity()).isEqualTo("WARNING");
         assertThat(result.evidenceState()).isEqualTo("PARTIAL_SOURCE");
-        assertThat(result.issueFlags()).contains("WRITER_CITATION_GAP");
+        assertThat(result.issueFlags()).contains("WRITER_CITATION_GAP", "OPTIONAL_CITATION_GAP");
         assertThat(result.issueFlags()).doesNotContain("WRITER_MISSING_SOURCE");
+        assertThat(result.gaps().get(0).getSeverity()).isEqualTo("WARNING");
         assertThat(result.gaps().get(0).getSourceUrls()).containsExactly("https://www.notion.so/pricing");
         assertThat(result.gaps().get(0).getSuggestedQueries()).contains("pricing official citation evidence");
     }
