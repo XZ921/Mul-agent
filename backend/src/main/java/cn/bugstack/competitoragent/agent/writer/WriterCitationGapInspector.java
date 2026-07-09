@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Writer 章节引用缺口检测器。
@@ -23,7 +24,20 @@ public class WriterCitationGapInspector {
     public InspectionResult inspect(String reportContent,
                                     List<SectionEvidenceBundle> sectionEvidenceBundles,
                                     List<String> fallbackSourceUrls) {
+        return inspect(reportContent, sectionEvidenceBundles, fallbackSourceUrls, List.of());
+    }
+
+    /**
+     * requestedDimensions 只允许来自任务请求快照。
+     * Writer 这里只决定“哪些 gap 进入用户可见主列表”，
+     * 绝不再从 reportContent 章节标题反推用户请求范围。
+     */
+    public InspectionResult inspect(String reportContent,
+                                    List<SectionEvidenceBundle> sectionEvidenceBundles,
+                                    List<String> fallbackSourceUrls,
+                                    List<String> requestedDimensions) {
         List<WriterCitationGap> gaps = new ArrayList<>();
+        Set<String> normalizedRequestedDimensions = StageOneFirstReportPolicy.normalizeRequestedDimensions(requestedDimensions);
         for (SectionEvidenceBundle bundle : sectionEvidenceBundles == null
                 ? List.<SectionEvidenceBundle>of()
                 : sectionEvidenceBundles) {
@@ -34,11 +48,15 @@ public class WriterCitationGapInspector {
             gaps.add(buildGap(normalized, fallbackSourceUrls));
         }
         List<String> issueFlags = buildIssueFlags(gaps);
+        List<String> visibleMissingSections = gaps.stream()
+                .filter(gap -> shouldExposeGapForRequestedDimensions(gap, normalizedRequestedDimensions))
+                .map(WriterCitationGap::getTargetSection)
+                .toList();
         return new InspectionResult(
                 gaps,
                 resolveSeverity(gaps),
                 resolveEvidenceState(gaps, fallbackSourceUrls),
-                gaps.stream().map(WriterCitationGap::getTargetSection).toList(),
+                visibleMissingSections,
                 issueFlags);
     }
 
@@ -52,7 +70,7 @@ public class WriterCitationGapInspector {
     }
 
     private boolean hasBlockingCitationGap(SectionEvidenceBundle bundle) {
-        if (isOptionalOnlyGap(bundle)) {
+        if (resolveIssueScope(bundle) != StageOneFirstReportPolicy.FirstReportIssueScope.CORE) {
             return false;
         }
         return contains(bundle.getIssueFlags(), "NO_USABLE_EVIDENCE")
@@ -63,8 +81,8 @@ public class WriterCitationGapInspector {
     }
 
     private boolean hasOptionalCitationGap(SectionEvidenceBundle bundle) {
-        return isOptionalOnlyGap(bundle)
-                || contains(bundle.getIssueFlags(), "OPTIONAL_SECTION_EVIDENCE_GAP");
+        return hasGapSignal(bundle)
+                && resolveIssueScope(bundle) != StageOneFirstReportPolicy.FirstReportIssueScope.CORE;
     }
 
     private boolean hasBlockingMissingFields(SectionEvidenceBundle bundle) {
@@ -131,13 +149,13 @@ public class WriterCitationGapInspector {
             sectionSources = normalize(fallbackSourceUrls);
         }
         String sectionKey = firstNonBlank(bundle.getSectionKey(), "report");
-        boolean optionalGap = !sectionSources.isEmpty() && isOptionalOnlyGap(bundle);
+        StageOneFirstReportPolicy.FirstReportIssueScope issueScope = resolveIssueScope(bundle);
         return WriterCitationGap.builder()
                 .targetSection(sectionKey)
                 .sectionTitle(firstNonBlank(bundle.getSectionTitle(), sectionKey))
                 .summary(firstNonBlank(bundle.getGapSummary(),
                         "Writer 章节缺少可回指引用：" + firstNonBlank(bundle.getSectionTitle(), sectionKey)))
-                .severity(sectionSources.isEmpty() ? "ERROR" : optionalGap ? "WARNING" : "HIGH")
+                .severity(resolveGapSeverity(issueScope, sectionSources))
                 .sourceUrls(sectionSources)
                 .evidenceState(sectionSources.isEmpty() ? "MISSING_SOURCE" : "PARTIAL_SOURCE")
                 .missingFields(normalize(bundle.getMissingFields()))
@@ -164,10 +182,14 @@ public class WriterCitationGapInspector {
         if (gaps == null || gaps.isEmpty()) {
             return "NONE";
         }
-        if (gaps.stream().anyMatch(gap -> "MISSING_SOURCE".equals(gap.getEvidenceState()))) {
+        if (gaps.stream().anyMatch(gap ->
+                classifyGapScope(gap) == StageOneFirstReportPolicy.FirstReportIssueScope.CORE
+                        && "MISSING_SOURCE".equals(gap.getEvidenceState()))) {
             return "ERROR";
         }
-        if (gaps.stream().anyMatch(gap -> "HIGH".equals(gap.getSeverity()))) {
+        if (gaps.stream().anyMatch(gap ->
+                classifyGapScope(gap) == StageOneFirstReportPolicy.FirstReportIssueScope.CORE
+                        && "HIGH".equals(gap.getSeverity()))) {
             return "HIGH";
         }
         return "WARNING";
@@ -198,7 +220,59 @@ public class WriterCitationGapInspector {
         if (gaps.stream().anyMatch(gap -> "WARNING".equals(gap.getSeverity()))) {
             flags.add("OPTIONAL_CITATION_GAP");
         }
+        if (gaps.stream().anyMatch(gap ->
+                classifyGapScope(gap) == StageOneFirstReportPolicy.FirstReportIssueScope.GENERATED)) {
+            flags.add("GENERATED_SECTION_REWRITE_ONLY");
+        }
         return new ArrayList<>(flags);
+    }
+
+    private boolean hasGapSignal(SectionEvidenceBundle bundle) {
+        return contains(bundle == null ? null : bundle.getIssueFlags(), "SECTION_EVIDENCE_GAP")
+                || contains(bundle == null ? null : bundle.getIssueFlags(), "OPTIONAL_SECTION_EVIDENCE_GAP")
+                || contains(bundle == null ? null : bundle.getIssueFlags(), "NO_USABLE_EVIDENCE")
+                || !(normalize(bundle == null ? null : bundle.getMissingFields())).isEmpty()
+                || bundle == null
+                || bundle.getSourceUrls() == null
+                || bundle.getSourceUrls().isEmpty();
+    }
+
+    private String resolveGapSeverity(StageOneFirstReportPolicy.FirstReportIssueScope issueScope,
+                                      List<String> sectionSources) {
+        if (issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.CORE) {
+            return sectionSources.isEmpty() ? "ERROR" : "HIGH";
+        }
+        return "WARNING";
+    }
+
+    private boolean shouldExposeGapForRequestedDimensions(WriterCitationGap gap,
+                                                          Set<String> normalizedRequestedDimensions) {
+        if (gap == null) {
+            return false;
+        }
+        return StageOneFirstReportPolicy.shouldExposeIssueForRequestedDimensions(
+                normalizedRequestedDimensions,
+                new StageOneFirstReportPolicy.FirstReportIssueContext(
+                        gap.getTargetSection(),
+                        gap.getSectionTitle(),
+                        null
+                ));
+    }
+
+    private StageOneFirstReportPolicy.FirstReportIssueScope resolveIssueScope(SectionEvidenceBundle bundle) {
+        return StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                bundle == null ? null : bundle.getSectionKey(),
+                bundle == null ? null : bundle.getSectionTitle(),
+                resolveStageOneField(bundle)
+        ));
+    }
+
+    private StageOneFirstReportPolicy.FirstReportIssueScope classifyGapScope(WriterCitationGap gap) {
+        return StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                gap == null ? null : gap.getTargetSection(),
+                gap == null ? null : gap.getSectionTitle(),
+                null
+        ));
     }
 
     private boolean contains(List<String> values, String expected) {

@@ -247,7 +247,7 @@ class ReportServiceTest {
                         [
                           {
                             "type":"missing_evidence",
-                            "section":"conclusion",
+                            "section":"targetUsers",
                             "severity":"ERROR",
                             "level":"BLOCKER",
                             "evidenceBasis":"关键结论缺少可追溯证据",
@@ -1373,7 +1373,7 @@ class ReportServiceTest {
                               "dimensionCode":"SEARCH_QUALITY",
                               "dimensionName":"搜索质量",
                               "type":"missing_structured_evidence",
-                              "section":"定价对比",
+                              "section":"targetUsers",
                               "severity":"ERROR",
                               "level":"BLOCKER",
                               "title":"结构化证据不足",
@@ -1387,7 +1387,7 @@ class ReportServiceTest {
                           "issues": [
                             {
                               "type":"missing_structured_evidence",
-                              "section":"定价对比",
+                              "section":"targetUsers",
                               "severity":"ERROR",
                               "level":"BLOCKER",
                               "dimensionCode":"SEARCH_QUALITY",

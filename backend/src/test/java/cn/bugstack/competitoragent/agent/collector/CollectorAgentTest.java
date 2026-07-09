@@ -1037,6 +1037,10 @@ class CollectorAgentTest {
             long resolveCollectorHardDeadlineMillis(CollectorNodeConfig config, String sourceType) {
                 return 50L;
             }
+
+            long resolveCollectorDeadlineDrainGraceMillis(CollectorNodeConfig config, String sourceType) {
+                return 0L;
+            }
         };
         SearchCollectionTarget prefetchedTarget = SearchCollectionTarget.builder()
                 .candidate(buildSourceCandidate("https://example.com/docs"))
@@ -1118,6 +1122,103 @@ class CollectorAgentTest {
     }
 
     @Test
+    void shouldDrainSearchResultThatFinishesJustAfterHardDeadline() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent deadlineAwareCollector = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchCoordinator,
+                collectionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper,
+                new DownstreamEvidenceViewAssembler(objectMapper),
+                new EvidenceQualityGate(new EvidenceQualityGateProperties()),
+                new EvidenceSourceSanitizer(),
+                null
+        ) {
+            long resolveCollectorHardDeadlineMillis(CollectorNodeConfig config, String sourceType) {
+                return 50L;
+            }
+        };
+        SearchCollectionTarget prefetchedTarget = SearchCollectionTarget.builder()
+                .candidate(buildSourceCandidate("https://example.com/docs"))
+                .collectedPage(successfulCollectedPage("https://example.com/docs", "Docs"))
+                .build();
+        when(searchCoordinator.execute(any(), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    Thread.sleep(80L);
+                    return buildSearchExecutionResult(prefetchedTarget);
+                });
+        when(collectionCoordinator.summarize(any()))
+                .thenAnswer(invocation -> buildCollectionReport(invocation.getArgument(0)));
+
+        AgentResult result = deadlineAwareCollector.execute(
+                buildContextWithVerification("[\"https://example.com/docs\"]"));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS_DEGRADED", result.getStatus().name(), result.getErrorMessage());
+        assertEquals(1, output.path("successCollected").asInt());
+        assertTrue(output.path("readyForQuorum").asBoolean());
+        assertEquals("HARD_DEADLINE_REACHED",
+                output.path("searchExecutionTrace").path("degradationReason").asText());
+    }
+
+    @Test
+    void shouldDrainCollectionReportThatFinishesJustAfterHardDeadline() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent deadlineAwareCollector = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchCoordinator,
+                collectionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper,
+                new DownstreamEvidenceViewAssembler(objectMapper),
+                new EvidenceQualityGate(new EvidenceQualityGateProperties()),
+                new EvidenceSourceSanitizer(),
+                null
+        ) {
+            long resolveCollectorHardDeadlineMillis(CollectorNodeConfig config, String sourceType) {
+                return 50L;
+            }
+        };
+        SearchCollectionTarget pendingTarget = SearchCollectionTarget.builder()
+                .candidate(buildSourceCandidate("https://example.com/docs"))
+                .build();
+        when(searchCoordinator.execute(any(), any(), any(), any()))
+                .thenReturn(buildSearchExecutionResult(pendingTarget));
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    Thread.sleep(80L);
+                    return buildCollectionReport(List.of(buildSuccessfulCollectionResult(
+                            "collect_sources_01_01#001",
+                            1,
+                            "https://example.com/docs",
+                            "Docs")));
+                });
+        when(collectionCoordinator.summarize(any()))
+                .thenAnswer(invocation -> buildCollectionReport(invocation.getArgument(0)));
+
+        AgentResult result = deadlineAwareCollector.execute(
+                buildContextWithVerification("[\"https://example.com/docs\"]"));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS_DEGRADED", result.getStatus().name(), result.getErrorMessage());
+        assertEquals(1, output.path("successCollected").asInt());
+        assertTrue(output.path("readyForQuorum").asBoolean());
+        assertEquals("HARD_DEADLINE_REACHED",
+                output.path("searchExecutionTrace").path("degradationReason").asText());
+    }
+
+    @Test
     void shouldStopCollectorWhenSearchPhaseExceedsHardDeadline() throws Exception {
         SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
         CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
@@ -1138,6 +1239,10 @@ class CollectorAgentTest {
         ) {
             long resolveCollectorHardDeadlineMillis(CollectorNodeConfig config, String sourceType) {
                 return 50L;
+            }
+
+            long resolveCollectorDeadlineDrainGraceMillis(CollectorNodeConfig config, String sourceType) {
+                return 0L;
             }
         };
         when(searchCoordinator.execute(any(), any(), any(), any()))

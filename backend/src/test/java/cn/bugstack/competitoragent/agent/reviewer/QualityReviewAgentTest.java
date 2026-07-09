@@ -1693,6 +1693,270 @@ class QualityReviewAgentTest {
     }
 
     @Test
+    void shouldNotBlockWhenStructuredBlocksMissingButCoreCoverageTraceable() throws Exception {
+        when(reportRepository.findByTaskId(120L)).thenReturn(Optional.of(
+                Report.builder()
+                        .taskId(120L)
+                        .content("""
+                                # 功能对比
+                                Notion AI 提供知识问答与工作流能力。[证据：E120]
+                                """)
+                        .build()
+        ));
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(120L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(120L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E120")
+                        .sourceType("DOCS")
+                        .title("Feature Docs")
+                        .url("https://docs.notion.so/features")
+                        .pageMetadata("""
+                                {
+                                  "qualitySignals": ["QUALITY_SIGNAL_FAILED", "NO_STRUCTURED_BLOCKS"],
+                                  "structuredBlocks": [],
+                                  "qualityScore": 0.21,
+                                  "failureKind": "STRUCTURED_EXTRACTION_INSUFFICIENT"
+                                }
+                                """)
+                        .build()
+        ));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(120L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .taskId(120L)
+                        .competitorName("Notion AI")
+                        .evidenceCoverage(fullTraceableCoverageJson())
+                        .build()
+        ));
+        when(promptService.render(eq("reviewer"), any())).thenReturn("review-prompt");
+        when(llmClient.chatForJson(any(), any(), eq("QualityReview"))).thenReturn("""
+                {
+                  "score": 93,
+                  "passed": true,
+                  "issues": [],
+                  "summary": "核心字段都已具备可追溯证据"
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentResult result = agent.execute(AgentContext.builder()
+                .taskId(120L)
+                .taskName("structured-blocks-core-traceable")
+                .currentNodeName("quality_check")
+                .build());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        JsonNode diagnosis = findDiagnosis(output.path("diagnoses"), "missing_structured_evidence", "功能对比");
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(diagnosis != null && !diagnosis.isMissingNode(), result.getOutputData());
+        assertEquals("WARNING", diagnosis.path("severity").asText(), result.getOutputData());
+        assertFalse("BLOCKER".equals(diagnosis.path("level").asText()), result.getOutputData());
+        assertFalse(output.path("requiresHumanIntervention").asBoolean(), result.getOutputData());
+    }
+
+    @Test
+    void shouldTreatGenericStructuredEvidenceGapAsAuditWhenCoreCoveragePassed() throws Exception {
+        when(reportRepository.findByTaskId(121L)).thenReturn(Optional.of(
+                Report.builder()
+                        .taskId(121L)
+                        .content("""
+                                # 产品概览
+                                Notion AI 面向知识协作场景提供 AI 能力。[证据：E121]
+                                """)
+                        .build()
+        ));
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(121L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(121L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E121")
+                        .sourceType("OFFICIAL")
+                        .title("Product Overview")
+                        .url("https://www.notion.so/product/ai")
+                        .pageMetadata("""
+                                {
+                                  "qualitySignals": ["QUALITY_SIGNAL_FAILED", "NO_STRUCTURED_BLOCKS"],
+                                  "structuredBlocks": [],
+                                  "qualityScore": 0.24,
+                                  "failureKind": "STRUCTURED_EXTRACTION_INSUFFICIENT"
+                                }
+                                """)
+                        .build()
+        ));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(121L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .taskId(121L)
+                        .competitorName("Notion AI")
+                        .evidenceCoverage(fullTraceableCoverageJson())
+                        .build()
+        ));
+        when(promptService.render(eq("reviewer"), any())).thenReturn("review-prompt");
+        when(llmClient.chatForJson(any(), any(), eq("QualityReview"))).thenReturn("""
+                {
+                  "score": 92,
+                  "passed": true,
+                  "issues": [],
+                  "summary": "核心字段已经可发布"
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentResult result = agent.execute(AgentContext.builder()
+                .taskId(121L)
+                .taskName("structured-blocks-generic-audit")
+                .currentNodeName("quality_check")
+                .build());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        JsonNode diagnosis = findDiagnosis(output.path("diagnoses"), "missing_structured_evidence", "通用");
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(diagnosis != null && !diagnosis.isMissingNode(), result.getOutputData());
+        assertEquals("WARNING", diagnosis.path("severity").asText(), result.getOutputData());
+        assertFalse("BLOCKER".equals(diagnosis.path("level").asText()), result.getOutputData());
+        assertTrue(output.path("diagnoses").toString().contains("SEARCH_QUALITY"), result.getOutputData());
+        assertFalse(output.path("requiresHumanIntervention").asBoolean(), result.getOutputData());
+    }
+
+    @Test
+    void shouldStillBlockWhenStructuredEvidenceGapMapsToMissingCoreCoverage() throws Exception {
+        when(reportRepository.findByTaskId(122L)).thenReturn(Optional.of(
+                Report.builder()
+                        .taskId(122L)
+                        .content("""
+                                # 功能对比
+                                当前公开资料还不足以稳定支撑核心能力判断。
+                                """)
+                        .build()
+        ));
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(122L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(122L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E122")
+                        .sourceType("DOCS")
+                        .title("Feature Docs")
+                        .url("https://docs.notion.so/features")
+                        .pageMetadata("""
+                                {
+                                  "qualitySignals": ["QUALITY_SIGNAL_FAILED", "NO_STRUCTURED_BLOCKS"],
+                                  "structuredBlocks": [],
+                                  "qualityScore": 0.20,
+                                  "failureKind": "STRUCTURED_EXTRACTION_INSUFFICIENT"
+                                }
+                                """)
+                        .build()
+        ));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(122L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .taskId(122L)
+                        .competitorName("Notion AI")
+                        .evidenceCoverage("""
+                                {
+                                  "summary": {"status":"TRACEABLE","hasValue":true},
+                                  "positioning": {"status":"TRACEABLE","hasValue":true},
+                                  "targetUsers": {"status":"TRACEABLE","hasValue":true},
+                                  "coreFeatures": {"status":"EVIDENCE_NOT_COVERING","hasValue":false},
+                                  "pricing": {"status":"TRACEABLE","hasValue":true},
+                                  "strengths": {"status":"TRACEABLE","hasValue":true},
+                                  "weaknesses": {"status":"TRACEABLE","hasValue":true}
+                                }
+                                """)
+                        .build()
+        ));
+        when(promptService.render(eq("reviewer"), any())).thenReturn("review-prompt");
+        when(llmClient.chatForJson(any(), any(), eq("QualityReview"))).thenReturn("""
+                {
+                  "score": 91,
+                  "passed": true,
+                  "issues": [],
+                  "summary": "结构化能力判断仍需补证据"
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentResult result = agent.execute(AgentContext.builder()
+                .taskId(122L)
+                .taskName("structured-blocks-core-missing")
+                .currentNodeName("quality_check")
+                .build());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        JsonNode diagnosis = findDiagnosis(output.path("diagnoses"), "missing_structured_evidence", "功能对比");
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(diagnosis != null && !diagnosis.isMissingNode(), result.getOutputData());
+        assertEquals("ERROR", diagnosis.path("severity").asText(), result.getOutputData());
+        assertEquals("BLOCKER", diagnosis.path("level").asText(), result.getOutputData());
+        assertTrue(output.path("requiresHumanIntervention").asBoolean(), result.getOutputData());
+    }
+
+    @Test
+    void shouldKeepStageOneMvpScoreAboveFloorWhenOnlyAuditIssuesRemain() throws Exception {
+        when(reportRepository.findByTaskId(123L)).thenReturn(Optional.of(
+                Report.builder()
+                        .taskId(123L)
+                        .content("""
+                                # 产品概览
+                                Notion AI 面向团队知识协作场景提供 AI 问答能力。[证据：E123]
+                                """)
+                        .build()
+        ));
+        when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(123L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(123L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E123")
+                        .sourceType("OFFICIAL")
+                        .title("Product Overview")
+                        .url("https://www.notion.so/product/ai")
+                        .pageMetadata("""
+                                {
+                                  "qualitySignals": ["QUALITY_SIGNAL_FAILED", "NO_STRUCTURED_BLOCKS"],
+                                  "structuredBlocks": [],
+                                  "qualityScore": 0.23,
+                                  "failureKind": "STRUCTURED_EXTRACTION_INSUFFICIENT"
+                                }
+                                """)
+                        .build()
+        ));
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(123L)).thenReturn(List.of(
+                CompetitorKnowledge.builder()
+                        .taskId(123L)
+                        .competitorName("Notion AI")
+                        .evidenceCoverage(fullTraceableCoverageJson())
+                        .build()
+        ));
+        when(promptService.render(eq("reviewer"), any())).thenReturn("review-prompt");
+        when(llmClient.chatForJson(any(), any(), eq("QualityReview"))).thenReturn("""
+                {
+                  "score": 40,
+                  "passed": false,
+                  "issues": [],
+                  "summary": "模型打分偏保守"
+                }
+                """);
+        when(llmClient.getModelName()).thenReturn("mock-model");
+        when(llmClient.getLastTokenUsage()).thenReturn(new TokenUsage(10, 20, 30));
+
+        AgentResult result = agent.execute(AgentContext.builder()
+                .taskId(123L)
+                .taskName("structured-blocks-audit-score-floor")
+                .currentNodeName("quality_check")
+                .build());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+        JsonNode diagnosis = findDiagnosis(output.path("diagnoses"), "missing_structured_evidence", "通用");
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(diagnosis != null && !diagnosis.isMissingNode(), result.getOutputData());
+        assertFalse("BLOCKER".equals(diagnosis.path("level").asText()), result.getOutputData());
+        assertTrue(output.path("score").asInt() >= 60, result.getOutputData());
+        assertTrue(output.path("passed").asBoolean(), result.getOutputData());
+        assertFalse(output.path("requiresHumanIntervention").asBoolean(), result.getOutputData());
+    }
+
+    @Test
     void shouldNotDiagnoseStructuredEvidenceGapForReadableHighScoreEvidenceWithoutFailureSignals() throws Exception {
         when(reportRepository.findByTaskId(12L)).thenReturn(Optional.of(
                 Report.builder()
@@ -1757,5 +2021,32 @@ class QualityReviewAgentTest {
 
         assertEquals("SUCCESS", result.getStatus().name());
         assertFalse(output.path("diagnoses").toString().contains("missing_structured_evidence"));
+    }
+
+    private String fullTraceableCoverageJson() {
+        return """
+                {
+                  "summary": {"status":"TRACEABLE","hasValue":true},
+                  "positioning": {"status":"TRACEABLE","hasValue":true},
+                  "targetUsers": {"status":"TRACEABLE","hasValue":true},
+                  "coreFeatures": {"status":"TRACEABLE","hasValue":true},
+                  "pricing": {"status":"TRACEABLE","hasValue":true},
+                  "strengths": {"status":"TRACEABLE","hasValue":true},
+                  "weaknesses": {"status":"TRACEABLE","hasValue":true}
+                }
+                """;
+    }
+
+    private JsonNode findDiagnosis(JsonNode diagnoses, String type, String section) {
+        if (diagnoses == null || !diagnoses.isArray()) {
+            return objectMapper.nullNode();
+        }
+        for (JsonNode diagnosis : diagnoses) {
+            if (type.equalsIgnoreCase(diagnosis.path("type").asText())
+                    && section.equalsIgnoreCase(diagnosis.path("section").asText())) {
+                return diagnosis;
+            }
+        }
+        return objectMapper.nullNode();
     }
 }

@@ -821,12 +821,13 @@ public class QualityReviewAgent extends BaseAgent {
                 continue;
             }
 
+            String severity = resolveStructuredEvidenceSeverity(section, coverageSnapshot);
             diagnoses.add(QualityDiagnosis.builder()
                     .dimensionCode("SEARCH_QUALITY")
                     .dimensionName(resolveDimensionName("SEARCH_QUALITY"))
                     .type("missing_structured_evidence")
                     .section(section)
-                    .severity("ERROR")
+                    .severity(severity)
                     .title("结构化证据不足")
                     .detail("当前来源虽然已命中 sourceUrls，但 structuredBlocks 或 qualitySignals 未达到可用门槛。")
                     .evidenceBasis(evidenceBasis)
@@ -834,7 +835,7 @@ public class QualityReviewAgent extends BaseAgent {
                             ? List.of(evidence.getEvidenceId().trim()) : List.of())
                     .sourceUrls(evidence != null && evidence.getUrl() != null && !evidence.getUrl().isBlank()
                             ? List.of(evidence.getUrl().trim()) : List.of())
-                    .repairSuggestion(buildStructuredEvidenceRepairSuggestion(section, qualitySignals, structuredBlocks))
+                    .repairSuggestion(buildStructuredEvidenceRepairSuggestion(section, qualitySignals, structuredBlocks, coverageSnapshot))
                     .build()
                     .normalized());
         }
@@ -1300,8 +1301,20 @@ public class QualityReviewAgent extends BaseAgent {
 
     private String buildStructuredEvidenceRepairSuggestion(String section,
                                                            List<String> qualitySignals,
-                                                           List<Object> structuredBlocks) {
+                                                           List<Object> structuredBlocks,
+                                                           CoverageSnapshot coverageSnapshot) {
+        StageOneFirstReportPolicy.FirstReportIssueScope issueScope = classifyStructuredEvidenceIssueScope(section);
+        if (issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.GENERATED) {
+            return "请将" + section + "改写为保守结论；若仍无法补齐结构化证据，请裁剪该自动生成章节。";
+        }
+        if (issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.ENHANCEMENT
+                || issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.UNKNOWN_AUDIT) {
+            return "请将" + section + "记录为审计提醒，必要时后续补齐 structuredBlocks，但当前阶段不要把它作为主阻断项。";
+        }
         if (structuredBlocks.isEmpty()) {
+            if (!isStructuredEvidenceBlocking(section, coverageSnapshot)) {
+                return "请补充" + section + "对应 structuredBlocks；当前章节先保留 warning / audit，不阻断阶段1首报交付。";
+            }
             return "请先为" + section + "补齐可复用 structuredBlocks，再复核是否保留当前结论。";
         }
         if (containsFailedQualitySignal(qualitySignals)) {
@@ -1343,28 +1356,53 @@ public class QualityReviewAgent extends BaseAgent {
         if (section == null || section.isBlank()) {
             return null;
         }
-        if (section.contains("定价")) {
-            return "定价策略";
+        if (StageOneFirstReportPolicy.isGeneratedReportSection(section)) {
+            return null;
         }
-        if (section.contains("功能")) {
-            return "核心能力";
+        String fieldName = StageOneFirstReportPolicy.fieldForSection(section);
+        if (fieldName == null || fieldName.isBlank()) {
+            return null;
         }
-        if (section.contains("定位")) {
-            return "市场定位";
-        }
-        if (section.contains("用户")) {
-            return "目标用户";
-        }
-        if (section.contains("优势")) {
-            return "优势判断";
-        }
-        if (section.contains("风险") || section.contains("不足")) {
-            return "短板与风险";
-        }
-        if (section.contains("结论")) {
-            return "产品概览";
+        for (CoverageFieldRule rule : COVERAGE_FIELD_RULES) {
+            if (rule.fieldName().equalsIgnoreCase(fieldName)) {
+                return rule.sectionTitle();
+            }
         }
         return null;
+    }
+
+    /**
+     * structured evidence 的严重度不能再由 Reviewer 独立硬编码。
+     * 这里必须先回到阶段1首报 scope，再结合 coverage hint 判断：
+     * - CORE 且 coverage 未过线：ERROR，可阻断；
+     * - CORE 但 coverage 已 TRACEABLE/STRUCTURED_BLOCK_DIRECT：WARNING；
+     * - ENHANCEMENT / GENERATED / UNKNOWN_AUDIT：WARNING，仅保留审计或改写提示。
+     */
+    private String resolveStructuredEvidenceSeverity(String section, CoverageSnapshot coverageSnapshot) {
+        StageOneFirstReportPolicy.FirstReportIssueScope issueScope = classifyStructuredEvidenceIssueScope(section);
+        if (issueScope != StageOneFirstReportPolicy.FirstReportIssueScope.CORE) {
+            return "WARNING";
+        }
+        return isStructuredEvidenceBlocking(section, coverageSnapshot) ? "ERROR" : "WARNING";
+    }
+
+    private boolean isStructuredEvidenceBlocking(String section, CoverageSnapshot coverageSnapshot) {
+        if (coverageSnapshot == null) {
+            return false;
+        }
+        String coverageHint = resolveStructuredCoverageHint(section, coverageSnapshot);
+        if (coverageHint == null || coverageHint.isBlank()) {
+            return false;
+        }
+        return !coverageHint.endsWith(":TRACEABLE") && !coverageHint.endsWith(":STRUCTURED_BLOCK_DIRECT");
+    }
+
+    private StageOneFirstReportPolicy.FirstReportIssueScope classifyStructuredEvidenceIssueScope(String section) {
+        return StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                section,
+                section,
+                StageOneFirstReportPolicy.fieldForSection(section)
+        ));
     }
 
     private boolean shouldDiagnoseStructuredEvidenceGap(List<String> qualitySignals,

@@ -4,6 +4,7 @@ import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.workflow.NodeExecutionRecoveryPolicy;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -56,6 +57,8 @@ public class TaskProgressSnapshot {
         int waitingInterventionNodeCount = 0;
         int compensatedNodeCount = 0;
         String currentStage = null;
+        boolean degradedDeliverable = status == AnalysisTaskStatus.SUCCESS
+                && new NodeExecutionRecoveryPolicy().isStageOneDegradedDeliverable(nodes);
 
         for (TaskNode node : nodes) {
             if (isActiveStatus(node.getStatus())) {
@@ -80,7 +83,7 @@ public class TaskProgressSnapshot {
         }
 
         if (currentStage == null) {
-            currentStage = deriveDefaultStage(status, nodes);
+            currentStage = deriveDefaultStage(status, nodes, degradedDeliverable);
         }
 
         return TaskProgressSnapshot.builder()
@@ -88,7 +91,11 @@ public class TaskProgressSnapshot {
                 .taskStatus(status.name())
                 .currentStage(currentStage)
                 .errorMessage(errorMessage)
-                .statusSummary(buildStatusSummary(waitingRetryNodeCount, waitingInterventionNodeCount, compensatedNodeCount))
+                .statusSummary(buildStatusSummary(
+                        waitingRetryNodeCount,
+                        waitingInterventionNodeCount,
+                        compensatedNodeCount,
+                        degradedDeliverable))
                 .totalNodes(nodes.size())
                 .completedNodes(completedNodes)
                 .waitingRetryNodeCount(waitingRetryNodeCount)
@@ -121,7 +128,10 @@ public class TaskProgressSnapshot {
                 || status == TaskNodeStatus.COMPENSATED;
     }
 
-    private static String deriveDefaultStage(AnalysisTaskStatus status, List<TaskNode> nodes) {
+    private static String deriveDefaultStage(AnalysisTaskStatus status, List<TaskNode> nodes, boolean degradedDeliverable) {
+        if (degradedDeliverable) {
+            return "\u9636\u6bb51\u964d\u7ea7\u53ef\u4ea4\u4ed8\uff0c\u5efa\u8bae\u4eba\u5de5\u590d\u6838";
+        }
         for (TaskNode node : nodes) {
             if (node.getStatus() == TaskNodeStatus.WAITING_INTERVENTION || node.getStatus() == TaskNodeStatus.PAUSED) {
                 return readableStageName(node) + "：等待人工处理";
@@ -149,7 +159,11 @@ public class TaskProgressSnapshot {
 
     private static String buildStatusSummary(int waitingRetryNodeCount,
                                              int waitingInterventionNodeCount,
-                                             int compensatedNodeCount) {
+                                             int compensatedNodeCount,
+                                             boolean degradedDeliverable) {
+        if (degradedDeliverable) {
+            return "\u9636\u6bb51\u964d\u7ea7\u53ef\u4ea4\u4ed8\uff0c\u5efa\u8bae\u4eba\u5de5\u590d\u6838\u540e\u4f7f\u7528";
+        }
         if (waitingInterventionNodeCount > 0) {
             return "存在等待人工处理的节点";
         }

@@ -93,6 +93,9 @@ public class CollectorAgent extends BaseAgent {
     private static final long DOCS_COLLECTOR_HARD_DEADLINE_MILLIS = 150_000L;
     private static final long REVIEW_COLLECTOR_HARD_DEADLINE_MILLIS = 120_000L;
     private static final long DEFAULT_COLLECTOR_HARD_DEADLINE_MILLIS = 120_000L;
+    // hard deadline 到点后给不可中断的 Playwright / HTTP 采集一个短暂交接窗口，
+    // 用于吸收已经快完成的正文或正式 collection report，避免“采到了但节点已关门”的证据丢失。
+    private static final long DEADLINE_DRAIN_GRACE_MILLIS = 30_000L;
 
     private final SourceCollector sourceCollector;
     private final EvidenceSourceRepository evidenceRepository;
@@ -921,13 +924,22 @@ public class CollectorAgent extends BaseAgent {
                 .filter(this::shouldExecuteThroughCoordinatorInRecursiveMode)
                 .toList();
         CollectionExecutionReport collectionReport;
+        boolean collectionHardDeadlineReached = false;
         try {
-            collectionReport = executeCollectionCoordinatorWithinHardDeadline(
+            CollectionDeadlineResult collectionDeadlineResult = executeCollectionCoordinatorWithinHardDeadline(
                     context,
                     config,
                     executableTargets,
                     collectorHardDeadlineEpochMillis
             );
+            collectionReport = collectionDeadlineResult.report();
+            if (collectionDeadlineResult.hardDeadlineReached()) {
+                collectionHardDeadlineReached = true;
+                searchExecutionResult = markSearchExecutionResultAsHardDeadlineReached(
+                        searchExecutionResult,
+                        collectorHardDeadlineEpochMillis
+                );
+            }
         } catch (TimeoutException e) {
             SearchExecutionResult deadlineMarkedSearchResult = markSearchExecutionResultAsHardDeadlineReached(
                     searchExecutionResult,
@@ -1102,6 +1114,22 @@ public class CollectorAgent extends BaseAgent {
         try {
             boolean hasFormalSelectedTargets = hasFormalSelectedTargets(targets);
             if (successCounterRef[0] == 0) {
+                if (collectionHardDeadlineReached || isHardDeadlineReached(searchExecutionResult)) {
+                    return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
+                            buildCollectorHardDeadlineResult(
+                                    context,
+                                    config,
+                                    sourceType,
+                                    searchExecutionResult,
+                                    executionPlan,
+                                    collectionReport,
+                                    progressSnapshots,
+                                    results,
+                                    successCounterRef[0],
+                                    targets,
+                                    fieldEvidenceLoopRounds
+                            ));
+                }
                 markCollectStep(executionPlan, SearchExecutionStep.StepStatus.FAILED, "未采集到可用页面内容");
                 progressSnapshots.add(buildProgressSnapshot(executionPlan,
                         "COLLECT_PAGES",
@@ -1154,7 +1182,9 @@ public class CollectorAgent extends BaseAgent {
                     config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, collectionReport,
                     progressSnapshots, results, successCounterRef[0], targets, fieldEvidenceLoopRounds);
             return AgentResult.builder()
-                    .status(TaskNodeStatus.SUCCESS)
+                    .status(isHardDeadlineReached(searchExecutionResult)
+                            ? TaskNodeStatus.SUCCESS_DEGRADED
+                            : TaskNodeStatus.SUCCESS)
                     .outputData(outputJson)
                     .outputSummary("已完成 " + config.getCompetitorName() + " 的 " + sourceType + " 采集，可用来源 "
                             + successCounterRef[0] + "/" + results.size() + " 条")
@@ -1751,6 +1781,10 @@ public class CollectorAgent extends BaseAgent {
         return DEFAULT_COLLECTOR_HARD_DEADLINE_MILLIS;
     }
 
+    long resolveCollectorDeadlineDrainGraceMillis(CollectorNodeConfig config, String sourceType) {
+        return DEADLINE_DRAIN_GRACE_MILLIS;
+    }
+
     private long resolveCollectorHardDeadlineEpochMillis(CollectorNodeConfig config, String sourceType) {
         long timeoutMillis = resolveCollectorHardDeadlineMillis(config, sourceType);
         if (timeoutMillis <= 0L) {
@@ -1790,6 +1824,15 @@ public class CollectorAgent extends BaseAgent {
         try {
             return future.get(remainingMillis, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
+            SearchExecutionResult drainedResult = drainSearchResultAfterHardDeadline(
+                    future,
+                    config,
+                    sourceType,
+                    collectorHardDeadlineEpochMillis
+            );
+            if (drainedResult != null) {
+                return drainedResult;
+            }
             future.cancel(true);
             throw e;
         } catch (InterruptedException e) {
@@ -1805,6 +1848,35 @@ public class CollectorAgent extends BaseAgent {
             throw new IllegalStateException("collector search failed", cause);
         } finally {
             executorService.shutdownNow();
+        }
+    }
+
+    private SearchExecutionResult drainSearchResultAfterHardDeadline(Future<SearchExecutionResult> future,
+                                                                     CollectorNodeConfig config,
+                                                                     String sourceType,
+                                                                     long collectorHardDeadlineEpochMillis) {
+        long graceMillis = resolveCollectorDeadlineDrainGraceMillis(config, sourceType);
+        if (graceMillis <= 0L) {
+            return null;
+        }
+        try {
+            // 搜索阶段内部也可能已经完成了候选验证或 Playwright 预取。
+            // 若这些结果在短暂交接窗口内返回，就保留证据并显式标记 HARD_DEADLINE_REACHED。
+            SearchExecutionResult result = future.get(graceMillis, TimeUnit.MILLISECONDS);
+            return markSearchExecutionResultAsHardDeadlineReached(result, collectorHardDeadlineEpochMillis);
+        } catch (TimeoutException ignored) {
+            return null;
+        } catch (InterruptedException e) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("collector search interrupted while draining hard deadline result", e);
+        } catch (ExecutionException e) {
+            future.cancel(true);
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("collector search failed while draining hard deadline result", cause);
         }
     }
 
@@ -1905,10 +1977,10 @@ public class CollectorAgent extends BaseAgent {
         return values == null ? List.of() : values;
     }
 
-    private CollectionExecutionReport executeCollectionCoordinatorWithinHardDeadline(AgentContext context,
-                                                                                     CollectorNodeConfig config,
-                                                                                     List<SearchCollectionTarget> targets,
-                                                                                     long collectorHardDeadlineEpochMillis) throws TimeoutException {
+    private CollectionDeadlineResult executeCollectionCoordinatorWithinHardDeadline(AgentContext context,
+                                                                                   CollectorNodeConfig config,
+                                                                                   List<SearchCollectionTarget> targets,
+                                                                                   long collectorHardDeadlineEpochMillis) throws TimeoutException {
         long remainingMillis = resolveRemainingCollectorHardDeadlineMillis(collectorHardDeadlineEpochMillis);
         if (remainingMillis <= 0L) {
             throw new TimeoutException(HARD_DEADLINE_REACHED);
@@ -1923,8 +1995,16 @@ public class CollectorAgent extends BaseAgent {
                 config.getCollectionAuditCheckpoint()
         ));
         try {
-            return future.get(remainingMillis, TimeUnit.MILLISECONDS);
+            return new CollectionDeadlineResult(future.get(remainingMillis, TimeUnit.MILLISECONDS), false);
         } catch (TimeoutException e) {
+            CollectionExecutionReport drainedReport = drainCollectionReportAfterHardDeadline(
+                    future,
+                    config,
+                    collectorHardDeadlineEpochMillis
+            );
+            if (drainedReport != null) {
+                return new CollectionDeadlineResult(drainedReport, true);
+            }
             future.cancel(true);
             throw e;
         } catch (InterruptedException e) {
@@ -1940,6 +2020,36 @@ public class CollectorAgent extends BaseAgent {
             throw new IllegalStateException("collector execution failed", cause);
         } finally {
             executorService.shutdownNow();
+        }
+    }
+
+    private CollectionExecutionReport drainCollectionReportAfterHardDeadline(Future<CollectionExecutionReport> future,
+                                                                             CollectorNodeConfig config,
+                                                                             long collectorHardDeadlineEpochMillis) {
+        long graceMillis = resolveCollectorDeadlineDrainGraceMillis(
+                config,
+                config == null ? null : config.getSourceType()
+        );
+        if (graceMillis <= 0L) {
+            return null;
+        }
+        try {
+            // collection 阶段超线后先尝试回收已完成的正式 report。
+            // grace 仍未返回时才取消，防止长尾节点继续拖住 DAG。
+            return future.get(graceMillis, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException ignored) {
+            return null;
+        } catch (InterruptedException e) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("collector execution interrupted while draining hard deadline result", e);
+        } catch (ExecutionException e) {
+            future.cancel(true);
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("collector execution failed while draining hard deadline result", cause);
         }
     }
 
@@ -2098,6 +2208,19 @@ public class CollectorAgent extends BaseAgent {
         return searchExecutionResult != null
                 && searchExecutionResult.getSelectedTargets() != null
                 && !searchExecutionResult.getSelectedTargets().isEmpty();
+    }
+
+    private boolean isHardDeadlineReached(SearchExecutionResult searchExecutionResult) {
+        return searchExecutionResult != null
+                && searchExecutionResult.getExecutionTrace() != null
+                && HARD_DEADLINE_REACHED.equals(searchExecutionResult.getExecutionTrace().getDegradationReason());
+    }
+
+    /**
+     * collection future 的返回结果与是否已经越过 hard deadline 需要一起传递。
+     * 这样即使 grace 窗口内拿到了正式证据，节点也会保持降级语义，而不是伪装成普通 SUCCESS。
+     */
+    private record CollectionDeadlineResult(CollectionExecutionReport report, boolean hardDeadlineReached) {
     }
 
     private List<String> resolveDegradationReasons(SearchExecutionTrace executionTrace) {

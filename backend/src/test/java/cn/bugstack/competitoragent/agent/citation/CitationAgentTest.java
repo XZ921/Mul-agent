@@ -86,7 +86,7 @@ class CitationAgentTest {
                 .build();
         context.putSharedOutput("write_report", """
                 {
-                  "content": "## 行动建议\\n建议优先学习 Notion AI 的企业权限设计。"
+                  "content": "## 核心功能\\nNotion AI 的核心能力应该覆盖企业级工作区 AI 协作。"
                 }
                 """);
 
@@ -111,7 +111,7 @@ class CitationAgentTest {
                 .build();
         context.putSharedOutput("write_report", """
                 {
-                  "content": "## 结论\\nNotion AI 在企业知识管理场景中更适合作为统一工作台。[证据：E999]"
+                  "content": "## 核心功能\\nNotion AI 提供统一工作台能力。[证据：E999]"
                 }
                 """);
 
@@ -121,5 +121,49 @@ class CitationAgentTest {
         assertEquals("SUCCESS", result.getStatus().name());
         assertEquals("UNKNOWN_EVIDENCE_ID", output.path("citationIssues").get(0).path("issueType").asText());
         assertEquals("MISSING_SOURCE", output.path("citationIssues").get(0).path("evidenceState").asText());
+    }
+
+    @Test
+    void shouldExcludeOptionalAndGeneratedClaimsFromInternalDeliveryCoverageRate() throws Exception {
+        when(evidenceSourceRepository.findByTaskIdOrderByEvidenceIdAsc(4L)).thenReturn(List.of(
+                EvidenceSource.builder()
+                        .taskId(4L)
+                        .competitorName("Notion AI")
+                        .evidenceId("E001")
+                        .title("Product Overview")
+                        .url("https://www.notion.so/product/ai")
+                        .sourceDomain("www.notion.so")
+                        .sourceType("OFFICIAL")
+                        .sourceCategory("OFFICIAL")
+                        .sourceScore(0.93)
+                        .contentSnippet("Notion AI provides workspace intelligence features.")
+                        .build()
+        ));
+
+        AgentContext context = AgentContext.builder()
+                .taskId(4L)
+                .taskName("citation-stage1-delivery-scope")
+                .analysisDimensions("[\"产品概述\",\"市场定位\",\"目标用户\",\"核心功能\",\"价格策略\"]")
+                .currentNodeName("citation_check")
+                .currentNodeConfig("{\"sourceNode\":\"write_report\",\"minCoverageRate\":0.85}")
+                .build();
+        context.putSharedOutput("write_report", """
+                {
+                  "content": "## 核心功能\\nNotion AI 提供统一工作台能力。[证据：E001]\\n\\n## 定价策略\\nNotion AI 企业版适合大团队采购。[证据：E999]\\n\\n## 报告结论\\n建议优先评估 Notion AI 作为统一工作台。",
+                  "sourceUrls": ["https://www.notion.so/product/ai", "https://www.notion.so/pricing"]
+                }
+                """);
+
+        AgentResult result = agent.execute(context);
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS", result.getStatus().name());
+        assertTrue(output.path("citationCoverageRate").asDouble() < 1.0d, result.getOutputData());
+        assertTrue(output.path("citationCoverageRate").asDouble() > 0.0d, result.getOutputData());
+        assertTrue(!"ERROR".equals(output.path("citationRiskSeverity").asText()), result.getOutputData());
+        assertTrue(!"MISSING_SOURCE".equals(output.path("citationEvidenceState").asText()), result.getOutputData());
+        assertTrue(output.path("issueFlags").toString().contains("STAGE1_DELIVERY_CITATION_READY"), result.getOutputData());
+        assertTrue(output.path("issueFlags").toString().contains("OPTIONAL_CITATION_GAP"), result.getOutputData());
+        assertTrue(output.path("issueFlags").toString().contains("GENERATED_SECTION_REWRITE_ONLY"), result.getOutputData());
     }
 }

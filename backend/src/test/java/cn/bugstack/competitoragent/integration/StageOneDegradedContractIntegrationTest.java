@@ -216,6 +216,237 @@ class StageOneDegradedContractIntegrationTest {
      * 杩欓噷鏄惧紡鏋勯€犲彧鏈夊寮哄瓧娈电己鍙ｇ殑鎶ュ憡锛?
      * 鐢ㄦ潵楠岃瘉 stage1 degraded ready 鐪熸鍙彈鏍稿績瀛楁鍜屽彲杩芥函绾㈢嚎绾︽潫銆?
      */
+    @Test
+    void shouldDeliverDegradedReadyWhenCoreTraceableButOptionalAndGeneratedCitationGapsExist() throws Exception {
+        Long taskId = 1901L;
+        AnalysisTask task = downstreamContractTask(taskId, "stage1-degraded-downstream-positive");
+        List<TaskNode> nodes = List.of(
+                stageOneWriterNode(taskId, 19011L),
+                stageOneReviewNode(taskId, 19012L, """
+                        {
+                          "passed": false,
+                          "requiresHumanIntervention": true,
+                          "diagnoses": [
+                            {
+                              "type":"MISSING_STRUCTURED_EVIDENCE",
+                              "section":"generic",
+                              "severity":"ERROR",
+                              "level":"BLOCKER",
+                              "evidenceBasis":"MISSING_STRUCTURED_EVIDENCE:TRACEABLE"
+                            },
+                            {
+                              "type":"MISSING_CITATION",
+                              "section":"pricing",
+                              "severity":"ERROR",
+                              "level":"BLOCKER",
+                              "evidenceBasis":"pricing still needs per-claim citations"
+                            },
+                            {
+                              "type":"MISSING_CITATION",
+                              "section":"strengths",
+                              "severity":"ERROR",
+                              "level":"BLOCKER",
+                              "evidenceBasis":"strengths remain audit-only in stage1"
+                            },
+                            {
+                              "type":"MISSING_CITATION",
+                              "section":"weaknesses",
+                              "severity":"ERROR",
+                              "level":"BLOCKER",
+                              "evidenceBasis":"weaknesses remain audit-only in stage1"
+                            },
+                            {
+                              "type":"MISSING_CITATION",
+                              "section":"report_conclusion",
+                              "severity":"ERROR",
+                              "level":"BLOCKER",
+                              "evidenceBasis":"report conclusion should stay rewrite-only in stage1"
+                            }
+                          ]
+                        }
+                        """),
+                skippedRewriteNode(taskId, 19013L)
+        );
+
+        TaskResponse taskResponse = newTaskNodeViewAssembler().toTaskResponse(task, nodes);
+        assertThat(taskResponse.getStatus()).isEqualTo(AnalysisTaskStatus.SUCCESS);
+        assertThat(taskResponse.getCanViewReport()).isTrue();
+        assertThat(taskResponse.getStatusSummary()).contains("\u964d\u7ea7").contains("\u4eba\u5de5\u590d\u6838");
+        assertThat(taskResponse.getInterventionSummary()).contains("\u4eba\u5de5\u590d\u6838");
+
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        ReportService reportService = newReportService(nodeRepository);
+        List<ReportResponse.EvidenceInfo> evidenceInfos = List.of(
+                traceableEvidence("E1901-1", "https://www.notion.so/product/ai", "OFFICIAL", "www.notion.so"),
+                traceableEvidence("E1901-2", "https://www.notion.so/security", "DOCS", "www.notion.so"),
+                traceableEvidence("E1901-3", "https://docs.notion.so/ai", "DOCS", "docs.notion.so"),
+                traceableEvidence("E1901-4", "https://www.airtable.com/product", "OFFICIAL", "www.airtable.com"),
+                traceableEvidence("E1901-5", "https://support.airtable.com/docs/airtable-ai-overview", "DOCS", "support.airtable.com"),
+                traceableEvidence("E1901-6", "https://www.g2.com/products/airtable/reviews", "REVIEW", "www.g2.com")
+        );
+        stubReportDependencies(
+                reportService,
+                nodeRepository,
+                taskId,
+                nodes,
+                downstreamContractReport(taskId, 65, false, """
+                        [
+                          {
+                            "type":"MISSING_STRUCTURED_EVIDENCE",
+                            "section":"generic",
+                            "severity":"ERROR",
+                            "level":"BLOCKER",
+                            "evidenceBasis":"MISSING_STRUCTURED_EVIDENCE:TRACEABLE",
+                            "sourceUrls":["https://docs.notion.so/ai"],
+                            "suggestion":"keep audit visibility only"
+                          },
+                          {
+                            "type":"MISSING_CITATION",
+                            "section":"pricing",
+                            "severity":"ERROR",
+                            "level":"BLOCKER",
+                            "evidenceBasis":"pricing still needs per-claim citations",
+                            "sourceUrls":["https://www.notion.so/pricing"],
+                            "suggestion":"supplement pricing citations later"
+                          },
+                          {
+                            "type":"MISSING_CITATION",
+                            "section":"strengths",
+                            "severity":"ERROR",
+                            "level":"BLOCKER",
+                            "evidenceBasis":"strengths remain audit-only in stage1",
+                            "sourceUrls":["https://www.g2.com/products/airtable/reviews"],
+                            "suggestion":"keep strengths as audit signal"
+                          },
+                          {
+                            "type":"MISSING_CITATION",
+                            "section":"weaknesses",
+                            "severity":"ERROR",
+                            "level":"BLOCKER",
+                            "evidenceBasis":"weaknesses remain audit-only in stage1",
+                            "sourceUrls":["https://www.g2.com/products/airtable/reviews"],
+                            "suggestion":"keep weaknesses as audit signal"
+                          },
+                          {
+                            "type":"MISSING_CITATION",
+                            "section":"report_conclusion",
+                            "severity":"ERROR",
+                            "level":"BLOCKER",
+                            "evidenceBasis":"report conclusion should stay rewrite-only in stage1",
+                            "sourceUrls":["https://www.notion.so/product/ai"],
+                            "suggestion":"rewrite conclusion conservatively"
+                          }
+                        ]
+                        """, evidenceInfos.size()),
+                evidenceInfos);
+
+        ReportResponse reportResponse = reportService.getReport(taskId);
+
+        assertThat(reportResponse.getQualityScore()).isGreaterThanOrEqualTo(60);
+        assertThat(reportResponse.isQualityPassed()).isFalse();
+        assertThat(reportResponse.getDeliverySummary()).isNotNull();
+        assertThat(reportResponse.getDeliverySummary().getReadyForDelivery()).isTrue();
+        assertThat(reportResponse.getDeliverySummary().getDeliveryStatus()).isEqualTo("DEGRADED_READY");
+        assertThat(reportResponse.getDeliverySummary().getBlockerCount()).isZero();
+        assertThat(reportResponse.getDeliverySummary().getEvidenceGapCount()).isZero();
+        assertThat(reportResponse.getReportDiagnosis()).isNotNull();
+        assertThat(reportResponse.getReportDiagnosis().getBlockerCount()).isZero();
+        assertThat(reportResponse.getReportDiagnosis().getEvidenceGapCount()).isZero();
+        assertThat(reportResponse.getSourceUrls()).hasSizeGreaterThanOrEqualTo(5);
+        assertThat(reportResponse.getWriterEvidenceSummary()).isNotNull();
+        assertThat(reportResponse.getWriterEvidenceSummary().getMissingCitationSections())
+                .contains("pricing", "strengths", "weaknesses", "conclusion", "report_conclusion");
+        assertThat(reportResponse.getWriterEvidenceSummary().getIssueFlags())
+                .contains("OPTIONAL_SECTION_CITATION_GAP", "GENERATED_SECTION_REWRITE_REQUIRED");
+    }
+
+    @Test
+    void shouldStillBlockWhenCoreTargetUsersNotTraceable() throws Exception {
+        Long taskId = 1902L;
+        AnalysisTask task = downstreamContractTask(taskId, "stage1-degraded-downstream-negative");
+        List<TaskNode> nodes = List.of(
+                stageOneWriterNode(taskId, 19021L),
+                stageOneReviewNode(taskId, 19022L, """
+                        {
+                          "passed": false,
+                          "requiresHumanIntervention": true,
+                          "diagnoses": [
+                            {
+                              "type":"MISSING_EVIDENCE",
+                              "section":"targetUsers",
+                              "severity":"ERROR",
+                              "level":"BLOCKER",
+                              "evidenceBasis":"targetUsers evidence is not traceable yet"
+                            },
+                            {
+                              "type":"MISSING_CITATION",
+                              "section":"pricing",
+                              "severity":"ERROR",
+                              "level":"BLOCKER",
+                              "evidenceBasis":"pricing still needs per-claim citations"
+                            }
+                          ]
+                        }
+                        """),
+                skippedRewriteNode(taskId, 19023L)
+        );
+
+        TaskResponse taskResponse = newTaskNodeViewAssembler().toTaskResponse(task, nodes);
+        assertThat(taskResponse.getStatus()).isEqualTo(AnalysisTaskStatus.STOPPED);
+        assertThat(taskResponse.getInterventionSummary()).doesNotContain("\u964d\u7ea7");
+
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        ReportService reportService = newReportService(nodeRepository);
+        List<ReportResponse.EvidenceInfo> evidenceInfos = List.of(
+                traceableEvidence("E1902-1", "https://www.notion.so/product/ai", "OFFICIAL", "www.notion.so"),
+                traceableEvidence("E1902-2", "https://www.notion.so/security", "DOCS", "www.notion.so"),
+                traceableEvidence("E1902-3", "https://docs.notion.so/ai", "DOCS", "docs.notion.so"),
+                traceableEvidence("E1902-4", "https://www.airtable.com/product", "OFFICIAL", "www.airtable.com"),
+                traceableEvidence("E1902-5", "https://support.airtable.com/docs/airtable-ai-overview", "DOCS", "support.airtable.com"),
+                traceableEvidence("E1902-6", "https://www.g2.com/products/airtable/reviews", "REVIEW", "www.g2.com")
+        );
+        stubReportDependencies(
+                reportService,
+                nodeRepository,
+                taskId,
+                nodes,
+                downstreamContractReport(taskId, 63, false, """
+                        [
+                          {
+                            "type":"MISSING_EVIDENCE",
+                            "section":"targetUsers",
+                            "severity":"ERROR",
+                            "level":"BLOCKER",
+                            "evidenceBasis":"targetUsers evidence is not traceable yet",
+                            "sourceUrls":["https://www.airtable.com/product"],
+                            "suggestion":"supplement targetUsers evidence before delivery"
+                          },
+                          {
+                            "type":"MISSING_CITATION",
+                            "section":"pricing",
+                            "severity":"ERROR",
+                            "level":"BLOCKER",
+                            "evidenceBasis":"pricing still needs per-claim citations",
+                            "sourceUrls":["https://www.notion.so/pricing"],
+                            "suggestion":"supplement pricing citations later"
+                          }
+                        ]
+                        """, evidenceInfos.size()),
+                evidenceInfos);
+
+        ReportResponse reportResponse = reportService.getReport(taskId);
+
+        assertThat(reportResponse.getQualityScore()).isGreaterThanOrEqualTo(60);
+        assertThat(reportResponse.getDeliverySummary()).isNotNull();
+        assertThat(reportResponse.getDeliverySummary().getDeliveryStatus()).isNotEqualTo("DEGRADED_READY");
+        assertThat(reportResponse.getDeliverySummary().getBlockerCount()).isGreaterThan(0);
+        assertThat(reportResponse.getReportDiagnosis()).isNotNull();
+        assertThat(reportResponse.getReportDiagnosis().getBlockerCount()).isGreaterThan(0);
+        assertThat(reportResponse.getReportDiagnosis().getSections())
+                .extracting(ReportResponse.DiagnosisSection::getSection)
+                .contains("targetUsers");
+    }
+
     private Report degradedCandidateReport(Long taskId, int evidenceCount, String deferredSourceUrl) {
         return Report.builder()
                 .id(taskId)
@@ -238,6 +469,153 @@ class StageOneDegradedContractIntegrationTest {
                           }
                         ]
                         """.formatted(deferredSourceUrl))
+                .evidenceCount(evidenceCount)
+                .build();
+    }
+
+    /**
+     * Task 6 复现夹具同时校验任务视图和报告视图，因此这里保留双竞品、阶段1模板和分析维度快照。
+     * 一旦后续有人把这些输入从任务主对象上裁掉，集成测试会直接暴露契约回退。
+     */
+    private AnalysisTask downstreamContractTask(Long taskId, String taskName) {
+        return AnalysisTask.builder()
+                .id(taskId)
+                .taskName(taskName)
+                .status(AnalysisTaskStatus.RUNNING)
+                .competitorNames("[\"Notion\",\"Airtable\"]")
+                .competitorUrls("[\"https://www.notion.so\",\"https://www.airtable.com\"]")
+                .analysisDimensions("[\"产品概述\",\"市场定位\",\"目标用户\",\"核心功能\",\"价格策略\"]")
+                .reportTemplate("阶段1首报")
+                .build();
+    }
+
+    /**
+     * Writer 节点显式保留 sourceUrls、缺口章节和 issue flags，
+     * 这样 ReportService 才能验证“降级可交付但仍需人工复核”的写作快照没有在下游丢失。
+     */
+    private TaskNode stageOneWriterNode(Long taskId, Long nodeId) {
+        return TaskNode.builder()
+                .id(nodeId)
+                .taskId(taskId)
+                .nodeName("write_report")
+                .displayName("write_report")
+                .agentType(AgentType.WRITER)
+                .status(TaskNodeStatus.SUCCESS)
+                .executionOrder(3)
+                .outputData("""
+                        {
+                          "content":"# Stage1 Report\\nNotion vs Airtable",
+                          "writerEvidenceState":"PARTIAL_SOURCE",
+                          "citationGapSeverity":"HIGH",
+                          "missingCitationSections":[
+                            "pricing",
+                            "strengths",
+                            "weaknesses",
+                            "conclusion",
+                            "report_conclusion"
+                          ],
+                          "issueFlags":[
+                            "OPTIONAL_SECTION_CITATION_GAP",
+                            "GENERATED_SECTION_REWRITE_REQUIRED"
+                          ],
+                          "sectionCitationGaps":[
+                            {
+                              "targetSection":"pricing",
+                              "sectionTitle":"pricing",
+                              "summary":"pricing still needs citations",
+                              "severity":"HIGH",
+                              "evidenceState":"PARTIAL_SOURCE",
+                              "sourceUrls":["https://www.notion.so/pricing"],
+                              "missingFields":["pricing"],
+                              "suggestedQueries":["Notion pricing", "Airtable pricing"]
+                            },
+                            {
+                              "targetSection":"strengths",
+                              "sectionTitle":"strengths",
+                              "summary":"strengths stay audit-only in stage1",
+                              "severity":"MEDIUM",
+                              "evidenceState":"PARTIAL_SOURCE",
+                              "sourceUrls":["https://www.g2.com/products/airtable/reviews"],
+                              "missingFields":["strengths"],
+                              "suggestedQueries":["Airtable strengths"]
+                            },
+                            {
+                              "targetSection":"weaknesses",
+                              "sectionTitle":"weaknesses",
+                              "summary":"weaknesses stay audit-only in stage1",
+                              "severity":"MEDIUM",
+                              "evidenceState":"PARTIAL_SOURCE",
+                              "sourceUrls":["https://www.g2.com/products/airtable/reviews"],
+                              "missingFields":["weaknesses"],
+                              "suggestedQueries":["Airtable weaknesses"]
+                            },
+                            {
+                              "targetSection":"report_conclusion",
+                              "sectionTitle":"report_conclusion",
+                              "summary":"report conclusion should be rewritten conservatively",
+                              "severity":"HIGH",
+                              "evidenceState":"REWRITE_ONLY",
+                              "sourceUrls":["https://www.notion.so/product/ai"],
+                              "missingFields":["report_conclusion"],
+                              "suggestedQueries":["Notion conclusion evidence"]
+                            }
+                          ],
+                          "sourceUrls":[
+                            "https://www.notion.so/product/ai",
+                            "https://www.notion.so/security",
+                            "https://docs.notion.so/ai",
+                            "https://www.airtable.com/product",
+                            "https://support.airtable.com/docs/airtable-ai-overview",
+                            "https://www.g2.com/products/airtable/reviews"
+                          ]
+                        }
+                        """)
+                .build();
+    }
+
+    private TaskNode stageOneReviewNode(Long taskId, Long nodeId, String outputData) {
+        return TaskNode.builder()
+                .id(nodeId)
+                .taskId(taskId)
+                .nodeName("quality_check")
+                .displayName("quality_check")
+                .agentType(AgentType.REVIEWER)
+                .status(TaskNodeStatus.SUCCESS)
+                .executionOrder(4)
+                .outputData(outputData)
+                .build();
+    }
+
+    private TaskNode skippedRewriteNode(Long taskId, Long nodeId) {
+        return TaskNode.builder()
+                .id(nodeId)
+                .taskId(taskId)
+                .nodeName("rewrite_report")
+                .displayName("rewrite_report")
+                .agentType(AgentType.WRITER)
+                .status(TaskNodeStatus.SKIPPED)
+                .executionOrder(5)
+                .build();
+    }
+
+    /**
+     * 报告实体继续沿用双轴语义：
+     * qualityScore 已过阶段1下限，但 qualityPassed 仍为 false，只能通过 DEGRADED_READY 对外表达。
+     */
+    private Report downstreamContractReport(Long taskId,
+                                            int qualityScore,
+                                            boolean qualityPassed,
+                                            String qualityIssues,
+                                            int evidenceCount) {
+        return Report.builder()
+                .id(taskId)
+                .taskId(taskId)
+                .title("stage1 downstream contract report")
+                .content("# Report")
+                .summary("stage1 downstream contract summary")
+                .qualityScore(qualityScore)
+                .qualityPassed(qualityPassed)
+                .qualityIssues(qualityIssues)
                 .evidenceCount(evidenceCount)
                 .build();
     }

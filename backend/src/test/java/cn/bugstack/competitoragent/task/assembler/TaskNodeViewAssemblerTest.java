@@ -263,6 +263,57 @@ class TaskNodeViewAssemblerTest {
         assertThat(response.getOutputSummary()).contains("降级原因=HARD_DEADLINE_REACHED");
     }
 
+    @Test
+    void shouldDescribeSuccessTaskAsDegradedReadyWhenOnlyDeferredIssuesRemain() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(63L)
+                .status(AnalysisTaskStatus.SUCCESS)
+                .build();
+        TaskNode writerNode = node("write_report", AgentType.WRITER, TaskNodeStatus.SUCCESS, 3);
+        writerNode.setOutputData("""
+                {
+                  "content":"# Stage1 Report",
+                  "sourceUrls": [
+                    "https://www.notion.so/product/ai",
+                    "https://www.notion.so/security",
+                    "https://docs.notion.so/ai",
+                    "https://docs.notion.so/admins",
+                    "https://www.g2.com/products/notion-ai/reviews"
+                  ]
+                }
+                """);
+        TaskNode reviewNode = node("quality_check", AgentType.REVIEWER, TaskNodeStatus.SUCCESS, 4);
+        reviewNode.setOutputData("""
+                {
+                  "passed": false,
+                  "requiresHumanIntervention": true,
+                  "diagnoses": [
+                    {
+                      "type":"MISSING_CITATION",
+                      "section":"定价策略",
+                      "severity":"ERROR",
+                      "level":"BLOCKER",
+                      "evidenceBasis":"pricing 仍需补齐逐句引用"
+                    },
+                    {
+                      "type":"MISSING_CITATION",
+                      "section":"report_conclusion",
+                      "severity":"ERROR",
+                      "level":"BLOCKER",
+                      "evidenceBasis":"report_conclusion 仍需保守改写"
+                    }
+                  ]
+                }
+                """);
+
+        TaskResponse response = assembler.toTaskResponse(task, List.of(writerNode, reviewNode));
+
+        assertThat(response.getStatus()).isEqualTo(AnalysisTaskStatus.SUCCESS);
+        assertThat(response.getCanViewReport()).isTrue();
+        assertThat(response.getStatusSummary()).contains("降级").contains("人工复核");
+        assertThat(response.getInterventionSummary()).contains("人工复核");
+    }
+
     private TaskNode node(String nodeName, AgentType agentType, TaskNodeStatus status, int executionOrder) {
         return TaskNode.builder()
                 .taskId(56L)

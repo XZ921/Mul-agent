@@ -12,16 +12,19 @@ import cn.bugstack.competitoragent.workflow.contract.CitationCheckResult;
 import cn.bugstack.competitoragent.workflow.contract.CitationClaim;
 import cn.bugstack.competitoragent.workflow.contract.CitationIssue;
 import cn.bugstack.competitoragent.workflow.contract.CitationSourceTrustFinding;
+import cn.bugstack.competitoragent.workflow.coverage.StageOneFirstReportPolicy;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Citation Agent。
@@ -84,11 +87,19 @@ public class CitationAgent extends BaseAgent {
 
         int sensitiveClaims = 0;
         int supportedSensitiveClaims = 0;
+        int deliverySensitiveClaims = 0;
+        int supportedDeliverySensitiveClaims = 0;
         int issueIndex = 1;
         List<String> repairableSourceUrls = distinctTexts(writerOutputSnapshot.fallbackSourceUrls());
+        Set<String> normalizedRequestedDimensions = StageOneFirstReportPolicy.normalizeRequestedDimensions(
+                parseAnalysisDimensions(context.getAnalysisDimensions()));
+        boolean hasOptionalAuditGap = false;
+        boolean hasGeneratedAuditGap = false;
+        List<CitationIssue> deliveryBlockingIssues = new ArrayList<>();
 
         for (CitationClaim extractedClaim : citationClaimExtractor.extract(writerOutputSnapshot.reportContent())) {
             List<String> resolvedSourceUrls = new ArrayList<>();
+            List<String> unknownEvidenceIds = new ArrayList<>();
             boolean allEvidenceKnown = !extractedClaim.getEvidenceIds().isEmpty();
 
             // 证据编号查找必须只基于当前任务内已落库的 EvidenceSource，
@@ -97,11 +108,7 @@ public class CitationAgent extends BaseAgent {
                 EvidenceSource evidenceSource = evidenceById.get(evidenceId);
                 if (evidenceSource == null) {
                     allEvidenceKnown = false;
-                    citationIssues.add(buildUnknownEvidenceIssue(
-                            issueIndex++,
-                            extractedClaim,
-                            evidenceId,
-                            repairableSourceUrls));
+                    unknownEvidenceIds.add(evidenceId);
                     continue;
                 }
                 if (hasText(evidenceSource.getUrl())) {
@@ -115,9 +122,34 @@ public class CitationAgent extends BaseAgent {
                     .build()
                     .normalized();
             resolvedClaims.add(resolvedClaim);
+            StageOneFirstReportPolicy.FirstReportIssueScope issueScope = classifyClaimIssueScope(resolvedClaim);
+            boolean deliveryClaim = isStageOneDeliveryClaim(resolvedClaim, issueScope);
 
             if (resolvedClaim.isTraceabilitySensitive()) {
                 sensitiveClaims++;
+                if (deliveryClaim) {
+                    deliverySensitiveClaims++;
+                }
+            }
+
+            for (String unknownEvidenceId : unknownEvidenceIds) {
+                CitationIssue citationIssue = deliveryClaim
+                        ? buildUnknownEvidenceIssue(issueIndex++, resolvedClaim, unknownEvidenceId, repairableSourceUrls)
+                        : buildStageOneAuditIssue(
+                        issueIndex++,
+                        resolvedClaim,
+                        issueScope,
+                        normalizedRequestedDimensions,
+                        "UNKNOWN_EVIDENCE_ID",
+                        unknownEvidenceId,
+                        repairableSourceUrls);
+                citationIssues.add(citationIssue);
+                if (deliveryClaim) {
+                    deliveryBlockingIssues.add(citationIssue);
+                } else {
+                    hasOptionalAuditGap = hasOptionalAuditGap || issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.ENHANCEMENT;
+                    hasGeneratedAuditGap = hasGeneratedAuditGap || issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.GENERATED;
+                }
             }
 
             // 敏感判断句没有证据编号且也没有显式降级时，必须直接落成 MISSING_CITATION。
@@ -125,7 +157,23 @@ public class CitationAgent extends BaseAgent {
             if (resolvedClaim.isTraceabilitySensitive()
                     && resolvedClaim.getEvidenceIds().isEmpty()
                     && !resolvedClaim.isExplicitlyDowngraded()) {
-                citationIssues.add(buildMissingCitationIssue(issueIndex++, resolvedClaim, repairableSourceUrls));
+                CitationIssue citationIssue = deliveryClaim
+                        ? buildMissingCitationIssue(issueIndex++, resolvedClaim, repairableSourceUrls)
+                        : buildStageOneAuditIssue(
+                        issueIndex++,
+                        resolvedClaim,
+                        issueScope,
+                        normalizedRequestedDimensions,
+                        "MISSING_CITATION",
+                        null,
+                        repairableSourceUrls);
+                citationIssues.add(citationIssue);
+                if (deliveryClaim) {
+                    deliveryBlockingIssues.add(citationIssue);
+                } else {
+                    hasOptionalAuditGap = hasOptionalAuditGap || issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.ENHANCEMENT;
+                    hasGeneratedAuditGap = hasGeneratedAuditGap || issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.GENERATED;
+                }
                 continue;
             }
 
@@ -133,6 +181,9 @@ public class CitationAgent extends BaseAgent {
                     && !resolvedClaim.getEvidenceIds().isEmpty()
                     && allEvidenceKnown) {
                 supportedSensitiveClaims++;
+                if (deliveryClaim) {
+                    supportedDeliverySensitiveClaims++;
+                }
             }
         }
 
@@ -140,17 +191,24 @@ public class CitationAgent extends BaseAgent {
         // 一旦命中 LOW_TRUST，就把风险显式转成 CitationIssue，交给后续 Orchestrator 决定是阻断还是重写。
         for (CitationSourceTrustFinding trustFinding : trustFindings) {
             if ("LOW_TRUST".equals(trustFinding.getTrustTier())) {
-                citationIssues.add(buildLowTrustIssue(issueIndex++, trustFinding));
+                CitationIssue citationIssue = buildLowTrustIssue(issueIndex++, trustFinding);
+                citationIssues.add(citationIssue);
+                deliveryBlockingIssues.add(citationIssue);
             }
         }
 
         double citationCoverageRate = sensitiveClaims == 0
                 ? 1.0d
                 : ((double) supportedSensitiveClaims) / sensitiveClaims;
+        double deliveryCitationCoverageRate = deliverySensitiveClaims == 0
+                ? 1.0d
+                : ((double) supportedDeliverySensitiveClaims) / deliverySensitiveClaims;
 
         List<String> resultSourceUrls = collectResultSourceUrls(writerOutputSnapshot, taskEvidences, resolvedClaims, trustFindings);
-        String citationRiskSeverity = resolveRiskSeverity(citationIssues, citationCoverageRate, minCoverageRate);
-        String citationEvidenceState = resolveEvidenceState(citationIssues, citationCoverageRate, minCoverageRate, resultSourceUrls);
+        String citationRiskSeverity = resolveRiskSeverity(deliveryBlockingIssues, deliveryCitationCoverageRate, minCoverageRate);
+        String citationEvidenceState = resolveEvidenceState(deliveryBlockingIssues, deliveryCitationCoverageRate, minCoverageRate, resultSourceUrls);
+        boolean stageOneDeliveryCitationReady = deliveryBlockingIssues.isEmpty()
+                && deliveryCitationCoverageRate >= minCoverageRate;
 
         CitationCheckResult result = CitationCheckResult.builder()
                 .checkedSourceNode(sourceNode)
@@ -162,7 +220,12 @@ public class CitationAgent extends BaseAgent {
                 .sourceCredibilityFindings(trustFindings)
                 .sourceUrls(resultSourceUrls)
                 .evidenceState(citationEvidenceState)
-                .issueFlags(collectIssueFlags(citationIssues, trustFindings))
+                .issueFlags(collectIssueFlags(
+                        citationIssues,
+                        trustFindings,
+                        stageOneDeliveryCitationReady,
+                        hasOptionalAuditGap,
+                        hasGeneratedAuditGap))
                 .build()
                 .normalized();
 
@@ -280,6 +343,34 @@ public class CitationAgent extends BaseAgent {
                 .normalized();
     }
 
+    /**
+     * 阶段1增强字段与自动生成章节的 citation 缺口必须保留为可见审计，
+     * 但不再进入 delivery blocker 口径。
+     */
+    private CitationIssue buildStageOneAuditIssue(int issueIndex,
+                                                  CitationClaim claim,
+                                                  StageOneFirstReportPolicy.FirstReportIssueScope issueScope,
+                                                  Set<String> normalizedRequestedDimensions,
+                                                  String issueType,
+                                                  String evidenceId,
+                                                  List<String> repairableSourceUrls) {
+        List<String> sourceUrls = distinctTexts(repairableSourceUrls);
+        return CitationIssue.builder()
+                .issueId("ci-" + issueIndex)
+                .issueType(issueType)
+                .severity("WARNING")
+                .targetSection(defaultIfBlank(claim.getSectionKey(), "report"))
+                .claimId(claim.getClaimId())
+                .evidenceId(evidenceId)
+                .summary(buildStageOneAuditSummary(claim, issueScope, normalizedRequestedDimensions, issueType, evidenceId))
+                .sourceUrls(sourceUrls)
+                .evidenceState(resolveRepairableEvidenceState(sourceUrls))
+                .suggestedQueries(buildAuditSuggestedQueries(claim, issueType, evidenceId))
+                .issueFlags(buildStageOneAuditIssueFlags(issueScope))
+                .build()
+                .normalized();
+    }
+
     private CitationIssue buildLowTrustIssue(int issueIndex, CitationSourceTrustFinding trustFinding) {
         List<String> sourceUrls = trustFinding.getSourceUrls() == null ? List.of() : trustFinding.getSourceUrls();
         return CitationIssue.builder()
@@ -371,7 +462,10 @@ public class CitationAgent extends BaseAgent {
     }
 
     private List<String> collectIssueFlags(List<CitationIssue> citationIssues,
-                                           List<CitationSourceTrustFinding> trustFindings) {
+                                           List<CitationSourceTrustFinding> trustFindings,
+                                           boolean stageOneDeliveryCitationReady,
+                                           boolean hasOptionalAuditGap,
+                                           boolean hasGeneratedAuditGap) {
         LinkedHashSet<String> issueFlags = new LinkedHashSet<>();
         for (CitationIssue citationIssue : citationIssues) {
             issueFlags.addAll(citationIssue.getIssueFlags());
@@ -379,7 +473,117 @@ public class CitationAgent extends BaseAgent {
         for (CitationSourceTrustFinding trustFinding : trustFindings) {
             issueFlags.addAll(trustFinding.getIssueFlags());
         }
+        issueFlags.add(stageOneDeliveryCitationReady
+                ? "STAGE1_DELIVERY_CITATION_READY"
+                : "STAGE1_DELIVERY_CITATION_GAP");
+        if (hasOptionalAuditGap) {
+            issueFlags.add("OPTIONAL_CITATION_GAP");
+        }
+        if (hasGeneratedAuditGap) {
+            issueFlags.add("GENERATED_SECTION_REWRITE_ONLY");
+        }
         return new ArrayList<>(issueFlags);
+    }
+
+    private StageOneFirstReportPolicy.FirstReportIssueScope classifyClaimIssueScope(CitationClaim claim) {
+        return StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                claim == null ? null : claim.getSectionKey(),
+                claim == null ? null : claim.getSectionTitle(),
+                null
+        ));
+    }
+
+    private boolean isStageOneDeliveryClaim(CitationClaim claim,
+                                            StageOneFirstReportPolicy.FirstReportIssueScope issueScope) {
+        return claim != null
+                && claim.isTraceabilitySensitive()
+                && issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.CORE;
+    }
+
+    private String buildStageOneAuditSummary(CitationClaim claim,
+                                             StageOneFirstReportPolicy.FirstReportIssueScope issueScope,
+                                             Set<String> normalizedRequestedDimensions,
+                                             String issueType,
+                                             String evidenceId) {
+        String sectionLabel = defaultIfBlank(claim == null ? null : claim.getSectionTitle(), "相关章节");
+        if (issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.GENERATED) {
+            return switch (issueType) {
+                case "UNKNOWN_EVIDENCE_ID" -> sectionLabel + " 引用了未知证据编号 "
+                        + defaultIfBlank(evidenceId, "unknown")
+                        + "，该自动结论章节仅保留改写提醒，不进入阶段1交付阻断。";
+                default -> sectionLabel + " 缺少句级引用，该自动结论章节仅保留改写提醒，不进入阶段1交付阻断。";
+            };
+        }
+        if (issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.UNKNOWN_AUDIT) {
+            return switch (issueType) {
+                case "UNKNOWN_EVIDENCE_ID" -> sectionLabel + " 引用了未知证据编号 "
+                        + defaultIfBlank(evidenceId, "unknown")
+                        + "，当前仅保留 audit 提醒，不进入阶段1交付阻断。";
+                default -> sectionLabel + " 缺少句级引用，当前仅保留 audit 提醒，不进入阶段1交付阻断。";
+            };
+        }
+        boolean explicitlyRequested = StageOneFirstReportPolicy.shouldExposeIssueForRequestedDimensions(
+                normalizedRequestedDimensions,
+                new StageOneFirstReportPolicy.FirstReportIssueContext(
+                        claim == null ? null : claim.getSectionKey(),
+                        claim == null ? null : claim.getSectionTitle(),
+                        null
+                ));
+        String visibility = explicitlyRequested ? "显式请求的增强章节" : "未请求的增强章节";
+        return switch (issueType) {
+            case "UNKNOWN_EVIDENCE_ID" -> visibility + " " + sectionLabel + " 引用了未知证据编号 "
+                    + defaultIfBlank(evidenceId, "unknown")
+                    + "，保留 audit，不进入阶段1交付阻断。";
+            default -> visibility + " " + sectionLabel + " 缺少句级引用，保留 audit，不进入阶段1交付阻断。";
+        };
+    }
+
+    private List<String> buildAuditSuggestedQueries(CitationClaim claim,
+                                                    String issueType,
+                                                    String evidenceId) {
+        if ("UNKNOWN_EVIDENCE_ID".equals(issueType) && hasText(evidenceId)) {
+            return List.of(evidenceId.trim() + " official evidence");
+        }
+        return List.of(defaultIfBlank(claim == null ? null : claim.getSectionKey(), "report") + " official evidence");
+    }
+
+    private List<String> buildStageOneAuditIssueFlags(StageOneFirstReportPolicy.FirstReportIssueScope issueScope) {
+        if (issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.GENERATED) {
+            return List.of("GENERATED_SECTION_REWRITE_ONLY");
+        }
+        return List.of("OPTIONAL_CITATION_GAP");
+    }
+
+    /**
+     * Citation 节点与 Writer 一样，只能读取任务请求快照中的 analysisDimensions，
+     * 不能从正文标题反推用户到底请求了哪些维度。
+     */
+    private List<String> parseAnalysisDimensions(String rawAnalysisDimensions) {
+        if (!hasText(rawAnalysisDimensions)) {
+            return List.of();
+        }
+        String normalized = rawAnalysisDimensions.trim();
+        if (normalized.startsWith("[") && normalized.endsWith("]")) {
+            try {
+                JsonNode node = objectMapper.readTree(normalized);
+                if (node.isArray()) {
+                    List<String> values = new ArrayList<>();
+                    for (JsonNode item : iterable(node)) {
+                        String text = item.asText("");
+                        if (hasText(text)) {
+                            values.add(text.trim());
+                        }
+                    }
+                    return values;
+                }
+            } catch (Exception e) {
+                log.warn("citation failed to parse analysisDimensions as json array, raw={}", rawAnalysisDimensions, e);
+            }
+        }
+        return Arrays.stream(normalized.split("[,，、;；\\s]+"))
+                .map(String::trim)
+                .filter(this::hasText)
+                .toList();
     }
 
     private JsonNode parseJsonNode(String rawJson) {

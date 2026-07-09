@@ -18,6 +18,25 @@ import java.util.Set;
  */
 public final class StageOneFirstReportPolicy {
 
+    /**
+     * 阶段1首报 issue scope。
+     * 下游任何诊断在决定是 blocker、warning 还是 audit 之前，
+     * 都必须先归一到这里，避免 reviewer / citation / report 各自维护第二套语义。
+     */
+    public enum FirstReportIssueScope {
+        CORE,
+        ENHANCEMENT,
+        GENERATED,
+        UNKNOWN_AUDIT
+    }
+
+    /**
+     * 下游 issue 统一上下文。
+     * sectionKey / sectionTitle / fieldName 允许来自不同节点，但收口判断必须走同一个值对象。
+     */
+    public record FirstReportIssueContext(String sectionKey, String sectionTitle, String fieldName) {
+    }
+
     public static final Set<String> FIRST_REPORT_CRITICAL_FIELDS = Set.of(
             "summary",
             "positioning",
@@ -48,6 +67,7 @@ public final class StageOneFirstReportPolicy {
 
     private static final Map<String, String> SECTION_FIELD_ALIASES = Map.ofEntries(
             Map.entry("产品概览", "summary"),
+            Map.entry("产品概述", "summary"),
             Map.entry("产品简介", "summary"),
             Map.entry("市场定位", "positioning"),
             Map.entry("定位分析", "positioning"),
@@ -56,6 +76,7 @@ public final class StageOneFirstReportPolicy {
             Map.entry("目标用户对比", "targetUsers"),
             Map.entry("核心能力", "coreFeatures"),
             Map.entry("核心功能", "coreFeatures"),
+            Map.entry("产品功能", "coreFeatures"),
             Map.entry("功能对比", "coreFeatures"),
             Map.entry("定价策略", "pricing"),
             Map.entry("价格策略", "pricing"),
@@ -99,6 +120,14 @@ public final class StageOneFirstReportPolicy {
             "OPTIONAL_PRICING_ANALYSIS_DEFERRED",
             "OPTIONAL_STRENGTHS_ANALYSIS_DEFERRED",
             "OPTIONAL_WEAKNESSES_ANALYSIS_DEFERRED"
+    );
+
+    private static final Set<String> GENERATED_SECTION_KEYS = Set.of(
+            "conclusion",
+            "reportconclusion",
+            "结论",
+            "建议结论",
+            "报告结论"
     );
 
     private StageOneFirstReportPolicy() {
@@ -205,6 +234,95 @@ public final class StageOneFirstReportPolicy {
      */
     public static List<String> defaultSourceScopes() {
         return DEFAULT_SOURCE_SCOPES;
+    }
+
+    /**
+     * 统一把下游 issue 归类到阶段1首报 scope。
+     * 这里先看显式 fieldName，再处理自动生成章节，最后回退到章节映射和弱字段名归一。
+     * 这样任意节点即使只拿到 sectionKey / sectionTitle，也不会再长出第二套判断口径。
+     */
+    public static FirstReportIssueScope classifyIssueScope(FirstReportIssueContext context) {
+        String explicitField = normalizeFieldName(context == null ? null : context.fieldName());
+        if (isFirstReportCriticalField(explicitField)) {
+            return FirstReportIssueScope.CORE;
+        }
+        if (isFirstReportEnhancementField(explicitField)) {
+            return FirstReportIssueScope.ENHANCEMENT;
+        }
+        if (isGeneratedReportSection(context == null ? null : context.sectionKey())
+                || isGeneratedReportSection(context == null ? null : context.sectionTitle())) {
+            return FirstReportIssueScope.GENERATED;
+        }
+        String mappedField = resolveIssueField(context);
+        if (isFirstReportCriticalField(mappedField)) {
+            return FirstReportIssueScope.CORE;
+        }
+        if (isFirstReportEnhancementField(mappedField)) {
+            return FirstReportIssueScope.ENHANCEMENT;
+        }
+        return FirstReportIssueScope.UNKNOWN_AUDIT;
+    }
+
+    /**
+     * 判断章节是否属于自动生成的结论/总结类章节。
+     * 这些章节在阶段1里允许进入改写或审计链路，但不能直接抬成 blocker。
+     */
+    public static boolean isGeneratedReportSection(String sectionKeyOrTitle) {
+        String normalized = normalizeSectionToken(sectionKeyOrTitle);
+        if (!StringUtils.hasText(normalized)) {
+            return false;
+        }
+        return GENERATED_SECTION_KEYS.contains(normalized);
+    }
+
+    /**
+     * 归一任务显式请求的分析维度。
+     * 这里返回的是内部统一字段名集合，供 reviewer / writer / citation / report diagnosis 共享，
+     * 禁止任何调用方再从报告内容反推“用户可能想看什么”。
+     */
+    public static Set<String> normalizeRequestedDimensions(List<String> requestedDimensions) {
+        LinkedHashSet<String> normalizedFields = new LinkedHashSet<>();
+        if (requestedDimensions != null) {
+            for (String requestedDimension : requestedDimensions) {
+                String fieldName = resolveFieldFromDimension(requestedDimension);
+                if (StringUtils.hasText(fieldName)) {
+                    normalizedFields.add(fieldName);
+                }
+            }
+        }
+        if (normalizedFields.isEmpty()) {
+            normalizedFields.addAll(FIRST_REPORT_CRITICAL_FIELDS);
+        }
+        return normalizedFields;
+    }
+
+    /**
+     * 判断某个 issue 是否应该进入“用户可见的主缺口链”。
+     * 核心字段始终可见；增强字段只有在用户显式请求时才进入主链；
+     * 自动结论和未知审计项只保留内部审计/提示，不进入主缺口列表。
+     */
+    public static boolean shouldExposeIssueForRequestedDimensions(Set<String> requestedDimensions,
+                                                                  FirstReportIssueContext context) {
+        FirstReportIssueScope issueScope = classifyIssueScope(context);
+        if (issueScope == FirstReportIssueScope.GENERATED || issueScope == FirstReportIssueScope.UNKNOWN_AUDIT) {
+            return false;
+        }
+        if (issueScope == FirstReportIssueScope.CORE) {
+            return true;
+        }
+        String issueField = resolveIssueField(context);
+        if (!StringUtils.hasText(issueField)) {
+            return false;
+        }
+        return normalizeRequestedDimensionSet(requestedDimensions).contains(issueField);
+    }
+
+    /**
+     * 判断某个 issue scope 是否允许进入交付 blocker 链。
+     * 阶段1只有核心字段才有资格触发阻断，其余 scope 只能留在 warning / audit / rewrite-only。
+     */
+    public static boolean isBlockingDeliveryScope(FirstReportIssueScope issueScope) {
+        return issueScope == FirstReportIssueScope.CORE;
     }
 
     /**
@@ -349,5 +467,74 @@ public final class StageOneFirstReportPolicy {
             }
         }
         return false;
+    }
+
+    /**
+     * 统一从 issue 上下文解析字段名。
+     * 解析顺序严格固定：显式字段 -> 章节映射 -> 弱字段名归一，
+     * 这样下游各层拿到的信息粒度不同，也会落回同一套字段口径。
+     */
+    private static String resolveIssueField(FirstReportIssueContext context) {
+        if (context == null) {
+            return null;
+        }
+        return firstNonBlank(
+                normalizeFieldName(context.fieldName()),
+                normalizeFieldName(fieldForSection(context.sectionTitle())),
+                normalizeFieldName(fieldForSection(context.sectionKey())),
+                normalizeFieldName(context.sectionTitle()),
+                normalizeFieldName(context.sectionKey())
+        );
+    }
+
+    /**
+     * requestedDimensions 允许传入字段名或章节维度文案。
+     * 这里统一回落到内部字段标识，避免“产品概述”和“summary”在不同层被当成两个维度。
+     */
+    private static String resolveFieldFromDimension(String dimension) {
+        return firstNonBlank(
+                normalizeFieldName(fieldForSection(dimension)),
+                normalizeFieldName(dimension)
+        );
+    }
+
+    /**
+     * 统一归一 requestedDimensions 集合。
+     * 这是下游判断“增强字段是否为显式请求”时唯一允许使用的集合归一逻辑。
+     */
+    private static LinkedHashSet<String> normalizeRequestedDimensionSet(Set<String> requestedDimensions) {
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        if (requestedDimensions != null) {
+            for (String requestedDimension : requestedDimensions) {
+                String fieldName = resolveFieldFromDimension(requestedDimension);
+                if (StringUtils.hasText(fieldName)) {
+                    normalized.add(fieldName);
+                }
+            }
+        }
+        return normalized;
+    }
+
+    private static String normalizeSectionToken(String rawValue) {
+        if (!StringUtils.hasText(rawValue)) {
+            return null;
+        }
+        return rawValue.trim()
+                .toLowerCase(Locale.ROOT)
+                .replace("_", "")
+                .replace("-", "")
+                .replace(" ", "");
+    }
+
+    private static String firstNonBlank(String... candidates) {
+        if (candidates == null) {
+            return null;
+        }
+        for (String candidate : candidates) {
+            if (StringUtils.hasText(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
     }
 }

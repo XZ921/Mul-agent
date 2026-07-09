@@ -138,7 +138,7 @@ class ReportDiagnosisAssemblerTest {
 
         assertNotNull(diagnosis);
         assertEquals(1, diagnosis.getDiagnosisCount());
-        assertEquals(1, diagnosis.getBlockerCount());
+        assertEquals(0, diagnosis.getBlockerCount());
         assertTrue(diagnosis.getSourceUrls().contains("https://docs.notion.so/ai"));
         assertEquals(1, diagnosis.getContentEvidences().size());
         assertEquals("E-001", diagnosis.getContentEvidences().get(0).getEvidence().getEvidenceId());
@@ -388,5 +388,46 @@ class ReportDiagnosisAssemblerTest {
         assertTrue(section.getEvidenceInsufficient());
         assertTrue(section.getRepairSuggestions().stream()
                 .anyMatch(item -> item.contains("structuredBlocks") || item.contains("结构化")));
+    }
+
+    @Test
+    void shouldNotCountTraceableStructuredLegacyBlockerIntoDeliveryBlockers() {
+        ReviewCheckpoint initialReview = ReviewCheckpoint.builder()
+                .nodeName("quality_check")
+                .nodeStatus(TaskNodeStatus.SUCCESS)
+                .score(70)
+                .passed(false)
+                .diagnoses(List.of(QualityDiagnosis.builder()
+                        .dimensionCode("SEARCH_QUALITY")
+                        .dimensionName("搜索质量")
+                        .type("missing_structured_evidence")
+                        .section("功能对比")
+                        .severity("ERROR")
+                        .level("BLOCKER")
+                        .title("结构化证据不足")
+                        .detail("历史数据里把 structured gap 硬抬成了 blocker")
+                        .evidenceBasis("功能对比 的 structuredBlocks 未达标，evidenceCoverage=核心能力:TRACEABLE。")
+                        .sourceUrls(List.of("https://docs.notion.so/ai"))
+                        .repairSuggestion("补充 structuredBlocks，但当前核心 coverage 已 traceable。")
+                        .build().normalized()))
+                .build();
+
+        ReportResponse.ReportDiagnosisInfo diagnosis = assembler.assemble(
+                List.of(),
+                List.of(),
+                initialReview,
+                null,
+                null,
+                List.of()
+        );
+
+        assertNotNull(diagnosis);
+        assertEquals(0, diagnosis.getBlockerCount());
+        assertEquals(0, diagnosis.getEvidenceGapCount());
+        DiagnosisSection section = diagnosis.getSections().stream()
+                .filter(item -> "功能对比".equals(item.getSection()))
+                .findFirst()
+                .orElseThrow();
+        assertTrue(section.getEvidenceInsufficient());
     }
 }

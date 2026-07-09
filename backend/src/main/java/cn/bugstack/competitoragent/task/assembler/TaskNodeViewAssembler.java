@@ -69,9 +69,12 @@ public class TaskNodeViewAssembler {
      * 这里集中维护状态解释规则，确保列表、详情和节点页看到的是同一套任务语义。
      */
     public TaskResponse toTaskResponse(AnalysisTask task, List<TaskNode> nodes) {
+        NodeExecutionRecoveryPolicy recoveryPolicy = recoveryPolicy();
         NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
-                recoveryPolicy().resolveTaskExecution(task, nodes);
+                recoveryPolicy.resolveTaskExecution(task, nodes);
         AnalysisTaskStatus resolvedStatus = resolution.getStatus();
+        boolean degradedDeliverable = resolvedStatus == AnalysisTaskStatus.SUCCESS
+                && recoveryPolicy.isStageOneDegradedDeliverable(nodes);
         Optional<TaskProgressSnapshot> snapshotOptional = taskRecoveryService.getTaskSnapshotOrRebuild(task.getId());
         TaskProgressSnapshot snapshot = snapshotOptional.orElse(null);
 
@@ -85,7 +88,7 @@ public class TaskNodeViewAssembler {
                 .sourceScope(task.getSourceScope())
                 .status(resolvedStatus)
                 .errorMessage(resolution.getErrorMessage())
-                .statusSummary(snapshot == null ? buildTaskStatusSummary(nodes) : snapshot.getStatusSummary())
+                .statusSummary(resolveTaskStatusSummary(snapshot, resolvedStatus, nodes, degradedDeliverable))
                 .currentPlanVersionId(task.getCurrentPlanVersionId())
                 .currentPlanVersion(task.getCurrentPlanVersion())
                 .totalNodes(snapshot == null ? resolution.getTotalNodes() : snapshot.getTotalNodes())
@@ -102,11 +105,11 @@ public class TaskNodeViewAssembler {
                 .canStop(canStopTask(resolvedStatus))
                 .canViewReport(resolvedStatus == AnalysisTaskStatus.SUCCESS || hasDraftReport(nodes))
                 .canViewDraftReport(hasDraftReport(nodes))
-                .interventionSummary(buildTaskInterventionSummary(resolvedStatus))
-                .resumeAdvice(buildTaskResumeAdvice(resolvedStatus))
+                .interventionSummary(buildTaskInterventionSummary(resolvedStatus, degradedDeliverable))
+                .resumeAdvice(buildTaskResumeAdvice(resolvedStatus, degradedDeliverable))
                 .retryAdvice(buildTaskRetryAdvice(resolvedStatus))
-                .replayEntrySummary(buildTaskReplayEntrySummary(resolvedStatus))
-                .currentStage(snapshot == null ? buildDefaultCurrentStage(nodes, resolvedStatus) : snapshot.getCurrentStage())
+                .replayEntrySummary(buildTaskReplayEntrySummary(resolvedStatus, degradedDeliverable))
+                .currentStage(resolveCurrentStage(snapshot, nodes, resolvedStatus, degradedDeliverable))
                 .activeNodeNames(snapshot == null ? buildActiveNodeNames(nodes) : snapshot.getActiveNodeNames())
                 .snapshotUpdatedAt(snapshot == null ? null : snapshot.getUpdatedAt())
                 .eventStreamPath(buildEventStreamPath(task.getId()))
@@ -369,6 +372,26 @@ public class TaskNodeViewAssembler {
         }
     }
 
+    private String resolveTaskStatusSummary(TaskProgressSnapshot snapshot,
+                                            AnalysisTaskStatus status,
+                                            List<TaskNode> nodes,
+                                            boolean degradedDeliverable) {
+        if (degradedDeliverable) {
+            return buildTaskStatusSummary(status, nodes, true);
+        }
+        return snapshot == null ? buildTaskStatusSummary(status, nodes, false) : snapshot.getStatusSummary();
+    }
+
+    private String resolveCurrentStage(TaskProgressSnapshot snapshot,
+                                       List<TaskNode> nodes,
+                                       AnalysisTaskStatus status,
+                                       boolean degradedDeliverable) {
+        if (degradedDeliverable) {
+            return buildDefaultCurrentStage(nodes, status);
+        }
+        return snapshot == null ? buildDefaultCurrentStage(nodes, status) : snapshot.getCurrentStage();
+    }
+
     private String buildDefaultCurrentStage(List<TaskNode> nodes, AnalysisTaskStatus status) {
         return TaskProgressSnapshot.fromTask(
                 AnalysisTask.builder().id(-1L).build(),
@@ -418,7 +441,10 @@ public class TaskNodeViewAssembler {
         return count;
     }
 
-    private String buildTaskStatusSummary(List<TaskNode> nodes) {
+    private String buildTaskStatusSummary(AnalysisTaskStatus status, List<TaskNode> nodes, boolean degradedDeliverable) {
+        if (degradedDeliverable && status == AnalysisTaskStatus.SUCCESS) {
+            return "\u9636\u6bb51\u964d\u7ea7\u53ef\u4ea4\u4ed8\uff0c\u5efa\u8bae\u4eba\u5de5\u590d\u6838\u540e\u4f7f\u7528";
+        }
         int waitingInterventionCount = countWaitingInterventionNodes(nodes);
         if (waitingInterventionCount > 0) {
             return "存在等待人工处理的节点";
@@ -506,7 +532,7 @@ public class TaskNodeViewAssembler {
         return status == AnalysisTaskStatus.RUNNING;
     }
 
-    private String buildTaskInterventionSummary(AnalysisTaskStatus status) {
+    private String buildTaskInterventionSummary(AnalysisTaskStatus status, boolean degradedDeliverable) {
         if (status == AnalysisTaskStatus.RUNNING) {
             return "任务运行中支持停止整任务；单节点可暂停尚未启动的节点、手动跳过未启动节点，或对运行中节点发起协作式终止请求。";
         }
@@ -516,13 +542,16 @@ public class TaskNodeViewAssembler {
         if (status == AnalysisTaskStatus.STOPPED) {
             return "当前支持基于已有检查点恢复执行，以及从指定节点发起局部重跑；若是节点暂停导致收口，也可直接恢复对应节点继续执行。";
         }
+        if (status == AnalysisTaskStatus.SUCCESS && degradedDeliverable) {
+            return "\u5f53\u524d\u62a5\u544a\u5df2\u6309\u9636\u6bb51\u964d\u7ea7\u53e3\u5f84\u53ef\u67e5\u770b\uff0c\u5efa\u8bae\u4eba\u5de5\u590d\u6838\u540e\u4f7f\u7528\u3002\u5982\u9700\u8865\u9f50\u589e\u5f3a\u5b57\u6bb5\u6216\u81ea\u52a8\u7ed3\u8bba\uff0c\u53ef\u4ece\u5bf9\u5e94\u8282\u70b9\u53d1\u8d77\u5c40\u90e8\u91cd\u8dd1\u3002";
+        }
         if (status == AnalysisTaskStatus.SUCCESS) {
             return "任务已完成，可查看报告；如需局部修正，支持从指定节点重新发起执行并保留未受影响成果。";
         }
         return "任务尚未开始，可直接启动执行；节点级支持暂停待执行节点、手动跳过待执行节点，以及从指定节点重跑。";
     }
 
-    private String buildTaskResumeAdvice(AnalysisTaskStatus status) {
+    private String buildTaskResumeAdvice(AnalysisTaskStatus status, boolean degradedDeliverable) {
         if (status == AnalysisTaskStatus.FAILED) {
             return "恢复执行会尽量保留已完成节点的成果，只重跑尚未完成或失败的链路。";
         }
@@ -539,7 +568,7 @@ public class TaskNodeViewAssembler {
         return "整任务重置会清空当前任务的派生产物，并从头重走整条执行链路。";
     }
 
-    private String buildTaskReplayEntrySummary(AnalysisTaskStatus status) {
+    private String buildTaskReplayEntrySummary(AnalysisTaskStatus status, boolean degradedDeliverable) {
         if (status != AnalysisTaskStatus.FAILED && status != AnalysisTaskStatus.STOPPED && status != AnalysisTaskStatus.RUNNING) {
             return null;
         }

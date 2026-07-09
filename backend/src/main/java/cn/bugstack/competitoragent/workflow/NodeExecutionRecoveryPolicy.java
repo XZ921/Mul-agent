@@ -6,12 +6,14 @@ import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.workflow.coverage.StageOneFirstReportPolicy;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.LinkedHashSet;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
@@ -37,6 +39,50 @@ public class NodeExecutionRecoveryPolicy {
     }
 
     /**
+     * 阶段1降级可交付的判定只服务于任务级收口和展示文案：
+     * 1. Writer 产物里已经沉淀出满足 sourceUrls 红线的可追溯报告；
+     * 2. Reviewer 未通过的原因只剩增强字段或自动章节缺口；
+     * 3. 任务不应再被统一写回 STOPPED/FAILED，而应以 SUCCESS + 人工复核提示对外展示。
+     */
+    public boolean isStageOneDegradedDeliverable(List<TaskNode> nodes) {
+        if (nodes == null || nodes.isEmpty()) {
+            return false;
+        }
+        boolean hasUnfinishedBlockingNode = nodes.stream().anyMatch(node ->
+                node.getStatus() == TaskNodeStatus.PENDING
+                        || node.getStatus() == TaskNodeStatus.READY
+                        || node.getStatus() == TaskNodeStatus.DISPATCHED
+                        || node.getStatus() == TaskNodeStatus.RUNNING
+                        || node.getStatus() == TaskNodeStatus.WAITING_RETRY
+                        || node.getStatus() == TaskNodeStatus.PAUSED
+                        || isBlockingWaitingInterventionNode(node));
+        if (hasUnfinishedBlockingNode) {
+            return false;
+        }
+        if (!hasEnoughTraceableWriterSources(nodes)) {
+            return false;
+        }
+        boolean hasFailedReview = false;
+        for (TaskNode node : nodes == null ? List.<TaskNode>of() : nodes) {
+            if (!isReviewNode(node) || node.getStatus() != TaskNodeStatus.SUCCESS) {
+                continue;
+            }
+            JsonNode output = readJson(node.getOutputData());
+            if (output == null || !hasReviewSignals(output)) {
+                continue;
+            }
+            if (output.path("passed").asBoolean(false)) {
+                return false;
+            }
+            if (hasBlockingCoreReviewIssue(output)) {
+                return false;
+            }
+            hasFailedReview = true;
+        }
+        return hasFailedReview;
+    }
+
+    /**
      * 基于节点权威状态推导任务公开状态。
      * <p>
      * 任务级状态继续保持五态：
@@ -57,6 +103,7 @@ public class NodeExecutionRecoveryPolicy {
         int completedNodes = (int) nodes.stream()
                 .filter(node -> isTerminalStatus(node.getStatus()))
                 .count();
+        boolean stageOneDegradedDeliverable = isStageOneDegradedDeliverable(nodes);
 
         if (isManuallyStoppedTask(task)) {
             return TaskExecutionResolution.builder()
@@ -90,6 +137,14 @@ public class NodeExecutionRecoveryPolicy {
         }
 
         if (hasWaitingInterventionNode && !hasActiveExecutionNode) {
+            if (stageOneDegradedDeliverable) {
+                return TaskExecutionResolution.builder()
+                        .status(AnalysisTaskStatus.SUCCESS)
+                        .errorMessage(null)
+                        .completedNodes(completedNodes)
+                        .totalNodes(totalNodes)
+                        .build();
+            }
             return TaskExecutionResolution.builder()
                     .status(AnalysisTaskStatus.STOPPED)
                     .errorMessage("存在等待人工处理的节点，请确认后继续")
@@ -100,6 +155,14 @@ public class NodeExecutionRecoveryPolicy {
         }
 
         if (initialReviewRequiresHumanIntervention && !hasRevisionFlowSucceeded(nodes)) {
+            if (stageOneDegradedDeliverable) {
+                return TaskExecutionResolution.builder()
+                        .status(AnalysisTaskStatus.SUCCESS)
+                        .errorMessage(null)
+                        .completedNodes(completedNodes)
+                        .totalNodes(totalNodes)
+                        .build();
+            }
             return TaskExecutionResolution.builder()
                     .status(AnalysisTaskStatus.STOPPED)
                     .errorMessage("初审未通过且需要人工介入，请补充证据或调整策略后继续")
@@ -172,6 +235,15 @@ public class NodeExecutionRecoveryPolicy {
             return TaskExecutionResolution.builder()
                     .status(AnalysisTaskStatus.FAILED)
                     .errorMessage("任务存在未恢复的失败节点，请检查节点详情")
+                    .completedNodes(completedNodes)
+                    .totalNodes(totalNodes)
+                    .build();
+        }
+
+        if (stageOneDegradedDeliverable) {
+            return TaskExecutionResolution.builder()
+                    .status(AnalysisTaskStatus.SUCCESS)
+                    .errorMessage(null)
                     .completedNodes(completedNodes)
                     .totalNodes(totalNodes)
                     .build();
@@ -303,6 +375,139 @@ public class NodeExecutionRecoveryPolicy {
         return nodes.stream()
                 .filter(node -> "quality_check".equals(node.getNodeName()))
                 .noneMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && requiresHumanIntervention(node.getOutputData()));
+    }
+
+    private boolean hasEnoughTraceableWriterSources(List<TaskNode> nodes) {
+        LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
+        for (TaskNode node : nodes == null ? List.<TaskNode>of() : nodes) {
+            if (!isWriterNode(node) || !isReusableWriterStatus(node.getStatus())) {
+                continue;
+            }
+            collectNestedSourceUrls(readJson(node.getOutputData()), sourceUrls);
+        }
+        return StageOneFirstReportPolicy.hasEnoughTraceableSources(List.copyOf(sourceUrls));
+    }
+
+    private boolean hasReviewSignals(JsonNode output) {
+        if (output == null || !output.isObject()) {
+            return false;
+        }
+        return output.has("passed")
+                || output.has("requiresHumanIntervention")
+                || output.path("diagnoses").isArray()
+                || output.path("issues").isArray();
+    }
+
+    /**
+     * 任务级收口只能把真实 CORE blocker 继续保留为 STOPPED/FAILED。
+     * reviewer 输出里如果只剩 pricing / strengths / conclusion 这类延期项，
+     * 就必须按阶段1降级口径放行到 SUCCESS。
+     */
+    private boolean hasBlockingCoreReviewIssue(JsonNode output) {
+        return hasBlockingCoreReviewIssues(output.path("diagnoses"))
+                || hasBlockingCoreReviewIssues(output.path("issues"));
+    }
+
+    private boolean hasBlockingCoreReviewIssues(JsonNode issues) {
+        if (issues == null || !issues.isArray()) {
+            return false;
+        }
+        for (JsonNode issue : issues) {
+            if (isBlockingCoreReviewIssue(issue)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isBlockingCoreReviewIssue(JsonNode issue) {
+        if (issue == null || issue.isNull()) {
+            return false;
+        }
+        boolean declaredBlocking = "BLOCKER".equalsIgnoreCase(issue.path("level").asText(null))
+                || "ERROR".equalsIgnoreCase(issue.path("severity").asText(null));
+        if (!declaredBlocking) {
+            return false;
+        }
+        StageOneFirstReportPolicy.FirstReportIssueScope issueScope = StageOneFirstReportPolicy.classifyIssueScope(
+                new StageOneFirstReportPolicy.FirstReportIssueContext(
+                        issue.path("section").asText(null),
+                        issue.path("section").asText(null),
+                        issue.path("fieldName").asText(null)
+                )
+        );
+        if (!StageOneFirstReportPolicy.isBlockingDeliveryScope(issueScope)) {
+            return false;
+        }
+        return !isTraceableStructuredEvidenceIssue(issue);
+    }
+
+    private boolean isTraceableStructuredEvidenceIssue(JsonNode issue) {
+        if (issue == null || issue.isNull()) {
+            return false;
+        }
+        String type = issue.path("type").asText("").toUpperCase(Locale.ROOT);
+        String evidenceBasis = issue.path("evidenceBasis").asText("").toUpperCase(Locale.ROOT);
+        if (!type.contains("STRUCTURED")) {
+            return false;
+        }
+        return evidenceBasis.contains(":TRACEABLE")
+                || evidenceBasis.contains(":STRUCTURED_BLOCK_DIRECT");
+    }
+
+    private boolean isReviewNode(TaskNode node) {
+        if (node == null) {
+            return false;
+        }
+        return node.getAgentType() == AgentType.REVIEWER
+                || "quality_check".equals(node.getNodeName())
+                || "quality_check_final".equals(node.getNodeName())
+                || (node.getNodeName() != null && node.getNodeName().startsWith("quality_check_revision_patch_v"));
+    }
+
+    private boolean isWriterNode(TaskNode node) {
+        if (node == null) {
+            return false;
+        }
+        return node.getAgentType() == AgentType.WRITER
+                || "write_report".equals(node.getNodeName())
+                || "rewrite_report".equals(node.getNodeName())
+                || (node.getNodeName() != null && node.getNodeName().startsWith("rewrite_revision_patch_v"));
+    }
+
+    private boolean isReusableWriterStatus(TaskNodeStatus status) {
+        return status == TaskNodeStatus.SUCCESS || status == TaskNodeStatus.SUCCESS_DEGRADED;
+    }
+
+    private void collectNestedSourceUrls(JsonNode node, LinkedHashSet<String> sourceUrls) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return;
+        }
+        if (node.isObject()) {
+            appendSourceUrls(sourceUrls, node.get("sourceUrls"));
+            node.fields().forEachRemaining(entry -> collectNestedSourceUrls(entry.getValue(), sourceUrls));
+            return;
+        }
+        if (node.isArray()) {
+            node.forEach(item -> collectNestedSourceUrls(item, sourceUrls));
+        }
+    }
+
+    private void appendSourceUrls(LinkedHashSet<String> sourceUrls, JsonNode urlsNode) {
+        if (urlsNode == null || urlsNode.isMissingNode() || urlsNode.isNull()) {
+            return;
+        }
+        if (urlsNode.isArray()) {
+            urlsNode.forEach(item -> appendSourceUrl(sourceUrls, item.asText(null)));
+            return;
+        }
+        appendSourceUrl(sourceUrls, urlsNode.asText(null));
+    }
+
+    private void appendSourceUrl(LinkedHashSet<String> sourceUrls, String value) {
+        if (value != null && !value.isBlank()) {
+            sourceUrls.add(value.trim());
+        }
     }
 
     private boolean isRunningLikeStatus(TaskNode node) {

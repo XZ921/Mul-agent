@@ -24,6 +24,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -133,7 +134,8 @@ public class ReportWriterAgent extends BaseAgent {
             WriterCitationGapInspector.InspectionResult citationInspection = writerCitationGapInspector.inspect(
                     reportContent,
                     normalizedAnalysis.sectionEvidenceBundles(),
-                    normalizedAnalysis.sourceUrls());
+                    normalizedAnalysis.sourceUrls(),
+                    parseAnalysisDimensions(context.getAnalysisDimensions()));
             List<String> outputIssueFlags = mergeIssueFlags(
                     normalizedAnalysis.issueFlags(),
                     citationInspection.issueFlags());
@@ -788,6 +790,38 @@ public class ReportWriterAgent extends BaseAgent {
      */
     private String toJsonArray(Object value) throws Exception {
         return objectMapper.writeValueAsString(value == null ? List.of() : value);
+    }
+
+    /**
+     * Writer 只接受任务请求快照里的 analysisDimensions。
+     * 这里兼容 JSON 数组与逗号分隔文本，避免不同入口格式漂移影响阶段1下游裁决。
+     */
+    private List<String> parseAnalysisDimensions(String rawAnalysisDimensions) {
+        if (rawAnalysisDimensions == null || rawAnalysisDimensions.isBlank()) {
+            return List.of();
+        }
+        String normalized = rawAnalysisDimensions.trim();
+        if (normalized.startsWith("[") && normalized.endsWith("]")) {
+            try {
+                JsonNode node = objectMapper.readTree(normalized);
+                if (node.isArray()) {
+                    List<String> values = new ArrayList<>();
+                    for (JsonNode item : node) {
+                        String text = item.asText("");
+                        if (!text.isBlank()) {
+                            values.add(text.trim());
+                        }
+                    }
+                    return values;
+                }
+            } catch (Exception e) {
+                log.warn("writer failed to parse analysisDimensions as json array, raw={}", rawAnalysisDimensions, e);
+            }
+        }
+        return Arrays.stream(normalized.split("[,，、;；\\s]+"))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .toList();
     }
 
     private record NormalizedAnalysisPayload(String serializedAnalysis,

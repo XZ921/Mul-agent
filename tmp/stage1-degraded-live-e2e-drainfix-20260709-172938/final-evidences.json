@@ -1,0 +1,1406 @@
+﻿{
+    "code":  200,
+    "message":  "æä½æå",
+    "data":  [
+                 {
+                     "evidenceId":  "T0103-COLLECT_SOURCES_02_02-001",
+                     "title":  "API Reference â pyAirtable documentation - Read the Docs",
+                     "url":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                     "contentSnippet":  "* [pyAirtable](index.html) â\n* API Reference\n\n# API Reference[Â¶](#api-reference \"Permalink to this headline\")\n\n## API: pyairtable[Â¶](#api-pyairtable \"Permalink to this headline\")\n\n*class* pyairtable.Api[[source]](_modules/pyairtable/api/api.html#Api)[Â¶](#pyairtable.Api \"Permalink to this definition\")\n:   Represents an Airtable API. Implements basic URL construction, session and request management, and retrying logic.\n\n    Usage:\n    :   ```\n        \u003e\u003e\u003e api = Api(\u0027auth_token\u0027)\u003e\u003e\u003e table = api. tab",
+                     "competitorName":  "Airtable",
+                     "collectedAt":  [
+                                         2026,
+                                         7,
+                                         9,
+                                         17,
+                                         33,
+                                         29,
+                                         45532000
+                                     ],
+                     "sourceType":  "DOCS",
+                     "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                     "sourceDomain":  "pyairtable.readthedocs.io",
+                     "discoveryReason":  "Tavily Fast Lane å½ä¸­ TRUSTED_WEB_EXPANSION ç»æ: API Reference â pyAirtable documentation - Read the Docs",
+                     "publishedAt":  null,
+                     "sourceScore":  1.0,
+                     "verified":  null,
+                     "verificationReason":  null,
+                     "searchQuery":  "Airtable documentation api reference",
+                     "searchEngine":  "tavily",
+                     "resultRank":  1,
+                     "browserTraceId":  null,
+                     "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                     "selectionStage":  "SELECTED",
+                     "matchedSignals":  [
+
+                                        ],
+                     "pageMetadata":  {
+                                          "executorType":  "TAVILY_PREFETCHED",
+                                          "resourceLocator":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                          "sourceUrls":  [
+                                                             "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                         ],
+                                          "discoveryDepth":  0,
+                                          "qualitySignals":  [
+                                                                 "TAVILY_RAW_CONTENT_READY",
+                                                                 "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                 "TAVILY_STRUCTURED_BLOCK_COUNT=2",
+                                                                 "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG"
+                                                             ],
+                                          "qualityScore":  0.895,
+                                          "evidenceQualityVerdict":  {
+                                                                         "sourceAuthenticityScore":  0.9,
+                                                                         "contentUsabilityScore":  0.65,
+                                                                         "sourceTier":  "OFFICIAL",
+                                                                         "taskRelevanceScore":  0.75,
+                                                                         "evidenceUsabilityScore":  0.65,
+                                                                         "issues":  [
+
+                                                                                    ],
+                                                                         "qualitySignals":  [
+                                                                                                "TAVILY_RAW_CONTENT_READY",
+                                                                                                "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                "TAVILY_STRUCTURED_BLOCK_COUNT=2",
+                                                                                                "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG"
+                                                                                            ],
+                                                                         "repairRequired":  false
+                                                                     },
+                                          "evidenceRepairPlan":  {
+                                                                     "state":  "REPAIR_NOT_REQUIRED",
+                                                                     "reason":  "TAVILY_RAW_CONTENT_READY",
+                                                                     "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                     "repairQueries":  [
+
+                                                                                       ],
+                                                                     "candidateUrls":  [
+
+                                                                                       ],
+                                                                     "promotedUrls":  [
+
+                                                                                      ],
+                                                                     "complete":  false
+                                                                 },
+                                          "publicEvidenceRecoveryFieldName":  null,
+                                          "publicEvidenceRecoveryEvidencePathKey":  null,
+                                          "publicEvidenceRecoveryQueryIntents":  [
+                                                                                     "OFFICIAL_DOCS",
+                                                                                     "API_DOCS",
+                                                                                     "SDK_GUIDE",
+                                                                                     "OFFICIAL_PRICING",
+                                                                                     "DOCS_BILLING",
+                                                                                     "TERMS_BILLING",
+                                                                                     "THIRD_PARTY_REVIEW"
+                                                                                 ],
+                                          "failureKind":  null,
+                                          "structuredBlocks":  [
+                                                                   {
+                                                                       "blockType":  "PRICING_BLOCK",
+                                                                       "title":  "Pricing",
+                                                                       "content":  "enterprise(*enterprise\\_account\\_id*)[[source]](_modules/pyairtable/api/api.html#Api.enterprise)[Â¶](#pyairtable.Api.enterprise \"Permalink to this definition\")\n:   â  This feature is only available on Enterprise billing plans.",
+                                                                       "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2"
+                                                                   },
+                                                                   {
+                                                                       "blockType":  "DEVELOPER_DOCS_BLOCK",
+                                                                       "title":  "Developer Docs",
+                                                                       "content":  "\\_\\_init\\_\\_(*api\\_key*, *\\**, *timeout=None*, *retry\\_strategy=True*, *endpoint\\_url=\u0027https://api.airtable.com\u0027*, *use\\_field\\_ids=False*)[[source]](_modules/pyairtable/api/api.html#Api.__init__)[Â¶](#pyairtable.Api.__init__ \"Permalink to this definition\")\n:   Parameters\n:   * **api\\_key** (`str`) â An Airtable API key or personal access token.\n* **timeout** (`Optional`[`Tuple`[`int`, `int`]], default: `None`) â A tuple indicating a connect and read timeout. e.g. `timeout=(2,5)` would configure a 2 second timeout for the connection to be established and 5 seconds for a server read timeout. Default is `None` (no timeout).\n* **retry\\_strategy** (`Union`[`bool`, `Retry`, `None`], default: `True`) â An instance of [urllib3.util.Retry](https://urllib3.readthedocs.io/en/stable/reference/urllib3.util.html#urllib3.util.Retry). If `None` or `False`, requests will not be retried. If `True`, the default strategy will be applied (see [`retry_strategy()`](#pyairtable.retry_strategy \"pyairtable.retry_strategy\") for details).\n* **endpoint\\_url** (`str`, default: `\u0027https://api.airtable.com\u0027`) â The API endpoint to use. Override this if you are using a debugging or caching proxy.\n* **use\\_field\\_ids** (`bool`, default: `False`) â If `True`, all API requests will return responses with field IDs instead of field names.",
+                                                                       "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2"
+                                                                   }
+                                                               ],
+                                          "durationMillis":  0,
+                                          "collectedAt":  1783589606.7585804,
+                                          "structuredPayload":  {
+                                                                    "prefetchedContentRef":  "tavily:05d6503c-12a8-41b3-9de9-e023bfe1e8e5:1",
+                                                                    "prefetchedRawContentLength":  312875,
+                                                                    "primaryTool":  "TAVILY_PREFETCHED",
+                                                                    "structuredBlockCount":  2
+                                                                },
+                                          "sourceType":  "DOCS",
+                                          "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                                          "reason":  "Tavily Fast Lane å½ä¸­ TRUSTED_WEB_EXPANSION ç»æ: API Reference â pyAirtable documentation - Read the Docs",
+                                          "domain":  "pyairtable.readthedocs.io",
+                                          "publishedAt":  null,
+                                          "relevanceScore":  0.895,
+                                          "freshnessScore":  0.6,
+                                          "totalScore":  1.0,
+                                          "trustTier":  "HIGH",
+                                          "trustTierLabel":  "é«å¯ä¿¡",
+                                          "rankingReasons":  [
+                                                                 "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡",
+                                                                 "å½ä¸­ææ¡£é«ä»·å¼è·¯å¾ï¼ä¼å\u0085çº§é«äºæ³å®ç½é¦é¡µ",
+                                                                 "å½ä¸­æç¡®ææ¡£è·¯å¾ï¼ä¼å\u0085çº§é«äºå¼æ¾å¹³å°æ ¹é¡µ",
+                                                                 "æç´¢åç°å®æ¹ç¸é»ææ¡£å\u0085¥å£ï¼ä¼å\u0085çº§é«äºæ¨¡æ¿å\u0085åº URL"
+                                                             ],
+                                          "rankingSummary":  "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡ï¼å½ä¸­ææ¡£é«ä»·å¼è·¯å¾ï¼ä¼å\u0085çº§é«äºæ³å®ç½é¦é¡µï¼å½ä¸­æç¡®ææ¡£è·¯å¾ï¼ä¼å\u0085çº§é«äºå¼æ¾å¹³å°æ ¹é¡µï¼æç´¢åç°å®æ¹ç¸é»ææ¡£å\u0085¥å£ï¼ä¼å\u0085çº§é«äºæ¨¡æ¿å\u0085åº URL",
+                                          "searchQuery":  "Airtable documentation api reference",
+                                          "searchEngine":  "tavily",
+                                          "resultRank":  1,
+                                          "browserTraceId":  null,
+                                          "verified":  null,
+                                          "verificationReason":  null,
+                                          "matchedSignals":  null,
+                                          "selectionStage":  "SELECTED",
+                                          "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                                          "selectionSummary":  "Tavily prefetch æ­£æå¯ç¨"
+                                      }
+                 },
+                 {
+                     "evidenceId":  "T0103-COLLECT_SOURCES_02_02-002",
+                     "title":  "API - Airtable Support",
+                     "url":  "https://support.airtable.com/docs/api",
+                     "contentSnippet":  "\u003e ## Documentation Index\n\u003e\n\u003e Fetch the complete documentation index at: \u003chttps://support.airtable.com/llms.txt\u003e\n\u003e\n\u003e Use this file to discover all available pages before exploring further.\n\n![](https://cdn.airtable.document360.io/logo/d0ee2ee4-3f78-47c7-b388-85e40be9fb89/7f9c63c97c244c8a988fa18cc531ecc3-360446de52ff494081b795b87a150ef3-Airtable_Logo 1.png)\n\n\n\n* [Contact Support](https://support.airtable.com/docs/contacting-airtable-support?contact_support=true)\n* [Sign up for free](https://airtab",
+                     "competitorName":  "Airtable",
+                     "collectedAt":  [
+                                         2026,
+                                         7,
+                                         9,
+                                         17,
+                                         33,
+                                         30,
+                                         68615000
+                                     ],
+                     "sourceType":  "DOCS",
+                     "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                     "sourceDomain":  "support.airtable.com",
+                     "discoveryReason":  "Tavily Fast Lane å½ä¸­ TRUSTED_WEB_EXPANSION ç»æ: API - Airtable Support",
+                     "publishedAt":  null,
+                     "sourceScore":  0.926,
+                     "verified":  null,
+                     "verificationReason":  null,
+                     "searchQuery":  "Airtable documentation api reference",
+                     "searchEngine":  "tavily",
+                     "resultRank":  4,
+                     "browserTraceId":  null,
+                     "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                     "selectionStage":  "SELECTED",
+                     "matchedSignals":  [
+
+                                        ],
+                     "pageMetadata":  {
+                                          "executorType":  "TAVILY_PREFETCHED",
+                                          "resourceLocator":  "https://support.airtable.com/docs/api",
+                                          "sourceUrls":  [
+                                                             "https://support.airtable.com/docs/api"
+                                                         ],
+                                          "discoveryDepth":  0,
+                                          "qualitySignals":  [
+                                                                 "TAVILY_RAW_CONTENT_READY",
+                                                                 "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                 "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                 "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG"
+                                                             ],
+                                          "qualityScore":  0.707,
+                                          "evidenceQualityVerdict":  {
+                                                                         "sourceAuthenticityScore":  0.9,
+                                                                         "contentUsabilityScore":  0.65,
+                                                                         "sourceTier":  "OFFICIAL",
+                                                                         "taskRelevanceScore":  0.75,
+                                                                         "evidenceUsabilityScore":  0.65,
+                                                                         "issues":  [
+
+                                                                                    ],
+                                                                         "qualitySignals":  [
+                                                                                                "TAVILY_RAW_CONTENT_READY",
+                                                                                                "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                                                "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG"
+                                                                                            ],
+                                                                         "repairRequired":  false
+                                                                     },
+                                          "evidenceRepairPlan":  {
+                                                                     "state":  "REPAIR_NOT_REQUIRED",
+                                                                     "reason":  "TAVILY_RAW_CONTENT_READY",
+                                                                     "sourceUrl":  "https://support.airtable.com/docs/api",
+                                                                     "repairQueries":  [
+
+                                                                                       ],
+                                                                     "candidateUrls":  [
+
+                                                                                       ],
+                                                                     "promotedUrls":  [
+
+                                                                                      ],
+                                                                     "complete":  false
+                                                                 },
+                                          "publicEvidenceRecoveryFieldName":  null,
+                                          "publicEvidenceRecoveryEvidencePathKey":  null,
+                                          "publicEvidenceRecoveryQueryIntents":  [
+                                                                                     "OFFICIAL_DOCS",
+                                                                                     "API_DOCS",
+                                                                                     "SDK_GUIDE",
+                                                                                     "OFFICIAL_PRICING",
+                                                                                     "DOCS_BILLING",
+                                                                                     "TERMS_BILLING",
+                                                                                     "THIRD_PARTY_REVIEW"
+                                                                                 ],
+                                          "failureKind":  null,
+                                          "structuredBlocks":  [
+                                                                   {
+                                                                       "blockType":  "PRICING_BLOCK",
+                                                                       "title":  "Pricing",
+                                                                       "content":  "* Account\n+ [Account overview](https://support.airtable.com/docs/managing-billable-collaborators-from-your-airtable-account)\n+ [Billing](https://support.airtable.com/docs/billing-overview-and-faqs)\n+ [Policies](https://support.airtable.com/docs/airtable-security-practices)\n* API\n+ [API Overview](https://support.airtable.com/docs/public-rest-api)\n+ [Get your API key](https://support.airtable.com/docs/how-do-i-get-my-api-key-)\n+ [Documentation](https://airtable.com/api)\n+ [Troubleshooting](https://support.airtable.com/docs/api-common-troubleshooting)\n* Integrations\n+ [Resources](https://www.airtable.com/developers)\n+ [Community](https://community.airtable.com/c/developers/55)\n* Enterprise\n+ [Admin Panel](https://support.airtable.com/docs/overview-enterprise-admin-panel)\n+ [Enterprise Plans](https://www.airtable.com/enterprise)\n+ [Airtable Security](https://www.airtable.com/security)\n+ [Terms of Service](https://www.airtable.com/tos)\n+ [Privacy Policy](https://www.airtable.com/privacy)\n* Resources\n+ [Community](https://community.airtable.com/)\n+ [Marketplace](https://airtable.com/marketplace)\n+ [Templates](https://www.airtable.com/templates)\n+ [Universe](https://www.airtable.com/universe)",
+                                                                       "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2"
+                                                                   }
+                                                               ],
+                                          "durationMillis":  0,
+                                          "collectedAt":  1783589606.7404575,
+                                          "structuredPayload":  {
+                                                                    "prefetchedContentRef":  "tavily:05d6503c-12a8-41b3-9de9-e023bfe1e8e5:4",
+                                                                    "prefetchedRawContentLength":  1759,
+                                                                    "primaryTool":  "TAVILY_PREFETCHED",
+                                                                    "structuredBlockCount":  1
+                                                                },
+                                          "sourceType":  "DOCS",
+                                          "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                                          "reason":  "Tavily Fast Lane å½ä¸­ TRUSTED_WEB_EXPANSION ç»æ: API - Airtable Support",
+                                          "domain":  "support.airtable.com",
+                                          "publishedAt":  null,
+                                          "relevanceScore":  0.707,
+                                          "freshnessScore":  0.6,
+                                          "totalScore":  0.926,
+                                          "trustTier":  "HIGH",
+                                          "trustTierLabel":  "é«å¯ä¿¡",
+                                          "rankingReasons":  [
+                                                                 "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡",
+                                                                 "å½ä¸­ææ¡£ååï¼éåä½ä¸ºé«ä»·å¼ææ¡£æ¥æº",
+                                                                 "å½ä¸­ææ¡£é«ä»·å¼è·¯å¾ï¼ä¼å\u0085çº§é«äºæ³å®ç½é¦é¡µ",
+                                                                 "å½ä¸­æç¡®ææ¡£è·¯å¾ï¼ä¼å\u0085çº§é«äºå¼æ¾å¹³å°æ ¹é¡µ",
+                                                                 "æç´¢åç°å®æ¹ç¸é»ææ¡£å\u0085¥å£ï¼ä¼å\u0085çº§é«äºæ¨¡æ¿å\u0085åº URL"
+                                                             ],
+                                          "rankingSummary":  "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡ï¼å½ä¸­ææ¡£ååï¼éåä½ä¸ºé«ä»·å¼ææ¡£æ¥æºï¼å½ä¸­ææ¡£é«ä»·å¼è·¯å¾ï¼ä¼å\u0085çº§é«äºæ³å®ç½é¦é¡µï¼å½ä¸­æç¡®ææ¡£è·¯å¾ï¼ä¼å\u0085çº§é«äºå¼æ¾å¹³å°æ ¹é¡µï¼æç´¢åç°å®æ¹ç¸é»ææ¡£å\u0085¥å£ï¼ä¼å\u0085çº§é«äºæ¨¡æ¿å\u0085åº URL",
+                                          "searchQuery":  "Airtable documentation api reference",
+                                          "searchEngine":  "tavily",
+                                          "resultRank":  4,
+                                          "browserTraceId":  null,
+                                          "verified":  null,
+                                          "verificationReason":  null,
+                                          "matchedSignals":  null,
+                                          "selectionStage":  "SELECTED",
+                                          "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                                          "selectionSummary":  "Tavily prefetch æ­£æå¯ç¨"
+                                      }
+                 },
+                 {
+                     "evidenceId":  "T0103-COLLECT_SOURCES_02_03-001",
+                     "title":  "Airtable Reviews 2026: What 7,800+ Users Actually Think - Airtable",
+                     "url":  "https://checkthat.ai/brands/airtable/reviews",
+                     "contentSnippet":  "* [Categories](/categories/featured)\n* [Brands](/brands)\n\n* [Overview](/features/overview)\n* [Prompts](/features/prompts)\n* [Sources](/features/sources)\n\n* [Sign In](/users/sign_in)[Built by GrowthX - Hire Us](https://growthx.ai?utm_source=checkthat-website\u0026utm_medium=referral\u0026utm_campaign=ssr\u0026utm_content=body-cta)\n\n\n\n\n\n\n![Airtable logo](https://cdn.brandfetch.io/domain/airtable.com/w/384/h/384/fallback/404?c=1exidp0JcANW1N42osUgy)\n\n![Airtable logo](https://cdn.brandfetch.io/domain/airtable.com/",
+                     "competitorName":  "Airtable",
+                     "collectedAt":  [
+                                         2026,
+                                         7,
+                                         9,
+                                         17,
+                                         33,
+                                         54,
+                                         31156000
+                                     ],
+                     "sourceType":  "REVIEW",
+                     "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                     "sourceDomain":  "checkthat.ai",
+                     "discoveryReason":  "Tavily Fast Lane å½ä¸­ OPEN_WEB ç»æ: Airtable Reviews 2026: What 7,800+ Users Actually Think - Airtable",
+                     "publishedAt":  null,
+                     "sourceScore":  0.871,
+                     "verified":  null,
+                     "verificationReason":  null,
+                     "searchQuery":  "Airtable reviews g2 capterra",
+                     "searchEngine":  "tavily",
+                     "resultRank":  1,
+                     "browserTraceId":  null,
+                     "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                     "selectionStage":  "SELECTED",
+                     "matchedSignals":  [
+
+                                        ],
+                     "pageMetadata":  {
+                                          "executorType":  "TAVILY_PREFETCHED",
+                                          "resourceLocator":  "https://checkthat.ai/brands/airtable/reviews",
+                                          "sourceUrls":  [
+                                                             "https://checkthat.ai/brands/airtable/reviews"
+                                                         ],
+                                          "discoveryDepth":  0,
+                                          "qualitySignals":  [
+                                                                 "TAVILY_RAW_CONTENT_READY",
+                                                                 "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                 "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                 "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG"
+                                                             ],
+                                          "qualityScore":  0.939,
+                                          "evidenceQualityVerdict":  {
+                                                                         "sourceAuthenticityScore":  0.6,
+                                                                         "contentUsabilityScore":  0.63,
+                                                                         "sourceTier":  "THIRD_PARTY",
+                                                                         "taskRelevanceScore":  0.75,
+                                                                         "evidenceUsabilityScore":  0.6,
+                                                                         "issues":  [
+
+                                                                                    ],
+                                                                         "qualitySignals":  [
+                                                                                                "TAVILY_RAW_CONTENT_READY",
+                                                                                                "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                                                "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG"
+                                                                                            ],
+                                                                         "repairRequired":  false
+                                                                     },
+                                          "evidenceRepairPlan":  {
+                                                                     "state":  "REPAIR_NOT_REQUIRED",
+                                                                     "reason":  "TAVILY_RAW_CONTENT_READY",
+                                                                     "sourceUrl":  "https://checkthat.ai/brands/airtable/reviews",
+                                                                     "repairQueries":  [
+
+                                                                                       ],
+                                                                     "candidateUrls":  [
+
+                                                                                       ],
+                                                                     "promotedUrls":  [
+
+                                                                                      ],
+                                                                     "complete":  false
+                                                                 },
+                                          "publicEvidenceRecoveryFieldName":  null,
+                                          "publicEvidenceRecoveryEvidencePathKey":  null,
+                                          "publicEvidenceRecoveryQueryIntents":  [
+                                                                                     "OFFICIAL_DOCS",
+                                                                                     "API_DOCS",
+                                                                                     "SDK_GUIDE",
+                                                                                     "OFFICIAL_PRICING",
+                                                                                     "DOCS_BILLING",
+                                                                                     "TERMS_BILLING",
+                                                                                     "THIRD_PARTY_REVIEW"
+                                                                                 ],
+                                          "failureKind":  null,
+                                          "structuredBlocks":  [
+                                                                   {
+                                                                       "blockType":  "PRICING_BLOCK",
+                                                                       "title":  "Pricing",
+                                                                       "content":  "* Small teams report fast setup for relational databases and internal workflows â praised as a backend for no-code stacks across Reddit and review threads\n* Per-seat pricing becomes a pain point at scale: a 25-person team on the Business plan hits ~$13,500/year before portals, automations, or add-ons\n* Advanced features like scripting, automations, and client portals are gated behind higher tiers â many teams pay a premium before the platform feels complete",
+                                                                       "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2"
+                                                                   }
+                                                               ],
+                                          "durationMillis":  0,
+                                          "collectedAt":  1783589633.7965903,
+                                          "structuredPayload":  {
+                                                                    "prefetchedContentRef":  "tavily:238ebac6-956c-4d98-a5c4-6421fff43add:1",
+                                                                    "prefetchedRawContentLength":  30983,
+                                                                    "primaryTool":  "TAVILY_PREFETCHED",
+                                                                    "structuredBlockCount":  1
+                                                                },
+                                          "sourceType":  "REVIEW",
+                                          "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                                          "reason":  "Tavily Fast Lane å½ä¸­ OPEN_WEB ç»æ: Airtable Reviews 2026: What 7,800+ Users Actually Think - Airtable",
+                                          "domain":  "checkthat.ai",
+                                          "publishedAt":  null,
+                                          "relevanceScore":  0.939,
+                                          "freshnessScore":  0.6,
+                                          "totalScore":  0.871,
+                                          "trustTier":  "MEDIUM",
+                                          "trustTierLabel":  "ä¸­å¯ä¿¡",
+                                          "rankingReasons":  [
+                                                                 "æ¥æºå¯ä¿¡åº¦ï¼ä¸­å¯ä¿¡",
+                                                                 "ç¬¬ä¸æ¹è¯æµæ¥æºå¯è¡¥å\u0085\u0085å®ç½ä¹å¤çå¤é¨è§è§"
+                                                             ],
+                                          "rankingSummary":  "æ¥æºå¯ä¿¡åº¦ï¼ä¸­å¯ä¿¡ï¼ç¬¬ä¸æ¹è¯æµæ¥æºå¯è¡¥å\u0085\u0085å®ç½ä¹å¤çå¤é¨è§è§",
+                                          "searchQuery":  "Airtable reviews g2 capterra",
+                                          "searchEngine":  "tavily",
+                                          "resultRank":  1,
+                                          "browserTraceId":  null,
+                                          "verified":  null,
+                                          "verificationReason":  null,
+                                          "matchedSignals":  null,
+                                          "selectionStage":  "SELECTED",
+                                          "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                                          "selectionSummary":  "Tavily prefetch æ­£æå¯ç¨"
+                                      }
+                 },
+                 {
+                     "evidenceId":  "T0103-COLLECT_SOURCES_02_03-002",
+                     "title":  "Top Airtable Alternatives to Upgrade Your Workflow",
+                     "url":  "https://bigtime.net/blogs/airtable-alternatives",
+                     "contentSnippet":  "[Resources](https://www.bigtime.net/resources/)\n\n[Blog](https://www.bigtime.net/blogs/)\n\n10 Best Airtable Alternatives of 2026 â Features, Reviews, and Pricing\n\n# 10 Best Airtable Alternatives of 2026 â Features, Reviews, and Pricing\n\n![](https://www.bigtime.net/wp-content/uploads/2025/01/T0DUZ5H61-U05LLPPKC01-58bf748ef2a5-512.jpeg)\n\n## Anna Hankus\n\nPosted: August 26, 2025\n\ntable of contents \n\nWhy Look for Alternatives to Airtable?\n\nWhat Features Should the Best Airtable Alternatives Have?\n\nThe ",
+                     "competitorName":  "Airtable",
+                     "collectedAt":  [
+                                         2026,
+                                         7,
+                                         9,
+                                         17,
+                                         33,
+                                         54,
+                                         512989000
+                                     ],
+                     "sourceType":  "REVIEW",
+                     "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                     "sourceDomain":  "bigtime.net",
+                     "discoveryReason":  "Tavily Fast Lane å½ä¸­ OPEN_WEB ç»æ: Top Airtable Alternatives to Upgrade Your Workflow",
+                     "publishedAt":  null,
+                     "sourceScore":  0.847,
+                     "verified":  null,
+                     "verificationReason":  null,
+                     "searchQuery":  "Airtable reviews g2 capterra",
+                     "searchEngine":  "tavily",
+                     "resultRank":  2,
+                     "browserTraceId":  null,
+                     "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                     "selectionStage":  "SELECTED",
+                     "matchedSignals":  [
+
+                                        ],
+                     "pageMetadata":  {
+                                          "executorType":  "TAVILY_PREFETCHED",
+                                          "resourceLocator":  "https://bigtime.net/blogs/airtable-alternatives",
+                                          "sourceUrls":  [
+                                                             "https://www.bigtime.net/blogs/airtable-alternatives",
+                                                             "https://bigtime.net/blogs/airtable-alternatives"
+                                                         ],
+                                          "discoveryDepth":  0,
+                                          "qualitySignals":  [
+                                                                 "TAVILY_RAW_CONTENT_READY",
+                                                                 "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                 "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                 "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                 "FIELD_RELEVANCE_WEAK",
+                                                                 "EVIDENCE_REPAIR_REQUIRED"
+                                                             ],
+                                          "qualityScore":  0.909,
+                                          "evidenceQualityVerdict":  {
+                                                                         "sourceAuthenticityScore":  0.6,
+                                                                         "contentUsabilityScore":  0.63,
+                                                                         "sourceTier":  "THIRD_PARTY",
+                                                                         "taskRelevanceScore":  0.35,
+                                                                         "evidenceUsabilityScore":  0.35,
+                                                                         "issues":  [
+                                                                                        "LOW_TASK_KEYWORD_DENSITY"
+                                                                                    ],
+                                                                         "qualitySignals":  [
+                                                                                                "TAVILY_RAW_CONTENT_READY",
+                                                                                                "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                                                "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                                                "FIELD_RELEVANCE_WEAK",
+                                                                                                "EVIDENCE_REPAIR_REQUIRED"
+                                                                                            ],
+                                                                         "repairRequired":  true
+                                                                     },
+                                          "evidenceRepairPlan":  {
+                                                                     "state":  "REPAIR_NOT_REQUIRED",
+                                                                     "reason":  "TAVILY_RAW_CONTENT_READY",
+                                                                     "sourceUrl":  "https://bigtime.net/blogs/airtable-alternatives",
+                                                                     "repairQueries":  [
+
+                                                                                       ],
+                                                                     "candidateUrls":  [
+
+                                                                                       ],
+                                                                     "promotedUrls":  [
+
+                                                                                      ],
+                                                                     "complete":  false
+                                                                 },
+                                          "publicEvidenceRecoveryFieldName":  null,
+                                          "publicEvidenceRecoveryEvidencePathKey":  null,
+                                          "publicEvidenceRecoveryQueryIntents":  [
+                                                                                     "OFFICIAL_DOCS",
+                                                                                     "API_DOCS",
+                                                                                     "SDK_GUIDE",
+                                                                                     "OFFICIAL_PRICING",
+                                                                                     "DOCS_BILLING",
+                                                                                     "TERMS_BILLING",
+                                                                                     "THIRD_PARTY_REVIEW"
+                                                                                 ],
+                                          "failureKind":  null,
+                                          "structuredBlocks":  [
+                                                                   {
+                                                                       "blockType":  "PRICING_BLOCK",
+                                                                       "title":  "Pricing",
+                                                                       "content":  "|  |  |  |  |\n| --- | --- | --- | --- |\n| **Tool** | **Description** | **Strengths** | **Limitations** |\n| **BigTime** | [PSA software](https://www.bigtime.net/blogs/what-is-psa-software/) with resource, time, and financial tracking | Comprehensive features, scalable, strong reporting | Learning curve |\n| **Trello** | Simple Kanban task management tool | Easy to use, affordable | Lacks advanced PM features |\n| **ClickUp** | All-in-one PM platform | Highly customizable, many views | Can be overwhelming |\n| **Monday.com** | Visual workflow boards | Flexible, good automations | Pricing rises with team size |\n| **Wrike** | Advanced PM tool for large teams | Robust planning \u0026 reporting | Complex onboarding |\n| **Notion** | Notes, databases, and tasks in one | Extremely flexible | Requires structure |\n| **Smartsheet** | Spreadsheet-based PM | Detailed control | Can feel rigid |\n| **Basecamp** | Communication \u0026 task hub | Simple, clear | Minimal PM features |\n| **Kantata** | PSA tool for service firms | Strong resource \u0026 billing | Steep learning curve |\n| **Coda** | Docs + spreadsheets + apps | Highly customizable | Requires design effort |",
+                                                                       "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=3"
+                                                                   }
+                                                               ],
+                                          "durationMillis":  0,
+                                          "collectedAt":  1783589633.7976477,
+                                          "structuredPayload":  {
+                                                                    "prefetchedContentRef":  "tavily:238ebac6-956c-4d98-a5c4-6421fff43add:2",
+                                                                    "prefetchedRawContentLength":  44121,
+                                                                    "primaryTool":  "TAVILY_PREFETCHED",
+                                                                    "structuredBlockCount":  1
+                                                                },
+                                          "sourceType":  "REVIEW",
+                                          "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                                          "reason":  "Tavily Fast Lane å½ä¸­ OPEN_WEB ç»æ: Top Airtable Alternatives to Upgrade Your Workflow",
+                                          "domain":  "bigtime.net",
+                                          "publishedAt":  null,
+                                          "relevanceScore":  0.909,
+                                          "freshnessScore":  0.6,
+                                          "totalScore":  0.847,
+                                          "trustTier":  "MEDIUM",
+                                          "trustTierLabel":  "ä¸­å¯ä¿¡",
+                                          "rankingReasons":  [
+                                                                 "æ¥æºå¯ä¿¡åº¦ï¼ä¸­å¯ä¿¡",
+                                                                 "ç¬¬ä¸æ¹è¯æµæ¥æºå¯è¡¥å\u0085\u0085å®ç½ä¹å¤çå¤é¨è§è§"
+                                                             ],
+                                          "rankingSummary":  "æ¥æºå¯ä¿¡åº¦ï¼ä¸­å¯ä¿¡ï¼ç¬¬ä¸æ¹è¯æµæ¥æºå¯è¡¥å\u0085\u0085å®ç½ä¹å¤çå¤é¨è§è§",
+                                          "searchQuery":  "Airtable reviews g2 capterra",
+                                          "searchEngine":  "tavily",
+                                          "resultRank":  2,
+                                          "browserTraceId":  null,
+                                          "verified":  null,
+                                          "verificationReason":  null,
+                                          "matchedSignals":  null,
+                                          "selectionStage":  "SELECTED",
+                                          "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                                          "selectionSummary":  "Tavily prefetch æ­£æå¯ç¨"
+                                      }
+                 },
+                 {
+                     "evidenceId":  "T0103-COLLECT_SOURCES_02_02-003",
+                     "title":  "Using Airtable\u0027s API",
+                     "url":  "https://airtable.com/guides/scale/using-airtable-api",
+                     "contentSnippet":  "1. [Home](/)\n2. [Guides](/guides)\n3. [Scale your work](/guides/scale)\n4. Using Airtableâs API\n\n# Using Airtableâs API\n\n![Airtable](/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fhlcyrtq5%2Fproduction%2F7d6ae733db9d34fc191cab48308d0d5e18c94118-169x169.png%3Fw%3D64%26h%3D64\u0026w=64\u0026q=75)\n\nAirtable\n\n3 min read\n\n![Using Airtableâs API](/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fhlcyrtq5%2Fproduction%2F75b50845b0fef51c2eeae8b377d50c666642d8c1-1600x900.png%3Fw%3D1200%26h%3D675\u0026w=384",
+                     "competitorName":  "Airtable",
+                     "collectedAt":  [
+                                         2026,
+                                         7,
+                                         9,
+                                         17,
+                                         33,
+                                         30,
+                                         769453000
+                                     ],
+                     "sourceType":  "DOCS",
+                     "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                     "sourceDomain":  "airtable.com",
+                     "discoveryReason":  "Tavily Fast Lane å½ä¸­ TRUSTED_WEB_EXPANSION ç»æ: Using Airtable\u0027s API",
+                     "publishedAt":  null,
+                     "sourceScore":  0.815,
+                     "verified":  null,
+                     "verificationReason":  null,
+                     "searchQuery":  "Airtable documentation api reference",
+                     "searchEngine":  "tavily",
+                     "resultRank":  2,
+                     "browserTraceId":  null,
+                     "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                     "selectionStage":  "SELECTED",
+                     "matchedSignals":  [
+
+                                        ],
+                     "pageMetadata":  {
+                                          "executorType":  "TAVILY_PREFETCHED",
+                                          "resourceLocator":  "https://airtable.com/guides/scale/using-airtable-api",
+                                          "sourceUrls":  [
+                                                             "https://www.airtable.com/guides/scale/using-airtable-api",
+                                                             "https://airtable.com/guides/scale/using-airtable-api"
+                                                         ],
+                                          "discoveryDepth":  0,
+                                          "qualitySignals":  [
+                                                                 "TAVILY_RAW_CONTENT_READY",
+                                                                 "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                 "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                 "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                 "FIELD_RELEVANCE_PARTIAL"
+                                                             ],
+                                          "qualityScore":  0.769,
+                                          "evidenceQualityVerdict":  {
+                                                                         "sourceAuthenticityScore":  0.9,
+                                                                         "contentUsabilityScore":  0.65,
+                                                                         "sourceTier":  "OFFICIAL",
+                                                                         "taskRelevanceScore":  0.55,
+                                                                         "evidenceUsabilityScore":  0.55,
+                                                                         "issues":  [
+
+                                                                                    ],
+                                                                         "qualitySignals":  [
+                                                                                                "TAVILY_RAW_CONTENT_READY",
+                                                                                                "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                                                "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                                                "FIELD_RELEVANCE_PARTIAL"
+                                                                                            ],
+                                                                         "repairRequired":  false
+                                                                     },
+                                          "evidenceRepairPlan":  {
+                                                                     "state":  "REPAIR_NOT_REQUIRED",
+                                                                     "reason":  "TAVILY_RAW_CONTENT_READY",
+                                                                     "sourceUrl":  "https://airtable.com/guides/scale/using-airtable-api",
+                                                                     "repairQueries":  [
+
+                                                                                       ],
+                                                                     "candidateUrls":  [
+
+                                                                                       ],
+                                                                     "promotedUrls":  [
+
+                                                                                      ],
+                                                                     "complete":  false
+                                                                 },
+                                          "publicEvidenceRecoveryFieldName":  null,
+                                          "publicEvidenceRecoveryEvidencePathKey":  null,
+                                          "publicEvidenceRecoveryQueryIntents":  [
+                                                                                     "OFFICIAL_DOCS",
+                                                                                     "API_DOCS",
+                                                                                     "SDK_GUIDE",
+                                                                                     "OFFICIAL_PRICING",
+                                                                                     "DOCS_BILLING",
+                                                                                     "TERMS_BILLING",
+                                                                                     "THIRD_PARTY_REVIEW"
+                                                                                 ],
+                                          "failureKind":  null,
+                                          "structuredBlocks":  [
+                                                                   {
+                                                                       "blockType":  "DEVELOPER_DOCS_BLOCK",
+                                                                       "title":  "Developer Docs",
+                                                                       "content":  "1. [Home](/)\n2. [Guides](/guides)\n3. [Scale your work](/guides/scale)\n4. Using Airtableâs API",
+                                                                       "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2"
+                                                                   }
+                                                               ],
+                                          "durationMillis":  0,
+                                          "collectedAt":  1783589606.7411842,
+                                          "structuredPayload":  {
+                                                                    "prefetchedContentRef":  "tavily:05d6503c-12a8-41b3-9de9-e023bfe1e8e5:2",
+                                                                    "prefetchedRawContentLength":  6072,
+                                                                    "primaryTool":  "TAVILY_PREFETCHED",
+                                                                    "structuredBlockCount":  1
+                                                                },
+                                          "sourceType":  "DOCS",
+                                          "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                                          "reason":  "Tavily Fast Lane å½ä¸­ TRUSTED_WEB_EXPANSION ç»æ: Using Airtable\u0027s API",
+                                          "domain":  "airtable.com",
+                                          "publishedAt":  null,
+                                          "relevanceScore":  0.769,
+                                          "freshnessScore":  0.6,
+                                          "totalScore":  0.815,
+                                          "trustTier":  "HIGH",
+                                          "trustTierLabel":  "é«å¯ä¿¡",
+                                          "rankingReasons":  [
+                                                                 "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡",
+                                                                 "æç´¢åç°å®æ¹ç¸é»ææ¡£å\u0085¥å£ï¼ä¼å\u0085çº§é«äºæ¨¡æ¿å\u0085åº URL"
+                                                             ],
+                                          "rankingSummary":  "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡ï¼æç´¢åç°å®æ¹ç¸é»ææ¡£å\u0085¥å£ï¼ä¼å\u0085çº§é«äºæ¨¡æ¿å\u0085åº URL",
+                                          "searchQuery":  "Airtable documentation api reference",
+                                          "searchEngine":  "tavily",
+                                          "resultRank":  2,
+                                          "browserTraceId":  null,
+                                          "verified":  null,
+                                          "verificationReason":  null,
+                                          "matchedSignals":  null,
+                                          "selectionStage":  "SELECTED",
+                                          "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                                          "selectionSummary":  "Tavily prefetch æ­£æå¯ç¨"
+                                      }
+                 },
+                 {
+                     "evidenceId":  "T0103-COLLECT_SOURCES_02_02-004",
+                     "title":  "A Comprehensive Guide to Understanding the Airtable API - DEV Community",
+                     "url":  "https://zuplo.com/learning-center/airtable-api",
+                     "contentSnippet":  "[Skip to content](#main-content)\n\n[![DEV Community](https://media2.dev.to/dynamic/image/quality=100/https://dev-to-uploads.s3.amazonaws.com/uploads/logos/resized_logo_UQww2soKuUsjaOGNB38o.png)](/) \n\n[Log in](https://dev.to/enter?signup_subforem=1)    [Create account](https://dev.to/enter?signup_subforem=1\u0026state=new-user)\n\n## DEV Community\n\n[![Zuplo profile image](https://media2.dev.to/dynamic/image/width=50,height=50,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.co",
+                     "competitorName":  "Airtable",
+                     "collectedAt":  [
+                                         2026,
+                                         7,
+                                         9,
+                                         17,
+                                         33,
+                                         31,
+                                         482516000
+                                     ],
+                     "sourceType":  "DOCS",
+                     "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                     "sourceDomain":  "zuplo.com",
+                     "discoveryReason":  "Tavily Fast Lane å½ä¸­ TRUSTED_WEB_EXPANSION ç»æ: A Comprehensive Guide to Understanding the Airtable API - DEV Community",
+                     "publishedAt":  null,
+                     "sourceScore":  0.814,
+                     "verified":  null,
+                     "verificationReason":  null,
+                     "searchQuery":  "Airtable documentation api reference",
+                     "searchEngine":  "tavily",
+                     "resultRank":  3,
+                     "browserTraceId":  null,
+                     "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                     "selectionStage":  "SELECTED",
+                     "matchedSignals":  [
+
+                                        ],
+                     "pageMetadata":  {
+                                          "executorType":  "TAVILY_PREFETCHED",
+                                          "resourceLocator":  "https://zuplo.com/learning-center/airtable-api",
+                                          "sourceUrls":  [
+                                                             "https://zuplo.com/learning-center/airtable-api"
+                                                         ],
+                                          "discoveryDepth":  0,
+                                          "qualitySignals":  [
+                                                                 "TAVILY_RAW_CONTENT_READY",
+                                                                 "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                 "TAVILY_STRUCTURED_BLOCK_COUNT=2",
+                                                                 "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG"
+                                                             ],
+                                          "qualityScore":  0.768,
+                                          "evidenceQualityVerdict":  {
+                                                                         "sourceAuthenticityScore":  0.9,
+                                                                         "contentUsabilityScore":  0.65,
+                                                                         "sourceTier":  "OFFICIAL",
+                                                                         "taskRelevanceScore":  0.75,
+                                                                         "evidenceUsabilityScore":  0.65,
+                                                                         "issues":  [
+
+                                                                                    ],
+                                                                         "qualitySignals":  [
+                                                                                                "TAVILY_RAW_CONTENT_READY",
+                                                                                                "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                "TAVILY_STRUCTURED_BLOCK_COUNT=2",
+                                                                                                "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG"
+                                                                                            ],
+                                                                         "repairRequired":  false
+                                                                     },
+                                          "evidenceRepairPlan":  {
+                                                                     "state":  "REPAIR_NOT_REQUIRED",
+                                                                     "reason":  "TAVILY_RAW_CONTENT_READY",
+                                                                     "sourceUrl":  "https://zuplo.com/learning-center/airtable-api",
+                                                                     "repairQueries":  [
+
+                                                                                       ],
+                                                                     "candidateUrls":  [
+
+                                                                                       ],
+                                                                     "promotedUrls":  [
+
+                                                                                      ],
+                                                                     "complete":  false
+                                                                 },
+                                          "publicEvidenceRecoveryFieldName":  null,
+                                          "publicEvidenceRecoveryEvidencePathKey":  null,
+                                          "publicEvidenceRecoveryQueryIntents":  [
+                                                                                     "OFFICIAL_DOCS",
+                                                                                     "API_DOCS",
+                                                                                     "SDK_GUIDE",
+                                                                                     "OFFICIAL_PRICING",
+                                                                                     "DOCS_BILLING",
+                                                                                     "TERMS_BILLING",
+                                                                                     "THIRD_PARTY_REVIEW"
+                                                                                 ],
+                                          "failureKind":  null,
+                                          "structuredBlocks":  [
+                                                                   {
+                                                                       "blockType":  "PRICING_BLOCK",
+                                                                       "title":  "Pricing",
+                                                                       "content":  "Understanding [Airtable\u0027s pricing structure](https://www.airtable.com/developers/web/api/billing-plans) is crucial when planning your API integration. Airtable offers several tiers with different API limits and capabilities:",
+                                                                       "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=3"
+                                                                   },
+                                                                   {
+                                                                       "blockType":  "DEVELOPER_DOCS_BLOCK",
+                                                                       "title":  "Developer Docs",
+                                                                       "content":  "This guide explores the capabilities, benefits, and practical implementation of the [Airtable API](https://airtable.com/developers/web/api/introduction), while also examining alternatives for those seeking different solutions for their data management needs. Whether you\u0027re building custom interfaces, automating workflows, or integrating with other services, understanding how to effectively interact with Airtable\u0027s API can significantly enhance your development projects and unlock new possibilities for your data.",
+                                                                       "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2"
+                                                                   }
+                                                               ],
+                                          "durationMillis":  0,
+                                          "collectedAt":  1783589606.742337,
+                                          "structuredPayload":  {
+                                                                    "prefetchedContentRef":  "tavily:05d6503c-12a8-41b3-9de9-e023bfe1e8e5:3",
+                                                                    "prefetchedRawContentLength":  16708,
+                                                                    "primaryTool":  "TAVILY_PREFETCHED",
+                                                                    "structuredBlockCount":  2
+                                                                },
+                                          "sourceType":  "DOCS",
+                                          "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                                          "reason":  "Tavily Fast Lane å½ä¸­ TRUSTED_WEB_EXPANSION ç»æ: A Comprehensive Guide to Understanding the Airtable API - DEV Community",
+                                          "domain":  "zuplo.com",
+                                          "publishedAt":  null,
+                                          "relevanceScore":  0.768,
+                                          "freshnessScore":  0.6,
+                                          "totalScore":  0.814,
+                                          "trustTier":  "HIGH",
+                                          "trustTierLabel":  "é«å¯ä¿¡",
+                                          "rankingReasons":  [
+                                                                 "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡",
+                                                                 "æç´¢åç°å®æ¹ç¸é»ææ¡£å\u0085¥å£ï¼ä¼å\u0085çº§é«äºæ¨¡æ¿å\u0085åº URL"
+                                                             ],
+                                          "rankingSummary":  "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡ï¼æç´¢åç°å®æ¹ç¸é»ææ¡£å\u0085¥å£ï¼ä¼å\u0085çº§é«äºæ¨¡æ¿å\u0085åº URL",
+                                          "searchQuery":  "Airtable documentation api reference",
+                                          "searchEngine":  "tavily",
+                                          "resultRank":  3,
+                                          "browserTraceId":  null,
+                                          "verified":  null,
+                                          "verificationReason":  null,
+                                          "matchedSignals":  null,
+                                          "selectionStage":  "SELECTED",
+                                          "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                                          "selectionSummary":  "Tavily prefetch æ­£æå¯ç¨"
+                                      }
+                 },
+                 {
+                     "evidenceId":  "T0103-COLLECT_SOURCES_02_03-003",
+                     "title":  "Honest Review of Airtable for 2026",
+                     "url":  "https://themarketingagency.ca/blog/honest-review-airtable",
+                     "contentSnippet":  "[![logo main](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![logo dark](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![logo main](data:image/svg+xml,%3Csvg%20xmlns=\u0027http://www.w3.org/2000/svg\u0027%20viewBox=\u00270%200%20400%20120\u0027%3E%3C/svg%3E)](https://themarketingagency.ca/)\n\n[0](https://themarketingagency.ca/cart/) \n\nNo products in the cart.\n\n[![logo main](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![",
+                     "competitorName":  "Airtable",
+                     "collectedAt":  [
+                                         2026,
+                                         7,
+                                         9,
+                                         17,
+                                         33,
+                                         54,
+                                         897341000
+                                     ],
+                     "sourceType":  "REVIEW",
+                     "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                     "sourceDomain":  "themarketingagency.ca",
+                     "discoveryReason":  "Tavily Fast Lane å½ä¸­ OPEN_WEB ç»æ: Honest Review of Airtable for 2026",
+                     "publishedAt":  null,
+                     "sourceScore":  0.798,
+                     "verified":  null,
+                     "verificationReason":  null,
+                     "searchQuery":  "Airtable reviews g2 capterra",
+                     "searchEngine":  "tavily",
+                     "resultRank":  3,
+                     "browserTraceId":  null,
+                     "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                     "selectionStage":  "SELECTED",
+                     "matchedSignals":  [
+
+                                        ],
+                     "pageMetadata":  {
+                                          "executorType":  "TAVILY_PREFETCHED",
+                                          "resourceLocator":  "https://themarketingagency.ca/blog/honest-review-airtable",
+                                          "sourceUrls":  [
+                                                             "https://themarketingagency.ca/blog/honest-review-airtable"
+                                                         ],
+                                          "discoveryDepth":  0,
+                                          "qualitySignals":  [
+                                                                 "TAVILY_RAW_CONTENT_READY",
+                                                                 "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                 "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                 "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                 "FIELD_RELEVANCE_PARTIAL"
+                                                             ],
+                                          "qualityScore":  0.848,
+                                          "evidenceQualityVerdict":  {
+                                                                         "sourceAuthenticityScore":  0.6,
+                                                                         "contentUsabilityScore":  0.63,
+                                                                         "sourceTier":  "THIRD_PARTY",
+                                                                         "taskRelevanceScore":  0.55,
+                                                                         "evidenceUsabilityScore":  0.55,
+                                                                         "issues":  [
+
+                                                                                    ],
+                                                                         "qualitySignals":  [
+                                                                                                "TAVILY_RAW_CONTENT_READY",
+                                                                                                "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                                                "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                                                "FIELD_RELEVANCE_PARTIAL"
+                                                                                            ],
+                                                                         "repairRequired":  false
+                                                                     },
+                                          "evidenceRepairPlan":  {
+                                                                     "state":  "REPAIR_NOT_REQUIRED",
+                                                                     "reason":  "TAVILY_RAW_CONTENT_READY",
+                                                                     "sourceUrl":  "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                                     "repairQueries":  [
+
+                                                                                       ],
+                                                                     "candidateUrls":  [
+
+                                                                                       ],
+                                                                     "promotedUrls":  [
+
+                                                                                      ],
+                                                                     "complete":  false
+                                                                 },
+                                          "publicEvidenceRecoveryFieldName":  null,
+                                          "publicEvidenceRecoveryEvidencePathKey":  null,
+                                          "publicEvidenceRecoveryQueryIntents":  [
+                                                                                     "OFFICIAL_DOCS",
+                                                                                     "API_DOCS",
+                                                                                     "SDK_GUIDE",
+                                                                                     "OFFICIAL_PRICING",
+                                                                                     "DOCS_BILLING",
+                                                                                     "TERMS_BILLING",
+                                                                                     "THIRD_PARTY_REVIEW"
+                                                                                 ],
+                                          "failureKind":  null,
+                                          "structuredBlocks":  [
+                                                                   {
+                                                                       "blockType":  "PRICING_BLOCK",
+                                                                       "title":  "Pricing",
+                                                                       "content":  "The free plan is excellent for testing, but paid tiers become expensive quickly. Additional AI costs and per-user pricing make budget planning challenging for growing teams. Do the math before you fall in love with the features.",
+                                                                       "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2"
+                                                                   }
+                                                               ],
+                                          "durationMillis":  0,
+                                          "collectedAt":  1783589633.7965903,
+                                          "structuredPayload":  {
+                                                                    "prefetchedContentRef":  "tavily:238ebac6-956c-4d98-a5c4-6421fff43add:3",
+                                                                    "prefetchedRawContentLength":  26791,
+                                                                    "primaryTool":  "TAVILY_PREFETCHED",
+                                                                    "structuredBlockCount":  1
+                                                                },
+                                          "sourceType":  "REVIEW",
+                                          "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                                          "reason":  "Tavily Fast Lane å½ä¸­ OPEN_WEB ç»æ: Honest Review of Airtable for 2026",
+                                          "domain":  "themarketingagency.ca",
+                                          "publishedAt":  null,
+                                          "relevanceScore":  0.848,
+                                          "freshnessScore":  0.6,
+                                          "totalScore":  0.798,
+                                          "trustTier":  "MEDIUM",
+                                          "trustTierLabel":  "ä¸­å¯ä¿¡",
+                                          "rankingReasons":  [
+                                                                 "æ¥æºå¯ä¿¡åº¦ï¼ä¸­å¯ä¿¡",
+                                                                 "ç¬¬ä¸æ¹è¯æµæ¥æºå¯è¡¥å\u0085\u0085å®ç½ä¹å¤çå¤é¨è§è§"
+                                                             ],
+                                          "rankingSummary":  "æ¥æºå¯ä¿¡åº¦ï¼ä¸­å¯ä¿¡ï¼ç¬¬ä¸æ¹è¯æµæ¥æºå¯è¡¥å\u0085\u0085å®ç½ä¹å¤çå¤é¨è§è§",
+                                          "searchQuery":  "Airtable reviews g2 capterra",
+                                          "searchEngine":  "tavily",
+                                          "resultRank":  3,
+                                          "browserTraceId":  null,
+                                          "verified":  null,
+                                          "verificationReason":  null,
+                                          "matchedSignals":  null,
+                                          "selectionStage":  "SELECTED",
+                                          "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                                          "selectionSummary":  "Tavily prefetch æ­£æå¯ç¨"
+                                      }
+                 },
+                 {
+                     "evidenceId":  "T0103-COLLECT_SOURCES_02_03-004",
+                     "title":  "Airtable Review: Streamline Workflows, Build Custom Apps, and Manage Data Efficiently",
+                     "url":  "https://copy.ai/go-to-market-tools/airtable-review",
+                     "contentSnippet":  "[All apps](/go-to-market-tool-reviews)\n\n![](https://cdn.prod.website-files.com/628288c5cd3e8411b90a36a4/667a75ba21c10aeab902fbdb_image.svg)\n\nCustomer Relationship Management Software\n\n## Airtable Review\n\nAirtable is a powerful low-code platform designed to help businesses and teams build custom applications, automate workflows, and create a single source of truth for their data. It\u0027s an ideal solution for organizations looking to streamline processes, enhance collaboration, and drive better deci",
+                     "competitorName":  "Airtable",
+                     "collectedAt":  [
+                                         2026,
+                                         7,
+                                         9,
+                                         17,
+                                         33,
+                                         55,
+                                         242332000
+                                     ],
+                     "sourceType":  "REVIEW",
+                     "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                     "sourceDomain":  "copy.ai",
+                     "discoveryReason":  "Tavily Fast Lane å½ä¸­ OPEN_WEB ç»æ: Airtable Review: Streamline Workflows, Build Custom Apps, and Manage Data Efficiently",
+                     "publishedAt":  null,
+                     "sourceScore":  0.765,
+                     "verified":  null,
+                     "verificationReason":  null,
+                     "searchQuery":  "Airtable reviews g2 capterra",
+                     "searchEngine":  "tavily",
+                     "resultRank":  4,
+                     "browserTraceId":  null,
+                     "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                     "selectionStage":  "SELECTED",
+                     "matchedSignals":  [
+
+                                        ],
+                     "pageMetadata":  {
+                                          "executorType":  "TAVILY_PREFETCHED",
+                                          "resourceLocator":  "https://copy.ai/go-to-market-tools/airtable-review",
+                                          "sourceUrls":  [
+                                                             "https://www.copy.ai/go-to-market-tools/airtable-review",
+                                                             "https://copy.ai/go-to-market-tools/airtable-review"
+                                                         ],
+                                          "discoveryDepth":  0,
+                                          "qualitySignals":  [
+                                                                 "TAVILY_RAW_CONTENT_READY",
+                                                                 "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                 "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                 "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                 "FIELD_RELEVANCE_PARTIAL"
+                                                             ],
+                                          "qualityScore":  0.806,
+                                          "evidenceQualityVerdict":  {
+                                                                         "sourceAuthenticityScore":  0.6,
+                                                                         "contentUsabilityScore":  0.63,
+                                                                         "sourceTier":  "THIRD_PARTY",
+                                                                         "taskRelevanceScore":  0.55,
+                                                                         "evidenceUsabilityScore":  0.55,
+                                                                         "issues":  [
+
+                                                                                    ],
+                                                                         "qualitySignals":  [
+                                                                                                "TAVILY_RAW_CONTENT_READY",
+                                                                                                "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                                                "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                                                "FIELD_RELEVANCE_PARTIAL"
+                                                                                            ],
+                                                                         "repairRequired":  false
+                                                                     },
+                                          "evidenceRepairPlan":  {
+                                                                     "state":  "REPAIR_NOT_REQUIRED",
+                                                                     "reason":  "TAVILY_RAW_CONTENT_READY",
+                                                                     "sourceUrl":  "https://copy.ai/go-to-market-tools/airtable-review",
+                                                                     "repairQueries":  [
+
+                                                                                       ],
+                                                                     "candidateUrls":  [
+
+                                                                                       ],
+                                                                     "promotedUrls":  [
+
+                                                                                      ],
+                                                                     "complete":  false
+                                                                 },
+                                          "publicEvidenceRecoveryFieldName":  null,
+                                          "publicEvidenceRecoveryEvidencePathKey":  null,
+                                          "publicEvidenceRecoveryQueryIntents":  [
+                                                                                     "OFFICIAL_DOCS",
+                                                                                     "API_DOCS",
+                                                                                     "SDK_GUIDE",
+                                                                                     "OFFICIAL_PRICING",
+                                                                                     "DOCS_BILLING",
+                                                                                     "TERMS_BILLING",
+                                                                                     "THIRD_PARTY_REVIEW"
+                                                                                 ],
+                                          "failureKind":  null,
+                                          "structuredBlocks":  [
+                                                                   {
+                                                                       "blockType":  "PRICING_BLOCK",
+                                                                       "title":  "Pricing",
+                                                                       "content":  "Airtable offers flexible pricing options to suit different team sizes and needs. Their plans range from a free tier to enterprise-level solutions. Pricing is per seat/user and billed monthly or annually.",
+                                                                       "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2"
+                                                                   }
+                                                               ],
+                                          "durationMillis":  0,
+                                          "collectedAt":  1783589633.7981727,
+                                          "structuredPayload":  {
+                                                                    "prefetchedContentRef":  "tavily:238ebac6-956c-4d98-a5c4-6421fff43add:4",
+                                                                    "prefetchedRawContentLength":  17665,
+                                                                    "primaryTool":  "TAVILY_PREFETCHED",
+                                                                    "structuredBlockCount":  1
+                                                                },
+                                          "sourceType":  "REVIEW",
+                                          "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                                          "reason":  "Tavily Fast Lane å½ä¸­ OPEN_WEB ç»æ: Airtable Review: Streamline Workflows, Build Custom Apps, and Manage Data Efficiently",
+                                          "domain":  "copy.ai",
+                                          "publishedAt":  null,
+                                          "relevanceScore":  0.806,
+                                          "freshnessScore":  0.6,
+                                          "totalScore":  0.765,
+                                          "trustTier":  "MEDIUM",
+                                          "trustTierLabel":  "ä¸­å¯ä¿¡",
+                                          "rankingReasons":  [
+                                                                 "æ¥æºå¯ä¿¡åº¦ï¼ä¸­å¯ä¿¡",
+                                                                 "ç¬¬ä¸æ¹è¯æµæ¥æºå¯è¡¥å\u0085\u0085å®ç½ä¹å¤çå¤é¨è§è§"
+                                                             ],
+                                          "rankingSummary":  "æ¥æºå¯ä¿¡åº¦ï¼ä¸­å¯ä¿¡ï¼ç¬¬ä¸æ¹è¯æµæ¥æºå¯è¡¥å\u0085\u0085å®ç½ä¹å¤çå¤é¨è§è§",
+                                          "searchQuery":  "Airtable reviews g2 capterra",
+                                          "searchEngine":  "tavily",
+                                          "resultRank":  4,
+                                          "browserTraceId":  null,
+                                          "verified":  null,
+                                          "verificationReason":  null,
+                                          "matchedSignals":  null,
+                                          "selectionStage":  "SELECTED",
+                                          "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                                          "selectionSummary":  "Tavily prefetch æ­£æå¯ç¨"
+                                      }
+                 },
+                 {
+                     "evidenceId":  "T0103-COLLECT_SOURCES_02_03-005",
+                     "title":  "Airtable Review: Pros, Cons, \u0026 Is It Worth It in 2026?",
+                     "url":  "https://zite.com/blog/airtable-reviews",
+                     "contentSnippet":  "![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/695f943890dbfcf5d73e5cab_zite-logo.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a09576ebadb9a7504070_brandedicons.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a194602129d0137156d3_apps-image.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a0964207c44b286b8163_databases-icon.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a096608",
+                     "competitorName":  "Airtable",
+                     "collectedAt":  [
+                                         2026,
+                                         7,
+                                         9,
+                                         17,
+                                         33,
+                                         55,
+                                         543042000
+                                     ],
+                     "sourceType":  "REVIEW",
+                     "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                     "sourceDomain":  "zite.com",
+                     "discoveryReason":  "Tavily Fast Lane å½ä¸­ OPEN_WEB ç»æ: Airtable Review: Pros, Cons, \u0026 Is It Worth It in 2026?",
+                     "publishedAt":  null,
+                     "sourceScore":  0.731,
+                     "verified":  null,
+                     "verificationReason":  null,
+                     "searchQuery":  "Airtable reviews g2 capterra",
+                     "searchEngine":  "tavily",
+                     "resultRank":  5,
+                     "browserTraceId":  null,
+                     "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                     "selectionStage":  "SELECTED",
+                     "matchedSignals":  [
+
+                                        ],
+                     "pageMetadata":  {
+                                          "executorType":  "TAVILY_PREFETCHED",
+                                          "resourceLocator":  "https://zite.com/blog/airtable-reviews",
+                                          "sourceUrls":  [
+                                                             "https://www.zite.com/blog/airtable-reviews",
+                                                             "https://zite.com/blog/airtable-reviews"
+                                                         ],
+                                          "discoveryDepth":  0,
+                                          "qualitySignals":  [
+                                                                 "TAVILY_RAW_CONTENT_READY",
+                                                                 "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                 "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                 "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                 "FIELD_RELEVANCE_PARTIAL"
+                                                             ],
+                                          "qualityScore":  0.764,
+                                          "evidenceQualityVerdict":  {
+                                                                         "sourceAuthenticityScore":  0.6,
+                                                                         "contentUsabilityScore":  0.63,
+                                                                         "sourceTier":  "THIRD_PARTY",
+                                                                         "taskRelevanceScore":  0.55,
+                                                                         "evidenceUsabilityScore":  0.55,
+                                                                         "issues":  [
+
+                                                                                    ],
+                                                                         "qualitySignals":  [
+                                                                                                "TAVILY_RAW_CONTENT_READY",
+                                                                                                "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                                                "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                                                "FIELD_RELEVANCE_PARTIAL"
+                                                                                            ],
+                                                                         "repairRequired":  false
+                                                                     },
+                                          "evidenceRepairPlan":  {
+                                                                     "state":  "REPAIR_NOT_REQUIRED",
+                                                                     "reason":  "TAVILY_RAW_CONTENT_READY",
+                                                                     "sourceUrl":  "https://zite.com/blog/airtable-reviews",
+                                                                     "repairQueries":  [
+
+                                                                                       ],
+                                                                     "candidateUrls":  [
+
+                                                                                       ],
+                                                                     "promotedUrls":  [
+
+                                                                                      ],
+                                                                     "complete":  false
+                                                                 },
+                                          "publicEvidenceRecoveryFieldName":  null,
+                                          "publicEvidenceRecoveryEvidencePathKey":  null,
+                                          "publicEvidenceRecoveryQueryIntents":  [
+                                                                                     "OFFICIAL_DOCS",
+                                                                                     "API_DOCS",
+                                                                                     "SDK_GUIDE",
+                                                                                     "OFFICIAL_PRICING",
+                                                                                     "DOCS_BILLING",
+                                                                                     "TERMS_BILLING",
+                                                                                     "THIRD_PARTY_REVIEW"
+                                                                                 ],
+                                          "failureKind":  null,
+                                          "structuredBlocks":  [
+                                                                   {
+                                                                       "blockType":  "PRICING_BLOCK",
+                                                                       "title":  "Pricing",
+                                                                       "content":  "| Plan | Cost (monthly billing) | Key strengths |\n| --- | --- | --- |\n| Free | $0 | 500 AI credits/editor/month ; 1000 records/bases ; 100 automation runs/month ; Up to 5 editors and 50 users with commenting permission |\n| Team | $24/seat/month | 15,000 AI credits/user/month ; 50,000 records/bases ; 25,000 automation runs/month ; Portals: Starting from $120 for 15 guests/month |\n| Business | $54/seat/month | 20,000 AI credits/user/month ; 125,000 records/bases100,000 automation runs/month ; Two-way sync ; SAML-based single sign-on ; Portals: Starting from $150 for 15 guests/month |\n| Enterprise | Custom | 25,000 AI credits/user/month at list price ; 500,000 records/bases ; 500,000 automation runs/month ; Audit logs and enterprise API |",
+                                                                       "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2"
+                                                                   }
+                                                               ],
+                                          "durationMillis":  0,
+                                          "collectedAt":  1783589633.7976477,
+                                          "structuredPayload":  {
+                                                                    "prefetchedContentRef":  "tavily:238ebac6-956c-4d98-a5c4-6421fff43add:5",
+                                                                    "prefetchedRawContentLength":  9699,
+                                                                    "primaryTool":  "TAVILY_PREFETCHED",
+                                                                    "structuredBlockCount":  1
+                                                                },
+                                          "sourceType":  "REVIEW",
+                                          "discoveryMethod":  "TAVILY_PHASE1_BOOTSTRAP",
+                                          "reason":  "Tavily Fast Lane å½ä¸­ OPEN_WEB ç»æ: Airtable Review: Pros, Cons, \u0026 Is It Worth It in 2026?",
+                                          "domain":  "zite.com",
+                                          "publishedAt":  null,
+                                          "relevanceScore":  0.764,
+                                          "freshnessScore":  0.6,
+                                          "totalScore":  0.731,
+                                          "trustTier":  "MEDIUM",
+                                          "trustTierLabel":  "ä¸­å¯ä¿¡",
+                                          "rankingReasons":  [
+                                                                 "æ¥æºå¯ä¿¡åº¦ï¼ä¸­å¯ä¿¡",
+                                                                 "ç¬¬ä¸æ¹è¯æµæ¥æºå¯è¡¥å\u0085\u0085å®ç½ä¹å¤çå¤é¨è§è§"
+                                                             ],
+                                          "rankingSummary":  "æ¥æºå¯ä¿¡åº¦ï¼ä¸­å¯ä¿¡ï¼ç¬¬ä¸æ¹è¯æµæ¥æºå¯è¡¥å\u0085\u0085å®ç½ä¹å¤çå¤é¨è§è§",
+                                          "searchQuery":  "Airtable reviews g2 capterra",
+                                          "searchEngine":  "tavily",
+                                          "resultRank":  5,
+                                          "browserTraceId":  null,
+                                          "verified":  null,
+                                          "verificationReason":  null,
+                                          "matchedSignals":  null,
+                                          "selectionStage":  "SELECTED",
+                                          "selectionReason":  "Tavily prefetch æ­£æå¯ç¨",
+                                          "selectionSummary":  "Tavily prefetch æ­£æå¯ç¨"
+                                      }
+                 },
+                 {
+                     "evidenceId":  "T0103-COLLECT_SOURCES_01_02-001",
+                     "title":  "Notion",
+                     "url":  "https://notion.so/api",
+                     "contentSnippet":  "Your browser is not compatible with Notion. Please upgrade to the latest browser version, or visit our [help center](https://www.notion.so/help/system-requirements-for-notion) for more information.",
+                     "competitorName":  "Notion",
+                     "collectedAt":  [
+                                         2026,
+                                         7,
+                                         9,
+                                         17,
+                                         33,
+                                         3,
+                                         276155000
+                                     ],
+                     "sourceType":  "DOCS",
+                     "discoveryMethod":  "PUBLIC_EVIDENCE_RECOVERY",
+                     "sourceDomain":  "notion.so",
+                     "discoveryReason":  "public evidence recovery from same-domain public recovery path",
+                     "publishedAt":  null,
+                     "sourceScore":  0.986,
+                     "verified":  true,
+                     "verificationReason":  "å½ä¸­ DOCS ç®æ ä¿¡å·: help, api, domain:notion.so",
+                     "searchQuery":  null,
+                     "searchEngine":  null,
+                     "resultRank":  null,
+                     "browserTraceId":  null,
+                     "selectionReason":  "è¿è¡æéªè¯éè¿åè¢«éä¸ºæ­£å¼ééç®æ ",
+                     "selectionStage":  "SELECTED",
+                     "matchedSignals":  [
+                                            "help",
+                                            "api",
+                                            "domain:notion.so"
+                                        ],
+                     "pageMetadata":  {
+                                          "collector":  "playwright; fallbackReason=HTTP collect failed: Remote host terminated the handshake",
+                                          "sourceUrls":  [
+
+                                                         ],
+                                          "qualitySignals":  [
+                                                                 "MAIN_CONTENT_READY",
+                                                                 "NO_STRUCTURED_BLOCKS"
+                                                             ],
+                                          "qualityScore":  0.82,
+                                          "structuredBlocks":  [
+
+                                                               ],
+                                          "collectedAt":  "2026-07-09T09:32:14.666038500Z",
+                                          "durationMillis":  7,
+                                          "sourceType":  "DOCS",
+                                          "discoveryMethod":  "PUBLIC_EVIDENCE_RECOVERY",
+                                          "reason":  "public evidence recovery from same-domain public recovery path",
+                                          "domain":  "notion.so",
+                                          "publishedAt":  null,
+                                          "relevanceScore":  0.78,
+                                          "freshnessScore":  0.55,
+                                          "totalScore":  0.986,
+                                          "trustTier":  "HIGH",
+                                          "trustTierLabel":  "é«å¯ä¿¡",
+                                          "rankingReasons":  [
+                                                                 "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡",
+                                                                 "å½ä¸­è´¨éä¿¡å·ï¼PUBLIC_EVIDENCE_RECOVERY",
+                                                                 "å½ä¸­ææ¡£é«ä»·å¼è·¯å¾ï¼ä¼å\u0085çº§é«äºæ³å®ç½é¦é¡µ",
+                                                                 "å½ä¸­æç¡®ææ¡£è·¯å¾ï¼ä¼å\u0085çº§é«äºå¼æ¾å¹³å°æ ¹é¡µ"
+                                                             ],
+                                          "rankingSummary":  "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡ï¼å½ä¸­è´¨éä¿¡å·ï¼PUBLIC_EVIDENCE_RECOVERYï¼å½ä¸­ææ¡£é«ä»·å¼è·¯å¾ï¼ä¼å\u0085çº§é«äºæ³å®ç½é¦é¡µï¼å½ä¸­æç¡®ææ¡£è·¯å¾ï¼ä¼å\u0085çº§é«äºå¼æ¾å¹³å°æ ¹é¡µ",
+                                          "searchQuery":  null,
+                                          "searchEngine":  null,
+                                          "resultRank":  null,
+                                          "browserTraceId":  null,
+                                          "verified":  true,
+                                          "verificationReason":  "å½ä¸­ DOCS ç®æ ä¿¡å·: help, api, domain:notion.so",
+                                          "matchedSignals":  [
+                                                                 "help",
+                                                                 "api",
+                                                                 "domain:notion.so"
+                                                             ],
+                                          "selectionStage":  "SELECTED",
+                                          "selectionReason":  "è¿è¡æéªè¯éè¿åè¢«éä¸ºæ­£å¼ééç®æ ",
+                                          "selectionSummary":  "è¿è¡æéªè¯éè¿åè¢«éä¸ºæ­£å¼ééç®æ "
+                                      }
+                 },
+                 {
+                     "evidenceId":  "T0103-COLLECT_SOURCES_01_02-002",
+                     "title":  "Docs | Notion",
+                     "url":  "https://notion.so/docs",
+                     "contentSnippet":  "DocsThe next gen of notes \u0026 docsSimple. Powerful. Beautiful. Communicate more efficiently with Notion\u0027s flexible building blocks. [Get Notion free](https://www.notion.com/signup?from=marketing\u0026pathname=%2Fproduct%2Fdocs\u0026tid=23cf2317bae04534af9226a57919a8aa) [Request a demo](https://www.notion.com/contact-sales) Meeting NotesConnect people \u0026 projects with updates \u0026 action items. [Duplicate Templateâ](https://www.notion.com/templates/meeting-notes) [Duplicate Templateâ](https://www.notion.com/temp...",
+                     "competitorName":  "Notion",
+                     "collectedAt":  [
+                                         2026,
+                                         7,
+                                         9,
+                                         17,
+                                         33,
+                                         3,
+                                         419301000
+                                     ],
+                     "sourceType":  "DOCS",
+                     "discoveryMethod":  "FAMILY_TEMPLATE",
+                     "sourceDomain":  "notion.so",
+                     "discoveryReason":  "official family template candidate",
+                     "publishedAt":  null,
+                     "sourceScore":  0.86,
+                     "verified":  true,
+                     "verificationReason":  "å½ä¸­ DOCS ç®æ ä¿¡å·: docs, guide, features, feature, domain:notion.so",
+                     "searchQuery":  null,
+                     "searchEngine":  null,
+                     "resultRank":  null,
+                     "browserTraceId":  null,
+                     "selectionReason":  "è¿è¡æéªè¯éè¿åè¢«éä¸ºæ­£å¼ééç®æ ",
+                     "selectionStage":  "SELECTED",
+                     "matchedSignals":  [
+                                            "docs",
+                                            "guide",
+                                            "features",
+                                            "feature",
+                                            "domain:notion.so"
+                                        ],
+                     "pageMetadata":  {
+                                          "collector":  "playwright; fallbackReason=HTTP collect failed: Remote host terminated the handshake",
+                                          "sourceUrls":  [
+
+                                                         ],
+                                          "qualitySignals":  [
+                                                                 "MAIN_CONTENT_READY",
+                                                                 "NO_STRUCTURED_BLOCKS"
+                                                             ],
+                                          "qualityScore":  0.92,
+                                          "structuredBlocks":  [
+
+                                                               ],
+                                          "collectedAt":  "2026-07-09T09:31:48.605645800Z",
+                                          "durationMillis":  15110,
+                                          "sourceType":  "DOCS",
+                                          "discoveryMethod":  "FAMILY_TEMPLATE",
+                                          "reason":  "official family template candidate",
+                                          "domain":  "notion.so",
+                                          "publishedAt":  null,
+                                          "relevanceScore":  0.95,
+                                          "freshnessScore":  0.6,
+                                          "totalScore":  0.86,
+                                          "trustTier":  "HIGH",
+                                          "trustTierLabel":  "é«å¯ä¿¡",
+                                          "rankingReasons":  [
+                                                                 "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡",
+                                                                 "æ¨¡æ¿å\u0085åºåéä»\u0085å¨ç¼ºå°çå®åç°å\u0085¥å£æ¶åä¸æåº",
+                                                                 "å½ä¸­ææ¡£é«ä»·å¼è·¯å¾ï¼ä¼å\u0085çº§é«äºæ³å®ç½é¦é¡µ",
+                                                                 "å½ä¸­æç¡®ææ¡£è·¯å¾ï¼ä¼å\u0085çº§é«äºå¼æ¾å¹³å°æ ¹é¡µ"
+                                                             ],
+                                          "rankingSummary":  "æ¥æºå¯ä¿¡åº¦ï¼é«å¯ä¿¡ï¼æ¨¡æ¿å\u0085åºåéä»\u0085å¨ç¼ºå°çå®åç°å\u0085¥å£æ¶åä¸æåºï¼å½ä¸­ææ¡£é«ä»·å¼è·¯å¾ï¼ä¼å\u0085çº§é«äºæ³å®ç½é¦é¡µï¼å½ä¸­æç¡®ææ¡£è·¯å¾ï¼ä¼å\u0085çº§é«äºå¼æ¾å¹³å°æ ¹é¡µ",
+                                          "searchQuery":  null,
+                                          "searchEngine":  null,
+                                          "resultRank":  null,
+                                          "browserTraceId":  null,
+                                          "verified":  true,
+                                          "verificationReason":  "å½ä¸­ DOCS ç®æ ä¿¡å·: docs, guide, features, feature, domain:notion.so",
+                                          "matchedSignals":  [
+                                                                 "docs",
+                                                                 "guide",
+                                                                 "features",
+                                                                 "feature",
+                                                                 "domain:notion.so"
+                                                             ],
+                                          "selectionStage":  "SELECTED",
+                                          "selectionReason":  "è¿è¡æéªè¯éè¿åè¢«éä¸ºæ­£å¼ééç®æ ",
+                                          "selectionSummary":  "è¿è¡æéªè¯éè¿åè¢«éä¸ºæ­£å¼ééç®æ "
+                                      }
+                 }
+             ],
+    "timestamp":  "2026-07-09T17:47:57.812881100",
+    "traceId":  "5c856dee6e2d41938d14a0f2e49b0a61"
+}

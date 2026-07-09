@@ -71,7 +71,7 @@ public class ReportDiagnosisAssembler {
                     diagnosis.getEvidenceIds(),
                     diagnosis.getSourceUrls()
             );
-            if ("BLOCKER".equalsIgnoreCase(diagnosis.getLevel())) {
+            if (isDeliveryBlockingDiagnosis(diagnosis)) {
                 blockerCount++;
             }
 
@@ -80,7 +80,7 @@ public class ReportDiagnosisAssembler {
             boolean evidenceInsufficient = isEvidenceInsufficient(diagnosis, references);
             accumulator.evidenceInsufficient = accumulator.evidenceInsufficient || evidenceInsufficient;
             if (evidenceInsufficient) {
-                markEvidenceGapScope(accumulator, diagnosis.getSection());
+                markEvidenceGapScope(accumulator, diagnosis);
             }
             if (diagnosis.getRepairSuggestion() != null && !diagnosis.getRepairSuggestion().isBlank()) {
                 accumulator.repairSuggestions.add(diagnosis.getRepairSuggestion().trim());
@@ -290,13 +290,58 @@ public class ReportDiagnosisAssembler {
         accumulator.optionalEvidenceGap = true;
     }
 
-    private void markEvidenceGapScope(SectionAccumulator accumulator, String sectionOrField) {
-        String fieldName = resolveStageOneFieldName(sectionOrField);
-        if (StageOneFirstReportPolicy.isFirstReportCriticalField(fieldName)) {
+    /**
+     * diagnosis 汇总阶段需要同时做两件事：
+     * 1. 保留 evidenceInsufficient=true，方便前端知道该章节仍需补证据；
+     * 2. 只有真正属于 stage1 CORE 且未被字段级 TRACEABLE 覆盖的缺口，才进入 delivery evidenceGapCount。
+     * 这样旧数据里遗留的 structured blocker 不会再次把已 traceable 的核心字段压回阻塞态。
+     */
+    private void markEvidenceGapScope(SectionAccumulator accumulator, QualityDiagnosis diagnosis) {
+        StageOneFirstReportPolicy.FirstReportIssueScope issueScope = resolveIssueScope(diagnosis);
+        if (issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.CORE
+                && !isTraceableStructuredEvidenceDiagnosis(diagnosis)) {
             accumulator.coreEvidenceGap = true;
             return;
         }
         accumulator.optionalEvidenceGap = true;
+    }
+
+    /**
+     * reportDiagnosis 的 blockerCount 直接喂给 delivery summary 和任务状态收口，
+     * 因此这里不能继续沿用“旧 diagnosis 里写了 BLOCKER 就算 blocker”的硬编码。
+     * 必须先回到 StageOneFirstReportPolicy 的统一 scope，再屏蔽掉
+     * “structured 缺口存在，但字段级 coverage 已 TRACEABLE”的历史噪声。
+     */
+    private boolean isDeliveryBlockingDiagnosis(QualityDiagnosis diagnosis) {
+        if (diagnosis == null || !"BLOCKER".equalsIgnoreCase(diagnosis.getLevel())) {
+            return false;
+        }
+        StageOneFirstReportPolicy.FirstReportIssueScope issueScope = resolveIssueScope(diagnosis);
+        if (!StageOneFirstReportPolicy.isBlockingDeliveryScope(issueScope)) {
+            return false;
+        }
+        return !isTraceableStructuredEvidenceDiagnosis(diagnosis);
+    }
+
+    private StageOneFirstReportPolicy.FirstReportIssueScope resolveIssueScope(QualityDiagnosis diagnosis) {
+        return StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                diagnosis == null ? null : diagnosis.getSection(),
+                diagnosis == null ? null : diagnosis.getSection(),
+                null
+        ));
+    }
+
+    private boolean isTraceableStructuredEvidenceDiagnosis(QualityDiagnosis diagnosis) {
+        if (diagnosis == null) {
+            return false;
+        }
+        String type = safe(diagnosis.getType()).toLowerCase();
+        String evidenceBasis = safe(diagnosis.getEvidenceBasis()).toUpperCase();
+        if (!type.contains("structured")) {
+            return false;
+        }
+        return evidenceBasis.contains(":TRACEABLE")
+                || evidenceBasis.contains(":STRUCTURED_BLOCK_DIRECT");
     }
 
     private String resolveCoverageFieldName(SectionEvidenceCoverage coverage) {

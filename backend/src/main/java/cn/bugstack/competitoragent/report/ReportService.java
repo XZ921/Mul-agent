@@ -393,7 +393,7 @@ public class ReportService {
      * 这样交付摘要才能体现 friendly baseline，而不是把 optional gap 伪装成已经完成。
      */
     private String buildDegradedDeliverySummary(ReportDiagnosisInfo reportDiagnosis) {
-        List<String> deferredSections = resolveDeferredOptionalSections(reportDiagnosis);
+        List<String> deferredSections = resolveDeferredDeliverySections(reportDiagnosis);
         if (deferredSections.isEmpty()) {
             return "当前报告达到阶段1最低可交付标准，可作为降级报告交付；建议人工复核后再正式使用。";
         }
@@ -408,11 +408,7 @@ public class ReportService {
         }
         int count = 0;
         for (QualityIssue issue : issues == null ? List.<QualityIssue>of() : issues) {
-            if (issue == null) {
-                continue;
-            }
-            if ("BLOCKER".equalsIgnoreCase(defaultText(issue.getLevel(), null))
-                    || "ERROR".equalsIgnoreCase(defaultText(issue.getSeverity(), null))) {
+            if (isDeliveryBlockingIssue(issue)) {
                 count++;
             }
         }
@@ -429,13 +425,7 @@ public class ReportService {
         }
         int count = 0;
         for (QualityIssue issue : issues == null ? List.<QualityIssue>of() : issues) {
-            if (issue == null) {
-                continue;
-            }
-            String type = defaultText(issue.getType(), null);
-            String basis = defaultText(issue.getEvidenceBasis(), null);
-            if (isEvidenceGapIssue(type, basis)
-                    && StageOneFirstReportPolicy.isFirstReportCriticalField(resolveStageOneFieldName(issue.getSection()))) {
+            if (isCountedDeliveryEvidenceGap(issue)) {
                 count++;
             }
         }
@@ -730,13 +720,49 @@ public class ReportService {
      * 检索审计摘要压缩成一句业务可读描述，
      * 让用户先知道这份报告的来源是否稳定，而不是先读完整 collector trace。
      */
+    /**
+     * fallback 只在旧 reportDiagnosis 尚未生成时启用，
+     * 因此这里也要复用 stage1 统一 scope，而不是把历史 ERROR/BLOCKER 原样算进交付阻塞。
+     */
+    private boolean isDeliveryBlockingIssue(QualityIssue issue) {
+        if (issue == null) {
+            return false;
+        }
+        boolean declaredBlocking = "BLOCKER".equalsIgnoreCase(defaultText(issue.getLevel(), null))
+                || "ERROR".equalsIgnoreCase(defaultText(issue.getSeverity(), null));
+        if (!declaredBlocking) {
+            return false;
+        }
+        StageOneFirstReportPolicy.FirstReportIssueScope issueScope = resolveIssueScope(issue);
+        if (!StageOneFirstReportPolicy.isBlockingDeliveryScope(issueScope)) {
+            return false;
+        }
+        return !isTraceableStructuredEvidenceIssue(issue);
+    }
+
+    private boolean isCountedDeliveryEvidenceGap(QualityIssue issue) {
+        if (issue == null) {
+            return false;
+        }
+        StageOneFirstReportPolicy.FirstReportIssueScope issueScope = resolveIssueScope(issue);
+        if (!StageOneFirstReportPolicy.isBlockingDeliveryScope(issueScope)) {
+            return false;
+        }
+        if (isTraceableStructuredEvidenceIssue(issue)) {
+            return false;
+        }
+        return isEvidenceGapIssue(issue.getType(), issue.getEvidenceBasis());
+    }
+
     private boolean isEvidenceGapIssue(String type, String evidenceBasis) {
         return "MISSING_EVIDENCE".equalsIgnoreCase(type)
                 || "EVIDENCE_GAP".equalsIgnoreCase(type)
+                || "MISSING_CITATION".equalsIgnoreCase(type)
+                || "MISSING_STRUCTURED_EVIDENCE".equalsIgnoreCase(type)
                 || (evidenceBasis != null && evidenceBasis.contains("证据"));
     }
 
-    private List<String> resolveDeferredOptionalSections(ReportDiagnosisInfo reportDiagnosis) {
+    private List<String> resolveDeferredDeliverySections(ReportDiagnosisInfo reportDiagnosis) {
         LinkedHashSet<String> deferredSections = new LinkedHashSet<>();
         if (reportDiagnosis == null || reportDiagnosis.getSections() == null) {
             return List.of();
@@ -745,11 +771,40 @@ public class ReportService {
             if (section == null || !Boolean.TRUE.equals(section.getEvidenceInsufficient())) {
                 continue;
             }
-            if (StageOneFirstReportPolicy.isFirstReportEnhancementField(resolveStageOneFieldName(section.getSection()))) {
+            StageOneFirstReportPolicy.FirstReportIssueScope issueScope = StageOneFirstReportPolicy.classifyIssueScope(
+                    new StageOneFirstReportPolicy.FirstReportIssueContext(
+                            section.getSection(),
+                            section.getSection(),
+                            null
+                    )
+            );
+            if (issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.ENHANCEMENT
+                    || issueScope == StageOneFirstReportPolicy.FirstReportIssueScope.GENERATED) {
                 deferredSections.add(defaultText(section.getSection(), "增强章节"));
             }
         }
         return new ArrayList<>(deferredSections);
+    }
+
+    private StageOneFirstReportPolicy.FirstReportIssueScope resolveIssueScope(QualityIssue issue) {
+        return StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                issue == null ? null : issue.getSection(),
+                issue == null ? null : issue.getSection(),
+                null
+        ));
+    }
+
+    private boolean isTraceableStructuredEvidenceIssue(QualityIssue issue) {
+        if (issue == null) {
+            return false;
+        }
+        String type = defaultText(issue.getType(), "").toUpperCase(Locale.ROOT);
+        String evidenceBasis = defaultText(issue.getEvidenceBasis(), "").toUpperCase(Locale.ROOT);
+        if (!type.contains("STRUCTURED")) {
+            return false;
+        }
+        return evidenceBasis.contains(":TRACEABLE")
+                || evidenceBasis.contains(":STRUCTURED_BLOCK_DIRECT");
     }
 
     private String resolveCoverageFieldName(SectionEvidenceCoverage coverage) {

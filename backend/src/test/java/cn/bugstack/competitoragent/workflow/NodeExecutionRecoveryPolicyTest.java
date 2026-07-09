@@ -297,4 +297,75 @@ class NodeExecutionRecoveryPolicyTest {
         assertTrue(resolution.isWaitingManualIntervention());
         assertFalse(recoveryPolicy.canAutoContinue(List.of(blockedCollector, analyzer)));
     }
+
+    @Test
+    void shouldResolveSuccessWhenReviewOnlyContainsDeferredStageOneIssues() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(6L)
+                .status(AnalysisTaskStatus.RUNNING)
+                .build();
+
+        TaskNode writerNode = TaskNode.builder()
+                .taskId(6L)
+                .nodeName("write_report")
+                .displayName("write_report")
+                .agentType(AgentType.WRITER)
+                .status(TaskNodeStatus.SUCCESS)
+                .outputData("""
+                        {
+                          "content":"# Stage1 Report",
+                          "sourceUrls":[
+                            "https://www.notion.so/product/ai",
+                            "https://www.notion.so/security",
+                            "https://docs.notion.so/ai",
+                            "https://docs.notion.so/admins",
+                            "https://www.g2.com/products/notion-ai/reviews"
+                          ]
+                        }
+                        """)
+                .build();
+        TaskNode reviewNode = TaskNode.builder()
+                .taskId(6L)
+                .nodeName("quality_check")
+                .displayName("quality_check")
+                .agentType(AgentType.REVIEWER)
+                .status(TaskNodeStatus.SUCCESS)
+                .outputData("""
+                        {
+                          "passed": false,
+                          "requiresHumanIntervention": true,
+                          "diagnoses": [
+                            {
+                              "type":"MISSING_CITATION",
+                              "section":"定价策略",
+                              "severity":"ERROR",
+                              "level":"BLOCKER",
+                              "evidenceBasis":"pricing 仍需补齐逐句引用"
+                            },
+                            {
+                              "type":"MISSING_CITATION",
+                              "section":"report_conclusion",
+                              "severity":"ERROR",
+                              "level":"BLOCKER",
+                              "evidenceBasis":"report_conclusion 仍需保守改写"
+                            }
+                          ]
+                        }
+                        """)
+                .build();
+        TaskNode rewriteNode = TaskNode.builder()
+                .taskId(6L)
+                .nodeName("rewrite_report")
+                .displayName("rewrite_report")
+                .agentType(AgentType.WRITER)
+                .status(TaskNodeStatus.SKIPPED)
+                .build();
+
+        NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
+                recoveryPolicy.resolveTaskExecution(task, List.of(writerNode, reviewNode, rewriteNode));
+
+        assertEquals(AnalysisTaskStatus.SUCCESS, resolution.getStatus());
+        assertFalse(resolution.isWaitingManualIntervention());
+        assertNull(resolution.getErrorMessage());
+    }
 }

@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.workflow.coverage;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -67,5 +68,139 @@ class StageOneFirstReportPolicyTest {
                 "https://www.g2.com/products/linear/reviews",
                 "https://www.capterra.com/p/linear"
         ))).isTrue();
+    }
+
+    @Test
+    void shouldClassifyStageOneIssueScopesForDownstreamDelivery() {
+        assertThat(StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                null,
+                null,
+                "summary"
+        ))).isEqualTo(StageOneFirstReportPolicy.FirstReportIssueScope.CORE);
+        assertThat(StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                null,
+                "市场定位",
+                null
+        ))).isEqualTo(StageOneFirstReportPolicy.FirstReportIssueScope.CORE);
+        assertThat(StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                null,
+                "目标用户",
+                null
+        ))).isEqualTo(StageOneFirstReportPolicy.FirstReportIssueScope.CORE);
+        assertThat(StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                null,
+                "功能对比",
+                null
+        ))).isEqualTo(StageOneFirstReportPolicy.FirstReportIssueScope.CORE);
+
+        assertThat(StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                null,
+                "定价策略",
+                null
+        ))).isEqualTo(StageOneFirstReportPolicy.FirstReportIssueScope.ENHANCEMENT);
+        assertThat(StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                "pricing",
+                null,
+                null
+        ))).isEqualTo(StageOneFirstReportPolicy.FirstReportIssueScope.ENHANCEMENT);
+        assertThat(StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                null,
+                "优势判断",
+                null
+        ))).isEqualTo(StageOneFirstReportPolicy.FirstReportIssueScope.ENHANCEMENT);
+        assertThat(StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                null,
+                "短板与风险",
+                null
+        ))).isEqualTo(StageOneFirstReportPolicy.FirstReportIssueScope.ENHANCEMENT);
+
+        assertThat(StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                "conclusion",
+                null,
+                null
+        ))).isEqualTo(StageOneFirstReportPolicy.FirstReportIssueScope.GENERATED);
+        assertThat(StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                "report_conclusion",
+                null,
+                null
+        ))).isEqualTo(StageOneFirstReportPolicy.FirstReportIssueScope.GENERATED);
+        assertThat(StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                null,
+                "建议结论",
+                null
+        ))).isEqualTo(StageOneFirstReportPolicy.FirstReportIssueScope.GENERATED);
+
+        assertThat(StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                "report",
+                null,
+                null
+        ))).isEqualTo(StageOneFirstReportPolicy.FirstReportIssueScope.UNKNOWN_AUDIT);
+        assertThat(StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                null,
+                "通用",
+                null
+        ))).isEqualTo(StageOneFirstReportPolicy.FirstReportIssueScope.UNKNOWN_AUDIT);
+        assertThat(StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                null,
+                null,
+                "unknown"
+        ))).isEqualTo(StageOneFirstReportPolicy.FirstReportIssueScope.UNKNOWN_AUDIT);
+    }
+
+    @Test
+    void shouldUseRequestedDimensionsWhenExposingOptionalSections() {
+        Set<String> requestedDimensions = StageOneFirstReportPolicy.normalizeRequestedDimensions(List.of(
+                "产品概述",
+                "市场定位",
+                "目标用户",
+                "核心功能",
+                "价格策略"
+        ));
+
+        assertThat(requestedDimensions)
+                .containsExactly("summary", "positioning", "targetusers", "corefeatures", "pricing");
+
+        assertThat(StageOneFirstReportPolicy.shouldExposeIssueForRequestedDimensions(
+                requestedDimensions,
+                new StageOneFirstReportPolicy.FirstReportIssueContext("pricing", "价格策略", null)
+        )).isTrue();
+        assertThat(StageOneFirstReportPolicy.shouldExposeIssueForRequestedDimensions(
+                requestedDimensions,
+                new StageOneFirstReportPolicy.FirstReportIssueContext("strengths", "优势判断", null)
+        )).isFalse();
+        assertThat(StageOneFirstReportPolicy.shouldExposeIssueForRequestedDimensions(
+                requestedDimensions,
+                new StageOneFirstReportPolicy.FirstReportIssueContext("weaknesses", "短板与风险", null)
+        )).isFalse();
+        assertThat(StageOneFirstReportPolicy.shouldExposeIssueForRequestedDimensions(
+                requestedDimensions,
+                new StageOneFirstReportPolicy.FirstReportIssueContext("conclusion", "建议结论", null)
+        )).isFalse();
+        assertThat(StageOneFirstReportPolicy.shouldExposeIssueForRequestedDimensions(
+                requestedDimensions,
+                new StageOneFirstReportPolicy.FirstReportIssueContext("report_conclusion", "报告结论", null)
+        )).isFalse();
+
+        assertThat(StageOneFirstReportPolicy.isBlockingDeliveryScope(
+                StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                        "summary",
+                        "产品概述",
+                        null
+                ))
+        )).isTrue();
+        assertThat(StageOneFirstReportPolicy.isBlockingDeliveryScope(
+                StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                        "pricing",
+                        "价格策略",
+                        null
+                ))
+        )).isFalse();
+        assertThat(StageOneFirstReportPolicy.isBlockingDeliveryScope(
+                StageOneFirstReportPolicy.classifyIssueScope(new StageOneFirstReportPolicy.FirstReportIssueContext(
+                        "conclusion",
+                        "建议结论",
+                        null
+                ))
+        )).isFalse();
     }
 }
