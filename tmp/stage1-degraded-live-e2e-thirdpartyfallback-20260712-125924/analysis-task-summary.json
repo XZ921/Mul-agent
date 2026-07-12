@@ -1,0 +1,31 @@
+﻿{
+    "taskId":  "105",
+    "status":  "STOPPED",
+    "statusSummary":  null,
+    "currentStage":  "等待人工处理",
+    "completedNodes":  14,
+    "totalNodes":  14,
+    "canViewReport":  true,
+    "canViewDraftReport":  true,
+    "waitingRetryNodeCount":  0,
+    "waitingInterventionNodeCount":  0,
+    "errorMessage":  "初审未通过且需要人工介入，请补充证据或调整策略后继续",
+    "interventionSummary":  "当前支持基于已有检查点恢复执行，以及从指定节点发起局部重跑；若是节点暂停导致收口，也可直接恢复对应节点继续执行。",
+    "nodeStatusGroups":  [
+                             {
+                                 "status":  "SUCCESS_DEGRADED",
+                                 "count":  5
+                             },
+                             {
+                                 "status":  "SUCCESS",
+                                 "count":  6
+                             },
+                             {
+                                 "status":  "SKIPPED",
+                                 "count":  3
+                             }
+                         ],
+    "nonSuccessNodes":  [
+
+                        ]
+}

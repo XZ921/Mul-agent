@@ -126,6 +126,37 @@ class PlaywrightPageCollectorTest {
     }
 
     @Test
+    void shouldFailFastWhenCollectorDeadlineAlreadyExpired() {
+        NeverCompletingHttpClient httpClient = new NeverCompletingHttpClient();
+        PlaywrightPageCollector deadlineAwareCollector = new PlaywrightPageCollector(
+                browserManager,
+                collectorProperties,
+                fallbackPolicy,
+                browserFailureClassifier,
+                antiBotSignalDetector,
+                diagnosticLogger,
+                new CanonicalUrlResolver(),
+                new PublicShellRecoveryExtractor(),
+                httpClient
+        );
+
+        SourceCollector.CollectedPage page = deadlineAwareCollector.collect(SourceCollectRequest.builder()
+                .url("https://example.com/docs")
+                .competitorName("Acme AI")
+                .sourceType("DOCS")
+                .collectorHardDeadlineEpochMillis(System.currentTimeMillis() - 1L)
+                .collectorDeadlineGraceMillis(0L)
+                .collectorDeadlineReason("HARD_DEADLINE_REACHED")
+                .sourceUrls(List.of("https://example.com/docs"))
+                .build());
+
+        assertFalse(page.isSuccess());
+        assertTrue(page.getErrorMessage().contains("HARD_DEADLINE_REACHED"));
+        assertEquals(0, httpClient.asyncAttemptCount());
+        verify(browserManager, never()).getBrowser();
+    }
+
+    @Test
     void shouldPreferArticleLikeContentBlockOverNoisyBody() {
         String selected = collector.selectBestContentBlock(List.of(
                 Map.of(
@@ -327,6 +358,55 @@ class PlaywrightPageCollectorTest {
     }
 
     @Test
+    void shouldApplyCollectorDeadlineToPlaywrightNavigateTimeout() {
+        Browser browser = mock(Browser.class);
+        Page page = mock(Page.class);
+
+        when(browserManager.getBrowser()).thenReturn(browser);
+        when(browser.newPage()).thenReturn(page);
+        when(page.title()).thenReturn("Pricing");
+        when(page.url()).thenReturn("https://example.com/pricing");
+        when(page.content()).thenReturn("""
+                <html>
+                  <body>
+                    <main>
+                      <section class="pricing-card">Pro 199 / month</section>
+                    </main>
+                  </body>
+                </html>
+                """);
+        when(page.evaluate(anyString())).thenReturn(List.of(
+                Map.of(
+                        "selector", "main",
+                        "tagName", "MAIN",
+                        "className", "pricing-card",
+                        "idName", "main-content",
+                        "text", """
+                                Acme AI pricing explains plan tiers, seat limits, enterprise support,
+                                rollout guidance, and API onboarding details for evaluation teams.
+                                """,
+                        "linkTextLength", 8
+                )
+        ));
+
+        long hardDeadlineEpochMillis = System.currentTimeMillis() + 1200L;
+        SourceCollector.CollectedPage collectedPage = collector.collect(SourceCollectRequest.builder()
+                .url("https://example.com/pricing")
+                .competitorName("Notion AI")
+                .sourceType("PRICING")
+                .renderHint(WebPageRenderHint.FULL_RENDER)
+                .collectorHardDeadlineEpochMillis(hardDeadlineEpochMillis)
+                .collectorDeadlineGraceMillis(0L)
+                .collectorDeadlineReason("HARD_DEADLINE_REACHED")
+                .sourceUrls(List.of("https://example.com/pricing"))
+                .build());
+
+        assertTrue(collectedPage.isSuccess());
+        verify(page).setDefaultTimeout(org.mockito.ArgumentMatchers.doubleThat(timeout -> timeout >= 250D && timeout <= 1200D));
+        verify(page).setDefaultNavigationTimeout(org.mockito.ArgumentMatchers.doubleThat(timeout -> timeout >= 250D && timeout <= 1200D));
+    }
+
+    @Test
     void shouldExposeStructuredExtractionMetadataForFullRenderCollection() throws Exception {
         Browser browser = mock(Browser.class);
         Page page = mock(Page.class);
@@ -511,5 +591,41 @@ class PlaywrightPageCollectorTest {
 
         assertTrue(collectedPage.isSuccess());
         assertTrue(heldMonitorWhenCreatingPage.get());
+    }
+
+    @Test
+    void shouldSkipPlaywrightRetryWhenDeadlineExpiredAfterPrimaryTimeout() {
+        PlaywrightBrowserManager retryAwareBrowserManager = mock(PlaywrightBrowserManager.class);
+        Browser browser = mock(Browser.class);
+        when(retryAwareBrowserManager.getBrowser()).thenReturn(browser);
+        when(browser.newPage()).thenAnswer(invocation -> {
+            Thread.sleep(450L);
+            throw new IllegalStateException("playwright connection closed");
+        });
+
+        PlaywrightPageCollector retryAwareCollector = new PlaywrightPageCollector(
+                retryAwareBrowserManager,
+                collectorProperties,
+                fallbackPolicy,
+                browserFailureClassifier,
+                antiBotSignalDetector,
+                diagnosticLogger
+        );
+
+        SourceCollector.CollectedPage collectedPage = retryAwareCollector.collect(SourceCollectRequest.builder()
+                .url("https://example.com/pricing")
+                .competitorName("Notion AI")
+                .sourceType("PRICING")
+                .renderHint(WebPageRenderHint.FULL_RENDER)
+                .collectorHardDeadlineEpochMillis(System.currentTimeMillis() + 350L)
+                .collectorDeadlineGraceMillis(0L)
+                .collectorDeadlineReason("HARD_DEADLINE_REACHED")
+                .sourceUrls(List.of("https://example.com/pricing"))
+                .build());
+
+        assertFalse(collectedPage.isSuccess());
+        assertTrue(collectedPage.getErrorMessage().contains("HARD_DEADLINE_REACHED"));
+        verify(retryAwareBrowserManager, never()).restartBrowserIfCurrent(any(), anyString());
+        verify(retryAwareBrowserManager, times(1)).getBrowser();
     }
 }

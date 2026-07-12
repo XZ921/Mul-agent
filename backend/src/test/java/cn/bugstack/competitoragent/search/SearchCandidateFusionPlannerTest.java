@@ -163,4 +163,49 @@ class SearchCandidateFusionPlannerTest {
                 );
         assertThat(decision.getPreselectedCandidates()).hasSize(4);
     }
+
+    @Test
+    void shouldRoutePrefetchThatNeedsVerificationIntoVerificationCandidates() {
+        SearchCandidateFusionPlanner planner = new SearchCandidateFusionPlanner(
+                new SearchPolicyResolver(),
+                new SourceCandidateRanker()
+        );
+        CollectorNodeConfig config = CollectorNodeConfig.builder()
+                .competitorName("Airtable")
+                .sourceType("DOCS")
+                .competitorUrls(List.of("https://airtable.com"))
+                .maxSearchResults(2)
+                .searchRuntimePolicy(SearchRuntimePolicy.builder()
+                        .searchFirstEvidenceTargetFloor(3)
+                        .preSelectionVerificationLimit(3)
+                        .build())
+                .build();
+
+        SourceCandidate needsVerification = SourceCandidate.builder()
+                .url("https://support.airtable.com/docs/automation-guide")
+                .title("Airtable automation guide")
+                .sourceType("DOCS")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .domain("support.airtable.com")
+                .qualityTier("STRONG")
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("tavily:req-103:02_02")
+                .prefetchedRawContentLength(1200)
+                .skipNetworkVerification(Boolean.FALSE)
+                .pageType("OFFICIAL_DOC")
+                .sourceUrls(List.of("https://support.airtable.com/docs/automation-guide"))
+                .totalScore(0.95)
+                .build();
+
+        SearchCandidateFusionDecision decision = planner.plan(config, List.of(needsVerification), 2, 5);
+
+        assertThat(decision.getVerificationCandidates())
+                .extracting(SourceCandidate::getUrl)
+                .contains("https://support.airtable.com/docs/automation-guide");
+        assertThat(decision.getFastLaneCandidates())
+                .noneMatch(candidate -> "https://support.airtable.com/docs/automation-guide".equals(candidate.getUrl())
+                        && Boolean.TRUE.equals(candidate.getSkipNetworkVerification()));
+    }
 }

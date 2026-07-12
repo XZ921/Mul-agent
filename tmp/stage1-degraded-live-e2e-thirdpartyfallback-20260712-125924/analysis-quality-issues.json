@@ -1,0 +1,255 @@
+﻿{
+    "qualityPassed":  false,
+    "qualityScore":  29,
+    "initialReview":  {
+                          "nodeName":  "quality_check",
+                          "nodeStatus":  "SUCCESS",
+                          "score":  29,
+                          "passed":  false,
+                          "requiresHumanIntervention":  true,
+                          "autoRewriteAllowed":  false,
+                          "summary":  "结构完整性、修订可执行性存在关键缺口，且已有 1 条阻断级诊断。请先补齐证据链，再继续自动改写。",
+                          "dimensions":  [
+                                             {
+                                                 "code":  "EVIDENCE_TRACEABILITY",
+                                                 "name":  "证据可追溯性",
+                                                 "description":  "关键结论是否都能回指到稳定的 evidenceId 与来源链接。",
+                                                 "evaluationStandard":  "关键结论必须携带可追溯 evidenceId 或 sourceUrls。",
+                                                 "score":  60,
+                                                 "maxScore":  100,
+                                                 "status":  "ATTENTION"
+                                             },
+                                             {
+                                                 "code":  "CLAIM_SUPPORT",
+                                                 "name":  "结论支撑度",
+                                                 "description":  "判断性结论是否有明确证据支撑，而非只靠模型主观归纳。",
+                                                 "evaluationStandard":  "关键结论不得出现 unsupported claim 或 BLOCKER 级别支撑缺口。",
+                                                 "score":  88,
+                                                 "maxScore":  100,
+                                                 "status":  "HEALTHY"
+                                             },
+                                             {
+                                                 "code":  "STRUCTURE_COMPLETENESS",
+                                                 "name":  "结构完整性",
+                                                 "description":  "上游抽取字段与报告章节是否同时完整，避免信息漂移和字段缺口。",
+                                                 "evaluationStandard":  "关键字段不应长期处于缺证据或空字段状态。",
+                                                 "score":  48,
+                                                 "maxScore":  100,
+                                                 "status":  "CRITICAL"
+                                             },
+                                             {
+                                                 "code":  "ACTIONABILITY",
+                                                 "name":  "修订可执行性",
+                                                 "description":  "当前质检结果是否足够明确，能够驱动下一轮自动改写。",
+                                                 "evaluationStandard":  "修订项应清晰、可执行，且不依赖大量人工补证据。",
+                                                 "score":  37,
+                                                 "maxScore":  100,
+                                                 "status":  "CRITICAL"
+                                             }
+                                         ],
+                          "diagnoses":  [
+                                            {
+                                                "dimensionCode":  "STRUCTURE_COMPLETENESS",
+                                                "dimensionName":  "结构完整性",
+                                                "type":  "coverage_gap",
+                                                "section":  "短板与风险、目标用户、定价策略 / 定价策略、优势判断、核心能力",
+                                                "severity":  "ERROR",
+                                                "level":  "BLOCKER",
+                                                "title":  "结构化字段仍存在覆盖缺口",
+                                                "detail":  "上游抽取结果中仍有字段缺证据或为空，说明报告链路输出质量不稳定。",
+                                                "evidenceBasis":  "缺证据章节=无；证据不覆盖章节=短板与风险、目标用户、定价策略；模型拒答章节=无；空字段章节=定价策略、优势判断、核心能力；阻断字段=目标用户",
+                                                "evidenceIds":  [
+
+                                                                ],
+                                                "sourceUrls":  [
+                                                                   "https://notion.com",
+                                                                   "https://hackceleration.com/labs/review/notion",
+                                                                   "https://seatable.com/notion-experiences",
+                                                                   "https://linkedin.com/posts/notionhq_notion-has-been-named-a-g2-leader-best-activity-7430655030757851136-WpUz",
+                                                                   "https://learn.g2.com/is-notion-worth-it",
+                                                                   "https://getoden.com/blog/g2-vs-capterra-vs-trustradius-vs-gartner-peer-insights",
+                                                                   "https://en.wikipedia.org/wiki/Airtable",
+                                                                   "https://checkthat.ai/brands/airtable/reviews",
+                                                                   "https://bigtime.net/blogs/airtable-alternatives",
+                                                                   "https://copy.ai/go-to-market-tools/airtable-review",
+                                                                   "https://zite.com/blog/airtable-reviews",
+                                                                   "https://smartsuite.com/blog/airtable-review"
+                                                               ],
+                                                "repairSuggestion":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。"
+                                            }
+                                        ],
+                          "issues":  [
+                                         {
+                                             "type":  "coverage_gap",
+                                             "section":  "短板与风险、目标用户、定价策略 / 定价策略、优势判断、核心能力",
+                                             "severity":  "ERROR",
+                                             "level":  "BLOCKER",
+                                             "dimensionCode":  "STRUCTURE_COMPLETENESS",
+                                             "dimensionName":  "结构完整性",
+                                             "evidenceBasis":  "缺证据章节=无；证据不覆盖章节=短板与风险、目标用户、定价策略；模型拒答章节=无；空字段章节=定价策略、优势判断、核心能力；阻断字段=目标用户",
+                                             "evidenceIds":  [
+
+                                                             ],
+                                             "sourceUrls":  [
+                                                                "https://notion.com",
+                                                                "https://hackceleration.com/labs/review/notion",
+                                                                "https://seatable.com/notion-experiences",
+                                                                "https://linkedin.com/posts/notionhq_notion-has-been-named-a-g2-leader-best-activity-7430655030757851136-WpUz",
+                                                                "https://learn.g2.com/is-notion-worth-it",
+                                                                "https://getoden.com/blog/g2-vs-capterra-vs-trustradius-vs-gartner-peer-insights",
+                                                                "https://en.wikipedia.org/wiki/Airtable",
+                                                                "https://checkthat.ai/brands/airtable/reviews",
+                                                                "https://bigtime.net/blogs/airtable-alternatives",
+                                                                "https://copy.ai/go-to-market-tools/airtable-review",
+                                                                "https://zite.com/blog/airtable-reviews",
+                                                                "https://smartsuite.com/blog/airtable-review"
+                                                            ],
+                                             "suggestion":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。"
+                                         }
+                                     ],
+                          "nextActions":  [
+
+                                          ],
+                          "revisionDirectives":  [
+                                                     {
+                                                         "category":  "STRUCTURE_ISSUE",
+                                                         "actionType":  "RERUN_NODE",
+                                                         "orchestrationAction":  "CREATE_RERUN_BRANCH",
+                                                         "priority":  "HIGH",
+                                                         "targetNode":  "extract_schema",
+                                                         "targetSection":  "短板与风险、目标用户、定价策略 / 定价策略、优势判断、核心能力",
+                                                         "summary":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。",
+                                                         "searchFeedback":  null,
+                                                         "searchQueries":  [
+                                                                               "Notion 短板与风险、目标用户、定价策略 / 定价策略、优势判断、核心能力",
+                                                                               "Airtable 短板与风险、目标用户、定价策略 / 定价策略、优势判断、核心能力"
+                                                                           ],
+                                                         "sourceUrls":  [
+                                                                            "https://notion.com",
+                                                                            "https://hackceleration.com/labs/review/notion",
+                                                                            "https://seatable.com/notion-experiences",
+                                                                            "https://linkedin.com/posts/notionhq_notion-has-been-named-a-g2-leader-best-activity-7430655030757851136-WpUz",
+                                                                            "https://learn.g2.com/is-notion-worth-it",
+                                                                            "https://getoden.com/blog/g2-vs-capterra-vs-trustradius-vs-gartner-peer-insights",
+                                                                            "https://en.wikipedia.org/wiki/Airtable",
+                                                                            "https://checkthat.ai/brands/airtable/reviews",
+                                                                            "https://bigtime.net/blogs/airtable-alternatives",
+                                                                            "https://copy.ai/go-to-market-tools/airtable-review",
+                                                                            "https://zite.com/blog/airtable-reviews",
+                                                                            "https://smartsuite.com/blog/airtable-review"
+                                                                        ],
+                                                         "expectedOutcome":  "短板与风险、目标用户、定价策略 / 定价策略、优势判断、核心能力需要恢复结构化字段完整性，并让报告章节与字段输出重新对齐。"
+                                                     }
+                                                 ]
+                      },
+    "finalReview":  {
+                        "nodeName":  "quality_check_final",
+                        "nodeStatus":  "SKIPPED",
+                        "score":  null,
+                        "passed":  null,
+                        "requiresHumanIntervention":  null,
+                        "autoRewriteAllowed":  null,
+                        "summary":  null,
+                        "dimensions":  [
+
+                                       ],
+                        "diagnoses":  [
+
+                                      ],
+                        "issues":  [
+
+                                   ],
+                        "nextActions":  [
+
+                                        ],
+                        "revisionDirectives":  [
+
+                                               ]
+                    },
+    "qualityIssues":  [
+                          {
+                              "type":  "coverage_gap",
+                              "section":  "短板与风险、目标用户、定价策略 / 定价策略、优势判断、核心能力",
+                              "severity":  "ERROR",
+                              "level":  "BLOCKER",
+                              "dimensionCode":  "STRUCTURE_COMPLETENESS",
+                              "dimensionName":  "结构完整性",
+                              "evidenceBasis":  "缺证据章节=无；证据不覆盖章节=短板与风险、目标用户、定价策略；模型拒答章节=无；空字段章节=定价策略、优势判断、核心能力；阻断字段=目标用户",
+                              "evidenceIds":  [
+
+                                              ],
+                              "sourceUrls":  [
+                                                 "https://notion.com",
+                                                 "https://hackceleration.com/labs/review/notion",
+                                                 "https://seatable.com/notion-experiences",
+                                                 "https://linkedin.com/posts/notionhq_notion-has-been-named-a-g2-leader-best-activity-7430655030757851136-WpUz",
+                                                 "https://learn.g2.com/is-notion-worth-it",
+                                                 "https://getoden.com/blog/g2-vs-capterra-vs-trustradius-vs-gartner-peer-insights",
+                                                 "https://en.wikipedia.org/wiki/Airtable",
+                                                 "https://checkthat.ai/brands/airtable/reviews",
+                                                 "https://bigtime.net/blogs/airtable-alternatives",
+                                                 "https://copy.ai/go-to-market-tools/airtable-review",
+                                                 "https://zite.com/blog/airtable-reviews",
+                                                 "https://smartsuite.com/blog/airtable-review"
+                                             ],
+                              "suggestion":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。"
+                          }
+                      ],
+    "orchestrationDecision":  {
+                                  "decisionId":  "od-105-write_report-writer-suggestion-1",
+                                  "taskId":  105,
+                                  "triggerNodeName":  "write_report",
+                                  "decisionType":  "REWRITE_ONLY",
+                                  "actionType":  "REWRITE_SECTION",
+                                  "targetNode":  "rewrite_report",
+                                  "affectedScope":  "CURRENT_NODE_ONLY",
+                                  "reason":  "缺少字段证据：featureComparison",
+                                  "requiresHumanIntervention":  false,
+                                  "requiresConfirmation":  false,
+                                  "evidenceState":  "PARTIAL_SOURCE",
+                                  "sourceUrls":  [
+                                                     "https://www.notion.com"
+                                                 ]
+                              },
+    "revisionPlan":  {
+                         "rewriteRequired":  true,
+                         "summary":  "结构完整性、修订可执行性存在关键缺口，且已有 1 条阻断级诊断。请先补齐证据链，再继续自动改写。",
+                         "items":  [
+
+                                   ],
+                         "directives":  [
+                                            {
+                                                "category":  "STRUCTURE_ISSUE",
+                                                "actionType":  "RERUN_NODE",
+                                                "orchestrationAction":  "CREATE_RERUN_BRANCH",
+                                                "priority":  "HIGH",
+                                                "targetNode":  "extract_schema",
+                                                "targetSection":  "短板与风险、目标用户、定价策略 / 定价策略、优势判断、核心能力",
+                                                "summary":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。",
+                                                "searchFeedback":  null,
+                                                "searchQueries":  [
+                                                                      "Notion 短板与风险、目标用户、定价策略 / 定价策略、优势判断、核心能力",
+                                                                      "Airtable 短板与风险、目标用户、定价策略 / 定价策略、优势判断、核心能力"
+                                                                  ],
+                                                "sourceUrls":  [
+                                                                   "https://notion.com",
+                                                                   "https://hackceleration.com/labs/review/notion",
+                                                                   "https://seatable.com/notion-experiences",
+                                                                   "https://linkedin.com/posts/notionhq_notion-has-been-named-a-g2-leader-best-activity-7430655030757851136-WpUz",
+                                                                   "https://learn.g2.com/is-notion-worth-it",
+                                                                   "https://getoden.com/blog/g2-vs-capterra-vs-trustradius-vs-gartner-peer-insights",
+                                                                   "https://en.wikipedia.org/wiki/Airtable",
+                                                                   "https://checkthat.ai/brands/airtable/reviews",
+                                                                   "https://bigtime.net/blogs/airtable-alternatives",
+                                                                   "https://copy.ai/go-to-market-tools/airtable-review",
+                                                                   "https://zite.com/blog/airtable-reviews",
+                                                                   "https://smartsuite.com/blog/airtable-review"
+                                                               ],
+                                                "expectedOutcome":  "短板与风险、目标用户、定价策略 / 定价策略、优势判断、核心能力需要恢复结构化字段完整性，并让报告章节与字段输出重新对齐。"
+                                            }
+                                        ],
+                         "rewriteGuidelines":  [
+                                                   "请补强证据引用，并进一步收紧章节结构与结论表达。"
+                                               ]
+                     }
+}

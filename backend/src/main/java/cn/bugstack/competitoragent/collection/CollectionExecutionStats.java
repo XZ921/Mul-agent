@@ -23,4 +23,7 @@ public class CollectionExecutionStats {
     private Integer executorCallCount;
     private Integer configuredConcurrency;
     private Long elapsedMillis;
+    private Boolean deadlineReached;
+    private Integer deadlineSkippedCount;
+    private Long hardDeadlineEpochMillis;
 }

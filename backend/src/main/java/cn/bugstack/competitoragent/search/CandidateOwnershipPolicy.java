@@ -183,7 +183,21 @@ public class CandidateOwnershipPolicy {
      * 规划期直达候选与文档/定价等页面仍允许继续走后续验证流程。
      */
     public boolean shouldRequireOwnershipValidation(SourceCandidate candidate, String sourceType) {
+        // 第三方回退候选来自非官方域名（知乎/CSDN/文档镜像等），不能要求它像官方域名一样归属命中，
+        // 否则 Notion 这类强反爬官网在官网打不开时永远拿不到证据。相关性仍由证据级正文归属校验兜住。
+        if (isThirdPartyFallbackCandidate(candidate)) {
+            return false;
+        }
         return "OFFICIAL".equalsIgnoreCase(sourceType) && isSearchDiscovered(candidate);
+    }
+
+    /**
+     * 第三方回退候选：官网采集失败后由 CollectorAgent 显式用第三方 query 召回，
+     * 用 discoveryMethod=THIRD_PARTY_FALLBACK 标记，区别于常规官网/搜索候选。
+     */
+    public boolean isThirdPartyFallbackCandidate(SourceCandidate candidate) {
+        return candidate != null
+                && "THIRD_PARTY_FALLBACK".equalsIgnoreCase(candidate.getDiscoveryMethod());
     }
 
     public boolean hasCompetitorOwnershipSignal(String competitorName,

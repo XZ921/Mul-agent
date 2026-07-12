@@ -1,0 +1,24 @@
+﻿{
+    "readyForDelivery":  false,
+    "deliveryStatus":  "BLOCKED",
+    "summary":  "当前报告暂不可交付，存在 1 个阻塞问题和 2 个证据缺口。",
+    "primaryIssue":  "结构化字段仍存在覆盖缺口",
+    "recommendedAction":  "结构完整性、修订可执行性存在关键缺口，且已有 1 条阻断级诊断。请先补齐证据链，再继续自动改写。",
+    "blockerCount":  1,
+    "evidenceGapCount":  2,
+    "sourceUrls":  [
+                       "https://www.notion.com",
+                       "https://notion.com",
+                       "https://en.wikipedia.org/wiki/Airtable",
+                       "https://hackceleration.com/labs/review/notion",
+                       "https://seatable.com/notion-experiences",
+                       "https://linkedin.com/posts/notionhq_notion-has-been-named-a-g2-leader-best-activity-7430655030757851136-WpUz",
+                       "https://learn.g2.com/is-notion-worth-it",
+                       "https://getoden.com/blog/g2-vs-capterra-vs-trustradius-vs-gartner-peer-insights",
+                       "https://checkthat.ai/brands/airtable/reviews",
+                       "https://bigtime.net/blogs/airtable-alternatives",
+                       "https://copy.ai/go-to-market-tools/airtable-review",
+                       "https://zite.com/blog/airtable-reviews",
+                       "https://smartsuite.com/blog/airtable-review"
+                   ]
+}

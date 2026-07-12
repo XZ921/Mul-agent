@@ -39,6 +39,7 @@ class AgentRuntimeContractTest {
                 "taskRagContextBundle",
                 "sharedState",
                 "sharedOutputEnvelopes",
+                "fieldEvidenceFingerprintClaims",
                 "createdAt"
         ), declaredFieldNames(AgentContext.class));
     }

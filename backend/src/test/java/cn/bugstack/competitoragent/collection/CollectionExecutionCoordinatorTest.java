@@ -360,6 +360,107 @@ class CollectionExecutionCoordinatorTest {
         assertThat(invocationOrder.get(0)).isEqualTo("TAVILY_PREFETCHED");
     }
 
+    @Test
+    void shouldStopSchedulingSequentialTargetsWhenCollectionDeadlineExpiredInsideQueue() throws Exception {
+        CollectionExecutor executor = mock(CollectionExecutor.class);
+        when(executor.supports(any())).thenReturn(true);
+        when(executor.execute(any())).thenAnswer(invocation -> {
+            Thread.sleep(120L);
+            CollectionTaskPackage taskPackage = invocation.getArgument(0);
+            return CollectionExecutionResult.builder()
+                    .executorType("WEB_PAGE")
+                    .success(true)
+                    .status("SUCCESS")
+                    .resourceLocator(taskPackage.getResourceLocator())
+                    .sourceUrls(taskPackage.getSourceUrls())
+                    .build();
+        });
+
+        CollectionExecutionProperties properties = new CollectionExecutionProperties();
+        properties.setConcurrency(1);
+        CollectionExecutionCoordinator coordinator = new CollectionExecutionCoordinator(
+                new CollectionTaskPackageBuilder(),
+                new CollectionExecutorRegistry(List.of(executor)),
+                new cn.bugstack.competitoragent.search.CanonicalUrlResolver(),
+                new InternalLinkDiscoveryProperties(),
+                properties
+        );
+        CollectionDeadlineContext deadline = CollectionDeadlineContext.hardDeadline(System.currentTimeMillis() + 80L, 0L);
+        List<SearchCollectionTarget> sequentialTargets = List.of(
+                target("https://docs.airtable.com/a"),
+                target("https://docs.airtable.com/b")
+        );
+
+        CollectionExecutionReport report = coordinator.execute(
+                41L,
+                "collect_sources_docs",
+                9L,
+                "Airtable",
+                sequentialTargets,
+                null,
+                deadline
+        );
+
+        assertThat(report.getStatus()).isEqualTo("SUCCESS_DEGRADED");
+        assertThat(report.getDegradationReasons()).contains("HARD_DEADLINE_REACHED");
+        assertThat(report.getStats().getDeadlineReached()).isTrue();
+        verify(executor, times(1)).execute(any());
+    }
+
+    @Test
+    void shouldNotScheduleDiscoveredChildBatchAfterConcurrentBatchCrossesDeadline() throws Exception {
+        CollectionExecutor executor = mock(CollectionExecutor.class);
+        when(executor.supports(any())).thenReturn(true);
+        when(executor.execute(any())).thenAnswer(invocation -> {
+            Thread.sleep(120L);
+            CollectionTaskPackage taskPackage = invocation.getArgument(0);
+            return CollectionExecutionResult.builder()
+                    .executorType("WEB_PAGE")
+                    .success(true)
+                    .status("SUCCESS")
+                    .resourceLocator(taskPackage.getResourceLocator())
+                    .sourceUrls(taskPackage.getSourceUrls())
+                    .discoveredCandidates(List.of(SourceCandidate.builder()
+                            .url(taskPackage.getResourceLocator() + "/child")
+                            .sourceType("DOCS")
+                            .sourceFamilyKey("official")
+                            .build()))
+                    .build();
+        });
+
+        CollectionExecutionProperties properties = new CollectionExecutionProperties();
+        properties.setConcurrency(3);
+        CollectionExecutionCoordinator coordinator = new CollectionExecutionCoordinator(
+                new CollectionTaskPackageBuilder(),
+                new CollectionExecutorRegistry(List.of(executor)),
+                new cn.bugstack.competitoragent.search.CanonicalUrlResolver(),
+                new InternalLinkDiscoveryProperties(),
+                properties
+        );
+        CollectionDeadlineContext deadline = CollectionDeadlineContext.hardDeadline(System.currentTimeMillis() + 80L, 0L);
+        List<SearchCollectionTarget> concurrentTopLevelTargets = List.of(
+                target("https://docs.airtable.com/a"),
+                target("https://docs.airtable.com/b"),
+                target("https://docs.airtable.com/c")
+        );
+
+        CollectionExecutionReport report = coordinator.execute(
+                41L,
+                "collect_sources_docs",
+                9L,
+                "Airtable",
+                concurrentTopLevelTargets,
+                null,
+                deadline
+        );
+
+        assertThat(report.getStatus()).isEqualTo("SUCCESS_DEGRADED");
+        assertThat(report.getStats().getDeadlineReached()).isTrue();
+        verify(executor, times(concurrentTopLevelTargets.size())).execute(any());
+        verify(executor, never()).execute(argThat(pkg ->
+                readStringAccessor(pkg, "resourceLocator").endsWith("/child")));
+    }
+
     private SearchCollectionTarget target(String url) {
         return target(url, false);
     }

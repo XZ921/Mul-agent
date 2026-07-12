@@ -11,6 +11,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -152,6 +153,67 @@ class CandidateVerifierTest {
                         .providerKey("tavily")
                         .discoveryMethod("TAVILY_FAST_LANE")
                         .selectionStage("HTTP")
+                        .build()
+        ));
+
+        assertEquals(1, result.getVerifiedTargets().size());
+        assertTrue(Boolean.TRUE.equals(result.getUpdatedCandidates().get(0).getVerified()));
+    }
+
+    @Test
+    void shouldRejectThirdPartyFallbackWhenCollectedContentDoesNotMentionCompetitor() {
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(sourceCollector.collect("https://www.getapp.com/collaboration-software/a/notion/reviews/",
+                "Notion", "DOCS"))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://www.getapp.com/collaboration-software/a/notion/reviews/")
+                        .title("Generic collaboration software guide")
+                        .content("This documentation API reference guide describes generic workspace collaboration workflows.")
+                        .snippet("documentation guide")
+                        .sourceType("DOCS")
+                        .success(true)
+                        .build());
+        CandidateVerifier verifier = new CandidateVerifier(sourceCollector);
+
+        CandidateVerificationResult result = verifier.verify("Notion", "DOCS", List.of(
+                SourceCandidate.builder()
+                        .url("https://www.getapp.com/collaboration-software/a/notion/reviews/")
+                        .domain("www.getapp.com")
+                        .title("Notion third-party review")
+                        .sourceType("DOCS")
+                        .providerKey("tavily")
+                        .discoveryMethod("THIRD_PARTY_FALLBACK")
+                        .build()
+        ));
+
+        assertEquals(0, result.getVerifiedTargets().size());
+        assertTrue(Boolean.FALSE.equals(result.getUpdatedCandidates().get(0).getVerified()));
+        assertTrue(result.getUpdatedCandidates().get(0).getVerificationReason().contains("竞品归属信号"));
+    }
+
+    @Test
+    void shouldVerifyThirdPartyFallbackWhenCollectedContentMentionsCompetitor() {
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(sourceCollector.collect("https://www.getapp.com/collaboration-software/a/notion/reviews/",
+                "Notion", "DOCS"))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://www.getapp.com/collaboration-software/a/notion/reviews/")
+                        .title("Notion third-party review")
+                        .content("Notion documentation and workspace features are described in this API reference guide.")
+                        .snippet("Notion documentation")
+                        .sourceType("DOCS")
+                        .success(true)
+                        .build());
+        CandidateVerifier verifier = new CandidateVerifier(sourceCollector);
+
+        CandidateVerificationResult result = verifier.verify("Notion", "DOCS", List.of(
+                SourceCandidate.builder()
+                        .url("https://www.getapp.com/collaboration-software/a/notion/reviews/")
+                        .domain("www.getapp.com")
+                        .title("Notion third-party review")
+                        .sourceType("DOCS")
+                        .providerKey("tavily")
+                        .discoveryMethod("THIRD_PARTY_FALLBACK")
                         .build()
         ));
 
@@ -369,6 +431,40 @@ class CandidateVerifierTest {
 
         assertEquals(1, result.getVerifiedCandidateCount());
         verify(sourceCollector, times(1)).collect("https://open.douyin.com/search", "抖音", "DOCS");
+    }
+
+    @Test
+    void shouldRunNetworkVerificationForPrefetchWhenSkipNetworkVerificationFalse() {
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(sourceCollector.collect("https://support.airtable.com/docs/automation-guide", "Airtable", "DOCS"))
+                .thenReturn(SourceCollector.CollectedPage.builder()
+                        .url("https://support.airtable.com/docs/automation-guide")
+                        .title("Airtable automation guide")
+                        .content("Airtable documentation API integration guide automation workspace")
+                        .snippet("Airtable documentation")
+                        .success(true)
+                        .build());
+        CandidateVerifier verifier = new CandidateVerifier(sourceCollector);
+
+        CandidateVerificationResult result = verifier.verify("Airtable", "DOCS", List.of(
+                SourceCandidate.builder()
+                        .url("https://support.airtable.com/docs/automation-guide")
+                        .sourceType("DOCS")
+                        .providerKey("tavily")
+                        .fastLaneUsable(Boolean.TRUE)
+                        .hasPrefetchedContent(Boolean.TRUE)
+                        .prefetchedContentRef("tavily:req-103:02_02")
+                        .skipNetworkVerification(Boolean.FALSE)
+                        .pageType("OFFICIAL_DOC")
+                        .sourceUrls(List.of("https://support.airtable.com/docs/automation-guide"))
+                        .build()
+        ));
+
+        assertEquals(1, result.getVerifiedCandidateCount());
+        assertTrue(Boolean.TRUE.equals(result.getUpdatedCandidates().get(0).getVerified()));
+        assertEquals("VERIFIED", result.getUpdatedCandidates().get(0).getSelectionStage());
+        assertFalse(result.getUpdatedCandidates().get(0).getQualitySignals().contains("TAVILY_VERIFICATION_SKIPPED"));
+        verify(sourceCollector).collect("https://support.airtable.com/docs/automation-guide", "Airtable", "DOCS");
     }
 
     @SuppressWarnings("unchecked")

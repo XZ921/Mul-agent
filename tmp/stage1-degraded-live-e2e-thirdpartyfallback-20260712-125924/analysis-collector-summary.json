@@ -1,0 +1,216 @@
+﻿[
+    {
+        "nodeName":  "collect_sources_01_01",
+        "status":  "SUCCESS_DEGRADED",
+        "failureCategory":  null,
+        "successCollected":  1,
+        "totalResults":  2,
+        "collectionStatus":  "SUCCESS_DEGRADED",
+        "readyForQuorum":  true,
+        "degradationReasons":  "HARD_DEADLINE_REACHED",
+        "issueFlags":  [
+                           "TAVILY_RAW_CONTENT_READY",
+                           "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                           "TAVILY_STRUCTURED_BLOCK_COUNT=0",
+                           "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                           "ROOT_ENTRY_WEAK_CONTENT",
+                           "COLLECT_FAILED",
+                           "CONTENT_GAP",
+                           "COLLECTION_RESULT_MISSING",
+                           "WEAK_MAIN_CONTENT",
+                           "EVIDENCE_REPAIR_REQUIRED",
+                           "FIELD_RELEVANCE_WEAK",
+                           "HIGH_TRUST_LOW_USABILITY",
+                           "SCORE_CONTRADICTION_DETECTED",
+                           "REPAIR_QUERY_PROPOSED",
+                           "PARTIAL_COLLECTION_FAILURE"
+                       ],
+        "selectedUrls":  null,
+        "sourceUrls":  [
+                           "https://www.notion.com",
+                           "https://notion.com",
+                           "https://www.notion.so/zh-cn/about?g-exp=dot_com_vercel_region_cache--us-east-2",
+                           "https://notion.so/zh-cn/about?g-exp=dot_com_vercel_region_cache--us-east-2"
+                       ],
+        "resultDiscoveryMethods":  [
+                                       "TAVILY_PHASE1_BOOTSTRAP",
+                                       "TAVILY_FIELD_EVIDENCE_QUERY"
+                                   ],
+        "resultTrustTiers":  "HIGH"
+    },
+    {
+        "nodeName":  "collect_sources_01_02",
+        "status":  "SUCCESS_DEGRADED",
+        "failureCategory":  null,
+        "successCollected":  0,
+        "totalResults":  null,
+        "collectionStatus":  "FAILED",
+        "readyForQuorum":  false,
+        "degradationReasons":  "HARD_DEADLINE_REACHED",
+        "issueFlags":  "SOURCE_URLS_BACKFILLED",
+        "selectedUrls":  null,
+        "sourceUrls":  [
+                           "https://www.notion.so/docs",
+                           "https://www.notion.so/documentation",
+                           "https://www.notion.so/help",
+                           "https://www.notion.so/guide"
+                       ],
+        "resultDiscoveryMethods":  {
+
+                                   },
+        "resultTrustTiers":  {
+
+                             }
+    },
+    {
+        "nodeName":  "collect_sources_01_03",
+        "status":  "SUCCESS_DEGRADED",
+        "failureCategory":  null,
+        "successCollected":  5,
+        "totalResults":  9,
+        "collectionStatus":  "SUCCESS_DEGRADED",
+        "readyForQuorum":  true,
+        "degradationReasons":  "HARD_DEADLINE_REACHED",
+        "issueFlags":  [
+                           "TAVILY_RAW_CONTENT_READY",
+                           "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                           "TAVILY_STRUCTURED_BLOCK_COUNT=2",
+                           "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                           "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                           "FIELD_RELEVANCE_PARTIAL",
+                           "TAVILY_STRUCTURED_BLOCK_COUNT=3",
+                           "FIELD_RELEVANCE_WEAK",
+                           "EVIDENCE_REPAIR_REQUIRED",
+                           "COLLECT_FAILED",
+                           "CONTENT_GAP",
+                           "COLLECTION_RESULT_MISSING",
+                           "WEAK_MAIN_CONTENT",
+                           "REPAIR_QUERY_PROPOSED",
+                           "PARTIAL_COLLECTION_FAILURE"
+                       ],
+        "selectedUrls":  null,
+        "sourceUrls":  [
+                           "https://hackceleration.com/labs/review/notion",
+                           "https://seatable.com/notion-experiences",
+                           "https://www.linkedin.com/posts/notionhq_notion-has-been-named-a-g2-leader-best-activity-7430655030757851136-WpUz",
+                           "https://linkedin.com/posts/notionhq_notion-has-been-named-a-g2-leader-best-activity-7430655030757851136-WpUz",
+                           "https://learn.g2.com/is-notion-worth-it",
+                           "https://getoden.com/blog/g2-vs-capterra-vs-trustradius-vs-gartner-peer-insights",
+                           "https://www.g2.com/search?query=Notion",
+                           "https://g2.com/search?query=Notion",
+                           "https://www.capterra.com/search/?query=Notion",
+                           "https://capterra.com/search?query=Notion",
+                           "https://www.notion.so/case-studies",
+                           "https://notion.so/case-studies",
+                           "https://www.notion.so/compare",
+                           "https://notion.so/compare"
+                       ],
+        "resultDiscoveryMethods":  [
+                                       "TAVILY_PHASE1_BOOTSTRAP",
+                                       "HEURISTIC",
+                                       "HEURISTIC_TEMPLATE"
+                                   ],
+        "resultTrustTiers":  [
+                                 "MEDIUM",
+                                 "HIGH"
+                             ]
+    },
+    {
+        "nodeName":  "collect_sources_02_01",
+        "status":  "SUCCESS_DEGRADED",
+        "failureCategory":  null,
+        "successCollected":  1,
+        "totalResults":  2,
+        "collectionStatus":  "SUCCESS_DEGRADED",
+        "readyForQuorum":  true,
+        "degradationReasons":  "HARD_DEADLINE_REACHED",
+        "issueFlags":  [
+                           "TAVILY_RAW_CONTENT_READY",
+                           "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                           "TAVILY_STRUCTURED_BLOCK_COUNT=0",
+                           "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                           "FIELD_RELEVANCE_PARTIAL",
+                           "COLLECT_FAILED",
+                           "CONTENT_GAP",
+                           "COLLECTION_RESULT_MISSING",
+                           "WEAK_MAIN_CONTENT",
+                           "EVIDENCE_REPAIR_REQUIRED",
+                           "FIELD_RELEVANCE_WEAK",
+                           "ROOT_ENTRY_WEAK_CONTENT",
+                           "HIGH_TRUST_LOW_USABILITY",
+                           "SCORE_CONTRADICTION_DETECTED",
+                           "REPAIR_QUERY_PROPOSED",
+                           "PARTIAL_COLLECTION_FAILURE"
+                       ],
+        "selectedUrls":  null,
+        "sourceUrls":  [
+                           "https://en.wikipedia.org/wiki/Airtable",
+                           "https://www.airtable.com",
+                           "https://airtable.com"
+                       ],
+        "resultDiscoveryMethods":  [
+                                       "TAVILY_PHASE1_BOOTSTRAP",
+                                       "DIRECT_LOCATOR"
+                                   ],
+        "resultTrustTiers":  "HIGH"
+    },
+    {
+        "nodeName":  "collect_sources_02_02",
+        "status":  "SUCCESS_DEGRADED",
+        "failureCategory":  null,
+        "successCollected":  0,
+        "totalResults":  null,
+        "collectionStatus":  "FAILED",
+        "readyForQuorum":  false,
+        "degradationReasons":  "HARD_DEADLINE_REACHED",
+        "issueFlags":  "SOURCE_URLS_BACKFILLED",
+        "selectedUrls":  null,
+        "sourceUrls":  [
+                           "https://www.airtable.com/docs",
+                           "https://www.airtable.com/documentation",
+                           "https://www.airtable.com/help",
+                           "https://www.airtable.com/guide"
+                       ],
+        "resultDiscoveryMethods":  {
+
+                                   },
+        "resultTrustTiers":  {
+
+                             }
+    },
+    {
+        "nodeName":  "collect_sources_02_03",
+        "status":  "SUCCESS",
+        "failureCategory":  null,
+        "successCollected":  5,
+        "totalResults":  10,
+        "collectionStatus":  "SUCCESS",
+        "readyForQuorum":  true,
+        "degradationReasons":  "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT",
+        "issueFlags":  [
+                           "TAVILY_RAW_CONTENT_READY",
+                           "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                           "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                           "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                           "FIELD_RELEVANCE_WEAK",
+                           "EVIDENCE_REPAIR_REQUIRED",
+                           "FIELD_RELEVANCE_PARTIAL",
+                           "DUPLICATE_CANONICAL_URL",
+                           "PARTIAL_COLLECTION_FAILURE"
+                       ],
+        "selectedUrls":  null,
+        "sourceUrls":  [
+                           "https://checkthat.ai/brands/airtable/reviews",
+                           "https://www.bigtime.net/blogs/airtable-alternatives",
+                           "https://bigtime.net/blogs/airtable-alternatives",
+                           "https://www.copy.ai/go-to-market-tools/airtable-review",
+                           "https://copy.ai/go-to-market-tools/airtable-review",
+                           "https://www.zite.com/blog/airtable-reviews",
+                           "https://zite.com/blog/airtable-reviews",
+                           "https://www.smartsuite.com/blog/airtable-review",
+                           "https://smartsuite.com/blog/airtable-review"
+                       ],
+        "resultDiscoveryMethods":  "TAVILY_PHASE1_BOOTSTRAP",
+        "resultTrustTiers":  "MEDIUM"
+    }
+]

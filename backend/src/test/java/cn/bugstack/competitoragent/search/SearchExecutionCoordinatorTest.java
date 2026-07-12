@@ -1,12 +1,14 @@
 package cn.bugstack.competitoragent.search;
 
 import cn.bugstack.competitoragent.agent.collector.CollectorNodeConfig;
+import cn.bugstack.competitoragent.collection.CollectionDeadlineContext;
 import cn.bugstack.competitoragent.source.SearchRequestPhase;
 import cn.bugstack.competitoragent.source.SearchSourceRequest;
 import cn.bugstack.competitoragent.source.SearchSourceProvider;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
 import cn.bugstack.competitoragent.source.SourceCollector;
+import cn.bugstack.competitoragent.source.SourceTrustTier;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -183,6 +185,84 @@ class SearchExecutionCoordinatorTest {
     }
 
     @Test
+    void shouldMarkThirdPartyFallbackCandidatesBeforeVerificationAndSelection() {
+        CandidateVerifier candidateVerifier = mock(CandidateVerifier.class);
+        BrowserSearchRuntimeService browserRuntimeService = mock(BrowserSearchRuntimeService.class);
+        SearchSourceProvider sourceProvider = mock(SearchSourceProvider.class);
+        SearchExecutionCoordinator searchCoordinator = new SearchExecutionCoordinator(
+                candidateVerifier,
+                browserRuntimeService,
+                sourceProvider,
+                new SourceCandidateRanker(),
+                new CollectionTargetSelector(),
+                new SearchPolicyResolver()
+        );
+        SourceCandidate providerCandidate = SourceCandidate.builder()
+                .url("https://www.getapp.com/collaboration-software/a/notion/reviews/")
+                .title("Notion third-party review")
+                .sourceType("DOCS")
+                .discoveryMethod("HTTP")
+                .providerKey("tavily")
+                .domain("www.getapp.com")
+                .sourceUrls(List.of("https://www.getapp.com/collaboration-software/a/notion/reviews/"))
+                .relevanceScore(0.91)
+                .freshnessScore(0.67)
+                .qualityScore(0.83)
+                .build();
+        when(sourceProvider.search(any(SearchSourceRequest.class))).thenReturn(List.of(providerCandidate));
+        when(candidateVerifier.verify(eq("Notion"), eq("DOCS"), any()))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    List<SourceCandidate> candidates = invocation.getArgument(2);
+                    if (candidates == null || candidates.isEmpty()) {
+                        return CandidateVerificationResult.builder()
+                                .updatedCandidates(List.of())
+                                .attemptedTargets(List.of())
+                                .verifiedTargets(List.of())
+                                .build();
+                    }
+                    SourceCandidate taggedCandidate = candidates.get(0);
+                    assertEquals("THIRD_PARTY_FALLBACK", taggedCandidate.getDiscoveryMethod());
+                    assertEquals(SourceTrustTier.MEDIUM, taggedCandidate.getTrustTier());
+                    SourceCandidate verifiedCandidate = taggedCandidate.toBuilder()
+                            .verified(Boolean.TRUE)
+                            .selectionStage("VERIFIED")
+                            .selectionReason("third-party fallback verified")
+                            .build();
+                    SearchCollectionTarget target = SearchCollectionTarget.builder()
+                            .candidate(verifiedCandidate)
+                            .build();
+                    return CandidateVerificationResult.builder()
+                            .updatedCandidates(List.of(verifiedCandidate))
+                            .attemptedTargets(List.of(target))
+                            .verifiedTargets(List.of(target))
+                            .build();
+                });
+
+        SearchExecutionResult result = searchCoordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Notion")
+                .sourceType("DOCS")
+                .searchQueries(List.of("Notion docs reviews alternatives"))
+                .thirdPartyFallbackActive(Boolean.TRUE)
+                .tavilyQueryMode("OPEN_WEB")
+                .verifyCandidates(Boolean.TRUE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .searchMode("HTTP_ONLY")
+                .maxSearchResults(1)
+                .minVerifiedCandidates(1)
+                .build());
+
+        SourceCandidate selectedCandidate = result.getSelectedTargets().get(0).getCandidate();
+        assertEquals("THIRD_PARTY_FALLBACK", selectedCandidate.getDiscoveryMethod());
+        assertEquals(SourceTrustTier.MEDIUM, selectedCandidate.getTrustTier());
+        verify(sourceProvider).search(argThat(request ->
+                request != null
+                        && "OPEN_WEB".equals(request.getPreferredQueryMode())
+                        && request.getIncludeDomains().isEmpty()
+                        && request.getPreferredDomains().isEmpty()));
+    }
+
+    @Test
     void shouldVerifyCandidatesBeforeSelectingTargetsAndSkipSupplementWhenVerifiedCandidatesAreEnough() {
         CandidateVerifier candidateVerifier = mock(CandidateVerifier.class);
         BrowserSearchRuntimeService browserRuntimeService = mock(BrowserSearchRuntimeService.class);
@@ -240,6 +320,149 @@ class SearchExecutionCoordinatorTest {
         assertEquals("SKIP_SUPPLEMENT_ENOUGH_VERIFIED", result.getExecutionTrace().getFallbackDecision());
         assertEquals("https://planned.example.com/docs", result.getSelectedTargets().get(0).getCandidate().getUrl());
         assertEquals(Boolean.TRUE, result.getSelectedTargets().get(0).getCandidate().getVerified());
+    }
+
+    @Test
+    void shouldVerifyPrefetchBeforeSelectorWhenSkipNetworkVerificationFalse() {
+        CandidateVerifier candidateVerifier = mock(CandidateVerifier.class);
+        BrowserSearchRuntimeService browserRuntimeService = mock(BrowserSearchRuntimeService.class);
+        SearchSourceProvider sourceProvider = mock(SearchSourceProvider.class);
+        CollectionTargetSelector targetSelector = spy(new CollectionTargetSelector());
+        when(sourceProvider.search(any(), any())).thenReturn(List.of());
+        when(sourceProvider.search(any(SearchSourceRequest.class))).thenReturn(List.of());
+
+        SearchExecutionCoordinator searchCoordinator = new SearchExecutionCoordinator(
+                candidateVerifier,
+                browserRuntimeService,
+                sourceProvider,
+                new SourceCandidateRanker(),
+                targetSelector,
+                new SearchPolicyResolver()
+        );
+
+        SourceCandidate prefetchedCandidate = SourceCandidate.builder()
+                .url("https://support.airtable.com/docs/automation-guide")
+                .title("Airtable automation guide")
+                .sourceType("DOCS")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .domain("support.airtable.com")
+                .qualityTier("STRONG")
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("tavily:req-103:02_02")
+                .prefetchedRawContentLength(1200)
+                .skipNetworkVerification(Boolean.FALSE)
+                .pageType("OFFICIAL_DOC")
+                .sourceUrls(List.of("https://support.airtable.com/docs/automation-guide"))
+                .relevanceScore(0.95)
+                .freshnessScore(0.78)
+                .qualityScore(0.96)
+                .totalScore(0.95)
+                .build();
+        SourceCandidate verifiedCandidate = prefetchedCandidate.toBuilder()
+                .verified(Boolean.TRUE)
+                .selectionStage("VERIFIED")
+                .selectionReason("运行期验证通过，允许直接进入正式采集")
+                .verificationReason("NETWORK_VERIFIED")
+                .build();
+        SearchCollectionTarget verifiedTarget = SearchCollectionTarget.builder()
+                .candidate(verifiedCandidate)
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url(prefetchedCandidate.getUrl())
+                        .title(prefetchedCandidate.getTitle())
+                        .content("Airtable documentation API integration guide automation workspace")
+                        .snippet("Airtable documentation")
+                        .success(true)
+                        .build())
+                .build();
+        when(candidateVerifier.verify(eq("Airtable"), eq("DOCS"), any()))
+                .thenReturn(CandidateVerificationResult.builder()
+                        .updatedCandidates(List.of(verifiedCandidate))
+                        .attemptedTargets(List.of(verifiedTarget))
+                        .verifiedTargets(List.of(verifiedTarget))
+                        .build());
+
+        SearchExecutionResult result = searchCoordinator.execute(CollectorNodeConfig.builder()
+                .competitorName("Airtable")
+                .sourceType("DOCS")
+                .sourceCandidates(List.of(prefetchedCandidate))
+                .verifyCandidates(Boolean.TRUE)
+                .browserSearchEnabled(Boolean.FALSE)
+                .maxSearchResults(2)
+                .minVerifiedCandidates(1)
+                .build());
+
+        InOrder inOrder = inOrder(candidateVerifier, targetSelector);
+        inOrder.verify(candidateVerifier).verify(eq("Airtable"), eq("DOCS"), argThat(candidates ->
+                candidates.stream().anyMatch(candidate ->
+                        "https://support.airtable.com/docs/automation-guide".equals(candidate.getUrl())
+                                && Boolean.FALSE.equals(candidate.getSkipNetworkVerification()))));
+        inOrder.verify(targetSelector).selectTargets(any(CollectorNodeConfig.class), any(), any(), anyInt());
+        assertThat(result.getSelectedTargets())
+                .extracting(target -> target.getCandidate().getVerified())
+                .contains(Boolean.TRUE);
+    }
+
+    @Test
+    void shouldStopBeforeVerificationAndSupplementWhenCollectorDeadlineAlreadyExpired() {
+        CandidateVerifier candidateVerifier = mock(CandidateVerifier.class);
+        BrowserSearchRuntimeService browserRuntimeService = mock(BrowserSearchRuntimeService.class);
+        SearchSourceProvider sourceProvider = mock(SearchSourceProvider.class);
+        SearchExecutionCoordinator searchCoordinator = new SearchExecutionCoordinator(
+                candidateVerifier,
+                browserRuntimeService,
+                sourceProvider,
+                new SourceCandidateRanker(),
+                new CollectionTargetSelector(),
+                new SearchPolicyResolver()
+        );
+
+        SearchExecutionResult result = searchCoordinator.execute(
+                CollectorNodeConfig.builder()
+                        .competitorName("Deadline Example")
+                        .sourceType("DOCS")
+                        .sourceCandidates(List.of(SourceCandidate.builder()
+                                .url("https://deadline.example.com/docs")
+                                .title("Deadline Docs")
+                                .sourceType("DOCS")
+                                .discoveryMethod("HEURISTIC")
+                                .reason("planned docs entry")
+                                .domain("deadline.example.com")
+                                .sourceUrls(List.of("https://deadline.example.com/docs"))
+                                .relevanceScore(0.90)
+                                .freshnessScore(0.72)
+                                .qualityScore(0.88)
+                                .build()))
+                        .verifyCandidates(Boolean.TRUE)
+                        .browserSearchEnabled(Boolean.TRUE)
+                        .searchMode("HYBRID")
+                        .maxSearchResults(2)
+                        .minVerifiedCandidates(2)
+                        .build(),
+                99L,
+                Map.of(),
+                null,
+                CollectionDeadlineContext.hardDeadline(System.currentTimeMillis() - 1L, 0L)
+        );
+
+        SearchExecutionStep verifyStep = result.getExecutionPlan().getSteps().stream()
+                .filter(step -> "VERIFY_TOP_CANDIDATES".equals(step.getStepCode()))
+                .findFirst()
+                .orElseThrow();
+        SearchExecutionStep supplementStep = result.getExecutionPlan().getSteps().stream()
+                .filter(step -> "BROWSER_SUPPLEMENT_SEARCH".equals(step.getStepCode()))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals("HARD_DEADLINE_REACHED", result.getExecutionTrace().getDegradationReason());
+        assertEquals(SearchExecutionStep.StepStatus.SKIPPED, verifyStep.getStatus());
+        assertTrue(verifyStep.getMessage().contains("collector hard deadline"));
+        assertEquals(SearchExecutionStep.StepStatus.SKIPPED, supplementStep.getStatus());
+        assertTrue(supplementStep.getMessage().contains("collector hard deadline"));
+        verify(candidateVerifier, never()).verify(anyString(), anyString(), any());
+        verify(browserRuntimeService, never()).search(any());
+        verify(sourceProvider, never()).search(any(SearchSourceRequest.class));
     }
 
     @Test

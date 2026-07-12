@@ -1,0 +1,20 @@
+﻿{
+    "readyForDelivery":  false,
+    "deliveryStatus":  "NEEDS_EVIDENCE",
+    "summary":  "å½åæ¥åæä¸å¯äº¤ä»ï¼å­å¨ 0 ä¸ªé»å¡é®é¢å 1 ä¸ªè¯æ®ç¼ºå£ã",
+    "primaryIssue":  "å\u0085³é®ç»è®ºç¼ºå°æ¥æºå¼ç¨",
+    "recommendedAction":  "è¯æ®å¯è¿½æº¯æ§ãä¿®è®¢å¯æ§è¡æ§å­å¨å\u0085³é®ç¼ºå£ï¼ä¸å·²æ 1 æ¡é»æ­çº§è¯æ­ãè¯·å\u0085è¡¥é½è¯æ®é¾ï¼åç»§ç»­èªå¨æ¹åã",
+    "blockerCount":  0,
+    "evidenceGapCount":  1,
+    "sourceUrls":  [
+                       "https://pyairtable.readthedocs.io/en/stable/api.html",
+                       "https://apitracker.io/a/airtable",
+                       "https://support.airtable.com/docs/airtable-enterprise-api",
+                       "https://airtable.com/guides/scale/using-airtable-api",
+                       "https://checkthat.ai/brands/airtable/reviews",
+                       "https://themarketingagency.ca/blog/honest-review-airtable",
+                       "https://zite.com/blog/airtable-reviews",
+                       "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                       "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                   ]
+}

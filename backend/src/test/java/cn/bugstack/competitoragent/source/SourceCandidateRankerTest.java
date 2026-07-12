@@ -227,6 +227,28 @@ class SourceCandidateRankerTest {
     }
 
     @Test
+    void shouldKeepThirdPartyFallbackCandidateAtMediumTrustTier() {
+        List<SourceCandidate> ranked = ranker.rankAndDeduplicate(List.of(
+                SourceCandidate.builder()
+                        .url("https://docs.thirdparty.example/notion-guide")
+                        .title("Notion guide")
+                        .sourceType("DOCS")
+                        .domain("docs.thirdparty.example")
+                        .discoveryMethod("THIRD_PARTY_FALLBACK")
+                        .relevanceScore(0.95D)
+                        .freshnessScore(0.80D)
+                        .qualityScore(0.90D)
+                        .build()
+        ));
+
+        SourceCandidate fallbackCandidate = ranked.get(0);
+
+        assertEquals("THIRD_PARTY_FALLBACK", fallbackCandidate.getDiscoveryMethod());
+        assertEquals(SourceTrustTier.MEDIUM, fallbackCandidate.getTrustTier());
+        assertEquals(SourceTrustTier.MEDIUM.getDisplayName(), fallbackCandidate.getTrustTierLabel());
+    }
+
+    @Test
     void shouldTrimCandidatePoolWithOverallBudgetAndPerDomainCap() {
         List<SourceCandidate> candidates = List.of(
                 candidateWithDomain("https://a.example.com/1", "a.example.com", 0.98D),

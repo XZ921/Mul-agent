@@ -21,4 +21,7 @@ public class SourceCollectRequest {
     WebPageRenderHint renderHint;
     List<String> expectedBlockTypes;
     List<String> sourceUrls;
+    Long collectorHardDeadlineEpochMillis;
+    Long collectorDeadlineGraceMillis;
+    String collectorDeadlineReason;
 }

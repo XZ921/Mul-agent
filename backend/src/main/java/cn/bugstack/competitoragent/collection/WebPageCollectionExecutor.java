@@ -109,21 +109,40 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
         long startedAt = System.currentTimeMillis();
 
         if (requiresFullRender(taskPackage.getRenderHint())) {
+            if (isCollectorDeadlineExpired(taskPackage)) {
+                return buildDeadlineReachedFailureResult(taskPackage, List.of(), startedAt);
+            }
             return collectByPlaywright(taskPackage, List.of("FULL_RENDER_REQUIRED"), null, startedAt);
         }
 
+        if (isCollectorDeadlineExpired(taskPackage)) {
+            return buildDeadlineReachedFailureResult(taskPackage, List.of(), startedAt);
+        }
         PageContentExtractionResult directResult = collectByDirectHtmlReader(taskPackage);
         if (directResult != null && directResult.isUsable()) {
             CollectionExecutionResult mappedDirect = mapLightweightResult(taskPackage, directResult, startedAt);
             return maybeSupplementLinksWithPlaywright(taskPackage, mappedDirect, startedAt);
         }
 
+        if (isCollectorDeadlineExpired(taskPackage)) {
+            return buildDeadlineReachedFailureResult(
+                    taskPackage,
+                    mergeSignals(resolveLightweightFailureSignals(directResult, "DIRECT_HTML_UNAVAILABLE"),
+                            List.of("HARD_DEADLINE_REACHED")),
+                    startedAt);
+        }
         PageContentExtractionResult jinaResult = collectByJinaReader(taskPackage);
         if (jinaResult != null && jinaResult.isUsable()) {
             CollectionExecutionResult mappedJina = mapLightweightResult(taskPackage, jinaResult, startedAt);
             return maybeSupplementLinksWithPlaywright(taskPackage, mappedJina, startedAt);
         }
 
+        if (isCollectorDeadlineExpired(taskPackage)) {
+            return buildDeadlineReachedFailureResult(
+                    taskPackage,
+                    mergeSignals(mergeLightweightFailureSignals(directResult, jinaResult), List.of("HARD_DEADLINE_REACHED")),
+                    startedAt);
+        }
         return collectByPlaywright(taskPackage,
                 mergeSignals(mergeLightweightFailureSignals(directResult, jinaResult), List.of("UPGRADED_TO_FULL_RENDER")),
                 jinaResult == null ? directResult : jinaResult,
@@ -202,6 +221,9 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
                                                           List<String> qualitySignals,
                                                           PageContentExtractionResult lightweightResult,
                                                           long startedAt) {
+        if (isCollectorDeadlineExpired(taskPackage)) {
+            return buildDeadlineReachedFailureResult(taskPackage, qualitySignals, startedAt);
+        }
         if (sourceCollector == null) {
             return buildFailureResult(taskPackage,
                     resolveFailureKind(lightweightResult, "source collector unavailable"),
@@ -260,6 +282,18 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
         CollectionExecutionResult normalizedLightweight = lightweightResult == null ? null : lightweightResult.normalize();
         if (!shouldSupplementLinks(taskPackage, normalizedLightweight)) {
             return normalizedLightweight;
+        }
+        /**
+         * 轻量正文已经成功后，deadline 只允许我们“带着已有结果返回”，
+         * 不能再为了补链接而新启动一次 Playwright 渲染。
+         */
+        if (isCollectorDeadlineExpired(taskPackage)) {
+            return normalizedLightweight.toBuilder()
+                    .qualitySignals(mergeSignals(
+                            normalizedLightweight.getQualitySignals(),
+                            List.of("PLAYWRIGHT_LINK_SUPPLEMENT_SKIPPED_BY_DEADLINE")))
+                    .build()
+                    .normalize();
         }
         try {
             SourceCollector.CollectedPage page = sourceCollector.collect(buildCollectRequest(taskPackage, WebPageRenderHint.FULL_RENDER));
@@ -384,6 +418,9 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
                 .renderHint(renderHint)
                 .expectedBlockTypes(taskPackage.getExpectedBlockTypes())
                 .sourceUrls(resolveSourceUrls(taskPackage))
+                .collectorHardDeadlineEpochMillis(taskPackage.getCollectorHardDeadlineEpochMillis())
+                .collectorDeadlineGraceMillis(taskPackage.getCollectorDeadlineGraceMillis())
+                .collectorDeadlineReason(taskPackage.getCollectorDeadlineReason())
                 .build();
     }
 
@@ -402,6 +439,28 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
     }
 
     /**
+     * executor 内层只消费 hard deadline，本层绝不能把外层 drain grace 误当成还能启动新抓取的预算。
+     */
+    private boolean isCollectorDeadlineExpired(CollectionTaskPackage taskPackage) {
+        if (taskPackage == null || taskPackage.getCollectorHardDeadlineEpochMillis() == null) {
+            return false;
+        }
+        long hardDeadlineEpochMillis = taskPackage.getCollectorHardDeadlineEpochMillis();
+        return hardDeadlineEpochMillis != Long.MAX_VALUE
+                && System.currentTimeMillis() >= hardDeadlineEpochMillis;
+    }
+
+    private CollectionExecutionResult buildDeadlineReachedFailureResult(CollectionTaskPackage taskPackage,
+                                                                       List<String> qualitySignals,
+                                                                       long startedAt) {
+        return buildFailureResult(taskPackage,
+                "HARD_DEADLINE_REACHED",
+                "collector hard deadline reached before web page collection",
+                mergeSignals(qualitySignals, List.of("HARD_DEADLINE_REACHED")),
+                startedAt);
+    }
+
+    /**
      * 失败分类优先消费上游 failureKind；如果上游没有，再根据错误消息推断最小失败语义。
      */
     private String resolveFailureKind(PageContentExtractionResult lightweightResult, String errorMessage) {
@@ -412,6 +471,9 @@ public class WebPageCollectionExecutor implements CollectionExecutor {
             return CollectionFailureKind.RUNTIME_FAILURE.name();
         }
         String normalized = errorMessage.toLowerCase(Locale.ROOT);
+        if (normalized.contains("hard_deadline_reached") || normalized.contains("deadline reached")) {
+            return "HARD_DEADLINE_REACHED";
+        }
         if (normalized.contains("timeout")) {
             return CollectionFailureKind.PAGE_TIMEOUT.name();
         }

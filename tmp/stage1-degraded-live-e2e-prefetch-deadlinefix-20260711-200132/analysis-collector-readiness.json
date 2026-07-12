@@ -1,0 +1,80 @@
+﻿[
+    {
+        "node":  "collect_sources_01_01",
+        "nodeStatus":  "SUCCESS_DEGRADED",
+        "collectionStatus":  "FAILED",
+        "readyForQuorum":  false,
+        "totalCollected":  0,
+        "successCollected":  0,
+        "resultCount":  0,
+        "documentCount":  0,
+        "sourceUrlCount":  1,
+        "firstSourceUrl":  "https://www.notion.so",
+        "reasons":  "HARD_DEADLINE_REACHED"
+    },
+    {
+        "node":  "collect_sources_01_02",
+        "nodeStatus":  "SUCCESS_DEGRADED",
+        "collectionStatus":  "FAILED",
+        "readyForQuorum":  false,
+        "totalCollected":  0,
+        "successCollected":  0,
+        "resultCount":  0,
+        "documentCount":  0,
+        "sourceUrlCount":  4,
+        "firstSourceUrl":  "https://www.notion.so/docs",
+        "reasons":  "HARD_DEADLINE_REACHED"
+    },
+    {
+        "node":  "collect_sources_01_03",
+        "nodeStatus":  "SUCCESS_DEGRADED",
+        "collectionStatus":  "FAILED",
+        "readyForQuorum":  false,
+        "totalCollected":  0,
+        "successCollected":  0,
+        "resultCount":  0,
+        "documentCount":  0,
+        "sourceUrlCount":  5,
+        "firstSourceUrl":  "https://www.g2.com/search?query=Notion",
+        "reasons":  "HARD_DEADLINE_REACHED"
+    },
+    {
+        "node":  "collect_sources_02_01",
+        "nodeStatus":  "SUCCESS_DEGRADED",
+        "collectionStatus":  "FAILED",
+        "readyForQuorum":  false,
+        "totalCollected":  0,
+        "successCollected":  0,
+        "resultCount":  0,
+        "documentCount":  0,
+        "sourceUrlCount":  1,
+        "firstSourceUrl":  "https://www.airtable.com",
+        "reasons":  "HARD_DEADLINE_REACHED"
+    },
+    {
+        "node":  "collect_sources_02_02",
+        "nodeStatus":  "SUCCESS_DEGRADED",
+        "collectionStatus":  "SUCCESS_DEGRADED",
+        "readyForQuorum":  true,
+        "totalCollected":  8,
+        "successCollected":  4,
+        "resultCount":  8,
+        "documentCount":  8,
+        "sourceUrlCount":  5,
+        "firstSourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+        "reasons":  "HARD_DEADLINE_REACHED"
+    },
+    {
+        "node":  "collect_sources_02_03",
+        "nodeStatus":  "SUCCESS",
+        "collectionStatus":  "SUCCESS",
+        "readyForQuorum":  true,
+        "totalCollected":  10,
+        "successCollected":  5,
+        "resultCount":  10,
+        "documentCount":  10,
+        "sourceUrlCount":  8,
+        "firstSourceUrl":  "https://checkthat.ai/brands/airtable/reviews",
+        "reasons":  "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT"
+    }
+]

@@ -1,0 +1,934 @@
+﻿{
+    "diagnosisCount":  6,
+    "blockerCount":  0,
+    "evidenceGapCount":  1,
+    "sourceUrls":  [
+                       "https://pyairtable.readthedocs.io/en/stable/api.html",
+                       "https://apitracker.io/a/airtable",
+                       "https://support.airtable.com/docs/airtable-enterprise-api",
+                       "https://airtable.com/guides/scale/using-airtable-api",
+                       "https://checkthat.ai/brands/airtable/reviews",
+                       "https://themarketingagency.ca/blog/honest-review-airtable",
+                       "https://zite.com/blog/airtable-reviews",
+                       "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                       "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                   ],
+    "contentEvidences":  [
+                             {
+                                 "stage":  "ANALYZE",
+                                 "competitorName":  "Airtable",
+                                 "fieldName":  "analysis",
+                                 "evidenceId":  null,
+                                 "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                 "title":  null,
+                                 "snippet":  null,
+                                 "issueFlags":  [
+                                                    "PROMPT_CONTENT_TRUNCATED",
+                                                    "SKIPPED_UNUSABLE_EVIDENCE",
+                                                    "PROMPT_BUDGET_SKIPPED",
+                                                    "STAGE1_COLLECTOR_QUORUM_READY",
+                                                    "COLLECTOR_QUORUM_DEGRADED",
+                                                    "COLLECTOR_FAMILY_MISSING_OFFICIAL",
+                                                    "COLLECTOR_FAMILY_MISSING_DOCS",
+                                                    "COLLECTOR_FAMILY_MISSING_REVIEW",
+                                                    "COLLECTOR_FAMILY_MISSING_PRICING",
+                                                    "HARD_DEADLINE_REACHED",
+                                                    "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT",
+                                                    "OPTIONAL_PRICING_NOT_READY",
+                                                    "OPTIONAL_FIELD_DEFERRED",
+                                                    "POSITIONING_EVIDENCE_LIMITED",
+                                                    "STRENGTHS_AND_WEAKNESSES_FROM_REVIEWS_ONLY",
+                                                    "OUR_PRODUCT_DATA_UNAVAILABLE",
+                                                    "EVIDENCE_NOT_COVERING"
+                                                ],
+                                 "evidence":  {
+                                                  "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                  "title":  "API Reference â pyAirtable documentation",
+                                                  "url":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                  "competitorName":  "Airtable",
+                                                  "sourceType":  "DOCS",
+                                                  "contentSnippet":  "* [pyAirtable](index.html) â\n* API Reference\n\n# API Reference[Â¶](#api-reference \"Permalink to this headline\")\n\n## API: pyairtable[Â¶](#api-pyairtable \"Permalink to this headline\")\n\n*class* pyairtable.Api[[source]](_modules/pyairtable/api/api.html#Api)[Â¶](#pyairtable.Api \"Permalink to this definition\")\n:   Represents an Airtable API. Implements basic URL construction, session and request management, and retrying logic.\n\n    Usage:\n    :   ```\n        \u003e\u003e\u003e api = Api(\u0027auth_token\u0027)\u003e\u003e\u003e table = api. tab"
+                                              }
+                             },
+                             {
+                                 "stage":  "ANALYZE",
+                                 "competitorName":  "Airtable",
+                                 "fieldName":  "analysis",
+                                 "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                 "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                 "title":  "API Reference â pyAirtable documentation",
+                                 "snippet":  null,
+                                 "issueFlags":  [
+                                                    "PROMPT_CONTENT_TRUNCATED",
+                                                    "SKIPPED_UNUSABLE_EVIDENCE",
+                                                    "PROMPT_BUDGET_SKIPPED",
+                                                    "STAGE1_COLLECTOR_QUORUM_READY",
+                                                    "COLLECTOR_QUORUM_DEGRADED",
+                                                    "COLLECTOR_FAMILY_MISSING_OFFICIAL",
+                                                    "COLLECTOR_FAMILY_MISSING_DOCS",
+                                                    "COLLECTOR_FAMILY_MISSING_REVIEW",
+                                                    "COLLECTOR_FAMILY_MISSING_PRICING",
+                                                    "HARD_DEADLINE_REACHED",
+                                                    "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT",
+                                                    "OPTIONAL_PRICING_NOT_READY",
+                                                    "OPTIONAL_FIELD_DEFERRED",
+                                                    "POSITIONING_EVIDENCE_LIMITED",
+                                                    "STRENGTHS_AND_WEAKNESSES_FROM_REVIEWS_ONLY",
+                                                    "OUR_PRODUCT_DATA_UNAVAILABLE",
+                                                    "EVIDENCE_NOT_COVERING"
+                                                ],
+                                 "evidence":  {
+                                                  "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                  "title":  "API Reference â pyAirtable documentation",
+                                                  "url":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                  "competitorName":  "Airtable",
+                                                  "sourceType":  "DOCS",
+                                                  "contentSnippet":  "* [pyAirtable](index.html) â\n* API Reference\n\n# API Reference[Â¶](#api-reference \"Permalink to this headline\")\n\n## API: pyairtable[Â¶](#api-pyairtable \"Permalink to this headline\")\n\n*class* pyairtable.Api[[source]](_modules/pyairtable/api/api.html#Api)[Â¶](#pyairtable.Api \"Permalink to this definition\")\n:   Represents an Airtable API. Implements basic URL construction, session and request management, and retrying logic.\n\n    Usage:\n    :   ```\n        \u003e\u003e\u003e api = Api(\u0027auth_token\u0027)\u003e\u003e\u003e table = api. tab"
+                                              }
+                             },
+                             {
+                                 "stage":  "ANALYZE",
+                                 "competitorName":  "Airtable",
+                                 "fieldName":  "analysis",
+                                 "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                 "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                 "title":  "API Reference â pyAirtable documentation",
+                                 "snippet":  "enterprise(*enterprise\\_account\\_id*)[[source]](_modules/pyairtable/api/api.html#Api.enterprise)[Â¶](#pyairtable.Api.enterprise \"Permalink to this definition\")\n:   â  This feature is...",
+                                 "issueFlags":  [
+                                                    "PROMPT_CONTENT_TRUNCATED",
+                                                    "SKIPPED_UNUSABLE_EVIDENCE",
+                                                    "PROMPT_BUDGET_SKIPPED",
+                                                    "STAGE1_COLLECTOR_QUORUM_READY",
+                                                    "COLLECTOR_QUORUM_DEGRADED",
+                                                    "COLLECTOR_FAMILY_MISSING_OFFICIAL",
+                                                    "COLLECTOR_FAMILY_MISSING_DOCS",
+                                                    "COLLECTOR_FAMILY_MISSING_REVIEW",
+                                                    "COLLECTOR_FAMILY_MISSING_PRICING",
+                                                    "HARD_DEADLINE_REACHED",
+                                                    "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT",
+                                                    "OPTIONAL_PRICING_NOT_READY",
+                                                    "OPTIONAL_FIELD_DEFERRED",
+                                                    "POSITIONING_EVIDENCE_LIMITED",
+                                                    "STRENGTHS_AND_WEAKNESSES_FROM_REVIEWS_ONLY",
+                                                    "OUR_PRODUCT_DATA_UNAVAILABLE",
+                                                    "EVIDENCE_NOT_COVERING"
+                                                ],
+                                 "evidence":  {
+                                                  "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                  "title":  "API Reference â pyAirtable documentation",
+                                                  "url":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                  "competitorName":  "Airtable",
+                                                  "sourceType":  "DOCS",
+                                                  "contentSnippet":  "* [pyAirtable](index.html) â\n* API Reference\n\n# API Reference[Â¶](#api-reference \"Permalink to this headline\")\n\n## API: pyairtable[Â¶](#api-pyairtable \"Permalink to this headline\")\n\n*class* pyairtable.Api[[source]](_modules/pyairtable/api/api.html#Api)[Â¶](#pyairtable.Api \"Permalink to this definition\")\n:   Represents an Airtable API. Implements basic URL construction, session and request management, and retrying logic.\n\n    Usage:\n    :   ```\n        \u003e\u003e\u003e api = Api(\u0027auth_token\u0027)\u003e\u003e\u003e table = api. tab"
+                                              }
+                             },
+                             {
+                                 "stage":  "ANALYZE",
+                                 "competitorName":  "Airtable",
+                                 "fieldName":  "analysis",
+                                 "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                 "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                 "title":  "API Reference â pyAirtable documentation",
+                                 "snippet":  "enterprise(*enterprise\\_account\\_id*)[[source]](_modules/pyairtable/api/api.html#Api.enterprise)[Â¶](#pyairtable.Api.enterprise \"Permalink to this definition\")\n:   â  This feature is...",
+                                 "issueFlags":  [
+                                                    "PROMPT_CONTENT_TRUNCATED",
+                                                    "SKIPPED_UNUSABLE_EVIDENCE",
+                                                    "PROMPT_BUDGET_SKIPPED",
+                                                    "STAGE1_COLLECTOR_QUORUM_READY",
+                                                    "COLLECTOR_QUORUM_DEGRADED",
+                                                    "COLLECTOR_FAMILY_MISSING_OFFICIAL",
+                                                    "COLLECTOR_FAMILY_MISSING_DOCS",
+                                                    "COLLECTOR_FAMILY_MISSING_REVIEW",
+                                                    "COLLECTOR_FAMILY_MISSING_PRICING",
+                                                    "HARD_DEADLINE_REACHED",
+                                                    "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT",
+                                                    "OPTIONAL_PRICING_NOT_READY",
+                                                    "OPTIONAL_FIELD_DEFERRED",
+                                                    "POSITIONING_EVIDENCE_LIMITED",
+                                                    "STRENGTHS_AND_WEAKNESSES_FROM_REVIEWS_ONLY",
+                                                    "OUR_PRODUCT_DATA_UNAVAILABLE",
+                                                    "EVIDENCE_NOT_COVERING"
+                                                ],
+                                 "evidence":  {
+                                                  "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                  "title":  "API Reference â pyAirtable documentation",
+                                                  "url":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                  "competitorName":  "Airtable",
+                                                  "sourceType":  "DOCS",
+                                                  "contentSnippet":  "* [pyAirtable](index.html) â\n* API Reference\n\n# API Reference[Â¶](#api-reference \"Permalink to this headline\")\n\n## API: pyairtable[Â¶](#api-pyairtable \"Permalink to this headline\")\n\n*class* pyairtable.Api[[source]](_modules/pyairtable/api/api.html#Api)[Â¶](#pyairtable.Api \"Permalink to this definition\")\n:   Represents an Airtable API. Implements basic URL construction, session and request management, and retrying logic.\n\n    Usage:\n    :   ```\n        \u003e\u003e\u003e api = Api(\u0027auth_token\u0027)\u003e\u003e\u003e table = api. tab"
+                                              }
+                             }
+                         ],
+    "sections":  [
+                     {
+                         "section":  "éç¨",
+                         "evidenceInsufficient":  true,
+                         "sourceUrls":  [
+                                            "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                            "https://apitracker.io/a/airtable",
+                                            "https://support.airtable.com/docs/airtable-enterprise-api",
+                                            "https://airtable.com/guides/scale/using-airtable-api",
+                                            "https://checkthat.ai/brands/airtable/reviews",
+                                            "https://themarketingagency.ca/blog/honest-review-airtable",
+                                            "https://zite.com/blog/airtable-reviews",
+                                            "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                            "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                                        ],
+                         "repairSuggestions":  [
+                                                   "éæ°æ§è¡å¯¹Notionçä¿¡æ¯ééï¼ç¡®ä¿å®ç½ãææ¡£ãç¨æ·è¯ä»·ç­æ¥æºæåè·åï¼è¥æç»­ééå¤±è´¥ï¼åºè®°å½éçº§åå å¹¶èèä½¿ç¨æ¿ä»£æ°æ®æºã",
+                                                   "è¡¥éAirtableå®æ¹ç½ç«ãå®æ¹å®ä»·é¡µåæå¨è¯æµï¼ç¡®ä¿æåå°å®æ´çå®ä½ãå®ä»·åç¨æ·è¯ä»·ä¿¡æ¯ï¼å¹¶æ¶é¤PROMPT_BUDGET_SKIPPEDçéå¶ã",
+                                                   "å½å\u0085¥æ¬æ¹äº§åçè¯¦ç»åè½åè¡¨ãå®ä»·æ¨¡åãç®æ ç¨æ·ç»ååå¸åºå®ä½è¯´æï¼ä½ä¸ºå¯¹æ¯åæçåºçº¿ã",
+                                                   "å¨è·å¾å\u0085\u0085åè¯æ®åï¼æææ¨æµæ§å»ºè®®ååºéå¸¦æ¾èé£é©æç¤ºï¼ä¸å¾ä½ä¸ºç´æ¥å³ç­è¾å\u0085¥ï¼å¾\u0085è¯æ®è¡¥å\u0085¨åéæ°çæåºäºäºå®çç»è®ºä¸å»ºè®®ã",
+                                                   "ç¡®ä¿ææå¼ç¨çè¯æ®IDåå­å¨äºå½åä»»å¡è¯æ®åºä¸­ï¼ä¸ºææå®¢è§éè¿°æä¾å\u0085·ä½æ¥æºï¼é¿å\u0085ä½¿ç¨æ æ¥æºå£°æã"
+                                               ],
+                         "diagnoses":  [
+                                           {
+                                               "reviewStage":  "INITIAL_REVIEW",
+                                               "diagnosis":  {
+                                                                 "dimensionCode":  "EVIDENCE_TRACEABILITY",
+                                                                 "dimensionName":  "è¯æ®å¯è¿½æº¯æ§",
+                                                                 "type":  "EVIDENCE_GAP",
+                                                                 "section":  "éç¨",
+                                                                 "severity":  "CRITICAL",
+                                                                 "level":  "MINOR",
+                                                                 "title":  "å\u0085³é®ç»è®ºç¼ºå°æ¥æºå¼ç¨",
+                                                                 "detail":  "éæ°æ§è¡å¯¹Notionçä¿¡æ¯ééï¼ç¡®ä¿å®ç½ãææ¡£ãç¨æ·è¯ä»·ç­æ¥æºæåè·åï¼è¥æç»­ééå¤±è´¥ï¼åºè®°å½éçº§åå å¹¶èèä½¿ç¨æ¿ä»£æ°æ®æºã",
+                                                                 "evidenceBasis":  "éç¨å­å¨æ æ³åæå° [è¯æ®ï¼EID] çå¤æ­ï¼éè¦è¡¥é½æ¥æºç¼å·ä¸é¾æ¥ã",
+                                                                 "evidenceIds":  [
+
+                                                                                 ],
+                                                                 "sourceUrls":  [
+                                                                                    "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                                    "https://apitracker.io/a/airtable",
+                                                                                    "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                                                    "https://airtable.com/guides/scale/using-airtable-api",
+                                                                                    "https://checkthat.ai/brands/airtable/reviews",
+                                                                                    "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                                                    "https://zite.com/blog/airtable-reviews",
+                                                                                    "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                                    "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                                                                                ],
+                                                                 "repairSuggestion":  "éæ°æ§è¡å¯¹Notionçä¿¡æ¯ééï¼ç¡®ä¿å®ç½ãææ¡£ãç¨æ·è¯ä»·ç­æ¥æºæåè·åï¼è¥æç»­ééå¤±è´¥ï¼åºè®°å½éçº§åå å¹¶èèä½¿ç¨æ¿ä»£æ°æ®æºã"
+                                                             },
+                                               "evidenceReferences":  [
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                                              "title":  "API Reference â pyAirtable documentation",
+                                                                              "url":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "* [pyAirtable](index.html) â\n* API Reference\n\n# API Reference[Â¶](#api-reference \"Permalink to this headline\")\n\n## API: pyairtable[Â¶](#api-pyairtable \"Permalink to this headline\")\n\n*class* pyairtable.Api[[source]](_modules/pyairtable/api/api.html#Api)[Â¶](#pyairtable.Api \"Permalink to this definition\")\n:   Represents an Airtable API. Implements basic URL construction, session and request management, and retrying logic.\n\n    Usage:\n    :   ```\n        \u003e\u003e\u003e api = Api(\u0027auth_token\u0027)\u003e\u003e\u003e table = api. tab"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-002",
+                                                                              "title":  "Airtable API - Developer docs, APIs, SDKs, and auth. | API Tracker",
+                                                                              "url":  "https://apitracker.io/a/airtable",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "![](https://res.cloudinary.com/apideck/image/upload/v1599581023/apitracker/logo.png)\n![](https://res.cloudinary.com/apideck/image/upload/v1529456009/catalog/airtable/icon128x128.png)\n\n# Airtable API\n\n#### Links\n\n#### [Customers \u0026 developers](/a/airtable/developers)\n\n![Medium](https://res.cloudinary.com/apideck/image/upload/v1545264805/catalog/medium/icon128x128.png \"Medium\")\n![Shopify](https://res.cloudinary.com/apideck/image/upload/v1529456131/catalog/shopify/icon128x128.png \"Shopify\")\n![Expedi"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-003",
+                                                                              "title":  "Airtable Enterprise API",
+                                                                              "url":  "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "\u003e ## Documentation Index\n\u003e\n\u003e Fetch the complete documentation index at: \u003chttps://support.airtable.com/llms.txt\u003e\n\u003e\n\u003e Use this file to discover all available pages before exploring further.\n\n![](https://cdn.airtable.document360.io/logo/d0ee2ee4-3f78-47c7-b388-85e40be9fb89/7f9c63c97c244c8a988fa18cc531ecc3-360446de52ff494081b795b87a150ef3-Airtable_Logo 1.png)\n\n\n\n* [Contact Support](https://support.airtable.com/docs/contacting-airtable-support?contact_support=true)\n* [Sign up for free](https://airtab"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-004",
+                                                                              "title":  "Using Airtableâs API | Airtable",
+                                                                              "url":  "https://airtable.com/guides/scale/using-airtable-api",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "1. [Home](/)\n2. [Guides](/guides)\n3. [Scale your work](/guides/scale)\n4. Using Airtableâs API\n\n# Using Airtableâs API\n\n![Airtable](/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fhlcyrtq5%2Fproduction%2F7d6ae733db9d34fc191cab48308d0d5e18c94118-169x169.png%3Fw%3D64%26h%3D64\u0026w=64\u0026q=75)\n\nAirtable\n\n3 min read\n\n![Using Airtableâs API](/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fhlcyrtq5%2Fproduction%2F75b50845b0fef51c2eeae8b377d50c666642d8c1-1600x900.png%3Fw%3D1200%26h%3D675\u0026w=384"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-001",
+                                                                              "title":  "Airtable Reviews 2026: What 7800+ Users Actually Think",
+                                                                              "url":  "https://checkthat.ai/brands/airtable/reviews",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "* [Categories](/categories/featured)\n* [Brands](/brands)\n\n* [Overview](/features/overview)\n* [Prompts](/features/prompts)\n* [Sources](/features/sources)\n\n* [Sign In](/users/sign_in)[Built by GrowthX - Hire Us](https://growthx.ai?utm_source=checkthat-website\u0026utm_medium=referral\u0026utm_campaign=ssr\u0026utm_content=body-cta)\n\n\n\n\n\n\n![Airtable logo](https://cdn.brandfetch.io/domain/airtable.com/w/384/h/384/fallback/404?c=1exidp0JcANW1N42osUgy)\n\n![Airtable logo](https://cdn.brandfetch.io/domain/airtable.com/"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-002",
+                                                                              "title":  "Honest Review of Airtable for 2026 - The Marketing Agency",
+                                                                              "url":  "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "[![logo main](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![logo dark](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![logo main](data:image/svg+xml,%3Csvg%20xmlns=\u0027http://www.w3.org/2000/svg\u0027%20viewBox=\u00270%200%20400%20120\u0027%3E%3C/svg%3E)](https://themarketingagency.ca/)\n\n[0](https://themarketingagency.ca/cart/) \n\nNo products in the cart.\n\n[![logo main](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) !["
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-003",
+                                                                              "title":  "Airtable Review: Pros, Cons, \u0026 Is It Worth It in 2026?",
+                                                                              "url":  "https://zite.com/blog/airtable-reviews",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/695f943890dbfcf5d73e5cab_zite-logo.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a09576ebadb9a7504070_brandedicons.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a194602129d0137156d3_apps-image.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a0964207c44b286b8163_databases-icon.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a096608"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-004",
+                                                                              "title":  "Compare Capterra vs G2.com in July 2026",
+                                                                              "url":  "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "[![SoftwareSuggest Logo](https://www.softwaresuggest.com/assets2/singleview/assets/img/homepage_new/ss_logo.svg)](https://www.softwaresuggest.com)\n\n[Write a Review](https://www.softwaresuggest.com/write-review)\n\n[Add a Product](https://www.softwaresuggest.com/vendors)\n\n* [User Login](https://www.softwaresuggest.com/user-login)\n* [Vendor Login](https://www.softwaresuggest.com/vendorsportal/index.php?r=site/login)\n\n[![SoftwareSuggest Logo](https://images.softwaresuggest.com/static-frontend/ss-head"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-005",
+                                                                              "title":  "Airtable Review: Is It Worth It in 2026? [In-Depth]",
+                                                                              "url":  "https://smartsuite.com/blog/airtable-review?338ea48f_page=8",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "**Daily Office Hours - Mon - Fri 9 amÂ PTÂ |** [**Register Here**](https://calendly.com/smartsuite-success/live-office-hours-1?month=2026-05)\n\n[![SmartSuite Logo](https://cdn.prod.website-files.com/60c1fb51c4706f216cc5b134/60c1ff8b5aab5ca37dafc9cc_SmartSuite%20Logo.svg)](/)\n\n[Sign In\n\n![](https://cdn.prod.website-files.com/60c1fb51c4706f216cc5b134/60d1c87d7c74078a831c67a1_Member%20Directory.svg)](https://app.smartsuite.com/)\n\n[Start Free Trial](https://app.smartsuite.com/signup/start)[Schedule a D"
+                                                                          }
+                                                                      ]
+                                           },
+                                           {
+                                               "reviewStage":  "INITIAL_REVIEW",
+                                               "diagnosis":  {
+                                                                 "dimensionCode":  "EVIDENCE_TRACEABILITY",
+                                                                 "dimensionName":  "è¯æ®å¯è¿½æº¯æ§",
+                                                                 "type":  "EVIDENCE_GAP",
+                                                                 "section":  "éç¨",
+                                                                 "severity":  "HIGH",
+                                                                 "level":  "MINOR",
+                                                                 "title":  "å\u0085³é®ç»è®ºç¼ºå°æ¥æºå¼ç¨",
+                                                                 "detail":  "è¡¥éAirtableå®æ¹ç½ç«ãå®æ¹å®ä»·é¡µåæå¨è¯æµï¼ç¡®ä¿æåå°å®æ´çå®ä½ãå®ä»·åç¨æ·è¯ä»·ä¿¡æ¯ï¼å¹¶æ¶é¤PROMPT_BUDGET_SKIPPEDçéå¶ã",
+                                                                 "evidenceBasis":  "éç¨å­å¨æ æ³åæå° [è¯æ®ï¼EID] çå¤æ­ï¼éè¦è¡¥é½æ¥æºç¼å·ä¸é¾æ¥ã",
+                                                                 "evidenceIds":  [
+
+                                                                                 ],
+                                                                 "sourceUrls":  [
+                                                                                    "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                                    "https://apitracker.io/a/airtable",
+                                                                                    "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                                                    "https://airtable.com/guides/scale/using-airtable-api",
+                                                                                    "https://checkthat.ai/brands/airtable/reviews",
+                                                                                    "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                                                    "https://zite.com/blog/airtable-reviews",
+                                                                                    "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                                    "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                                                                                ],
+                                                                 "repairSuggestion":  "è¡¥éAirtableå®æ¹ç½ç«ãå®æ¹å®ä»·é¡µåæå¨è¯æµï¼ç¡®ä¿æåå°å®æ´çå®ä½ãå®ä»·åç¨æ·è¯ä»·ä¿¡æ¯ï¼å¹¶æ¶é¤PROMPT_BUDGET_SKIPPEDçéå¶ã"
+                                                             },
+                                               "evidenceReferences":  [
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                                              "title":  "API Reference â pyAirtable documentation",
+                                                                              "url":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "* [pyAirtable](index.html) â\n* API Reference\n\n# API Reference[Â¶](#api-reference \"Permalink to this headline\")\n\n## API: pyairtable[Â¶](#api-pyairtable \"Permalink to this headline\")\n\n*class* pyairtable.Api[[source]](_modules/pyairtable/api/api.html#Api)[Â¶](#pyairtable.Api \"Permalink to this definition\")\n:   Represents an Airtable API. Implements basic URL construction, session and request management, and retrying logic.\n\n    Usage:\n    :   ```\n        \u003e\u003e\u003e api = Api(\u0027auth_token\u0027)\u003e\u003e\u003e table = api. tab"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-002",
+                                                                              "title":  "Airtable API - Developer docs, APIs, SDKs, and auth. | API Tracker",
+                                                                              "url":  "https://apitracker.io/a/airtable",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "![](https://res.cloudinary.com/apideck/image/upload/v1599581023/apitracker/logo.png)\n![](https://res.cloudinary.com/apideck/image/upload/v1529456009/catalog/airtable/icon128x128.png)\n\n# Airtable API\n\n#### Links\n\n#### [Customers \u0026 developers](/a/airtable/developers)\n\n![Medium](https://res.cloudinary.com/apideck/image/upload/v1545264805/catalog/medium/icon128x128.png \"Medium\")\n![Shopify](https://res.cloudinary.com/apideck/image/upload/v1529456131/catalog/shopify/icon128x128.png \"Shopify\")\n![Expedi"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-003",
+                                                                              "title":  "Airtable Enterprise API",
+                                                                              "url":  "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "\u003e ## Documentation Index\n\u003e\n\u003e Fetch the complete documentation index at: \u003chttps://support.airtable.com/llms.txt\u003e\n\u003e\n\u003e Use this file to discover all available pages before exploring further.\n\n![](https://cdn.airtable.document360.io/logo/d0ee2ee4-3f78-47c7-b388-85e40be9fb89/7f9c63c97c244c8a988fa18cc531ecc3-360446de52ff494081b795b87a150ef3-Airtable_Logo 1.png)\n\n\n\n* [Contact Support](https://support.airtable.com/docs/contacting-airtable-support?contact_support=true)\n* [Sign up for free](https://airtab"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-004",
+                                                                              "title":  "Using Airtableâs API | Airtable",
+                                                                              "url":  "https://airtable.com/guides/scale/using-airtable-api",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "1. [Home](/)\n2. [Guides](/guides)\n3. [Scale your work](/guides/scale)\n4. Using Airtableâs API\n\n# Using Airtableâs API\n\n![Airtable](/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fhlcyrtq5%2Fproduction%2F7d6ae733db9d34fc191cab48308d0d5e18c94118-169x169.png%3Fw%3D64%26h%3D64\u0026w=64\u0026q=75)\n\nAirtable\n\n3 min read\n\n![Using Airtableâs API](/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fhlcyrtq5%2Fproduction%2F75b50845b0fef51c2eeae8b377d50c666642d8c1-1600x900.png%3Fw%3D1200%26h%3D675\u0026w=384"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-001",
+                                                                              "title":  "Airtable Reviews 2026: What 7800+ Users Actually Think",
+                                                                              "url":  "https://checkthat.ai/brands/airtable/reviews",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "* [Categories](/categories/featured)\n* [Brands](/brands)\n\n* [Overview](/features/overview)\n* [Prompts](/features/prompts)\n* [Sources](/features/sources)\n\n* [Sign In](/users/sign_in)[Built by GrowthX - Hire Us](https://growthx.ai?utm_source=checkthat-website\u0026utm_medium=referral\u0026utm_campaign=ssr\u0026utm_content=body-cta)\n\n\n\n\n\n\n![Airtable logo](https://cdn.brandfetch.io/domain/airtable.com/w/384/h/384/fallback/404?c=1exidp0JcANW1N42osUgy)\n\n![Airtable logo](https://cdn.brandfetch.io/domain/airtable.com/"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-002",
+                                                                              "title":  "Honest Review of Airtable for 2026 - The Marketing Agency",
+                                                                              "url":  "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "[![logo main](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![logo dark](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![logo main](data:image/svg+xml,%3Csvg%20xmlns=\u0027http://www.w3.org/2000/svg\u0027%20viewBox=\u00270%200%20400%20120\u0027%3E%3C/svg%3E)](https://themarketingagency.ca/)\n\n[0](https://themarketingagency.ca/cart/) \n\nNo products in the cart.\n\n[![logo main](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) !["
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-003",
+                                                                              "title":  "Airtable Review: Pros, Cons, \u0026 Is It Worth It in 2026?",
+                                                                              "url":  "https://zite.com/blog/airtable-reviews",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/695f943890dbfcf5d73e5cab_zite-logo.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a09576ebadb9a7504070_brandedicons.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a194602129d0137156d3_apps-image.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a0964207c44b286b8163_databases-icon.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a096608"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-004",
+                                                                              "title":  "Compare Capterra vs G2.com in July 2026",
+                                                                              "url":  "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "[![SoftwareSuggest Logo](https://www.softwaresuggest.com/assets2/singleview/assets/img/homepage_new/ss_logo.svg)](https://www.softwaresuggest.com)\n\n[Write a Review](https://www.softwaresuggest.com/write-review)\n\n[Add a Product](https://www.softwaresuggest.com/vendors)\n\n* [User Login](https://www.softwaresuggest.com/user-login)\n* [Vendor Login](https://www.softwaresuggest.com/vendorsportal/index.php?r=site/login)\n\n[![SoftwareSuggest Logo](https://images.softwaresuggest.com/static-frontend/ss-head"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-005",
+                                                                              "title":  "Airtable Review: Is It Worth It in 2026? [In-Depth]",
+                                                                              "url":  "https://smartsuite.com/blog/airtable-review?338ea48f_page=8",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "**Daily Office Hours - Mon - Fri 9 amÂ PTÂ |** [**Register Here**](https://calendly.com/smartsuite-success/live-office-hours-1?month=2026-05)\n\n[![SmartSuite Logo](https://cdn.prod.website-files.com/60c1fb51c4706f216cc5b134/60c1ff8b5aab5ca37dafc9cc_SmartSuite%20Logo.svg)](/)\n\n[Sign In\n\n![](https://cdn.prod.website-files.com/60c1fb51c4706f216cc5b134/60d1c87d7c74078a831c67a1_Member%20Directory.svg)](https://app.smartsuite.com/)\n\n[Start Free Trial](https://app.smartsuite.com/signup/start)[Schedule a D"
+                                                                          }
+                                                                      ]
+                                           },
+                                           {
+                                               "reviewStage":  "INITIAL_REVIEW",
+                                               "diagnosis":  {
+                                                                 "dimensionCode":  "EVIDENCE_TRACEABILITY",
+                                                                 "dimensionName":  "è¯æ®å¯è¿½æº¯æ§",
+                                                                 "type":  "EVIDENCE_GAP",
+                                                                 "section":  "éç¨",
+                                                                 "severity":  "HIGH",
+                                                                 "level":  "MINOR",
+                                                                 "title":  "å\u0085³é®ç»è®ºç¼ºå°æ¥æºå¼ç¨",
+                                                                 "detail":  "å½å\u0085¥æ¬æ¹äº§åçè¯¦ç»åè½åè¡¨ãå®ä»·æ¨¡åãç®æ ç¨æ·ç»ååå¸åºå®ä½è¯´æï¼ä½ä¸ºå¯¹æ¯åæçåºçº¿ã",
+                                                                 "evidenceBasis":  "éç¨å­å¨æ æ³åæå° [è¯æ®ï¼EID] çå¤æ­ï¼éè¦è¡¥é½æ¥æºç¼å·ä¸é¾æ¥ã",
+                                                                 "evidenceIds":  [
+
+                                                                                 ],
+                                                                 "sourceUrls":  [
+                                                                                    "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                                    "https://apitracker.io/a/airtable",
+                                                                                    "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                                                    "https://airtable.com/guides/scale/using-airtable-api",
+                                                                                    "https://checkthat.ai/brands/airtable/reviews",
+                                                                                    "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                                                    "https://zite.com/blog/airtable-reviews",
+                                                                                    "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                                    "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                                                                                ],
+                                                                 "repairSuggestion":  "å½å\u0085¥æ¬æ¹äº§åçè¯¦ç»åè½åè¡¨ãå®ä»·æ¨¡åãç®æ ç¨æ·ç»ååå¸åºå®ä½è¯´æï¼ä½ä¸ºå¯¹æ¯åæçåºçº¿ã"
+                                                             },
+                                               "evidenceReferences":  [
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                                              "title":  "API Reference â pyAirtable documentation",
+                                                                              "url":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "* [pyAirtable](index.html) â\n* API Reference\n\n# API Reference[Â¶](#api-reference \"Permalink to this headline\")\n\n## API: pyairtable[Â¶](#api-pyairtable \"Permalink to this headline\")\n\n*class* pyairtable.Api[[source]](_modules/pyairtable/api/api.html#Api)[Â¶](#pyairtable.Api \"Permalink to this definition\")\n:   Represents an Airtable API. Implements basic URL construction, session and request management, and retrying logic.\n\n    Usage:\n    :   ```\n        \u003e\u003e\u003e api = Api(\u0027auth_token\u0027)\u003e\u003e\u003e table = api. tab"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-002",
+                                                                              "title":  "Airtable API - Developer docs, APIs, SDKs, and auth. | API Tracker",
+                                                                              "url":  "https://apitracker.io/a/airtable",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "![](https://res.cloudinary.com/apideck/image/upload/v1599581023/apitracker/logo.png)\n![](https://res.cloudinary.com/apideck/image/upload/v1529456009/catalog/airtable/icon128x128.png)\n\n# Airtable API\n\n#### Links\n\n#### [Customers \u0026 developers](/a/airtable/developers)\n\n![Medium](https://res.cloudinary.com/apideck/image/upload/v1545264805/catalog/medium/icon128x128.png \"Medium\")\n![Shopify](https://res.cloudinary.com/apideck/image/upload/v1529456131/catalog/shopify/icon128x128.png \"Shopify\")\n![Expedi"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-003",
+                                                                              "title":  "Airtable Enterprise API",
+                                                                              "url":  "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "\u003e ## Documentation Index\n\u003e\n\u003e Fetch the complete documentation index at: \u003chttps://support.airtable.com/llms.txt\u003e\n\u003e\n\u003e Use this file to discover all available pages before exploring further.\n\n![](https://cdn.airtable.document360.io/logo/d0ee2ee4-3f78-47c7-b388-85e40be9fb89/7f9c63c97c244c8a988fa18cc531ecc3-360446de52ff494081b795b87a150ef3-Airtable_Logo 1.png)\n\n\n\n* [Contact Support](https://support.airtable.com/docs/contacting-airtable-support?contact_support=true)\n* [Sign up for free](https://airtab"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-004",
+                                                                              "title":  "Using Airtableâs API | Airtable",
+                                                                              "url":  "https://airtable.com/guides/scale/using-airtable-api",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "1. [Home](/)\n2. [Guides](/guides)\n3. [Scale your work](/guides/scale)\n4. Using Airtableâs API\n\n# Using Airtableâs API\n\n![Airtable](/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fhlcyrtq5%2Fproduction%2F7d6ae733db9d34fc191cab48308d0d5e18c94118-169x169.png%3Fw%3D64%26h%3D64\u0026w=64\u0026q=75)\n\nAirtable\n\n3 min read\n\n![Using Airtableâs API](/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fhlcyrtq5%2Fproduction%2F75b50845b0fef51c2eeae8b377d50c666642d8c1-1600x900.png%3Fw%3D1200%26h%3D675\u0026w=384"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-001",
+                                                                              "title":  "Airtable Reviews 2026: What 7800+ Users Actually Think",
+                                                                              "url":  "https://checkthat.ai/brands/airtable/reviews",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "* [Categories](/categories/featured)\n* [Brands](/brands)\n\n* [Overview](/features/overview)\n* [Prompts](/features/prompts)\n* [Sources](/features/sources)\n\n* [Sign In](/users/sign_in)[Built by GrowthX - Hire Us](https://growthx.ai?utm_source=checkthat-website\u0026utm_medium=referral\u0026utm_campaign=ssr\u0026utm_content=body-cta)\n\n\n\n\n\n\n![Airtable logo](https://cdn.brandfetch.io/domain/airtable.com/w/384/h/384/fallback/404?c=1exidp0JcANW1N42osUgy)\n\n![Airtable logo](https://cdn.brandfetch.io/domain/airtable.com/"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-002",
+                                                                              "title":  "Honest Review of Airtable for 2026 - The Marketing Agency",
+                                                                              "url":  "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "[![logo main](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![logo dark](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![logo main](data:image/svg+xml,%3Csvg%20xmlns=\u0027http://www.w3.org/2000/svg\u0027%20viewBox=\u00270%200%20400%20120\u0027%3E%3C/svg%3E)](https://themarketingagency.ca/)\n\n[0](https://themarketingagency.ca/cart/) \n\nNo products in the cart.\n\n[![logo main](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) !["
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-003",
+                                                                              "title":  "Airtable Review: Pros, Cons, \u0026 Is It Worth It in 2026?",
+                                                                              "url":  "https://zite.com/blog/airtable-reviews",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/695f943890dbfcf5d73e5cab_zite-logo.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a09576ebadb9a7504070_brandedicons.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a194602129d0137156d3_apps-image.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a0964207c44b286b8163_databases-icon.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a096608"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-004",
+                                                                              "title":  "Compare Capterra vs G2.com in July 2026",
+                                                                              "url":  "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "[![SoftwareSuggest Logo](https://www.softwaresuggest.com/assets2/singleview/assets/img/homepage_new/ss_logo.svg)](https://www.softwaresuggest.com)\n\n[Write a Review](https://www.softwaresuggest.com/write-review)\n\n[Add a Product](https://www.softwaresuggest.com/vendors)\n\n* [User Login](https://www.softwaresuggest.com/user-login)\n* [Vendor Login](https://www.softwaresuggest.com/vendorsportal/index.php?r=site/login)\n\n[![SoftwareSuggest Logo](https://images.softwaresuggest.com/static-frontend/ss-head"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-005",
+                                                                              "title":  "Airtable Review: Is It Worth It in 2026? [In-Depth]",
+                                                                              "url":  "https://smartsuite.com/blog/airtable-review?338ea48f_page=8",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "**Daily Office Hours - Mon - Fri 9 amÂ PTÂ |** [**Register Here**](https://calendly.com/smartsuite-success/live-office-hours-1?month=2026-05)\n\n[![SmartSuite Logo](https://cdn.prod.website-files.com/60c1fb51c4706f216cc5b134/60c1ff8b5aab5ca37dafc9cc_SmartSuite%20Logo.svg)](/)\n\n[Sign In\n\n![](https://cdn.prod.website-files.com/60c1fb51c4706f216cc5b134/60d1c87d7c74078a831c67a1_Member%20Directory.svg)](https://app.smartsuite.com/)\n\n[Start Free Trial](https://app.smartsuite.com/signup/start)[Schedule a D"
+                                                                          }
+                                                                      ]
+                                           },
+                                           {
+                                               "reviewStage":  "INITIAL_REVIEW",
+                                               "diagnosis":  {
+                                                                 "dimensionCode":  "ACTIONABILITY",
+                                                                 "dimensionName":  "ä¿®è®¢å¯æ§è¡æ§",
+                                                                 "type":  "INFERENCE_RISK",
+                                                                 "section":  "éç¨",
+                                                                 "severity":  "ERROR",
+                                                                 "level":  "BLOCKER",
+                                                                 "title":  "éè¦ä¿®è®¢çè´¨éé®é¢",
+                                                                 "detail":  "å¨è·å¾å\u0085\u0085åè¯æ®åï¼æææ¨æµæ§å»ºè®®ååºéå¸¦æ¾èé£é©æç¤ºï¼ä¸å¾ä½ä¸ºç´æ¥å³ç­è¾å\u0085¥ï¼å¾\u0085è¯æ®è¡¥å\u0085¨åéæ°çæåºäºäºå®çç»è®ºä¸å»ºè®®ã",
+                                                                 "evidenceBasis":  "éç¨å­å¨éè¦æ¶ç´§æéåçè¡¨è¾¾ï¼è¯·ç»åå½åè¯æ­ç»§ç»­å¤æ ¸ã",
+                                                                 "evidenceIds":  [
+                                                                                     "T0104-COLLECT_SOURCES_02_02-001",
+                                                                                     "T0104-COLLECT_SOURCES_02_02-002",
+                                                                                     "T0104-COLLECT_SOURCES_02_02-003",
+                                                                                     "T0104-COLLECT_SOURCES_02_02-004",
+                                                                                     "T0104-COLLECT_SOURCES_02_03-001",
+                                                                                     "T0104-COLLECT_SOURCES_02_03-002",
+                                                                                     "T0104-COLLECT_SOURCES_02_03-003",
+                                                                                     "T0104-COLLECT_SOURCES_02_03-004",
+                                                                                     "T0104-COLLECT_SOURCES_02_03-005"
+                                                                                 ],
+                                                                 "sourceUrls":  [
+                                                                                    "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                                    "https://apitracker.io/a/airtable",
+                                                                                    "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                                                    "https://airtable.com/guides/scale/using-airtable-api",
+                                                                                    "https://checkthat.ai/brands/airtable/reviews",
+                                                                                    "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                                                    "https://zite.com/blog/airtable-reviews",
+                                                                                    "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                                    "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                                                                                ],
+                                                                 "repairSuggestion":  "å¨è·å¾å\u0085\u0085åè¯æ®åï¼æææ¨æµæ§å»ºè®®ååºéå¸¦æ¾èé£é©æç¤ºï¼ä¸å¾ä½ä¸ºç´æ¥å³ç­è¾å\u0085¥ï¼å¾\u0085è¯æ®è¡¥å\u0085¨åéæ°çæåºäºäºå®çç»è®ºä¸å»ºè®®ã"
+                                                             },
+                                               "evidenceReferences":  [
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                                              "title":  "API Reference â pyAirtable documentation",
+                                                                              "url":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "* [pyAirtable](index.html) â\n* API Reference\n\n# API Reference[Â¶](#api-reference \"Permalink to this headline\")\n\n## API: pyairtable[Â¶](#api-pyairtable \"Permalink to this headline\")\n\n*class* pyairtable.Api[[source]](_modules/pyairtable/api/api.html#Api)[Â¶](#pyairtable.Api \"Permalink to this definition\")\n:   Represents an Airtable API. Implements basic URL construction, session and request management, and retrying logic.\n\n    Usage:\n    :   ```\n        \u003e\u003e\u003e api = Api(\u0027auth_token\u0027)\u003e\u003e\u003e table = api. tab"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-002",
+                                                                              "title":  "Airtable API - Developer docs, APIs, SDKs, and auth. | API Tracker",
+                                                                              "url":  "https://apitracker.io/a/airtable",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "![](https://res.cloudinary.com/apideck/image/upload/v1599581023/apitracker/logo.png)\n![](https://res.cloudinary.com/apideck/image/upload/v1529456009/catalog/airtable/icon128x128.png)\n\n# Airtable API\n\n#### Links\n\n#### [Customers \u0026 developers](/a/airtable/developers)\n\n![Medium](https://res.cloudinary.com/apideck/image/upload/v1545264805/catalog/medium/icon128x128.png \"Medium\")\n![Shopify](https://res.cloudinary.com/apideck/image/upload/v1529456131/catalog/shopify/icon128x128.png \"Shopify\")\n![Expedi"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-003",
+                                                                              "title":  "Airtable Enterprise API",
+                                                                              "url":  "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "\u003e ## Documentation Index\n\u003e\n\u003e Fetch the complete documentation index at: \u003chttps://support.airtable.com/llms.txt\u003e\n\u003e\n\u003e Use this file to discover all available pages before exploring further.\n\n![](https://cdn.airtable.document360.io/logo/d0ee2ee4-3f78-47c7-b388-85e40be9fb89/7f9c63c97c244c8a988fa18cc531ecc3-360446de52ff494081b795b87a150ef3-Airtable_Logo 1.png)\n\n\n\n* [Contact Support](https://support.airtable.com/docs/contacting-airtable-support?contact_support=true)\n* [Sign up for free](https://airtab"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-004",
+                                                                              "title":  "Using Airtableâs API | Airtable",
+                                                                              "url":  "https://airtable.com/guides/scale/using-airtable-api",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "1. [Home](/)\n2. [Guides](/guides)\n3. [Scale your work](/guides/scale)\n4. Using Airtableâs API\n\n# Using Airtableâs API\n\n![Airtable](/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fhlcyrtq5%2Fproduction%2F7d6ae733db9d34fc191cab48308d0d5e18c94118-169x169.png%3Fw%3D64%26h%3D64\u0026w=64\u0026q=75)\n\nAirtable\n\n3 min read\n\n![Using Airtableâs API](/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fhlcyrtq5%2Fproduction%2F75b50845b0fef51c2eeae8b377d50c666642d8c1-1600x900.png%3Fw%3D1200%26h%3D675\u0026w=384"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-001",
+                                                                              "title":  "Airtable Reviews 2026: What 7800+ Users Actually Think",
+                                                                              "url":  "https://checkthat.ai/brands/airtable/reviews",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "* [Categories](/categories/featured)\n* [Brands](/brands)\n\n* [Overview](/features/overview)\n* [Prompts](/features/prompts)\n* [Sources](/features/sources)\n\n* [Sign In](/users/sign_in)[Built by GrowthX - Hire Us](https://growthx.ai?utm_source=checkthat-website\u0026utm_medium=referral\u0026utm_campaign=ssr\u0026utm_content=body-cta)\n\n\n\n\n\n\n![Airtable logo](https://cdn.brandfetch.io/domain/airtable.com/w/384/h/384/fallback/404?c=1exidp0JcANW1N42osUgy)\n\n![Airtable logo](https://cdn.brandfetch.io/domain/airtable.com/"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-002",
+                                                                              "title":  "Honest Review of Airtable for 2026 - The Marketing Agency",
+                                                                              "url":  "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "[![logo main](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![logo dark](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![logo main](data:image/svg+xml,%3Csvg%20xmlns=\u0027http://www.w3.org/2000/svg\u0027%20viewBox=\u00270%200%20400%20120\u0027%3E%3C/svg%3E)](https://themarketingagency.ca/)\n\n[0](https://themarketingagency.ca/cart/) \n\nNo products in the cart.\n\n[![logo main](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) !["
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-003",
+                                                                              "title":  "Airtable Review: Pros, Cons, \u0026 Is It Worth It in 2026?",
+                                                                              "url":  "https://zite.com/blog/airtable-reviews",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/695f943890dbfcf5d73e5cab_zite-logo.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a09576ebadb9a7504070_brandedicons.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a194602129d0137156d3_apps-image.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a0964207c44b286b8163_databases-icon.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a096608"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-004",
+                                                                              "title":  "Compare Capterra vs G2.com in July 2026",
+                                                                              "url":  "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "[![SoftwareSuggest Logo](https://www.softwaresuggest.com/assets2/singleview/assets/img/homepage_new/ss_logo.svg)](https://www.softwaresuggest.com)\n\n[Write a Review](https://www.softwaresuggest.com/write-review)\n\n[Add a Product](https://www.softwaresuggest.com/vendors)\n\n* [User Login](https://www.softwaresuggest.com/user-login)\n* [Vendor Login](https://www.softwaresuggest.com/vendorsportal/index.php?r=site/login)\n\n[![SoftwareSuggest Logo](https://images.softwaresuggest.com/static-frontend/ss-head"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-005",
+                                                                              "title":  "Airtable Review: Is It Worth It in 2026? [In-Depth]",
+                                                                              "url":  "https://smartsuite.com/blog/airtable-review?338ea48f_page=8",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "**Daily Office Hours - Mon - Fri 9 amÂ PTÂ |** [**Register Here**](https://calendly.com/smartsuite-success/live-office-hours-1?month=2026-05)\n\n[![SmartSuite Logo](https://cdn.prod.website-files.com/60c1fb51c4706f216cc5b134/60c1ff8b5aab5ca37dafc9cc_SmartSuite%20Logo.svg)](/)\n\n[Sign In\n\n![](https://cdn.prod.website-files.com/60c1fb51c4706f216cc5b134/60d1c87d7c74078a831c67a1_Member%20Directory.svg)](https://app.smartsuite.com/)\n\n[Start Free Trial](https://app.smartsuite.com/signup/start)[Schedule a D"
+                                                                          }
+                                                                      ]
+                                           },
+                                           {
+                                               "reviewStage":  "INITIAL_REVIEW",
+                                               "diagnosis":  {
+                                                                 "dimensionCode":  "ACTIONABILITY",
+                                                                 "dimensionName":  "ä¿®è®¢å¯æ§è¡æ§",
+                                                                 "type":  "CITATION_QUALITY",
+                                                                 "section":  "éç¨",
+                                                                 "severity":  "WARNING",
+                                                                 "level":  "MAJOR",
+                                                                 "title":  "éè¦ä¿®è®¢çè´¨éé®é¢",
+                                                                 "detail":  "ç¡®ä¿ææå¼ç¨çè¯æ®IDåå­å¨äºå½åä»»å¡è¯æ®åºä¸­ï¼ä¸ºææå®¢è§éè¿°æä¾å\u0085·ä½æ¥æºï¼é¿å\u0085ä½¿ç¨æ æ¥æºå£°æã",
+                                                                 "evidenceBasis":  "éç¨å­å¨éè¦æ¶ç´§æéåçè¡¨è¾¾ï¼è¯·ç»åå½åè¯æ­ç»§ç»­å¤æ ¸ã",
+                                                                 "evidenceIds":  [
+                                                                                     "T0104-COLLECT_SOURCES_02_02-001",
+                                                                                     "T0104-COLLECT_SOURCES_02_02-002",
+                                                                                     "T0104-COLLECT_SOURCES_02_02-003",
+                                                                                     "T0104-COLLECT_SOURCES_02_02-004",
+                                                                                     "T0104-COLLECT_SOURCES_02_03-001",
+                                                                                     "T0104-COLLECT_SOURCES_02_03-002",
+                                                                                     "T0104-COLLECT_SOURCES_02_03-003",
+                                                                                     "T0104-COLLECT_SOURCES_02_03-004",
+                                                                                     "T0104-COLLECT_SOURCES_02_03-005"
+                                                                                 ],
+                                                                 "sourceUrls":  [
+                                                                                    "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                                    "https://apitracker.io/a/airtable",
+                                                                                    "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                                                    "https://airtable.com/guides/scale/using-airtable-api",
+                                                                                    "https://checkthat.ai/brands/airtable/reviews",
+                                                                                    "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                                                    "https://zite.com/blog/airtable-reviews",
+                                                                                    "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                                    "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                                                                                ],
+                                                                 "repairSuggestion":  "ç¡®ä¿ææå¼ç¨çè¯æ®IDåå­å¨äºå½åä»»å¡è¯æ®åºä¸­ï¼ä¸ºææå®¢è§éè¿°æä¾å\u0085·ä½æ¥æºï¼é¿å\u0085ä½¿ç¨æ æ¥æºå£°æã"
+                                                             },
+                                               "evidenceReferences":  [
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                                              "title":  "API Reference â pyAirtable documentation",
+                                                                              "url":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "* [pyAirtable](index.html) â\n* API Reference\n\n# API Reference[Â¶](#api-reference \"Permalink to this headline\")\n\n## API: pyairtable[Â¶](#api-pyairtable \"Permalink to this headline\")\n\n*class* pyairtable.Api[[source]](_modules/pyairtable/api/api.html#Api)[Â¶](#pyairtable.Api \"Permalink to this definition\")\n:   Represents an Airtable API. Implements basic URL construction, session and request management, and retrying logic.\n\n    Usage:\n    :   ```\n        \u003e\u003e\u003e api = Api(\u0027auth_token\u0027)\u003e\u003e\u003e table = api. tab"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-002",
+                                                                              "title":  "Airtable API - Developer docs, APIs, SDKs, and auth. | API Tracker",
+                                                                              "url":  "https://apitracker.io/a/airtable",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "![](https://res.cloudinary.com/apideck/image/upload/v1599581023/apitracker/logo.png)\n![](https://res.cloudinary.com/apideck/image/upload/v1529456009/catalog/airtable/icon128x128.png)\n\n# Airtable API\n\n#### Links\n\n#### [Customers \u0026 developers](/a/airtable/developers)\n\n![Medium](https://res.cloudinary.com/apideck/image/upload/v1545264805/catalog/medium/icon128x128.png \"Medium\")\n![Shopify](https://res.cloudinary.com/apideck/image/upload/v1529456131/catalog/shopify/icon128x128.png \"Shopify\")\n![Expedi"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-003",
+                                                                              "title":  "Airtable Enterprise API",
+                                                                              "url":  "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "\u003e ## Documentation Index\n\u003e\n\u003e Fetch the complete documentation index at: \u003chttps://support.airtable.com/llms.txt\u003e\n\u003e\n\u003e Use this file to discover all available pages before exploring further.\n\n![](https://cdn.airtable.document360.io/logo/d0ee2ee4-3f78-47c7-b388-85e40be9fb89/7f9c63c97c244c8a988fa18cc531ecc3-360446de52ff494081b795b87a150ef3-Airtable_Logo 1.png)\n\n\n\n* [Contact Support](https://support.airtable.com/docs/contacting-airtable-support?contact_support=true)\n* [Sign up for free](https://airtab"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-004",
+                                                                              "title":  "Using Airtableâs API | Airtable",
+                                                                              "url":  "https://airtable.com/guides/scale/using-airtable-api",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "1. [Home](/)\n2. [Guides](/guides)\n3. [Scale your work](/guides/scale)\n4. Using Airtableâs API\n\n# Using Airtableâs API\n\n![Airtable](/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fhlcyrtq5%2Fproduction%2F7d6ae733db9d34fc191cab48308d0d5e18c94118-169x169.png%3Fw%3D64%26h%3D64\u0026w=64\u0026q=75)\n\nAirtable\n\n3 min read\n\n![Using Airtableâs API](/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fhlcyrtq5%2Fproduction%2F75b50845b0fef51c2eeae8b377d50c666642d8c1-1600x900.png%3Fw%3D1200%26h%3D675\u0026w=384"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-001",
+                                                                              "title":  "Airtable Reviews 2026: What 7800+ Users Actually Think",
+                                                                              "url":  "https://checkthat.ai/brands/airtable/reviews",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "* [Categories](/categories/featured)\n* [Brands](/brands)\n\n* [Overview](/features/overview)\n* [Prompts](/features/prompts)\n* [Sources](/features/sources)\n\n* [Sign In](/users/sign_in)[Built by GrowthX - Hire Us](https://growthx.ai?utm_source=checkthat-website\u0026utm_medium=referral\u0026utm_campaign=ssr\u0026utm_content=body-cta)\n\n\n\n\n\n\n![Airtable logo](https://cdn.brandfetch.io/domain/airtable.com/w/384/h/384/fallback/404?c=1exidp0JcANW1N42osUgy)\n\n![Airtable logo](https://cdn.brandfetch.io/domain/airtable.com/"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-002",
+                                                                              "title":  "Honest Review of Airtable for 2026 - The Marketing Agency",
+                                                                              "url":  "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "[![logo main](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![logo dark](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![logo main](data:image/svg+xml,%3Csvg%20xmlns=\u0027http://www.w3.org/2000/svg\u0027%20viewBox=\u00270%200%20400%20120\u0027%3E%3C/svg%3E)](https://themarketingagency.ca/)\n\n[0](https://themarketingagency.ca/cart/) \n\nNo products in the cart.\n\n[![logo main](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) !["
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-003",
+                                                                              "title":  "Airtable Review: Pros, Cons, \u0026 Is It Worth It in 2026?",
+                                                                              "url":  "https://zite.com/blog/airtable-reviews",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/695f943890dbfcf5d73e5cab_zite-logo.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a09576ebadb9a7504070_brandedicons.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a194602129d0137156d3_apps-image.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a0964207c44b286b8163_databases-icon.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a096608"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-004",
+                                                                              "title":  "Compare Capterra vs G2.com in July 2026",
+                                                                              "url":  "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "[![SoftwareSuggest Logo](https://www.softwaresuggest.com/assets2/singleview/assets/img/homepage_new/ss_logo.svg)](https://www.softwaresuggest.com)\n\n[Write a Review](https://www.softwaresuggest.com/write-review)\n\n[Add a Product](https://www.softwaresuggest.com/vendors)\n\n* [User Login](https://www.softwaresuggest.com/user-login)\n* [Vendor Login](https://www.softwaresuggest.com/vendorsportal/index.php?r=site/login)\n\n[![SoftwareSuggest Logo](https://images.softwaresuggest.com/static-frontend/ss-head"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-005",
+                                                                              "title":  "Airtable Review: Is It Worth It in 2026? [In-Depth]",
+                                                                              "url":  "https://smartsuite.com/blog/airtable-review?338ea48f_page=8",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "**Daily Office Hours - Mon - Fri 9 amÂ PTÂ |** [**Register Here**](https://calendly.com/smartsuite-success/live-office-hours-1?month=2026-05)\n\n[![SmartSuite Logo](https://cdn.prod.website-files.com/60c1fb51c4706f216cc5b134/60c1ff8b5aab5ca37dafc9cc_SmartSuite%20Logo.svg)](/)\n\n[Sign In\n\n![](https://cdn.prod.website-files.com/60c1fb51c4706f216cc5b134/60d1c87d7c74078a831c67a1_Member%20Directory.svg)](https://app.smartsuite.com/)\n\n[Start Free Trial](https://app.smartsuite.com/signup/start)[Schedule a D"
+                                                                          }
+                                                                      ]
+                                           }
+                                       ]
+                     },
+                     {
+                         "section":  "ç­æ¿ä¸é£é© / å¸åºå®ä½ãä¼å¿å¤æ­",
+                         "evidenceInsufficient":  false,
+                         "sourceUrls":  [
+                                            "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                            "https://apitracker.io/a/airtable",
+                                            "https://support.airtable.com/docs/airtable-enterprise-api",
+                                            "https://airtable.com/guides/scale/using-airtable-api",
+                                            "https://checkthat.ai/brands/airtable/reviews",
+                                            "https://themarketingagency.ca/blog/honest-review-airtable",
+                                            "https://zite.com/blog/airtable-reviews",
+                                            "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                            "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                                        ],
+                         "repairSuggestions":  [
+                                                   "è¯·ä¼å\u0085è¡¥é½ç¼ºè¯æ®ç« èï¼å¹¶å¨éè·æ½ååå¤æ ¸å¯¹åºæ¥åæ®µè½æ¯å¦ä»ä¿çæ ä¾æ®ç»è®ºã"
+                                               ],
+                         "diagnoses":  [
+                                           {
+                                               "reviewStage":  "INITIAL_REVIEW",
+                                               "diagnosis":  {
+                                                                 "dimensionCode":  "STRUCTURE_COMPLETENESS",
+                                                                 "dimensionName":  "ç»æå®æ´æ§",
+                                                                 "type":  "coverage_gap",
+                                                                 "section":  "ç­æ¿ä¸é£é© / å¸åºå®ä½ãä¼å¿å¤æ­",
+                                                                 "severity":  "WARNING",
+                                                                 "level":  "MAJOR",
+                                                                 "title":  "ç»æåå­æ®µä»å­å¨è¦çç¼ºå£",
+                                                                 "detail":  "ä¸æ¸¸æ½åç»æä¸­ä»æå­æ®µç¼ºè¯æ®æä¸ºç©ºï¼è¯´ææ¥åé¾è·¯è¾åºè´¨éä¸ç¨³å®ã",
+                                                                 "evidenceBasis":  "ç¼ºè¯æ®ç« è=æ ï¼è¯æ®ä¸è¦çç« è=ç­æ¿ä¸é£é©ï¼æ¨¡åæç­ç« è=æ ï¼ç©ºå­æ®µç« è=å¸åºå®ä½ãä¼å¿å¤æ­ï¼é»æ­å­æ®µ=æ ",
+                                                                 "evidenceIds":  [
+
+                                                                                 ],
+                                                                 "sourceUrls":  [
+                                                                                    "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                                    "https://apitracker.io/a/airtable",
+                                                                                    "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                                                    "https://airtable.com/guides/scale/using-airtable-api",
+                                                                                    "https://checkthat.ai/brands/airtable/reviews",
+                                                                                    "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                                                    "https://zite.com/blog/airtable-reviews",
+                                                                                    "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                                    "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                                                                                ],
+                                                                 "repairSuggestion":  "è¯·ä¼å\u0085è¡¥é½ç¼ºè¯æ®ç« èï¼å¹¶å¨éè·æ½ååå¤æ ¸å¯¹åºæ¥åæ®µè½æ¯å¦ä»ä¿çæ ä¾æ®ç»è®ºã"
+                                                             },
+                                               "evidenceReferences":  [
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                                              "title":  "API Reference â pyAirtable documentation",
+                                                                              "url":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "* [pyAirtable](index.html) â\n* API Reference\n\n# API Reference[Â¶](#api-reference \"Permalink to this headline\")\n\n## API: pyairtable[Â¶](#api-pyairtable \"Permalink to this headline\")\n\n*class* pyairtable.Api[[source]](_modules/pyairtable/api/api.html#Api)[Â¶](#pyairtable.Api \"Permalink to this definition\")\n:   Represents an Airtable API. Implements basic URL construction, session and request management, and retrying logic.\n\n    Usage:\n    :   ```\n        \u003e\u003e\u003e api = Api(\u0027auth_token\u0027)\u003e\u003e\u003e table = api. tab"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-002",
+                                                                              "title":  "Airtable API - Developer docs, APIs, SDKs, and auth. | API Tracker",
+                                                                              "url":  "https://apitracker.io/a/airtable",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "![](https://res.cloudinary.com/apideck/image/upload/v1599581023/apitracker/logo.png)\n![](https://res.cloudinary.com/apideck/image/upload/v1529456009/catalog/airtable/icon128x128.png)\n\n# Airtable API\n\n#### Links\n\n#### [Customers \u0026 developers](/a/airtable/developers)\n\n![Medium](https://res.cloudinary.com/apideck/image/upload/v1545264805/catalog/medium/icon128x128.png \"Medium\")\n![Shopify](https://res.cloudinary.com/apideck/image/upload/v1529456131/catalog/shopify/icon128x128.png \"Shopify\")\n![Expedi"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-003",
+                                                                              "title":  "Airtable Enterprise API",
+                                                                              "url":  "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "\u003e ## Documentation Index\n\u003e\n\u003e Fetch the complete documentation index at: \u003chttps://support.airtable.com/llms.txt\u003e\n\u003e\n\u003e Use this file to discover all available pages before exploring further.\n\n![](https://cdn.airtable.document360.io/logo/d0ee2ee4-3f78-47c7-b388-85e40be9fb89/7f9c63c97c244c8a988fa18cc531ecc3-360446de52ff494081b795b87a150ef3-Airtable_Logo 1.png)\n\n\n\n* [Contact Support](https://support.airtable.com/docs/contacting-airtable-support?contact_support=true)\n* [Sign up for free](https://airtab"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_02-004",
+                                                                              "title":  "Using Airtableâs API | Airtable",
+                                                                              "url":  "https://airtable.com/guides/scale/using-airtable-api",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "DOCS",
+                                                                              "contentSnippet":  "1. [Home](/)\n2. [Guides](/guides)\n3. [Scale your work](/guides/scale)\n4. Using Airtableâs API\n\n# Using Airtableâs API\n\n![Airtable](/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fhlcyrtq5%2Fproduction%2F7d6ae733db9d34fc191cab48308d0d5e18c94118-169x169.png%3Fw%3D64%26h%3D64\u0026w=64\u0026q=75)\n\nAirtable\n\n3 min read\n\n![Using Airtableâs API](/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fhlcyrtq5%2Fproduction%2F75b50845b0fef51c2eeae8b377d50c666642d8c1-1600x900.png%3Fw%3D1200%26h%3D675\u0026w=384"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-001",
+                                                                              "title":  "Airtable Reviews 2026: What 7800+ Users Actually Think",
+                                                                              "url":  "https://checkthat.ai/brands/airtable/reviews",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "* [Categories](/categories/featured)\n* [Brands](/brands)\n\n* [Overview](/features/overview)\n* [Prompts](/features/prompts)\n* [Sources](/features/sources)\n\n* [Sign In](/users/sign_in)[Built by GrowthX - Hire Us](https://growthx.ai?utm_source=checkthat-website\u0026utm_medium=referral\u0026utm_campaign=ssr\u0026utm_content=body-cta)\n\n\n\n\n\n\n![Airtable logo](https://cdn.brandfetch.io/domain/airtable.com/w/384/h/384/fallback/404?c=1exidp0JcANW1N42osUgy)\n\n![Airtable logo](https://cdn.brandfetch.io/domain/airtable.com/"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-002",
+                                                                              "title":  "Honest Review of Airtable for 2026 - The Marketing Agency",
+                                                                              "url":  "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "[![logo main](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![logo dark](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) ![logo main](data:image/svg+xml,%3Csvg%20xmlns=\u0027http://www.w3.org/2000/svg\u0027%20viewBox=\u00270%200%20400%20120\u0027%3E%3C/svg%3E)](https://themarketingagency.ca/)\n\n[0](https://themarketingagency.ca/cart/) \n\nNo products in the cart.\n\n[![logo main](https://themarketingagency.ca/wp-content/uploads/2026/02/Untitled-design.svg) !["
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-003",
+                                                                              "title":  "Airtable Review: Pros, Cons, \u0026 Is It Worth It in 2026?",
+                                                                              "url":  "https://zite.com/blog/airtable-reviews",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/695f943890dbfcf5d73e5cab_zite-logo.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a09576ebadb9a7504070_brandedicons.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a194602129d0137156d3_apps-image.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a0964207c44b286b8163_databases-icon.svg)\n![](https://cdn.prod.website-files.com/693ad62eeb48e420b2465a58/6978a096608"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-004",
+                                                                              "title":  "Compare Capterra vs G2.com in July 2026",
+                                                                              "url":  "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "[![SoftwareSuggest Logo](https://www.softwaresuggest.com/assets2/singleview/assets/img/homepage_new/ss_logo.svg)](https://www.softwaresuggest.com)\n\n[Write a Review](https://www.softwaresuggest.com/write-review)\n\n[Add a Product](https://www.softwaresuggest.com/vendors)\n\n* [User Login](https://www.softwaresuggest.com/user-login)\n* [Vendor Login](https://www.softwaresuggest.com/vendorsportal/index.php?r=site/login)\n\n[![SoftwareSuggest Logo](https://images.softwaresuggest.com/static-frontend/ss-head"
+                                                                          },
+                                                                          {
+                                                                              "evidenceId":  "T0104-COLLECT_SOURCES_02_03-005",
+                                                                              "title":  "Airtable Review: Is It Worth It in 2026? [In-Depth]",
+                                                                              "url":  "https://smartsuite.com/blog/airtable-review?338ea48f_page=8",
+                                                                              "competitorName":  "Airtable",
+                                                                              "sourceType":  "REVIEW",
+                                                                              "contentSnippet":  "**Daily Office Hours - Mon - Fri 9 amÂ PTÂ |** [**Register Here**](https://calendly.com/smartsuite-success/live-office-hours-1?month=2026-05)\n\n[![SmartSuite Logo](https://cdn.prod.website-files.com/60c1fb51c4706f216cc5b134/60c1ff8b5aab5ca37dafc9cc_SmartSuite%20Logo.svg)](/)\n\n[Sign In\n\n![](https://cdn.prod.website-files.com/60c1fb51c4706f216cc5b134/60d1c87d7c74078a831c67a1_Member%20Directory.svg)](https://app.smartsuite.com/)\n\n[Start Free Trial](https://app.smartsuite.com/signup/start)[Schedule a D"
+                                                                          }
+                                                                      ]
+                                           }
+                                       ]
+                     },
+                     {
+                         "section":  "å¸åºå®ä½",
+                         "evidenceInsufficient":  true,
+                         "sourceUrls":  [
+
+                                        ],
+                         "repairSuggestions":  [
+                                                   "è¯·ä¼å\u0085è¡¥é½âå¸åºå®ä½âç« èçè¯æ®é¾è·¯ï¼å¹¶å¤æ ¸ç¼ºå¤±å­æ®µï¼"
+                                               ],
+                         "diagnoses":  [
+
+                                       ]
+                     },
+                     {
+                         "section":  "ä¼å¿å¤æ­",
+                         "evidenceInsufficient":  true,
+                         "sourceUrls":  [
+
+                                        ],
+                         "repairSuggestions":  [
+                                                   "è¯·ä¼å\u0085è¡¥é½âä¼å¿å¤æ­âç« èçè¯æ®é¾è·¯ï¼å¹¶å¤æ ¸ç¼ºå¤±å­æ®µï¼"
+                                               ],
+                         "diagnoses":  [
+
+                                       ]
+                     },
+                     {
+                         "section":  "ç­æ¿ä¸é£é©",
+                         "evidenceInsufficient":  true,
+                         "sourceUrls":  [
+
+                                        ],
+                         "repairSuggestions":  [
+                                                   "è¯·ä¼å\u0085è¡¥é½âç­æ¿ä¸é£é©âç« èçè¯æ®é¾è·¯ï¼å¹¶å¤æ ¸ç¼ºå¤±å­æ®µï¼Airtable / ç­æ¿ä¸é£é©"
+                                               ],
+                         "diagnoses":  [
+
+                                       ]
+                     }
+                 ],
+    "nextActions":  [
+
+                    ],
+    "revisionDirectives":  [
+                               {
+                                   "category":  "EVIDENCE_GAP",
+                                   "actionType":  "SUPPLEMENT_EVIDENCE",
+                                   "priority":  "HIGH",
+                                   "targetNode":  "collect_sources",
+                                   "targetSection":  "éç¨",
+                                   "summary":  "éæ°æ§è¡å¯¹Notionçä¿¡æ¯ééï¼ç¡®ä¿å®ç½ãææ¡£ãç¨æ·è¯ä»·ç­æ¥æºæåè·åï¼è¥æç»­ééå¤±è´¥ï¼åºè®°å½éçº§åå å¹¶èèä½¿ç¨æ¿ä»£æ°æ®æºã",
+                                   "searchFeedback":  null,
+                                   "searchQueries":  [
+                                                         "Airtable éç¨"
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                      "https://apitracker.io/a/airtable",
+                                                      "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                      "https://airtable.com/guides/scale/using-airtable-api",
+                                                      "https://checkthat.ai/brands/airtable/reviews",
+                                                      "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                      "https://zite.com/blog/airtable-reviews",
+                                                      "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                      "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                                                  ],
+                                   "expectedOutcome":  "éç¨éè¦è¡¥é½æ¥æºå¼ç¨æä¸è°æ æ³éªè¯çå¤æ­ï¼ç¡®ä¿ç»è®ºå¯åæº¯ã"
+                               },
+                               {
+                                   "category":  "STRUCTURE_ISSUE",
+                                   "actionType":  "RERUN_NODE",
+                                   "priority":  "HIGH",
+                                   "targetNode":  "extract_schema",
+                                   "targetSection":  "ç­æ¿ä¸é£é© / å¸åºå®ä½ãä¼å¿å¤æ­",
+                                   "summary":  "è¯·ä¼å\u0085è¡¥é½ç¼ºè¯æ®ç« èï¼å¹¶å¨éè·æ½ååå¤æ ¸å¯¹åºæ¥åæ®µè½æ¯å¦ä»ä¿çæ ä¾æ®ç»è®ºã",
+                                   "searchFeedback":  null,
+                                   "searchQueries":  [
+                                                         "Airtable ç­æ¿ä¸é£é© / å¸åºå®ä½ãä¼å¿å¤æ­"
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                      "https://apitracker.io/a/airtable",
+                                                      "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                      "https://airtable.com/guides/scale/using-airtable-api",
+                                                      "https://checkthat.ai/brands/airtable/reviews",
+                                                      "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                      "https://zite.com/blog/airtable-reviews",
+                                                      "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                      "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                                                  ],
+                                   "expectedOutcome":  "ç­æ¿ä¸é£é© / å¸åºå®ä½ãä¼å¿å¤æ­éè¦æ¢å¤ç»æåå­æ®µå®æ´æ§ï¼å¹¶è®©æ¥åç« èä¸å­æ®µè¾åºéæ°å¯¹é½ã"
+                               }
+                           ]
+}

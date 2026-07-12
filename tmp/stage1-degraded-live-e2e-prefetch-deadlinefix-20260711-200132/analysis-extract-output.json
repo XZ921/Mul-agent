@@ -1,0 +1,1607 @@
+﻿{
+    "contractVersion":  "1.0",
+    "totalCompetitors":  1,
+    "successCount":  1,
+    "results":  [
+                    {
+                        "issueFlags":  [
+                                           "PROMPT_CONTENT_TRUNCATED",
+                                           "SKIPPED_UNUSABLE_EVIDENCE",
+                                           "PROMPT_BUDGET_SKIPPED",
+                                           "STAGE1_COLLECTOR_QUORUM_READY",
+                                           "COLLECTOR_QUORUM_DEGRADED",
+                                           "COLLECTOR_FAMILY_MISSING_OFFICIAL",
+                                           "COLLECTOR_FAMILY_MISSING_DOCS",
+                                           "COLLECTOR_FAMILY_MISSING_REVIEW",
+                                           "COLLECTOR_FAMILY_MISSING_PRICING",
+                                           "HARD_DEADLINE_REACHED",
+                                           "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT",
+                                           "OPTIONAL_PRICING_NOT_READY",
+                                           "OPTIONAL_FIELD_DEFERRED"
+                                       ],
+                        "coverage":  {
+                                         "summary":  {
+                                                         "status":  "TRACEABLE",
+                                                         "hasValue":  true,
+                                                         "evidenceIds":  [
+
+                                                                         ],
+                                                         "sourceUrls":  [
+                                                                            "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                        ]
+                                                     },
+                                         "positioning":  {
+                                                             "status":  "EMPTY",
+                                                             "hasValue":  false,
+                                                             "evidenceIds":  [
+
+                                                                             ],
+                                                             "sourceUrls":  [
+
+                                                                            ]
+                                                         },
+                                         "targetUsers":  {
+                                                             "status":  "TRACEABLE",
+                                                             "hasValue":  true,
+                                                             "evidenceIds":  [
+
+                                                                             ],
+                                                             "sourceUrls":  [
+                                                                                "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                            ]
+                                                         },
+                                         "coreFeatures":  {
+                                                              "status":  "TRACEABLE",
+                                                              "hasValue":  true,
+                                                              "evidenceIds":  [
+                                                                                  "T0104-COLLECT_SOURCES_02_02-001"
+                                                                              ],
+                                                              "sourceUrls":  [
+                                                                                 "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                             ]
+                                                          },
+                                         "pricing":  {
+                                                         "status":  "TRACEABLE",
+                                                         "hasValue":  true,
+                                                         "evidenceIds":  [
+                                                                             "T0104-COLLECT_SOURCES_02_02-001"
+                                                                         ],
+                                                         "sourceUrls":  [
+                                                                            "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                        ]
+                                                     },
+                                         "strengths":  {
+                                                           "status":  "EMPTY",
+                                                           "hasValue":  false,
+                                                           "evidenceIds":  [
+
+                                                                           ],
+                                                           "sourceUrls":  [
+
+                                                                          ]
+                                                       },
+                                         "weaknesses":  {
+                                                            "status":  "EVIDENCE_NOT_COVERING",
+                                                            "hasValue":  false,
+                                                            "evidenceIds":  [
+
+                                                                            ],
+                                                            "sourceUrls":  [
+
+                                                                           ]
+                                                        }
+                                     },
+                        "downstreamEvidenceViews":  [
+                                                        {
+                                                            "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                            "competitorName":  "Airtable",
+                                                            "sourceType":  "DOCS",
+                                                            "title":  "API Reference â pyAirtable documentation",
+                                                            "content":  "",
+                                                            "sourceUrls":  [
+                                                                               "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                           ],
+                                                            "issueFlags":  [
+                                                                               "PROMPT_CONTENT_TRUNCATED"
+                                                                           ],
+                                                            "qualitySignals":  [
+                                                                                   "TAVILY_RAW_CONTENT_READY",
+                                                                                   "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                   "TAVILY_STRUCTURED_BLOCK_COUNT=2",
+                                                                                   "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG"
+                                                                               ],
+                                                            "structuredBlocks":  [
+                                                                                     {
+                                                                                         "blockType":  "PRICING_BLOCK",
+                                                                                         "title":  "Pricing",
+                                                                                         "summary":  "enterprise(*enterprise\\_account\\_id*)[[source]](_modules/pyairtable/api/api.html#Api.enterprise)[Â¶](#pyairtable.Api.enterprise \"Permalink to this definition\")\n:   â  This feature is only available on Enterprise billing plans.",
+                                                                                         "content":  null,
+                                                                                         "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                         "sourceUrls":  [
+
+                                                                                                        ]
+                                                                                     },
+                                                                                     {
+                                                                                         "blockType":  "DEVELOPER_DOCS_BLOCK",
+                                                                                         "title":  "Developer Docs",
+                                                                                         "summary":  "\\_\\_init\\_\\_(*api\\_key*, *\\**, *timeout=None*, *retry\\_strategy=True*, *endpoint\\_url=\u0027https://api.airtable.com\u0027*, *use\\_field\\_ids=False*)[[source]](_modules/pyairtable/api/api.html#Api.__init__)[Â¶](#pyairtable.Api.__init__ \"Permalink to this definition\")\n:   Parameters\n:   * **api\\_key** (`str`) â An Airtable API key or personal access token.\n* **timeout** (`Optional`[`Tuple`[`int`, `int`]], default: `None`) â A tuple indicating a connect and read timeout. e.g. `timeout=(2,5)` would configure a 2 second timeout for the connection to be established and 5 seconds for a server read timeout. Default is `None` (no timeout).\n* **retry\\_strategy** (`Union`[`bool`, `Retry`, `None`], default: `True`) â An instance of [urllib3.util.Retry](https://urllib3.readthedocs.io/en/stable/reference/urllib3.util.html#urllib3.util.Retry). If `None` or `False`, requests will not be retried. If `True`, the default strategy will be applied (see [`retry_strategy()`](#pyairtable.retry_strategy \"pyairtable.retry_strategy\") for details).\n* **endpoint\\_url** (`str`, default: `\u0027https://api.airtable.com\u0027`) â The API endpoint to use. Override this if you are using a debugging or caching proxy.\n* **use\\_field\\_ids** (`bool`, default: `False`) â If `True`, all API requests will return responses with field IDs instead of field names.",
+                                                                                         "content":  null,
+                                                                                         "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                         "sourceUrls":  [
+
+                                                                                                        ]
+                                                                                     }
+                                                                                 ],
+                                                            "structuredPayload":  {
+
+                                                                                  },
+                                                            "quality":  {
+                                                                            "qualityScore":  0.894,
+                                                                            "failureKind":  null,
+                                                                            "durationMillis":  0
+                                                                        }
+                                                        }
+                                                    ],
+                        "sourceUrls":  [
+                                           "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                       ],
+                        "competitor":  "Airtable"
+                    }
+                ],
+    "drafts":  [
+                   {
+                       "competitorName":  "Airtable",
+                       "officialUrl":  null,
+                       "summary":  "Airtable provides a REST API (pyAirtable) that enables developers to interact with bases and tables programmatically. Enterprise-specific API features require an Enterprise billing plan.",
+                       "positioning":  null,
+                       "targetUsers":  [
+                                           "Developers",
+                                           "Teams requiring programmatic data access"
+                                       ],
+                       "coreFeatures":  [
+                                            {
+                                                "name":  "REST API",
+                                                "description":  "Programmatic access to Airtable bases and tables via HTTP API, supporting operations such as base retrieval, table operations, and record management. Configurable timeout, retry strategy, and field ID usage.",
+                                                "evidenceIds":  [
+                                                                    "T0104-COLLECT_SOURCES_02_02-001"
+                                                                ],
+                                                "sourceUrls":  [
+                                                                   "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                               ]
+                                            }
+                                        ],
+                       "pricing":  {
+                                       "model":  null,
+                                       "plans":  null,
+                                       "evidenceIds":  [
+                                                           "T0104-COLLECT_SOURCES_02_02-001"
+                                                       ],
+                                       "sourceUrls":  [
+                                                          "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                      ]
+                                   },
+                       "strengths":  [
+
+                                     ],
+                       "weaknesses":  [
+
+                                      ],
+                       "sourceUrls":  [
+                                          "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                      ],
+                       "evidenceFragments":  [
+                                                 {
+                                                     "stage":  "EXTRACT",
+                                                     "competitorName":  "Airtable",
+                                                     "fieldName":  "knowledge",
+                                                     "fieldLabel":  null,
+                                                     "sectionKey":  null,
+                                                     "sectionTitle":  null,
+                                                     "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                     "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                     "title":  "API Reference â pyAirtable documentation",
+                                                     "snippet":  null,
+                                                     "coverageStatus":  null,
+                                                     "gapComment":  null,
+                                                     "issueFlags":  [
+                                                                        "PROMPT_CONTENT_TRUNCATED",
+                                                                        "SKIPPED_UNUSABLE_EVIDENCE",
+                                                                        "PROMPT_BUDGET_SKIPPED",
+                                                                        "STAGE1_COLLECTOR_QUORUM_READY",
+                                                                        "COLLECTOR_QUORUM_DEGRADED",
+                                                                        "COLLECTOR_FAMILY_MISSING_OFFICIAL",
+                                                                        "COLLECTOR_FAMILY_MISSING_DOCS",
+                                                                        "COLLECTOR_FAMILY_MISSING_REVIEW",
+                                                                        "COLLECTOR_FAMILY_MISSING_PRICING",
+                                                                        "HARD_DEADLINE_REACHED",
+                                                                        "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT",
+                                                                        "OPTIONAL_PRICING_NOT_READY",
+                                                                        "OPTIONAL_FIELD_DEFERRED"
+                                                                    ]
+                                                 }
+                                             ],
+                       "sectionEvidenceBundles":  [
+                                                      {
+                                                          "stage":  "EXTRACT",
+                                                          "sectionType":  "SECTION",
+                                                          "sectionKey":  "summary",
+                                                          "sectionTitle":  "äº§åæ¦è§",
+                                                          "summary":  "Airtable provides a REST API (pyAirtable) that enables developers to interact with bases and tables programmatically. En...",
+                                                          "gapSummary":  null,
+                                                          "fieldNames":  [
+                                                                             "summary"
+                                                                         ],
+                                                          "missingFields":  [
+
+                                                                            ],
+                                                          "sourceUrls":  [
+                                                                             "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                         ],
+                                                          "issueFlags":  [
+
+                                                                         ],
+                                                          "evidenceFragments":  [
+                                                                                    {
+                                                                                        "stage":  "EXTRACT",
+                                                                                        "competitorName":  "Airtable",
+                                                                                        "fieldName":  "summary",
+                                                                                        "fieldLabel":  "äº§åæ¦è§",
+                                                                                        "sectionKey":  "summary",
+                                                                                        "sectionTitle":  "äº§åæ¦è§",
+                                                                                        "evidenceId":  null,
+                                                                                        "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                                        "title":  null,
+                                                                                        "snippet":  null,
+                                                                                        "coverageStatus":  "TRACEABLE",
+                                                                                        "gapComment":  null,
+                                                                                        "issueFlags":  [
+
+                                                                                                       ]
+                                                                                    }
+                                                                                ]
+                                                      },
+                                                      {
+                                                          "stage":  "EXTRACT",
+                                                          "sectionType":  "SECTION",
+                                                          "sectionKey":  "positioning",
+                                                          "sectionTitle":  "å¸åºå®ä½",
+                                                          "summary":  null,
+                                                          "gapSummary":  "ç¼ºå°å­æ®µè¯æ®ï¼positioning",
+                                                          "fieldNames":  [
+                                                                             "positioning"
+                                                                         ],
+                                                          "missingFields":  [
+                                                                                "positioning"
+                                                                            ],
+                                                          "sourceUrls":  [
+
+                                                                         ],
+                                                          "issueFlags":  [
+                                                                             "NO_USABLE_EVIDENCE",
+                                                                             "SECTION_EVIDENCE_GAP"
+                                                                         ],
+                                                          "evidenceFragments":  [
+                                                                                    {
+                                                                                        "stage":  "EXTRACT",
+                                                                                        "competitorName":  "Airtable",
+                                                                                        "fieldName":  "positioning",
+                                                                                        "fieldLabel":  "å¸åºå®ä½",
+                                                                                        "sectionKey":  "positioning",
+                                                                                        "sectionTitle":  "å¸åºå®ä½",
+                                                                                        "evidenceId":  null,
+                                                                                        "sourceUrl":  null,
+                                                                                        "title":  null,
+                                                                                        "snippet":  null,
+                                                                                        "coverageStatus":  "EMPTY",
+                                                                                        "gapComment":  "å­æ®µææ å\u0085å®¹",
+                                                                                        "issueFlags":  [
+                                                                                                           "EMPTY",
+                                                                                                           "MISSING_SOURCE_URL"
+                                                                                                       ]
+                                                                                    }
+                                                                                ]
+                                                      },
+                                                      {
+                                                          "stage":  "EXTRACT",
+                                                          "sectionType":  "SECTION",
+                                                          "sectionKey":  "targetUsers",
+                                                          "sectionTitle":  "ç®æ ç¨æ·",
+                                                          "summary":  "[\"Developers\",\"Teams requiring programmatic data access\"]",
+                                                          "gapSummary":  null,
+                                                          "fieldNames":  [
+                                                                             "targetUsers"
+                                                                         ],
+                                                          "missingFields":  [
+
+                                                                            ],
+                                                          "sourceUrls":  [
+                                                                             "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                         ],
+                                                          "issueFlags":  [
+
+                                                                         ],
+                                                          "evidenceFragments":  [
+                                                                                    {
+                                                                                        "stage":  "EXTRACT",
+                                                                                        "competitorName":  "Airtable",
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "fieldLabel":  "ç®æ ç¨æ·",
+                                                                                        "sectionKey":  "targetUsers",
+                                                                                        "sectionTitle":  "ç®æ ç¨æ·",
+                                                                                        "evidenceId":  null,
+                                                                                        "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                                        "title":  null,
+                                                                                        "snippet":  null,
+                                                                                        "coverageStatus":  "TRACEABLE",
+                                                                                        "gapComment":  null,
+                                                                                        "issueFlags":  [
+
+                                                                                                       ]
+                                                                                    }
+                                                                                ]
+                                                      },
+                                                      {
+                                                          "stage":  "EXTRACT",
+                                                          "sectionType":  "SECTION",
+                                                          "sectionKey":  "coreFeatures",
+                                                          "sectionTitle":  "æ ¸å¿è½å",
+                                                          "summary":  "[{\"name\":\"REST API\",\"description\":\"Programmatic access to Airtable bases and tables via HTTP API, supporting operations ...",
+                                                          "gapSummary":  null,
+                                                          "fieldNames":  [
+                                                                             "coreFeatures"
+                                                                         ],
+                                                          "missingFields":  [
+
+                                                                            ],
+                                                          "sourceUrls":  [
+                                                                             "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                         ],
+                                                          "issueFlags":  [
+
+                                                                         ],
+                                                          "evidenceFragments":  [
+                                                                                    {
+                                                                                        "stage":  "EXTRACT",
+                                                                                        "competitorName":  "Airtable",
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "fieldLabel":  "æ ¸å¿è½å",
+                                                                                        "sectionKey":  "coreFeatures",
+                                                                                        "sectionTitle":  "æ ¸å¿è½å",
+                                                                                        "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                                                        "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                                        "title":  "API Reference â pyAirtable documentation",
+                                                                                        "snippet":  null,
+                                                                                        "coverageStatus":  "TRACEABLE",
+                                                                                        "gapComment":  null,
+                                                                                        "issueFlags":  [
+
+                                                                                                       ]
+                                                                                    }
+                                                                                ]
+                                                      },
+                                                      {
+                                                          "stage":  "EXTRACT",
+                                                          "sectionType":  "SECTION",
+                                                          "sectionKey":  "pricing",
+                                                          "sectionTitle":  "å®ä»·ç­ç¥",
+                                                          "summary":  "{\"note\":\"Enterprise features (e.g., enterprise_account_id) are only available on Enterprise billing plans. Detailed pric...",
+                                                          "gapSummary":  null,
+                                                          "fieldNames":  [
+                                                                             "pricing"
+                                                                         ],
+                                                          "missingFields":  [
+
+                                                                            ],
+                                                          "sourceUrls":  [
+                                                                             "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                         ],
+                                                          "issueFlags":  [
+
+                                                                         ],
+                                                          "evidenceFragments":  [
+                                                                                    {
+                                                                                        "stage":  "EXTRACT",
+                                                                                        "competitorName":  "Airtable",
+                                                                                        "fieldName":  "pricing",
+                                                                                        "fieldLabel":  "å®ä»·ç­ç¥",
+                                                                                        "sectionKey":  "pricing",
+                                                                                        "sectionTitle":  "å®ä»·ç­ç¥",
+                                                                                        "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                                                        "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                                        "title":  "API Reference â pyAirtable documentation",
+                                                                                        "snippet":  null,
+                                                                                        "coverageStatus":  "TRACEABLE",
+                                                                                        "gapComment":  null,
+                                                                                        "issueFlags":  [
+
+                                                                                                       ]
+                                                                                    }
+                                                                                ]
+                                                      },
+                                                      {
+                                                          "stage":  "EXTRACT",
+                                                          "sectionType":  "SECTION",
+                                                          "sectionKey":  "strengths",
+                                                          "sectionTitle":  "ä¼å¿å¤æ­",
+                                                          "summary":  "[]",
+                                                          "gapSummary":  "ç¼ºå°å­æ®µè¯æ®ï¼strengths",
+                                                          "fieldNames":  [
+                                                                             "strengths"
+                                                                         ],
+                                                          "missingFields":  [
+                                                                                "strengths"
+                                                                            ],
+                                                          "sourceUrls":  [
+
+                                                                         ],
+                                                          "issueFlags":  [
+                                                                             "NO_USABLE_EVIDENCE",
+                                                                             "OPTIONAL_SECTION_EVIDENCE_GAP"
+                                                                         ],
+                                                          "evidenceFragments":  [
+                                                                                    {
+                                                                                        "stage":  "EXTRACT",
+                                                                                        "competitorName":  "Airtable",
+                                                                                        "fieldName":  "strengths",
+                                                                                        "fieldLabel":  "ä¼å¿å¤æ­",
+                                                                                        "sectionKey":  "strengths",
+                                                                                        "sectionTitle":  "ä¼å¿å¤æ­",
+                                                                                        "evidenceId":  null,
+                                                                                        "sourceUrl":  null,
+                                                                                        "title":  null,
+                                                                                        "snippet":  null,
+                                                                                        "coverageStatus":  "EMPTY",
+                                                                                        "gapComment":  "å­æ®µææ å\u0085å®¹",
+                                                                                        "issueFlags":  [
+                                                                                                           "EMPTY",
+                                                                                                           "MISSING_SOURCE_URL"
+                                                                                                       ]
+                                                                                    }
+                                                                                ]
+                                                      },
+                                                      {
+                                                          "stage":  "EXTRACT",
+                                                          "sectionType":  "SECTION",
+                                                          "sectionKey":  "weaknesses",
+                                                          "sectionTitle":  "ç­æ¿ä¸é£é©",
+                                                          "summary":  "[]",
+                                                          "gapSummary":  "ç¼ºå°å­æ®µè¯æ®ï¼weaknesses",
+                                                          "fieldNames":  [
+                                                                             "weaknesses"
+                                                                         ],
+                                                          "missingFields":  [
+                                                                                "weaknesses"
+                                                                            ],
+                                                          "sourceUrls":  [
+
+                                                                         ],
+                                                          "issueFlags":  [
+                                                                             "NO_USABLE_EVIDENCE",
+                                                                             "OPTIONAL_SECTION_EVIDENCE_GAP"
+                                                                         ],
+                                                          "evidenceFragments":  [
+                                                                                    {
+                                                                                        "stage":  "EXTRACT",
+                                                                                        "competitorName":  "Airtable",
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "fieldLabel":  "ç­æ¿ä¸é£é©",
+                                                                                        "sectionKey":  "weaknesses",
+                                                                                        "sectionTitle":  "ç­æ¿ä¸é£é©",
+                                                                                        "evidenceId":  null,
+                                                                                        "sourceUrl":  null,
+                                                                                        "title":  null,
+                                                                                        "snippet":  null,
+                                                                                        "coverageStatus":  "EVIDENCE_NOT_COVERING",
+                                                                                        "gapComment":  "å½åè¯æ®æªè¦çè¯¥å­æ®µ",
+                                                                                        "issueFlags":  [
+                                                                                                           "EVIDENCE_NOT_COVERING",
+                                                                                                           "MISSING_SOURCE_URL"
+                                                                                                       ]
+                                                                                    }
+                                                                                ]
+                                                      }
+                                                  ],
+                       "downstreamEvidenceViews":  [
+                                                       {
+                                                           "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                           "competitorName":  "Airtable",
+                                                           "sourceType":  "DOCS",
+                                                           "title":  "API Reference â pyAirtable documentation",
+                                                           "content":  "",
+                                                           "sourceUrls":  [
+                                                                              "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                          ],
+                                                           "issueFlags":  [
+                                                                              "PROMPT_CONTENT_TRUNCATED"
+                                                                          ],
+                                                           "qualitySignals":  [
+                                                                                  "TAVILY_RAW_CONTENT_READY",
+                                                                                  "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                  "TAVILY_STRUCTURED_BLOCK_COUNT=2",
+                                                                                  "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG"
+                                                                              ],
+                                                           "structuredBlocks":  [
+                                                                                    {
+                                                                                        "blockType":  "PRICING_BLOCK",
+                                                                                        "title":  "Pricing",
+                                                                                        "summary":  "enterprise(*enterprise\\_account\\_id*)[[source]](_modules/pyairtable/api/api.html#Api.enterprise)[Â¶](#pyairtable.Api.enterprise \"Permalink to this definition\")\n:   â  This feature is only available on Enterprise billing plans.",
+                                                                                        "content":  null,
+                                                                                        "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                        "sourceUrls":  [
+
+                                                                                                       ]
+                                                                                    },
+                                                                                    {
+                                                                                        "blockType":  "DEVELOPER_DOCS_BLOCK",
+                                                                                        "title":  "Developer Docs",
+                                                                                        "summary":  "\\_\\_init\\_\\_(*api\\_key*, *\\**, *timeout=None*, *retry\\_strategy=True*, *endpoint\\_url=\u0027https://api.airtable.com\u0027*, *use\\_field\\_ids=False*)[[source]](_modules/pyairtable/api/api.html#Api.__init__)[Â¶](#pyairtable.Api.__init__ \"Permalink to this definition\")\n:   Parameters\n:   * **api\\_key** (`str`) â An Airtable API key or personal access token.\n* **timeout** (`Optional`[`Tuple`[`int`, `int`]], default: `None`) â A tuple indicating a connect and read timeout. e.g. `timeout=(2,5)` would configure a 2 second timeout for the connection to be established and 5 seconds for a server read timeout. Default is `None` (no timeout).\n* **retry\\_strategy** (`Union`[`bool`, `Retry`, `None`], default: `True`) â An instance of [urllib3.util.Retry](https://urllib3.readthedocs.io/en/stable/reference/urllib3.util.html#urllib3.util.Retry). If `None` or `False`, requests will not be retried. If `True`, the default strategy will be applied (see [`retry_strategy()`](#pyairtable.retry_strategy \"pyairtable.retry_strategy\") for details).\n* **endpoint\\_url** (`str`, default: `\u0027https://api.airtable.com\u0027`) â The API endpoint to use. Override this if you are using a debugging or caching proxy.\n* **use\\_field\\_ids** (`bool`, default: `False`) â If `True`, all API requests will return responses with field IDs instead of field names.",
+                                                                                        "content":  null,
+                                                                                        "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                        "sourceUrls":  [
+
+                                                                                                       ]
+                                                                                    }
+                                                                                ],
+                                                           "structuredPayload":  {
+
+                                                                                 },
+                                                           "quality":  {
+                                                                           "qualityScore":  0.894,
+                                                                           "failureKind":  null,
+                                                                           "durationMillis":  0
+                                                                       }
+                                                       }
+                                                   ],
+                       "issueFlags":  [
+                                          "PROMPT_CONTENT_TRUNCATED",
+                                          "SKIPPED_UNUSABLE_EVIDENCE",
+                                          "PROMPT_BUDGET_SKIPPED",
+                                          "STAGE1_COLLECTOR_QUORUM_READY",
+                                          "COLLECTOR_QUORUM_DEGRADED",
+                                          "COLLECTOR_FAMILY_MISSING_OFFICIAL",
+                                          "COLLECTOR_FAMILY_MISSING_DOCS",
+                                          "COLLECTOR_FAMILY_MISSING_REVIEW",
+                                          "COLLECTOR_FAMILY_MISSING_PRICING",
+                                          "HARD_DEADLINE_REACHED",
+                                          "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT",
+                                          "OPTIONAL_PRICING_NOT_READY",
+                                          "OPTIONAL_FIELD_DEFERRED"
+                                      ],
+                       "evidenceCoverage":  {
+                                                "summary":  {
+                                                                "status":  "TRACEABLE",
+                                                                "hasValue":  true,
+                                                                "evidenceIds":  [
+
+                                                                                ],
+                                                                "sourceUrls":  [
+                                                                                   "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                               ]
+                                                            },
+                                                "positioning":  {
+                                                                    "status":  "EMPTY",
+                                                                    "hasValue":  false,
+                                                                    "evidenceIds":  [
+
+                                                                                    ],
+                                                                    "sourceUrls":  [
+
+                                                                                   ]
+                                                                },
+                                                "targetUsers":  {
+                                                                    "status":  "TRACEABLE",
+                                                                    "hasValue":  true,
+                                                                    "evidenceIds":  [
+
+                                                                                    ],
+                                                                    "sourceUrls":  [
+                                                                                       "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                                   ]
+                                                                },
+                                                "coreFeatures":  {
+                                                                     "status":  "TRACEABLE",
+                                                                     "hasValue":  true,
+                                                                     "evidenceIds":  [
+                                                                                         "T0104-COLLECT_SOURCES_02_02-001"
+                                                                                     ],
+                                                                     "sourceUrls":  [
+                                                                                        "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                                    ]
+                                                                 },
+                                                "pricing":  {
+                                                                "status":  "TRACEABLE",
+                                                                "hasValue":  true,
+                                                                "evidenceIds":  [
+                                                                                    "T0104-COLLECT_SOURCES_02_02-001"
+                                                                                ],
+                                                                "sourceUrls":  [
+                                                                                   "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                               ]
+                                                            },
+                                                "strengths":  {
+                                                                  "status":  "EMPTY",
+                                                                  "hasValue":  false,
+                                                                  "evidenceIds":  [
+
+                                                                                  ],
+                                                                  "sourceUrls":  [
+
+                                                                                 ]
+                                                              },
+                                                "weaknesses":  {
+                                                                   "status":  "EVIDENCE_NOT_COVERING",
+                                                                   "hasValue":  false,
+                                                                   "evidenceIds":  [
+
+                                                                                   ],
+                                                                   "sourceUrls":  [
+
+                                                                                  ]
+                                                               }
+                                            },
+                       "fieldsExtracted":  3,
+                       "status":  "PARTIAL"
+                   }
+               ],
+    "sourceUrls":  [
+                       "https://pyairtable.readthedocs.io/en/stable/api.html"
+                   ],
+    "taskRagContext":  "ç¥è¯ä¸ä¸æ\næ£ç´¢æ¥è¯¢ï¼ä¼ä¸çº§ç¥è¯åä½ä¸ä½ä»£ç å·¥ä½å° [\"Notion\",\"Airtable\"] [\"äº§åæ¦è¿°\",\"å¸åºå®ä½\",\"ç®æ ç¨æ·\",\"æ ¸å¿åè½\",\"ä»·æ ¼ç­ç¥\"] extract_schema\næ£ç´¢æè¦ï¼[TASK] editorial pipelines:** Linked records tying deadlines, collaborators, and status together make Airtable a natural fit for content calendars and production tracking.\n* **Inventory,ï¼ç¥è¯ææ¡£ï¼TASK-104-T0104-COLLECT-SOURCES-02-03-001ï¼ï¼[TASK] or schema design.\n\nLook elsewhere if:\n\n* **You only need simple task tracking:** Monday.com or Asana deliver project and portfolio management with less setup and a lower learning cï¼ç¥è¯ææ¡£ï¼TASK-104-T0104-COLLECT-SOURCES-02-03-001ï¼ï¼[TASK] ts, raising `KeyError` if it does not.\n * **force** (`bool`, default: `False`) â By default, this method will only fetch information from the API if it has not been cached. If callï¼ç¥è¯ææ¡£ï¼TASK-104-T0104-COLLECT-SOURCES-02-02-001ï¼\nç¼ºå£è¯´æï¼å½åå·²å¬å 5 æ¡çæ®µï¼å¯ä½ä¸º extract_schema çä»»å¡çº§ä¸ä¸æåèã\næ¥æºé¾æ¥ï¼https://checkthat.ai/brands/airtable/reviewsï¼https://pyairtable.readthedocs.io/en/stable/api.htmlï¼https://apitracker.io/a/airtableï¼https://support.airtable.com/docs/airtable-enterprise-apiï¼https://airtable.com/guides/scale/using-airtable-apiï¼https://themarketingagency.ca/blog/honest-review-airtableï¼https://zite.com/blog/airtable-reviewsï¼https://softwaresuggest.com/compare/capterra-vs-g2-comï¼https://smartsuite.com/blog/airtable-review?338ea48f_page=8\nå½ä¸­çæ®µï¼\n1. [T0104-COLLECT_SOURCES_02_03-001] editorial pipelines:** Linked records tying deadlines, collaborators, and status together make Airtable a natural fit for content calendars and production tracking.\n* **Inventory,  | å¬åå±çº§ï¼TASK | ç¥è¯ææ¡£ï¼TASK-104-T0104-COLLECT-SOURCES-02-03-001 | åçé®ï¼TASK-104-T0104-COLLECT-SOURCES-02-03-001#CHUNK-042 | å½ä¸­åå ï¼AI_DISCOVERED | sourceUrls=https://checkthat.ai/brands/airtable/reviews\n2. [T0104-COLLECT_SOURCES_02_03-001] or schema design.\n\nLook elsewhere if:\n\n* **You only need simple task tracking:** Monday.com or Asana deliver project and portfolio management with less setup and a lower learning c | å¬åå±çº§ï¼TASK | ç¥è¯ææ¡£ï¼TASK-104-T0104-COLLECT-SOURCES-02-03-001 | åçé®ï¼TASK-104-T0104-COLLECT-SOURCES-02-03-001#CHUNK-043 | å½ä¸­åå ï¼AI_DISCOVERED | sourceUrls=https://checkthat.ai/brands/airtable/reviews\n3. [T0104-COLLECT_SOURCES_02_02-001] ts, raising `KeyError` if it does not.\n * **force** (`bool`, default: `False`) â By default, this method will only fetch information from the API if it has not been cached. If call | å¬åå±çº§ï¼TASK | ç¥è¯ææ¡£ï¼TASK-104-T0104-COLLECT-SOURCES-02-02-001 | åçé®ï¼TASK-104-T0104-COLLECT-SOURCES-02-02-001#CHUNK-008 | å½ä¸­åå ï¼AI_DISCOVERED | sourceUrls=https://pyairtable.readthedocs.io/en/stable/api.html\n4. [T0104-COLLECT_SOURCES_02_02-001] baseâs schema and return a list of [`Base`](#pyairtable.Base \"pyairtable.Base\") instances.\n\n Parameters\n : **force** (`bool`, default: `False`) â By default, this method will only  | å¬åå±çº§ï¼TASK | ç¥è¯ææ¡£ï¼TASK-104-T0104-COLLECT-SOURCES-02-02-001 | åçé®ï¼TASK-104-T0104-COLLECT-SOURCES-02-02-001#CHUNK-009 | å½ä¸­åå ï¼AI_DISCOVERED | sourceUrls=https://pyairtable.readthedocs.io/en/stable/api.html\n5. [T0104-COLLECT_SOURCES_02_02-001] the baseâs shares.\n\n \\_urls.tables *= Url(\u0027meta/bases/{id}/tables\u0027)*\n : URL for retrieving the baseâs schema.\n\n \\_urls.collaborators *= Url(\u0027meta/bases/{id}/collaborators\u0027)*\n : URL | å¬åå±çº§ï¼TASK | ç¥è¯ææ¡£ï¼TASK-104-T0104-COLLECT-SOURCES-02-02-001 | åçé®ï¼TASK-104-T0104-COLLECT-SOURCES-02-02-001#CHUNK-023 | å½ä¸­åå ï¼AI_DISCOVERED | sourceUrls=https://pyairtable.readthedocs.io/en/stable/api.html\nå¯å¤ç¨è®°å¿\n1. å½åæªå¬åå°å¯ç¨çæ®µã | è®°å¿å±çº§ï¼SHORT_TERM | æ¥æºå¯¹è±¡ï¼MEMORY_SNAPSHOT | æ¥æºèç¹/å¯¹è±¡ï¼collect_sources_02_03 | versionSource=UNSPECIFIED | invalidationScope=MANUAL_REVIEW | invalidationReason=NOT_EVALUATED | reuseReason=å½åä»»å¡ç­æè®°å¿å¯ä½ä¸ºè¡¥å\u0085\u0085ä¸ä¸æï¼ä½ä»éåæ sourceUrls | sourceUrls=æ \n2. å½åæªå¬åå°å¯ç¨çæ®µã | è®°å¿å±çº§ï¼SHORT_TERM | æ¥æºå¯¹è±¡ï¼MEMORY_SNAPSHOT | æ¥æºèç¹/å¯¹è±¡ï¼collect_sources_02_02 | versionSource=UNSPECIFIED | invalidationScope=MANUAL_REVIEW | invalidationReason=NOT_EVALUATED | reuseReason=å½åä»»å¡ç­æè®°å¿å¯ä½ä¸ºè¡¥å\u0085\u0085ä¸ä¸æï¼ä½ä»éåæ sourceUrls | sourceUrls=æ \n3. å½åæªå¬åå°å¯ç¨çæ®µã | è®°å¿å±çº§ï¼SHORT_TERM | æ¥æºå¯¹è±¡ï¼MEMORY_SNAPSHOT | æ¥æºèç¹/å¯¹è±¡ï¼collect_sources_02_01 | versionSource=UNSPECIFIED | invalidationScope=MANUAL_REVIEW | invalidationReason=NOT_EVALUATED | reuseReason=å½åä»»å¡ç­æè®°å¿å¯ä½ä¸ºè¡¥å\u0085\u0085ä¸ä¸æï¼ä½ä»éåæ sourceUrls | sourceUrls=æ \n4. è¿æ¯ä¸ä¸ªç¨äºæ¬å°æ¼ç¤ºçç¤ºä¾ç«åæè¦ã | è®°å¿å±çº§ï¼DOMAIN | æ¥æºå¯¹è±¡ï¼COMPETITOR_KNOWLEDGE | æ¥æºèç¹/å¯¹è±¡ï¼Notion AI | versionSource=UNSPECIFIED | invalidationScope=MANUAL_REVIEW | invalidationReason=NOT_EVALUATED | reuseReason=å¯ä½ä¸ºè·¨ä»»å¡èæ¯åèï¼ä½ä»éåæ sourceUrls åç¥è¯æ¥æº | sourceUrls=https://example.com\n5. è¿æ¯ä¸ä¸ªç¨äºæ¬å°æ¼ç¤ºçç¤ºä¾ç«åæè¦ã | è®°å¿å±çº§ï¼DOMAIN | æ¥æºå¯¹è±¡ï¼COMPETITOR_KNOWLEDGE | æ¥æºèç¹/å¯¹è±¡ï¼é£ä¹¦ç¥è¯åº | versionSource=UNSPECIFIED | invalidationScope=MANUAL_REVIEW | invalidationReason=NOT_EVALUATED | reuseReason=å¯ä½ä¸ºè·¨ä»»å¡èæ¯åèï¼ä½ä»éåæ sourceUrls åç¥è¯æ¥æº | sourceUrls=https://example.com\n6. è¿æ¯ä¸ä¸ªç¨äºæ¬å°æ¼ç¤ºçç¤ºä¾ç«åæè¦ã | è®°å¿å±çº§ï¼DOMAIN | æ¥æºå¯¹è±¡ï¼COMPETITOR_KNOWLEDGE | æ¥æºèç¹/å¯¹è±¡ï¼Notion AI | versionSource=UNSPECIFIED | invalidationScope=MANUAL_REVIEW | invalidationReason=NOT_EVALUATED | reuseReason=å¯ä½ä¸ºè·¨ä»»å¡èæ¯åèï¼ä½ä»éåæ sourceUrls åç¥è¯æ¥æº | sourceUrls=https://example.com\nä»»å¡å³æ¶ä¸ä¸æ\n1. collect_sources_01_02 -\u003e {\"projectionType\":\"SEARCH_SHARED_PROJECTION_V1\",\"searchAuditSummary\":{\"selectedCount\":0,\"degradationReason\":\"HARD_DEADLINE_REACHED\",\"sourceUrls\":[\"https://www.notion.so/docs\",\"https://www.notion.so/documentation\",\"https://www.notion.so/help\",\"https://www.notion.so/guide\"]},\"selectedTargets\":[],\"sourceUrls\":[\"https://www.notion.so/docs\",\"https://www.notion.so/documentation\",\"https://www.notion.so/help\",\"https://www.notion.so/guide\"],\"issueFlags\":[\"SOURCE_URLS_BACKFILLED\"],\"selectedUrls\":[],\"degradationReason\":\"HARD_DEADLINE_REACHED\"}\n2. collect_sources_02_03 -\u003e {\"projectionType\":\"SEARCH_SHARED_PROJECTION_V1\",\"recoveryCheckpoint\":\"SELECT_TARGETS\",\"searchAuditSummary\":{\"selectedCount\":5,\"degradationReason\":\"SEARCH_TIMEOUT_BEFORE_SUPPLEMENT\",\"fallbackDecision\":\"SKIP_SUPPLEMENT_AND_FALLBACK_PLANNED\",\"recoveryCheckpoint\":\"SELECT_TARGETS\",\"sourceUrls\":[\"https://checkthat.ai/brands/airtable/reviews\",\"https://themarketingagency.ca/blog/honest-review-airtable\",\"https://www.zite.com/blog/airtable-reviews\",\"https://zite.com/blog/airtable-reviews\",\"https://www.softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://www.smartsuite.com/blog/airtable-review?338ea48f_page=8\",\"https://smartsuite.com/blog/airtable-review?338ea48f_page=8\"],\"tavilyFastLaneAudit\":{\"queryModes\":[\"OPEN_WEB\"],\"queryOrigins\":[\"BOOTSTRAP\"],\"requestedScopes\":[],\"effectiveScopes\":[],\"queriesSent\":1,\"totalResults\":5,\"fastLaneUsableCount\":5,\"fastLaneRejectedCount\":0,\"rejectionReasons\":{},\"bootstrapTriggered\":true,\"fallbackTriggered\":false,\"tavilyRequestIds\":[\"d547df0a-1f10-4df3-8d07-ed43cfd061cb\"],\"playwrightInvocationBaselineHint\":5,\"winnerRawFetchCount\":0,\"fieldEvidenceQueryExecutions\":[],\"fieldDistribution\":{},\"sourceTypeDistribution\":{},\"scopeExpansionSources\":{}}},\"selectedTargets\":[{\"url\":\"https://checkthat.ai/brands/airtable/reviews\",\"title\":\"Airtable Reviews 2026: What 7800+ Users Actually Think\",\"selectionStage\":\"VERIFIED\",\"selectionReason\":\"Tavily prefetch æ­£æå¯ç¨\",\"discoveryMethod\":\"TAVILY_PHASE1_BOOTSTRAP\",\"tavilyQueryMode\":\"OPEN_WEB\",\"qualityTier\":\"STRONG\",\"fastLaneUsable\":true,\"prefetchedRawContentLength\":30983,\"skipNetworkVerification\":true,\"reusedCollectedPage\":false,\"sourceUrls\":[\"https://checkthat.ai/brands/airtable/reviews\",\"https://themarketingagency.ca/blog/honest-review-airtable\",\"https://www.zite.com/blog/airtable-reviews\",\"https://zite.com/blog/airtable-reviews\",\"https://www.softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://www.smartsuite.com/blog/airtable-review?338ea48f_page=8\",\"https://smartsuite.com/blog/airtable-review?338ea48f_page=8\"]},{\"url\":\"https://themarketingagency.ca/blog/honest-review-airtable\",\"title\":\"Honest Review of Airtable for 2026 - The Marketing Agency\",\"selectionStage\":\"VERIFIED\",\"selectionReason\":\"Tavily prefetch æ­£æå¯ç¨\",\"discoveryMethod\":\"TAVILY_PHASE1_BOOTSTRAP\",\"tavilyQueryMode\":\"OPEN_WEB\",\"qualityTier\":\"STRONG\",\"fastLaneUsable\":true,\"prefetchedRawContentLength\":26791,\"skipNetworkVerification\":true,\"reusedCollectedPage\":false,\"sourceUrls\":[\"https://checkthat.ai/brands/airtable/reviews\",\"https://themarketingagency.ca/blog/honest-review-airtable\",\"https://www.zite.com/blog/airtable-reviews\",\"https://zite.com/blog/airtable-reviews\",\"https://www.softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://www.smartsuite.com/blog/airtable-review?338ea48f_page=8\",\"https://smartsuite.com/blog/airtable-review?338ea48f_page=8\"]},{\"url\":\"https://zite.com/blog/airtable-reviews\",\"title\":\"Airtable Review: Pros, Cons, \u0026 Is It Worth It in 2026?\",\"selectionStage\":\"VERIFIED\",\"selectionReason\":\"Tavily prefetch æ­£æå¯ç¨\",\"discoveryMethod\":\"TAVILY_PHASE1_BOOTSTRAP\",\"tavilyQueryMode\":\"OPEN_WEB\",\"qualityTier\":\"STRONG\",\"fastLaneUsable\":true,\"prefetchedRawContentLength\":9699,\"skipNetworkVerification\":true,\"reusedCollectedPage\":false,\"sourceUrls\":[\"https://checkthat.ai/brands/airtable/reviews\",\"https://themarketingagency.ca/blog/honest-review-airtable\",\"https://www.zite.com/blog/airtable-reviews\",\"https://zite.com/blog/airtable-reviews\",\"https://www.softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://www.smartsuite.com/blog/airtable-review?338ea48f_page=8\",\"https://smartsuite.com/blog/airtable-review?338ea48f_page=8\"]},{\"url\":\"https://softwaresuggest.com/compare/capterra-vs-g2-com\",\"title\":\"Compare Capterra vs G2.com in July 2026\",\"selectionStage\":\"VERIFIED\",\"selectionReason\":\"Tavily prefetch æ­£æå¯ç¨\",\"discoveryMethod\":\"TAVILY_PHASE1_BOOTSTRAP\",\"tavilyQueryMode\":\"OPEN_WEB\",\"qualityTier\":\"STRONG\",\"fastLaneUsable\":true,\"prefetchedRawContentLength\":16485,\"skipNetworkVerification\":true,\"reusedCollectedPage\":false,\"sourceUrls\":[\"https://checkthat.ai/brands/airtable/reviews\",\"https://themarketingagency.ca/blog/honest-review-airtable\",\"https://www.zite.com/blog/airtable-reviews\",\"https://zite.com/blog/airtable-reviews\",\"https://www.softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://www.smartsuite.com/blog/airtable-review?338ea48f_page=8\",\"https://smartsuite.com/blog/airtable-review?338ea48f_page=8\"]},{\"url\":\"https://smartsuite.com/blog/airtable-review?338ea48f_page=8\",\"title\":\"Airtable Review: Is It Worth It in 2026? [In-Depth]\",\"selectionStage\":\"VERIFIED\",\"selectionReason\":\"Tavily prefetch æ­£æå¯ç¨\",\"discoveryMethod\":\"TAVILY_PHASE1_BOOTSTRAP\",\"tavilyQueryMode\":\"OPEN_WEB\",\"qualityTier\":\"STRONG\",\"fastLaneUsable\":true,\"prefetchedRawContentLength\":33456,\"skipNetworkVerification\":true,\"reusedCollectedPage\":false,\"sourceUrls\":[\"https://checkthat.ai/brands/airtable/reviews\",\"https://themarketingagency.ca/blog/honest-review-airtable\",\"https://www.zite.com/blog/airtable-reviews\",\"https://zite.com/blog/airtable-reviews\",\"https://www.softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://www.smartsuite.com/blog/airtable-review?338ea48f_page=8\",\"https://smartsuite.com/blog/airtable-review?338ea48f_page=8\"]}],\"sourceUrls\":[\"https://checkthat.ai/brands/airtable/reviews\",\"https://themarketingagency.ca/blog/honest-review-airtable\",\"https://www.zite.com/blog/airtable-reviews\",\"https://zite.com/blog/airtable-reviews\",\"https://www.softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://www.smartsuite.com/blog/airtable-review?338ea48f_page=8\",\"https://smartsuite.com/blog/airtable-review?338ea48f_page=8\"],\"issueFlags\":[\"TAVILY_RAW_CONTENT_READY\",\"TAVILY_PREFETCHED_CONTENT_CONSUMED\",\"TAVILY_STRUCTURED_BLOCK_COUNT=1\",\"FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG\",\"FIELD_RELEVANCE_PARTIAL\",\"DUPLICATE_CANONICAL_URL\",\"PARTIAL_COLLECTION_FAILURE\"],\"selectedUrls\":[\"https://checkthat.ai/brands/airtable/reviews\",\"https://themarketingagency.ca/blog/honest-review-airtable\",\"https://zite.com/blog/airtable-reviews\",\"https://softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://smartsuite.com/blog/airtable-review?338ea48f_page=8\"],\"fallbackDecision\":\"SKIP_SUPPLEMENT_AND_FALLBACK_PLANNED\",\"degradationReason\":\"SEARCH_TIMEOUT_BEFORE_SUPPLEMENT\"}\n3. collect_sources_01_03 -\u003e {\"projectionType\":\"SEARCH_SHARED_PROJECTION_V1\",\"searchAuditSummary\":{\"selectedCount\":0,\"degradationReason\":\"HARD_DEADLINE_REACHED\",\"sourceUrls\":[\"https://www.g2.com/search?query=Notion\",\"https://www.capterra.com/search/?query=Notion\",\"https://www.notion.so/case-studies\",\"https://www.notion.so/compare\",\"https://www.notion.so/customers\"]},\"selectedTargets\":[],\"sourceUrls\":[\"https://www.g2.com/search?query=Notion\",\"https://www.capterra.com/search/?query=Notion\",\"https://www.notion.so/case-studies\",\"https://www.notion.so/compare\",\"https://www.notion.so/customers\"],\"issueFlags\":[\"SOURCE_URLS_BACKFILLED\"],\"selectedUrls\":[],\"degradationReason\":\"HARD_DEADLINE_REACHED\"}\n4. collect_sources_02_01 -\u003e {\"projectionType\":\"SEARCH_SHARED_PROJECTION_V1\",\"searchAuditSummary\":{\"selectedCount\":0,\"degradationReason\":\"HARD_DEADLINE_REACHED\",\"sourceUrls\":[\"https://www.airtable.com\"]},\"selectedTargets\":[],\"sourceUrls\":[\"https://www.airtable.com\"],\"issueFlags\":[\"SOURCE_URLS_BACKFILLED\"],\"selectedUrls\":[],\"degradationReason\":\"HARD_DEADLINE_REACHED\"}\n5. collect_sources_01_01 -\u003e {\"projectionType\":\"SEARCH_SHARED_PROJECTION_V1\",\"recoveryCheckpoint\":\"SELECT_TARGETS\",\"searchAuditSummary\":{\"selectedCount\":1,\"degradationReason\":\"HARD_DEADLINE_REACHED\",\"fallbackDecision\":\"SUPPLEMENTED_BUT_SKIP_VERIFY_DUE_COLLECTOR_HARD_DEADLINE\",\"recoveryCheckpoint\":\"SELECT_TARGETS\",\"sourceUrls\":[\"https://www.notion.so\",\"https://en.wikipedia.org/wiki/Notion_(productivity_software)\"],\"tavilyFastLaneAudit\":{\"queryModes\":[\"TRUSTED_WEB_EXPANSION\"],\"queryOrigins\":[\"BOOTSTRAP\"],\"requestedScopes\":[],\"effectiveScopes\":[],\"queriesSent\":1,\"totalResults\":5,\"fastLaneUsableCount\":5,\"fastLaneRejectedCount\":0,\"rejectionReasons\":{},\"bootstrapTriggered\":true,\"fallbackTriggered\":false,\"tavilyRequestIds\":[\"25ffbcd6-3740-4cb8-b09d-799591b99be0\"],\"playwrightInvocationBaselineHint\":1,\"winnerRawFetchCount\":0,\"fieldEvidenceQueryExecutions\":[],\"fieldDistribution\":{},\"sourceTypeDistribution\":{},\"scopeExpansionSources\":{}}},\"selectedTargets\":[{\"url\":\"https://en.wikipedia.org/wiki/Notion_(productivity_software)\",\"title\":\"Notion (productivity software) - Wikipedia\",\"selectionStage\":\"VERIFIED\",\"selectionReason\":\"Tavily prefetch æ­£æå¯ç¨\",\"discoveryMethod\":\"TAVILY_PHASE1_BOOTSTRAP\",\"tavilyQueryMode\":\"TRUSTED_WEB_EXPANSION\",\"qualityTier\":\"STRONG\",\"fastLaneUsable\":true,\"prefetchedRawContentLength\":29993,\"skipNetworkVerification\":true,\"reusedCollectedPage\":false,\"sourceUrls\":[\"https://www.notion.so\",\"https://en.wikipedia.org/wiki/Notion_(productivity_software)\"]}],\"sourceUrls\":[\"https://www.notion.so\",\"https://en.wikipedia.org/wiki/Notion_(productivity_software)\"],\"issueFlags\":[\"SOURCE_URLS_BACKFILLED\"],\"selectedUrls\":[\"https://en.wikipedia.org/wiki/Notion_(productivity_software)\"],\"fallbackDecision\":\"SUPPLEMENTED_BUT_SKIP_VERIFY_DUE_COLLECTOR_HARD_DEADLINE\",\"degradationReason\":\"HARD_DEADLINE_REACHED\"}\n6. collect_sources_02_02 -\u003e {\"projectionType\":\"SEARCH_SHARED_PROJECTION_V1\",\"recoveryCheckpoint\":\"SELECT_TARGETS\",\"searchAuditSummary\":{\"selectedCount\":4,\"degradationReason\":\"HARD_DEADLINE_REACHED\",\"fallbackDecision\":\"SKIP_SUPPLEMENT_COLLECTOR_HARD_DEADLINE\",\"recoveryCheckpoint\":\"SELECT_TARGETS\",\"sourceUrls\":[\"https://pyairtable.readthedocs.io/en/stable/api.html\",\"https://apitracker.io/a/airtable\",\"https://support.airtable.com/docs/airtable-enterprise-api\",\"https://www.airtable.com/guides/scale/using-airtable-api\",\"https://airtable.com/guides/scale/using-airtable-api\"],\"tavilyFastLaneAudit\":{\"queryModes\":[\"TRUSTED_WEB_EXPANSION\"],\"queryOrigins\":[\"BOOTSTRAP\"],\"requestedScopes\":[],\"effectiveScopes\":[],\"queriesSent\":1,\"totalResults\":5,\"fastLaneUsableCount\":5,\"fastLaneRejectedCount\":0,\"rejectionReasons\":{},\"bootstrapTriggered\":true,\"fallbackTriggered\":false,\"tavilyRequestIds\":[\"f4691314-fa50-42d3-afdf-a5c44e6a1c2c\"],\"playwrightInvocationBaselineHint\":4,\"winnerRawFetchCount\":0,\"fieldEvidenceQueryExecutions\":[],\"fieldDistribution\":{},\"sourceTypeDistribution\":{},\"scopeExpansionSources\":{}}},\"selectedTargets\":[{\"url\":\"https://pyairtable.readthedocs.io/en/stable/api.html\",\"title\":\"API Reference â pyAirtable documentation\",\"selectionStage\":\"VERIFIED\",\"selectionReason\":\"Tavily prefetch æ­£æå¯ç¨\",\"discoveryMethod\":\"TAVILY_PHASE1_BOOTSTRAP\",\"tavilyQueryMode\":\"TRUSTED_WEB_EXPANSION\",\"qualityTier\":\"STRONG\",\"fastLaneUsable\":true,\"prefetchedRawContentLength\":312875,\"skipNetworkVerification\":true,\"reusedCollectedPage\":false,\"sourceUrls\":[\"https://pyairtable.readthedocs.io/en/stable/api.html\",\"https://apitracker.io/a/airtable\",\"https://support.airtable.com/docs/airtable-enterprise-api\",\"https://www.airtable.com/guides/scale/using-airtable-api\",\"https://airtable.com/guides/scale/using-airtable-api\"]},{\"url\":\"https://apitracker.io/a/airtable\",\"title\":\"Airtable API - Developer docs, APIs, SDKs, and auth. | API Tracker\",\"selectionStage\":\"VERIFIED\",\"selectionReason\":\"Tavily prefetch æ­£æå¯ç¨\",\"discoveryMethod\":\"TAVILY_PHASE1_BOOTSTRAP\",\"tavilyQueryMode\":\"TRUSTED_WEB_EXPANSION\",\"qualityTier\":\"STRONG\",\"fastLaneUsable\":true,\"prefetchedRawContentLength\":3297,\"skipNetworkVerification\":true,\"reusedCollectedPage\":false,\"sourceUrls\":[\"https://pyairtable.readthedocs.io/en/stable/api.html\",\"https://apitracker.io/a/airtable\",\"https://support.airtable.com/docs/airtable-enterprise-api\",\"https://www.airtable.com/guides/scale/using-airtable-api\",\"https://airtable.com/guides/scale/using-airtable-api\"]},{\"url\":\"https://support.airtable.com/docs/airtable-enterprise-api\",\"title\":\"Airtable Enterprise API\",\"selectionStage\":\"VERIFIED\",\"selectionReason\":\"Tavily prefetch æ­£æå¯ç¨\",\"discoveryMethod\":\"TAVILY_PHASE1_BOOTSTRAP\",\"tavilyQueryMode\":\"TRUSTED_WEB_EXPANSION\",\"qualityTier\":\"STRONG\",\"fastLaneUsable\":true,\"prefetchedRawContentLength\":7767,\"skipNetworkVerification\":true,\"reusedCollectedPage\":false,\"sourceUrls\":[\"https://pyairtable.readthedocs.io/en/stable/api.html\",\"https://apitracker.io/a/airtable\",\"https://support.airtable.com/docs/airtable-enterprise-api\",\"https://www.airtable.com/guides/scale/using-airtable-api\",\"https://airtable.com/guides/scale/using-airtable-api\"]},{\"url\":\"https://airtable.com/guides/scale/using-airtable-api\",\"title\":\"Using Airtableâs API | Airtable\",\"selectionStage\":\"VERIFIED\",\"selectionReason\":\"Tavily prefetch æ­£æå¯ç¨\",\"discoveryMethod\":\"TAVILY_PHASE1_BOOTSTRAP\",\"tavilyQueryMode\":\"TRUSTED_WEB_EXPANSION\",\"qualityTier\":\"STRONG\",\"fastLaneUsable\":true,\"prefetchedRawContentLength\":6072,\"skipNetworkVerification\":true,\"reusedCollectedPage\":false,\"sourceUrls\":[\"https://pyairtable.readthedocs.io/en/stable/api.html\",\"https://apitracker.io/a/airtable\",\"https://support.airtable.com/docs/airtable-enterprise-api\",\"https://www.airtable.com/guides/scale/using-airtable-api\",\"https://airtable.com/guides/scale/using-airtable-api\"]}],\"sourceUrls\":[\"https://pyairtable.readthedocs.io/en/stable/api.html\",\"https://apitracker.io/a/airtable\",\"https://support.airtable.com/docs/airtable-enterprise-api\",\"https://www.airtable.com/guides/scale/using-airtable-api\",\"https://airtable.com/guides/scale/using-airtable-api\"],\"issueFlags\":[\"TAVILY_RAW_CONTENT_READY\",\"TAVILY_PREFETCHED_CONTENT_CONSUMED\",\"TAVILY_STRUCTURED_BLOCK_COUNT=2\",\"FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG\",\"TAVILY_STRUCTURED_BLOCK_COUNT=0\",\"TAVILY_STRUCTURED_BLOCK_COUNT=1\",\"FIELD_RELEVANCE_PARTIAL\",\"COLLECT_FAILED\",\"CONTENT_GAP\",\"COLLECTION_RESULT_MISSING\",\"WEAK_MAIN_CONTENT\",\"EVIDENCE_REPAIR_REQUIRED\",\"FIELD_RELEVANCE_WEAK\",\"HIGH_TRUST_LOW_USABILITY\",\"SCORE_CONTRADICTION_DETECTED\",\"DUPLICATE_CANONICAL_URL\",\"REPAIR_QUERY_PROPOSED\",\"PARTIAL_COLLECTION_FAILURE\"],\"selectedUrls\":[\"https://pyairtable.readthedocs.io/en/stable/api.html\",\"https://apitracker.io/a/airtable\",\"https://support.airtable.com/docs/airtable-enterprise-api\",\"https://airtable.com/guides/scale/using-airtable-api\"],\"fallbackDecision\":\"SKIP_SUPPLEMENT_COLLECTOR_HARD_DEADLINE\",\"degradationReason\":\"HARD_DEADLINE_REACHED\"}\n7. collector_evidence_readiness -\u003e {\"ready\":true,\"degraded\":true,\"reason\":\"STAGE1_COLLECTOR_QUORUM_READY\",\"satisfiedFamilies\":[\"DOCS\",\"REVIEW\"],\"missingFamilies\":[\"OFFICIAL\",\"DOCS\",\"REVIEW\",\"PRICING\"],\"auditFlags\":[\"HARD_DEADLINE_REACHED\",\"SEARCH_TIMEOUT_BEFORE_SUPPLEMENT\",\"OPTIONAL_PRICING_NOT_READY\"],\"sourceUrls\":[\"https://www.notion.so\",\"https://www.notion.so/docs\",\"https://www.notion.so/documentation\",\"https://www.notion.so/help\",\"https://www.notion.so/guide\",\"https://www.g2.com/search?query=Notion\",\"https://www.capterra.com/search/?query=Notion\",\"https://www.notion.so/case-studies\",\"https://www.notion.so/compare\",\"https://www.notion.so/customers\",\"https://www.airtable.com\",\"https://pyairtable.readthedocs.io/en/stable/api.html\",\"https://apitracker.io/a/airtable\",\"https://support.airtable.com/docs/airtable-enterprise-api\",\"https://www.airtable.com/guides/scale/using-airtable-api\",\"https://airtable.com/guides/scale/using-airtable-api\",\"https://checkthat.ai/brands/airtable/reviews\",\"https://themarketingagency.ca/blog/honest-review-airtable\",\"https://www.zite.com/blog/airtable-reviews\",\"https://zite.com/blog/airtable-reviews\",\"https://www.softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://softwaresuggest.com/compare/capterra-vs-g2-com\",\"https://www.smartsuite.com/blog/airtable-review?338ea48f_page=8\",\"https://smartsuite.com/blog/airtable-review?338ea48f_page=8\"]}",
+    "issueFlags":  [
+                       "PROMPT_CONTENT_TRUNCATED",
+                       "SKIPPED_UNUSABLE_EVIDENCE",
+                       "PROMPT_BUDGET_SKIPPED",
+                       "STAGE1_COLLECTOR_QUORUM_READY",
+                       "COLLECTOR_QUORUM_DEGRADED",
+                       "COLLECTOR_FAMILY_MISSING_OFFICIAL",
+                       "COLLECTOR_FAMILY_MISSING_DOCS",
+                       "COLLECTOR_FAMILY_MISSING_REVIEW",
+                       "COLLECTOR_FAMILY_MISSING_PRICING",
+                       "HARD_DEADLINE_REACHED",
+                       "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT",
+                       "OPTIONAL_PRICING_NOT_READY",
+                       "OPTIONAL_FIELD_DEFERRED"
+                   ],
+    "evidenceFragments":  [
+                              {
+                                  "stage":  "EXTRACT",
+                                  "competitorName":  "Airtable",
+                                  "fieldName":  "knowledge",
+                                  "fieldLabel":  null,
+                                  "sectionKey":  null,
+                                  "sectionTitle":  null,
+                                  "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                  "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                  "title":  "API Reference â pyAirtable documentation",
+                                  "snippet":  null,
+                                  "coverageStatus":  null,
+                                  "gapComment":  null,
+                                  "issueFlags":  [
+                                                     "PROMPT_CONTENT_TRUNCATED",
+                                                     "SKIPPED_UNUSABLE_EVIDENCE",
+                                                     "PROMPT_BUDGET_SKIPPED",
+                                                     "STAGE1_COLLECTOR_QUORUM_READY",
+                                                     "COLLECTOR_QUORUM_DEGRADED",
+                                                     "COLLECTOR_FAMILY_MISSING_OFFICIAL",
+                                                     "COLLECTOR_FAMILY_MISSING_DOCS",
+                                                     "COLLECTOR_FAMILY_MISSING_REVIEW",
+                                                     "COLLECTOR_FAMILY_MISSING_PRICING",
+                                                     "HARD_DEADLINE_REACHED",
+                                                     "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT",
+                                                     "OPTIONAL_PRICING_NOT_READY",
+                                                     "OPTIONAL_FIELD_DEFERRED"
+                                                 ]
+                              }
+                          ],
+    "sectionEvidenceBundles":  [
+                                   {
+                                       "stage":  "EXTRACT",
+                                       "sectionType":  "SECTION",
+                                       "sectionKey":  "summary",
+                                       "sectionTitle":  "äº§åæ¦è§",
+                                       "summary":  "Airtable provides a REST API (pyAirtable) that enables developers to interact with bases and tables programmatically. En...",
+                                       "gapSummary":  null,
+                                       "fieldNames":  [
+                                                          "summary"
+                                                      ],
+                                       "missingFields":  [
+
+                                                         ],
+                                       "sourceUrls":  [
+                                                          "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                      ],
+                                       "issueFlags":  [
+
+                                                      ],
+                                       "evidenceFragments":  [
+                                                                 {
+                                                                     "stage":  "EXTRACT",
+                                                                     "competitorName":  "Airtable",
+                                                                     "fieldName":  "summary",
+                                                                     "fieldLabel":  "äº§åæ¦è§",
+                                                                     "sectionKey":  "summary",
+                                                                     "sectionTitle":  "äº§åæ¦è§",
+                                                                     "evidenceId":  null,
+                                                                     "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                     "title":  null,
+                                                                     "snippet":  null,
+                                                                     "coverageStatus":  "TRACEABLE",
+                                                                     "gapComment":  null,
+                                                                     "issueFlags":  [
+
+                                                                                    ]
+                                                                 }
+                                                             ]
+                                   },
+                                   {
+                                       "stage":  "EXTRACT",
+                                       "sectionType":  "SECTION",
+                                       "sectionKey":  "positioning",
+                                       "sectionTitle":  "å¸åºå®ä½",
+                                       "summary":  null,
+                                       "gapSummary":  "ç¼ºå°å­æ®µè¯æ®ï¼positioning",
+                                       "fieldNames":  [
+                                                          "positioning"
+                                                      ],
+                                       "missingFields":  [
+                                                             "positioning"
+                                                         ],
+                                       "sourceUrls":  [
+
+                                                      ],
+                                       "issueFlags":  [
+                                                          "NO_USABLE_EVIDENCE",
+                                                          "SECTION_EVIDENCE_GAP"
+                                                      ],
+                                       "evidenceFragments":  [
+                                                                 {
+                                                                     "stage":  "EXTRACT",
+                                                                     "competitorName":  "Airtable",
+                                                                     "fieldName":  "positioning",
+                                                                     "fieldLabel":  "å¸åºå®ä½",
+                                                                     "sectionKey":  "positioning",
+                                                                     "sectionTitle":  "å¸åºå®ä½",
+                                                                     "evidenceId":  null,
+                                                                     "sourceUrl":  null,
+                                                                     "title":  null,
+                                                                     "snippet":  null,
+                                                                     "coverageStatus":  "EMPTY",
+                                                                     "gapComment":  "å­æ®µææ å\u0085å®¹",
+                                                                     "issueFlags":  [
+                                                                                        "EMPTY",
+                                                                                        "MISSING_SOURCE_URL"
+                                                                                    ]
+                                                                 }
+                                                             ]
+                                   },
+                                   {
+                                       "stage":  "EXTRACT",
+                                       "sectionType":  "SECTION",
+                                       "sectionKey":  "targetUsers",
+                                       "sectionTitle":  "ç®æ ç¨æ·",
+                                       "summary":  "[\"Developers\",\"Teams requiring programmatic data access\"]",
+                                       "gapSummary":  null,
+                                       "fieldNames":  [
+                                                          "targetUsers"
+                                                      ],
+                                       "missingFields":  [
+
+                                                         ],
+                                       "sourceUrls":  [
+                                                          "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                      ],
+                                       "issueFlags":  [
+
+                                                      ],
+                                       "evidenceFragments":  [
+                                                                 {
+                                                                     "stage":  "EXTRACT",
+                                                                     "competitorName":  "Airtable",
+                                                                     "fieldName":  "targetUsers",
+                                                                     "fieldLabel":  "ç®æ ç¨æ·",
+                                                                     "sectionKey":  "targetUsers",
+                                                                     "sectionTitle":  "ç®æ ç¨æ·",
+                                                                     "evidenceId":  null,
+                                                                     "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                     "title":  null,
+                                                                     "snippet":  null,
+                                                                     "coverageStatus":  "TRACEABLE",
+                                                                     "gapComment":  null,
+                                                                     "issueFlags":  [
+
+                                                                                    ]
+                                                                 }
+                                                             ]
+                                   },
+                                   {
+                                       "stage":  "EXTRACT",
+                                       "sectionType":  "SECTION",
+                                       "sectionKey":  "coreFeatures",
+                                       "sectionTitle":  "æ ¸å¿è½å",
+                                       "summary":  "[{\"name\":\"REST API\",\"description\":\"Programmatic access to Airtable bases and tables via HTTP API, supporting operations ...",
+                                       "gapSummary":  null,
+                                       "fieldNames":  [
+                                                          "coreFeatures"
+                                                      ],
+                                       "missingFields":  [
+
+                                                         ],
+                                       "sourceUrls":  [
+                                                          "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                      ],
+                                       "issueFlags":  [
+
+                                                      ],
+                                       "evidenceFragments":  [
+                                                                 {
+                                                                     "stage":  "EXTRACT",
+                                                                     "competitorName":  "Airtable",
+                                                                     "fieldName":  "coreFeatures",
+                                                                     "fieldLabel":  "æ ¸å¿è½å",
+                                                                     "sectionKey":  "coreFeatures",
+                                                                     "sectionTitle":  "æ ¸å¿è½å",
+                                                                     "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                                     "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                     "title":  "API Reference â pyAirtable documentation",
+                                                                     "snippet":  null,
+                                                                     "coverageStatus":  "TRACEABLE",
+                                                                     "gapComment":  null,
+                                                                     "issueFlags":  [
+
+                                                                                    ]
+                                                                 }
+                                                             ]
+                                   },
+                                   {
+                                       "stage":  "EXTRACT",
+                                       "sectionType":  "SECTION",
+                                       "sectionKey":  "pricing",
+                                       "sectionTitle":  "å®ä»·ç­ç¥",
+                                       "summary":  "{\"note\":\"Enterprise features (e.g., enterprise_account_id) are only available on Enterprise billing plans. Detailed pric...",
+                                       "gapSummary":  null,
+                                       "fieldNames":  [
+                                                          "pricing"
+                                                      ],
+                                       "missingFields":  [
+
+                                                         ],
+                                       "sourceUrls":  [
+                                                          "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                      ],
+                                       "issueFlags":  [
+
+                                                      ],
+                                       "evidenceFragments":  [
+                                                                 {
+                                                                     "stage":  "EXTRACT",
+                                                                     "competitorName":  "Airtable",
+                                                                     "fieldName":  "pricing",
+                                                                     "fieldLabel":  "å®ä»·ç­ç¥",
+                                                                     "sectionKey":  "pricing",
+                                                                     "sectionTitle":  "å®ä»·ç­ç¥",
+                                                                     "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                                     "sourceUrl":  "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                     "title":  "API Reference â pyAirtable documentation",
+                                                                     "snippet":  null,
+                                                                     "coverageStatus":  "TRACEABLE",
+                                                                     "gapComment":  null,
+                                                                     "issueFlags":  [
+
+                                                                                    ]
+                                                                 }
+                                                             ]
+                                   },
+                                   {
+                                       "stage":  "EXTRACT",
+                                       "sectionType":  "SECTION",
+                                       "sectionKey":  "strengths",
+                                       "sectionTitle":  "ä¼å¿å¤æ­",
+                                       "summary":  "[]",
+                                       "gapSummary":  "ç¼ºå°å­æ®µè¯æ®ï¼strengths",
+                                       "fieldNames":  [
+                                                          "strengths"
+                                                      ],
+                                       "missingFields":  [
+                                                             "strengths"
+                                                         ],
+                                       "sourceUrls":  [
+
+                                                      ],
+                                       "issueFlags":  [
+                                                          "NO_USABLE_EVIDENCE",
+                                                          "OPTIONAL_SECTION_EVIDENCE_GAP"
+                                                      ],
+                                       "evidenceFragments":  [
+                                                                 {
+                                                                     "stage":  "EXTRACT",
+                                                                     "competitorName":  "Airtable",
+                                                                     "fieldName":  "strengths",
+                                                                     "fieldLabel":  "ä¼å¿å¤æ­",
+                                                                     "sectionKey":  "strengths",
+                                                                     "sectionTitle":  "ä¼å¿å¤æ­",
+                                                                     "evidenceId":  null,
+                                                                     "sourceUrl":  null,
+                                                                     "title":  null,
+                                                                     "snippet":  null,
+                                                                     "coverageStatus":  "EMPTY",
+                                                                     "gapComment":  "å­æ®µææ å\u0085å®¹",
+                                                                     "issueFlags":  [
+                                                                                        "EMPTY",
+                                                                                        "MISSING_SOURCE_URL"
+                                                                                    ]
+                                                                 }
+                                                             ]
+                                   },
+                                   {
+                                       "stage":  "EXTRACT",
+                                       "sectionType":  "SECTION",
+                                       "sectionKey":  "weaknesses",
+                                       "sectionTitle":  "ç­æ¿ä¸é£é©",
+                                       "summary":  "[]",
+                                       "gapSummary":  "ç¼ºå°å­æ®µè¯æ®ï¼weaknesses",
+                                       "fieldNames":  [
+                                                          "weaknesses"
+                                                      ],
+                                       "missingFields":  [
+                                                             "weaknesses"
+                                                         ],
+                                       "sourceUrls":  [
+
+                                                      ],
+                                       "issueFlags":  [
+                                                          "NO_USABLE_EVIDENCE",
+                                                          "OPTIONAL_SECTION_EVIDENCE_GAP"
+                                                      ],
+                                       "evidenceFragments":  [
+                                                                 {
+                                                                     "stage":  "EXTRACT",
+                                                                     "competitorName":  "Airtable",
+                                                                     "fieldName":  "weaknesses",
+                                                                     "fieldLabel":  "ç­æ¿ä¸é£é©",
+                                                                     "sectionKey":  "weaknesses",
+                                                                     "sectionTitle":  "ç­æ¿ä¸é£é©",
+                                                                     "evidenceId":  null,
+                                                                     "sourceUrl":  null,
+                                                                     "title":  null,
+                                                                     "snippet":  null,
+                                                                     "coverageStatus":  "EVIDENCE_NOT_COVERING",
+                                                                     "gapComment":  "å½åè¯æ®æªè¦çè¯¥å­æ®µ",
+                                                                     "issueFlags":  [
+                                                                                        "EVIDENCE_NOT_COVERING",
+                                                                                        "MISSING_SOURCE_URL"
+                                                                                    ]
+                                                                 }
+                                                             ]
+                                   }
+                               ],
+    "downstreamEvidenceViews":  [
+                                    {
+                                        "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                        "competitorName":  "Airtable",
+                                        "sourceType":  "DOCS",
+                                        "title":  "API Reference â pyAirtable documentation",
+                                        "content":  "",
+                                        "sourceUrls":  [
+                                                           "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                       ],
+                                        "issueFlags":  [
+                                                           "PROMPT_CONTENT_TRUNCATED"
+                                                       ],
+                                        "qualitySignals":  [
+                                                               "TAVILY_RAW_CONTENT_READY",
+                                                               "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                               "TAVILY_STRUCTURED_BLOCK_COUNT=2",
+                                                               "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG"
+                                                           ],
+                                        "structuredBlocks":  [
+                                                                 {
+                                                                     "blockType":  "PRICING_BLOCK",
+                                                                     "title":  "Pricing",
+                                                                     "summary":  "enterprise(*enterprise\\_account\\_id*)[[source]](_modules/pyairtable/api/api.html#Api.enterprise)[Â¶](#pyairtable.Api.enterprise \"Permalink to this definition\")\n:   â  This feature is only available on Enterprise billing plans.",
+                                                                     "content":  null,
+                                                                     "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                     "sourceUrls":  [
+
+                                                                                    ]
+                                                                 },
+                                                                 {
+                                                                     "blockType":  "DEVELOPER_DOCS_BLOCK",
+                                                                     "title":  "Developer Docs",
+                                                                     "summary":  "\\_\\_init\\_\\_(*api\\_key*, *\\**, *timeout=None*, *retry\\_strategy=True*, *endpoint\\_url=\u0027https://api.airtable.com\u0027*, *use\\_field\\_ids=False*)[[source]](_modules/pyairtable/api/api.html#Api.__init__)[Â¶](#pyairtable.Api.__init__ \"Permalink to this definition\")\n:   Parameters\n:   * **api\\_key** (`str`) â An Airtable API key or personal access token.\n* **timeout** (`Optional`[`Tuple`[`int`, `int`]], default: `None`) â A tuple indicating a connect and read timeout. e.g. `timeout=(2,5)` would configure a 2 second timeout for the connection to be established and 5 seconds for a server read timeout. Default is `None` (no timeout).\n* **retry\\_strategy** (`Union`[`bool`, `Retry`, `None`], default: `True`) â An instance of [urllib3.util.Retry](https://urllib3.readthedocs.io/en/stable/reference/urllib3.util.html#urllib3.util.Retry). If `None` or `False`, requests will not be retried. If `True`, the default strategy will be applied (see [`retry_strategy()`](#pyairtable.retry_strategy \"pyairtable.retry_strategy\") for details).\n* **endpoint\\_url** (`str`, default: `\u0027https://api.airtable.com\u0027`) â The API endpoint to use. Override this if you are using a debugging or caching proxy.\n* **use\\_field\\_ids** (`bool`, default: `False`) â If `True`, all API requests will return responses with field IDs instead of field names.",
+                                                                     "content":  null,
+                                                                     "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                     "sourceUrls":  [
+
+                                                                                    ]
+                                                                 }
+                                                             ],
+                                        "structuredPayload":  {
+
+                                                              },
+                                        "quality":  {
+                                                        "qualityScore":  0.894,
+                                                        "failureKind":  null,
+                                                        "durationMillis":  0
+                                                    }
+                                    }
+                                ],
+    "extractorInput":  {
+                           "taskId":  104,
+                           "nodeName":  "extract_schema",
+                           "planVersionId":  null,
+                           "branchKey":  null,
+                           "schemaId":  null,
+                           "dimensions":  [
+                                              "äº§åæ¦è¿°",
+                                              "å¸åºå®ä½",
+                                              "ç®æ ç¨æ·",
+                                              "æ ¸å¿åè½",
+                                              "ä»·æ ¼ç­ç¥"
+                                          ],
+                           "inputSource":  "REPOSITORY_BACKED_PORT",
+                           "auditRefs":  {
+                                             "collectorEnvelopeCount":  6,
+                                             "projectionTypes":  [
+                                                                     "SEARCH_SHARED_PROJECTION_V1"
+                                                                 ],
+                                             "searchAudit":  {
+                                                                 "usage":  "ç¨äºè§£éæ¥æºåç°ä¸ééè·¯å¾ï¼ä¸ç´æ¥æ¿ä»£ extractor æ­£æè¾å\u0085¥",
+                                                                 "available":  true,
+                                                                 "availabilityReason":  "SEARCH_SHARED_PROJECTION_READY"
+                                                             },
+                                             "collectionAudit":  {
+                                                                     "usage":  "ç¨äºè§£éééå¤±è´¥ãéçº§ä¸ skippedEvidence æ¥æº",
+                                                                     "available":  true,
+                                                                     "availabilityReason":  "COLLECTOR_SHARED_ENVELOPE_READY"
+                                                                 },
+                                             "collectorEvidenceReadiness":  {
+                                                                                "ready":  true,
+                                                                                "degraded":  true,
+                                                                                "reason":  "STAGE1_COLLECTOR_QUORUM_READY",
+                                                                                "satisfiedFamilies":  [
+                                                                                                          "DOCS",
+                                                                                                          "REVIEW"
+                                                                                                      ],
+                                                                                "missingFamilies":  [
+                                                                                                        "OFFICIAL",
+                                                                                                        "DOCS",
+                                                                                                        "REVIEW",
+                                                                                                        "PRICING"
+                                                                                                    ],
+                                                                                "auditFlags":  [
+                                                                                                   "HARD_DEADLINE_REACHED",
+                                                                                                   "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT",
+                                                                                                   "OPTIONAL_PRICING_NOT_READY"
+                                                                                               ],
+                                                                                "sourceUrls":  [
+                                                                                                   "https://www.notion.so",
+                                                                                                   "https://www.notion.so/docs",
+                                                                                                   "https://www.notion.so/documentation",
+                                                                                                   "https://www.notion.so/help",
+                                                                                                   "https://www.notion.so/guide",
+                                                                                                   "https://www.g2.com/search?query=Notion",
+                                                                                                   "https://www.capterra.com/search/?query=Notion",
+                                                                                                   "https://www.notion.so/case-studies",
+                                                                                                   "https://www.notion.so/compare",
+                                                                                                   "https://www.notion.so/customers",
+                                                                                                   "https://www.airtable.com",
+                                                                                                   "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                                                   "https://apitracker.io/a/airtable",
+                                                                                                   "https://support.airtable.com/docs/airtable-enterprise-api",
+                                                                                                   "https://www.airtable.com/guides/scale/using-airtable-api",
+                                                                                                   "https://airtable.com/guides/scale/using-airtable-api",
+                                                                                                   "https://checkthat.ai/brands/airtable/reviews",
+                                                                                                   "https://themarketingagency.ca/blog/honest-review-airtable",
+                                                                                                   "https://www.zite.com/blog/airtable-reviews",
+                                                                                                   "https://zite.com/blog/airtable-reviews",
+                                                                                                   "https://www.softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                                                   "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                                                   "https://www.smartsuite.com/blog/airtable-review?338ea48f_page=8",
+                                                                                                   "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                                                                                               ]
+                                                                            }
+                                         },
+                           "competitors":  [
+                                               {
+                                                   "competitorName":  "Airtable",
+                                                   "evidenceCatalog":  [
+                                                                           {
+                                                                               "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                                               "competitorName":  "Airtable",
+                                                                               "sourceType":  "DOCS",
+                                                                               "title":  "API Reference â pyAirtable documentation",
+                                                                               "content":  "",
+                                                                               "sourceUrls":  [
+                                                                                                  "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                                              ],
+                                                                               "issueFlags":  [
+                                                                                                  "PROMPT_CONTENT_TRUNCATED"
+                                                                                              ],
+                                                                               "qualitySignals":  [
+                                                                                                      "TAVILY_RAW_CONTENT_READY",
+                                                                                                      "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                      "TAVILY_STRUCTURED_BLOCK_COUNT=2",
+                                                                                                      "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG"
+                                                                                                  ],
+                                                                               "structuredBlocks":  [
+                                                                                                        {
+                                                                                                            "blockType":  "PRICING_BLOCK",
+                                                                                                            "title":  "Pricing",
+                                                                                                            "summary":  "enterprise(*enterprise\\_account\\_id*)[[source]](_modules/pyairtable/api/api.html#Api.enterprise)[Â¶](#pyairtable.Api.enterprise \"Permalink to this definition\")\n:   â  This feature is only available on Enterprise billing plans.",
+                                                                                                            "content":  null,
+                                                                                                            "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                                            "sourceUrls":  [
+
+                                                                                                                           ]
+                                                                                                        },
+                                                                                                        {
+                                                                                                            "blockType":  "DEVELOPER_DOCS_BLOCK",
+                                                                                                            "title":  "Developer Docs",
+                                                                                                            "summary":  "\\_\\_init\\_\\_(*api\\_key*, *\\**, *timeout=None*, *retry\\_strategy=True*, *endpoint\\_url=\u0027https://api.airtable.com\u0027*, *use\\_field\\_ids=False*)[[source]](_modules/pyairtable/api/api.html#Api.__init__)[Â¶](#pyairtable.Api.__init__ \"Permalink to this definition\")\n:   Parameters\n:   * **api\\_key** (`str`) â An Airtable API key or personal access token.\n* **timeout** (`Optional`[`Tuple`[`int`, `int`]], default: `None`) â A tuple indicating a connect and read timeout. e.g. `timeout=(2,5)` would configure a 2 second timeout for the connection to be established and 5 seconds for a server read timeout. Default is `None` (no timeout).\n* **retry\\_strategy** (`Union`[`bool`, `Retry`, `None`], default: `True`) â An instance of [urllib3.util.Retry](https://urllib3.readthedocs.io/en/stable/reference/urllib3.util.html#urllib3.util.Retry). If `None` or `False`, requests will not be retried. If `True`, the default strategy will be applied (see [`retry_strategy()`](#pyairtable.retry_strategy \"pyairtable.retry_strategy\") for details).\n* **endpoint\\_url** (`str`, default: `\u0027https://api.airtable.com\u0027`) â The API endpoint to use. Override this if you are using a debugging or caching proxy.\n* **use\\_field\\_ids** (`bool`, default: `False`) â If `True`, all API requests will return responses with field IDs instead of field names.",
+                                                                                                            "content":  null,
+                                                                                                            "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                                            "sourceUrls":  [
+
+                                                                                                                           ]
+                                                                                                        }
+                                                                                                    ],
+                                                                               "structuredPayload":  {
+
+                                                                                                     },
+                                                                               "quality":  {
+                                                                                               "qualityScore":  0.894,
+                                                                                               "failureKind":  null,
+                                                                                               "durationMillis":  0
+                                                                                           }
+                                                                           }
+                                                                       ],
+                                                   "structuredEvidence":  [
+                                                                              {
+                                                                                  "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                                                  "competitorName":  "Airtable",
+                                                                                  "sourceType":  "DOCS",
+                                                                                  "title":  "API Reference â pyAirtable documentation",
+                                                                                  "content":  "",
+                                                                                  "sourceUrls":  [
+                                                                                                     "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                                                 ],
+                                                                                  "issueFlags":  [
+                                                                                                     "PROMPT_CONTENT_TRUNCATED"
+                                                                                                 ],
+                                                                                  "qualitySignals":  [
+                                                                                                         "TAVILY_RAW_CONTENT_READY",
+                                                                                                         "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                         "TAVILY_STRUCTURED_BLOCK_COUNT=2",
+                                                                                                         "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG"
+                                                                                                     ],
+                                                                                  "structuredBlocks":  [
+                                                                                                           {
+                                                                                                               "blockType":  "PRICING_BLOCK",
+                                                                                                               "title":  "Pricing",
+                                                                                                               "summary":  "enterprise(*enterprise\\_account\\_id*)[[source]](_modules/pyairtable/api/api.html#Api.enterprise)[Â¶](#pyairtable.Api.enterprise \"Permalink to this definition\")\n:   â  This feature is only available on Enterprise billing plans.",
+                                                                                                               "content":  null,
+                                                                                                               "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                                               "sourceUrls":  [
+
+                                                                                                                              ]
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "blockType":  "DEVELOPER_DOCS_BLOCK",
+                                                                                                               "title":  "Developer Docs",
+                                                                                                               "summary":  "\\_\\_init\\_\\_(*api\\_key*, *\\**, *timeout=None*, *retry\\_strategy=True*, *endpoint\\_url=\u0027https://api.airtable.com\u0027*, *use\\_field\\_ids=False*)[[source]](_modules/pyairtable/api/api.html#Api.__init__)[Â¶](#pyairtable.Api.__init__ \"Permalink to this definition\")\n:   Parameters\n:   * **api\\_key** (`str`) â An Airtable API key or personal access token.\n* **timeout** (`Optional`[`Tuple`[`int`, `int`]], default: `None`) â A tuple indicating a connect and read timeout. e.g. `timeout=(2,5)` would configure a 2 second timeout for the connection to be established and 5 seconds for a server read timeout. Default is `None` (no timeout).\n* **retry\\_strategy** (`Union`[`bool`, `Retry`, `None`], default: `True`) â An instance of [urllib3.util.Retry](https://urllib3.readthedocs.io/en/stable/reference/urllib3.util.html#urllib3.util.Retry). If `None` or `False`, requests will not be retried. If `True`, the default strategy will be applied (see [`retry_strategy()`](#pyairtable.retry_strategy \"pyairtable.retry_strategy\") for details).\n* **endpoint\\_url** (`str`, default: `\u0027https://api.airtable.com\u0027`) â The API endpoint to use. Override this if you are using a debugging or caching proxy.\n* **use\\_field\\_ids** (`bool`, default: `False`) â If `True`, all API requests will return responses with field IDs instead of field names.",
+                                                                                                               "content":  null,
+                                                                                                               "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                                               "sourceUrls":  [
+
+                                                                                                                              ]
+                                                                                                           }
+                                                                                                       ],
+                                                                                  "structuredPayload":  {
+
+                                                                                                        },
+                                                                                  "quality":  {
+                                                                                                  "qualityScore":  0.894,
+                                                                                                  "failureKind":  null,
+                                                                                                  "durationMillis":  0
+                                                                                              }
+                                                                              }
+                                                                          ],
+                                                   "readableEvidence":  [
+                                                                            {
+                                                                                "evidenceId":  "T0104-COLLECT_SOURCES_02_02-001",
+                                                                                "competitorName":  "Airtable",
+                                                                                "sourceType":  "DOCS",
+                                                                                "title":  "API Reference â pyAirtable documentation",
+                                                                                "content":  "",
+                                                                                "sourceUrls":  [
+                                                                                                   "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                                               ],
+                                                                                "issueFlags":  [
+                                                                                                   "PROMPT_CONTENT_TRUNCATED"
+                                                                                               ],
+                                                                                "qualitySignals":  [
+                                                                                                       "TAVILY_RAW_CONTENT_READY",
+                                                                                                       "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                       "TAVILY_STRUCTURED_BLOCK_COUNT=2",
+                                                                                                       "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG"
+                                                                                                   ],
+                                                                                "structuredBlocks":  [
+                                                                                                         {
+                                                                                                             "blockType":  "PRICING_BLOCK",
+                                                                                                             "title":  "Pricing",
+                                                                                                             "summary":  "enterprise(*enterprise\\_account\\_id*)[[source]](_modules/pyairtable/api/api.html#Api.enterprise)[Â¶](#pyairtable.Api.enterprise \"Permalink to this definition\")\n:   â  This feature is only available on Enterprise billing plans.",
+                                                                                                             "content":  null,
+                                                                                                             "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                                             "sourceUrls":  [
+
+                                                                                                                            ]
+                                                                                                         },
+                                                                                                         {
+                                                                                                             "blockType":  "DEVELOPER_DOCS_BLOCK",
+                                                                                                             "title":  "Developer Docs",
+                                                                                                             "summary":  "\\_\\_init\\_\\_(*api\\_key*, *\\**, *timeout=None*, *retry\\_strategy=True*, *endpoint\\_url=\u0027https://api.airtable.com\u0027*, *use\\_field\\_ids=False*)[[source]](_modules/pyairtable/api/api.html#Api.__init__)[Â¶](#pyairtable.Api.__init__ \"Permalink to this definition\")\n:   Parameters\n:   * **api\\_key** (`str`) â An Airtable API key or personal access token.\n* **timeout** (`Optional`[`Tuple`[`int`, `int`]], default: `None`) â A tuple indicating a connect and read timeout. e.g. `timeout=(2,5)` would configure a 2 second timeout for the connection to be established and 5 seconds for a server read timeout. Default is `None` (no timeout).\n* **retry\\_strategy** (`Union`[`bool`, `Retry`, `None`], default: `True`) â An instance of [urllib3.util.Retry](https://urllib3.readthedocs.io/en/stable/reference/urllib3.util.html#urllib3.util.Retry). If `None` or `False`, requests will not be retried. If `True`, the default strategy will be applied (see [`retry_strategy()`](#pyairtable.retry_strategy \"pyairtable.retry_strategy\") for details).\n* **endpoint\\_url** (`str`, default: `\u0027https://api.airtable.com\u0027`) â The API endpoint to use. Override this if you are using a debugging or caching proxy.\n* **use\\_field\\_ids** (`bool`, default: `False`) â If `True`, all API requests will return responses with field IDs instead of field names.",
+                                                                                                             "content":  null,
+                                                                                                             "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                                             "sourceUrls":  [
+
+                                                                                                                            ]
+                                                                                                         }
+                                                                                                     ],
+                                                                                "structuredPayload":  {
+
+                                                                                                      },
+                                                                                "quality":  {
+                                                                                                "qualityScore":  0.894,
+                                                                                                "failureKind":  null,
+                                                                                                "durationMillis":  0
+                                                                                            }
+                                                                            }
+                                                                        ],
+                                                   "skippedEvidence":  [
+                                                                           {
+                                                                               "evidenceId":  "T0104-COLLECT_SOURCES_02_02-002",
+                                                                               "competitorName":  "Airtable",
+                                                                               "sourceType":  "DOCS",
+                                                                               "title":  "Airtable API - Developer docs, APIs, SDKs, and auth. | API Tracker",
+                                                                               "content":  "",
+                                                                               "sourceUrls":  [
+                                                                                                  "https://apitracker.io/a/airtable"
+                                                                                              ],
+                                                                               "issueFlags":  [
+                                                                                                  "PROMPT_BUDGET_SKIPPED"
+                                                                                              ],
+                                                                               "qualitySignals":  [
+                                                                                                      "TAVILY_RAW_CONTENT_READY",
+                                                                                                      "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                      "TAVILY_STRUCTURED_BLOCK_COUNT=0",
+                                                                                                      "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                                                      "PROMPT_BUDGET_SKIPPED"
+                                                                                                  ],
+                                                                               "structuredBlocks":  [
+
+                                                                                                    ],
+                                                                               "structuredPayload":  {
+
+                                                                                                     },
+                                                                               "quality":  {
+                                                                                               "qualityScore":  0.805,
+                                                                                               "failureKind":  null,
+                                                                                               "durationMillis":  0
+                                                                                           }
+                                                                           },
+                                                                           {
+                                                                               "evidenceId":  "T0104-COLLECT_SOURCES_02_02-004",
+                                                                               "competitorName":  "Airtable",
+                                                                               "sourceType":  "DOCS",
+                                                                               "title":  "Using Airtableâs API | Airtable",
+                                                                               "content":  "",
+                                                                               "sourceUrls":  [
+                                                                                                  "https://www.airtable.com/guides/scale/using-airtable-api",
+                                                                                                  "https://airtable.com/guides/scale/using-airtable-api"
+                                                                                              ],
+                                                                               "issueFlags":  [
+                                                                                                  "PROMPT_BUDGET_SKIPPED"
+                                                                                              ],
+                                                                               "qualitySignals":  [
+                                                                                                      "TAVILY_RAW_CONTENT_READY",
+                                                                                                      "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                      "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                                                      "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                                                      "FIELD_RELEVANCE_PARTIAL",
+                                                                                                      "PROMPT_BUDGET_SKIPPED"
+                                                                                                  ],
+                                                                               "structuredBlocks":  [
+                                                                                                        {
+                                                                                                            "blockType":  "DEVELOPER_DOCS_BLOCK",
+                                                                                                            "title":  "Developer Docs",
+                                                                                                            "summary":  "1. [Home](/)\n2. [Guides](/guides)\n3. [Scale your work](/guides/scale)\n4. Using Airtableâs API",
+                                                                                                            "content":  null,
+                                                                                                            "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                                            "sourceUrls":  [
+
+                                                                                                                           ]
+                                                                                                        }
+                                                                                                    ],
+                                                                               "structuredPayload":  {
+
+                                                                                                     },
+                                                                               "quality":  {
+                                                                                               "qualityScore":  0.782,
+                                                                                               "failureKind":  null,
+                                                                                               "durationMillis":  0
+                                                                                           }
+                                                                           },
+                                                                           {
+                                                                               "evidenceId":  "T0104-COLLECT_SOURCES_02_02-003",
+                                                                               "competitorName":  "Airtable",
+                                                                               "sourceType":  "DOCS",
+                                                                               "title":  "Airtable Enterprise API",
+                                                                               "content":  "",
+                                                                               "sourceUrls":  [
+                                                                                                  "https://support.airtable.com/docs/airtable-enterprise-api"
+                                                                                              ],
+                                                                               "issueFlags":  [
+                                                                                                  "PROMPT_BUDGET_SKIPPED"
+                                                                                              ],
+                                                                               "qualitySignals":  [
+                                                                                                      "TAVILY_RAW_CONTENT_READY",
+                                                                                                      "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                      "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                                                      "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                                                      "PROMPT_BUDGET_SKIPPED"
+                                                                                                  ],
+                                                                               "structuredBlocks":  [
+                                                                                                        {
+                                                                                                            "blockType":  "PRICING_BLOCK",
+                                                                                                            "title":  "Pricing",
+                                                                                                            "summary":  "* Account\n+ [Account overview](https://support.airtable.com/docs/managing-billable-collaborators-from-your-airtable-account)\n+ [Billing](https://support.airtable.com/docs/billing-overview-and-faqs)\n+ [Policies](https://support.airtable.com/docs/airtable-security-practices)\n* API\n+ [API Overview](https://support.airtable.com/docs/public-rest-api)\n+ [Get your API key](https://support.airtable.com/docs/how-do-i-get-my-api-key-)\n+ [Documentation](https://airtable.com/api)\n+ [Troubleshooting](https://support.airtable.com/docs/api-common-troubleshooting)\n* Integrations\n+ [Resources](https://www.airtable.com/developers)\n+ [Community](https://community.airtable.com/c/developers/55)\n* Enterprise\n+ [Admin Panel](https://support.airtable.com/docs/overview-enterprise-admin-panel)\n+ [Enterprise Plans](https://www.airtable.com/enterprise)\n+ [Airtable Security](https://www.airtable.com/security)\n+ [Terms of Service](https://www.airtable.com/tos)\n+ [Privacy Policy](https://www.airtable.com/privacy)\n* Resources\n+ [Community](https://community.airtable.com/)\n+ [Marketplace](https://airtable.com/marketplace)\n+ [Templates](https://www.airtable.com/templates)\n+ [Universe](https://www.airtable.com/universe)",
+                                                                                                            "content":  null,
+                                                                                                            "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                                            "sourceUrls":  [
+
+                                                                                                                           ]
+                                                                                                        }
+                                                                                                    ],
+                                                                               "structuredPayload":  {
+
+                                                                                                     },
+                                                                               "quality":  {
+                                                                                               "qualityScore":  0.714,
+                                                                                               "failureKind":  null,
+                                                                                               "durationMillis":  0
+                                                                                           }
+                                                                           },
+                                                                           {
+                                                                               "evidenceId":  "T0104-COLLECT_SOURCES_02_03-001",
+                                                                               "competitorName":  "Airtable",
+                                                                               "sourceType":  "REVIEW",
+                                                                               "title":  "Airtable Reviews 2026: What 7800+ Users Actually Think",
+                                                                               "content":  "",
+                                                                               "sourceUrls":  [
+                                                                                                  "https://checkthat.ai/brands/airtable/reviews"
+                                                                                              ],
+                                                                               "issueFlags":  [
+                                                                                                  "PROMPT_BUDGET_SKIPPED"
+                                                                                              ],
+                                                                               "qualitySignals":  [
+                                                                                                      "TAVILY_RAW_CONTENT_READY",
+                                                                                                      "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                      "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                                                      "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                                                      "PROMPT_BUDGET_SKIPPED"
+                                                                                                  ],
+                                                                               "structuredBlocks":  [
+                                                                                                        {
+                                                                                                            "blockType":  "PRICING_BLOCK",
+                                                                                                            "title":  "Pricing",
+                                                                                                            "summary":  "* Small teams report fast setup for relational databases and internal workflows â praised as a backend for no-code stacks across Reddit and review threads\n* Per-seat pricing becomes a pain point at scale: a 25-person team on the Business plan hits ~$13,500/year before portals, automations, or add-ons\n* Advanced features like scripting, automations, and client portals are gated behind higher tiers â many teams pay a premium before the platform feels complete",
+                                                                                                            "content":  null,
+                                                                                                            "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                                            "sourceUrls":  [
+
+                                                                                                                           ]
+                                                                                                        }
+                                                                                                    ],
+                                                                               "structuredPayload":  {
+
+                                                                                                     },
+                                                                               "quality":  {
+                                                                                               "qualityScore":  0.941,
+                                                                                               "failureKind":  null,
+                                                                                               "durationMillis":  0
+                                                                                           }
+                                                                           },
+                                                                           {
+                                                                               "evidenceId":  "T0104-COLLECT_SOURCES_02_03-002",
+                                                                               "competitorName":  "Airtable",
+                                                                               "sourceType":  "REVIEW",
+                                                                               "title":  "Honest Review of Airtable for 2026 - The Marketing Agency",
+                                                                               "content":  "",
+                                                                               "sourceUrls":  [
+                                                                                                  "https://themarketingagency.ca/blog/honest-review-airtable"
+                                                                                              ],
+                                                                               "issueFlags":  [
+                                                                                                  "PROMPT_BUDGET_SKIPPED"
+                                                                                              ],
+                                                                               "qualitySignals":  [
+                                                                                                      "TAVILY_RAW_CONTENT_READY",
+                                                                                                      "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                      "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                                                      "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                                                      "FIELD_RELEVANCE_PARTIAL",
+                                                                                                      "PROMPT_BUDGET_SKIPPED"
+                                                                                                  ],
+                                                                               "structuredBlocks":  [
+                                                                                                        {
+                                                                                                            "blockType":  "PRICING_BLOCK",
+                                                                                                            "title":  "Pricing",
+                                                                                                            "summary":  "The free plan is excellent for testing, but paid tiers become expensive quickly. Additional AI costs and per-user pricing make budget planning challenging for growing teams. Do the math before you fall in love with the features.",
+                                                                                                            "content":  null,
+                                                                                                            "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                                            "sourceUrls":  [
+
+                                                                                                                           ]
+                                                                                                        }
+                                                                                                    ],
+                                                                               "structuredPayload":  {
+
+                                                                                                     },
+                                                                               "quality":  {
+                                                                                               "qualityScore":  0.85,
+                                                                                               "failureKind":  null,
+                                                                                               "durationMillis":  0
+                                                                                           }
+                                                                           },
+                                                                           {
+                                                                               "evidenceId":  "T0104-COLLECT_SOURCES_02_03-003",
+                                                                               "competitorName":  "Airtable",
+                                                                               "sourceType":  "REVIEW",
+                                                                               "title":  "Airtable Review: Pros, Cons, \u0026 Is It Worth It in 2026?",
+                                                                               "content":  "",
+                                                                               "sourceUrls":  [
+                                                                                                  "https://www.zite.com/blog/airtable-reviews",
+                                                                                                  "https://zite.com/blog/airtable-reviews"
+                                                                                              ],
+                                                                               "issueFlags":  [
+                                                                                                  "PROMPT_BUDGET_SKIPPED"
+                                                                                              ],
+                                                                               "qualitySignals":  [
+                                                                                                      "TAVILY_RAW_CONTENT_READY",
+                                                                                                      "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                      "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                                                      "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                                                      "FIELD_RELEVANCE_PARTIAL",
+                                                                                                      "PROMPT_BUDGET_SKIPPED"
+                                                                                                  ],
+                                                                               "structuredBlocks":  [
+                                                                                                        {
+                                                                                                            "blockType":  "PRICING_BLOCK",
+                                                                                                            "title":  "Pricing",
+                                                                                                            "summary":  "| Plan | Cost (monthly billing) | Key strengths |\n| --- | --- | --- |\n| Free | $0 | 500 AI credits/editor/month ; 1000 records/bases ; 100 automation runs/month ; Up to 5 editors and 50 users with commenting permission |\n| Team | $24/seat/month | 15,000 AI credits/user/month ; 50,000 records/bases ; 25,000 automation runs/month ; Portals: Starting from $120 for 15 guests/month |\n| Business | $54/seat/month | 20,000 AI credits/user/month ; 125,000 records/bases100,000 automation runs/month ; Two-way sync ; SAML-based single sign-on ; Portals: Starting from $150 for 15 guests/month |\n| Enterprise | Custom | 25,000 AI credits/user/month at list price ; 500,000 records/bases ; 500,000 automation runs/month ; Audit logs and enterprise API |",
+                                                                                                            "content":  null,
+                                                                                                            "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                                            "sourceUrls":  [
+
+                                                                                                                           ]
+                                                                                                        }
+                                                                                                    ],
+                                                                               "structuredPayload":  {
+
+                                                                                                     },
+                                                                               "quality":  {
+                                                                                               "qualityScore":  0.764,
+                                                                                               "failureKind":  null,
+                                                                                               "durationMillis":  0
+                                                                                           }
+                                                                           },
+                                                                           {
+                                                                               "evidenceId":  "T0104-COLLECT_SOURCES_02_03-004",
+                                                                               "competitorName":  "Airtable",
+                                                                               "sourceType":  "REVIEW",
+                                                                               "title":  "Compare Capterra vs G2.com in July 2026",
+                                                                               "content":  "",
+                                                                               "sourceUrls":  [
+                                                                                                  "https://www.softwaresuggest.com/compare/capterra-vs-g2-com",
+                                                                                                  "https://softwaresuggest.com/compare/capterra-vs-g2-com"
+                                                                                              ],
+                                                                               "issueFlags":  [
+                                                                                                  "PROMPT_BUDGET_SKIPPED"
+                                                                                              ],
+                                                                               "qualitySignals":  [
+                                                                                                      "TAVILY_RAW_CONTENT_READY",
+                                                                                                      "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                      "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                                                      "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                                                      "FIELD_RELEVANCE_PARTIAL",
+                                                                                                      "PROMPT_BUDGET_SKIPPED"
+                                                                                                  ],
+                                                                               "structuredBlocks":  [
+                                                                                                        {
+                                                                                                            "blockType":  "PRICING_BLOCK",
+                                                                                                            "title":  "Pricing",
+                                                                                                            "summary":  "Compare pricing of Capterra vs G2.com with the following detailed pricing plan info.",
+                                                                                                            "content":  null,
+                                                                                                            "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                                            "sourceUrls":  [
+
+                                                                                                                           ]
+                                                                                                        }
+                                                                                                    ],
+                                                                               "structuredPayload":  {
+
+                                                                                                     },
+                                                                               "quality":  {
+                                                                                               "qualityScore":  0.754,
+                                                                                               "failureKind":  null,
+                                                                                               "durationMillis":  0
+                                                                                           }
+                                                                           },
+                                                                           {
+                                                                               "evidenceId":  "T0104-COLLECT_SOURCES_02_03-005",
+                                                                               "competitorName":  "Airtable",
+                                                                               "sourceType":  "REVIEW",
+                                                                               "title":  "Airtable Review: Is It Worth It in 2026? [In-Depth]",
+                                                                               "content":  "",
+                                                                               "sourceUrls":  [
+                                                                                                  "https://www.smartsuite.com/blog/airtable-review?338ea48f_page=8",
+                                                                                                  "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                                                                                              ],
+                                                                               "issueFlags":  [
+                                                                                                  "PROMPT_BUDGET_SKIPPED"
+                                                                                              ],
+                                                                               "qualitySignals":  [
+                                                                                                      "TAVILY_RAW_CONTENT_READY",
+                                                                                                      "TAVILY_PREFETCHED_CONTENT_CONSUMED",
+                                                                                                      "TAVILY_STRUCTURED_BLOCK_COUNT=1",
+                                                                                                      "FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG",
+                                                                                                      "FIELD_RELEVANCE_PARTIAL",
+                                                                                                      "PROMPT_BUDGET_SKIPPED"
+                                                                                                  ],
+                                                                               "structuredBlocks":  [
+                                                                                                        {
+                                                                                                            "blockType":  "PRICING_BLOCK",
+                                                                                                            "title":  "Pricing",
+                                                                                                            "summary":  "* **Range of features:** 7/10. Airtable offers best-in-class workflow automation, AI and task management capabilities, but the tool lacks advanced reporting and collaboration features.\n* **User interface and usability:** 8/10. The platform can be customized to your use case, department, or industry â but all of that comes with a steep learning curve. Some users had to invest money to hire a tech expert to set up the platformâs interface for them.\n* **Security measures:** 8/10. Airtable adheres to the industryâs standard for security, and there are no discovered security concerns.\n* **Integrations:** 8/10. The platform offers 24 native integrations with apps your team might already be using â which is not as much as other alternatives, but users are satisfied with how easy it is to integrate the tool into their other productivity platforms.\n* **Customer support:** 8/10. Airtable offers excellent customer support to its customers, but email support is only available to their Business and Enterprise customers.\n* **Pricing model:** 7/10. The platform is significantly more expensive than other alternatives on the market, but it offers a generous free plan. Read-only access is limited, so if you need a large number of view-only users, youâll need to buy a higher-tier plan.",
+                                                                                                            "content":  null,
+                                                                                                            "qualitySignal":  "TAVILY_BLOCK_CLASSIFIED:blockConfidence=0.72;blockEvidenceReason=paragraph-body keywordHits=2",
+                                                                                                            "sourceUrls":  [
+
+                                                                                                                           ]
+                                                                                                        }
+                                                                                                    ],
+                                                                               "structuredPayload":  {
+
+                                                                                                     },
+                                                                               "quality":  {
+                                                                                               "qualityScore":  0.722,
+                                                                                               "failureKind":  null,
+                                                                                               "durationMillis":  0
+                                                                                           }
+                                                                           }
+                                                                       ],
+                                                   "sourceUrls":  [
+                                                                      "https://pyairtable.readthedocs.io/en/stable/api.html"
+                                                                  ],
+                                                   "issueFlags":  [
+                                                                      "PROMPT_CONTENT_TRUNCATED",
+                                                                      "SKIPPED_UNUSABLE_EVIDENCE",
+                                                                      "PROMPT_BUDGET_SKIPPED",
+                                                                      "STAGE1_COLLECTOR_QUORUM_READY",
+                                                                      "COLLECTOR_QUORUM_DEGRADED",
+                                                                      "COLLECTOR_FAMILY_MISSING_OFFICIAL",
+                                                                      "COLLECTOR_FAMILY_MISSING_DOCS",
+                                                                      "COLLECTOR_FAMILY_MISSING_REVIEW",
+                                                                      "COLLECTOR_FAMILY_MISSING_PRICING",
+                                                                      "HARD_DEADLINE_REACHED",
+                                                                      "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT",
+                                                                      "OPTIONAL_PRICING_NOT_READY"
+                                                                  ],
+                                                   "budget":  {
+                                                                  "maxPromptEvidenceChars":  4000,
+                                                                  "usedPromptEvidenceChars":  4000,
+                                                                  "truncated":  true
+                                                              }
+                                               }
+                                           ]
+                       }
+}

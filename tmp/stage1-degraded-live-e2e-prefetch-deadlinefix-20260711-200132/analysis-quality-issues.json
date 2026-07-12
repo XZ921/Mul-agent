@@ -1,0 +1,162 @@
+﻿[
+    {
+        "type":  "EVIDENCE_GAP",
+        "section":  "éç¨",
+        "severity":  "CRITICAL",
+        "level":  "MINOR",
+        "dimensionCode":  "EVIDENCE_TRACEABILITY",
+        "dimensionName":  "è¯æ®å¯è¿½æº¯æ§",
+        "evidenceBasis":  "éç¨å­å¨æ æ³åæå° [è¯æ®ï¼EID] çå¤æ­ï¼éè¦è¡¥é½æ¥æºç¼å·ä¸é¾æ¥ã",
+        "evidenceIds":  [
+
+                        ],
+        "sourceUrls":  [
+                           "https://pyairtable.readthedocs.io/en/stable/api.html",
+                           "https://apitracker.io/a/airtable",
+                           "https://support.airtable.com/docs/airtable-enterprise-api",
+                           "https://airtable.com/guides/scale/using-airtable-api",
+                           "https://checkthat.ai/brands/airtable/reviews",
+                           "https://themarketingagency.ca/blog/honest-review-airtable",
+                           "https://zite.com/blog/airtable-reviews",
+                           "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                           "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                       ],
+        "suggestion":  "éæ°æ§è¡å¯¹Notionçä¿¡æ¯ééï¼ç¡®ä¿å®ç½ãææ¡£ãç¨æ·è¯ä»·ç­æ¥æºæåè·åï¼è¥æç»­ééå¤±è´¥ï¼åºè®°å½éçº§åå å¹¶èèä½¿ç¨æ¿ä»£æ°æ®æºã"
+    },
+    {
+        "type":  "EVIDENCE_GAP",
+        "section":  "éç¨",
+        "severity":  "HIGH",
+        "level":  "MINOR",
+        "dimensionCode":  "EVIDENCE_TRACEABILITY",
+        "dimensionName":  "è¯æ®å¯è¿½æº¯æ§",
+        "evidenceBasis":  "éç¨å­å¨æ æ³åæå° [è¯æ®ï¼EID] çå¤æ­ï¼éè¦è¡¥é½æ¥æºç¼å·ä¸é¾æ¥ã",
+        "evidenceIds":  [
+
+                        ],
+        "sourceUrls":  [
+                           "https://pyairtable.readthedocs.io/en/stable/api.html",
+                           "https://apitracker.io/a/airtable",
+                           "https://support.airtable.com/docs/airtable-enterprise-api",
+                           "https://airtable.com/guides/scale/using-airtable-api",
+                           "https://checkthat.ai/brands/airtable/reviews",
+                           "https://themarketingagency.ca/blog/honest-review-airtable",
+                           "https://zite.com/blog/airtable-reviews",
+                           "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                           "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                       ],
+        "suggestion":  "è¡¥éAirtableå®æ¹ç½ç«ãå®æ¹å®ä»·é¡µåæå¨è¯æµï¼ç¡®ä¿æåå°å®æ´çå®ä½ãå®ä»·åç¨æ·è¯ä»·ä¿¡æ¯ï¼å¹¶æ¶é¤PROMPT_BUDGET_SKIPPEDçéå¶ã"
+    },
+    {
+        "type":  "EVIDENCE_GAP",
+        "section":  "éç¨",
+        "severity":  "HIGH",
+        "level":  "MINOR",
+        "dimensionCode":  "EVIDENCE_TRACEABILITY",
+        "dimensionName":  "è¯æ®å¯è¿½æº¯æ§",
+        "evidenceBasis":  "éç¨å­å¨æ æ³åæå° [è¯æ®ï¼EID] çå¤æ­ï¼éè¦è¡¥é½æ¥æºç¼å·ä¸é¾æ¥ã",
+        "evidenceIds":  [
+
+                        ],
+        "sourceUrls":  [
+                           "https://pyairtable.readthedocs.io/en/stable/api.html",
+                           "https://apitracker.io/a/airtable",
+                           "https://support.airtable.com/docs/airtable-enterprise-api",
+                           "https://airtable.com/guides/scale/using-airtable-api",
+                           "https://checkthat.ai/brands/airtable/reviews",
+                           "https://themarketingagency.ca/blog/honest-review-airtable",
+                           "https://zite.com/blog/airtable-reviews",
+                           "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                           "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                       ],
+        "suggestion":  "å½å\u0085¥æ¬æ¹äº§åçè¯¦ç»åè½åè¡¨ãå®ä»·æ¨¡åãç®æ ç¨æ·ç»ååå¸åºå®ä½è¯´æï¼ä½ä¸ºå¯¹æ¯åæçåºçº¿ã"
+    },
+    {
+        "type":  "INFERENCE_RISK",
+        "section":  "éç¨",
+        "severity":  "ERROR",
+        "level":  "BLOCKER",
+        "dimensionCode":  "ACTIONABILITY",
+        "dimensionName":  "ä¿®è®¢å¯æ§è¡æ§",
+        "evidenceBasis":  "éç¨å­å¨éè¦æ¶ç´§æéåçè¡¨è¾¾ï¼è¯·ç»åå½åè¯æ­ç»§ç»­å¤æ ¸ã",
+        "evidenceIds":  [
+                            "T0104-COLLECT_SOURCES_02_02-001",
+                            "T0104-COLLECT_SOURCES_02_02-002",
+                            "T0104-COLLECT_SOURCES_02_02-003",
+                            "T0104-COLLECT_SOURCES_02_02-004",
+                            "T0104-COLLECT_SOURCES_02_03-001",
+                            "T0104-COLLECT_SOURCES_02_03-002",
+                            "T0104-COLLECT_SOURCES_02_03-003",
+                            "T0104-COLLECT_SOURCES_02_03-004",
+                            "T0104-COLLECT_SOURCES_02_03-005"
+                        ],
+        "sourceUrls":  [
+                           "https://pyairtable.readthedocs.io/en/stable/api.html",
+                           "https://apitracker.io/a/airtable",
+                           "https://support.airtable.com/docs/airtable-enterprise-api",
+                           "https://airtable.com/guides/scale/using-airtable-api",
+                           "https://checkthat.ai/brands/airtable/reviews",
+                           "https://themarketingagency.ca/blog/honest-review-airtable",
+                           "https://zite.com/blog/airtable-reviews",
+                           "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                           "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                       ],
+        "suggestion":  "å¨è·å¾å\u0085\u0085åè¯æ®åï¼æææ¨æµæ§å»ºè®®ååºéå¸¦æ¾èé£é©æç¤ºï¼ä¸å¾ä½ä¸ºç´æ¥å³ç­è¾å\u0085¥ï¼å¾\u0085è¯æ®è¡¥å\u0085¨åéæ°çæåºäºäºå®çç»è®ºä¸å»ºè®®ã"
+    },
+    {
+        "type":  "CITATION_QUALITY",
+        "section":  "éç¨",
+        "severity":  "WARNING",
+        "level":  "MAJOR",
+        "dimensionCode":  "ACTIONABILITY",
+        "dimensionName":  "ä¿®è®¢å¯æ§è¡æ§",
+        "evidenceBasis":  "éç¨å­å¨éè¦æ¶ç´§æéåçè¡¨è¾¾ï¼è¯·ç»åå½åè¯æ­ç»§ç»­å¤æ ¸ã",
+        "evidenceIds":  [
+                            "T0104-COLLECT_SOURCES_02_02-001",
+                            "T0104-COLLECT_SOURCES_02_02-002",
+                            "T0104-COLLECT_SOURCES_02_02-003",
+                            "T0104-COLLECT_SOURCES_02_02-004",
+                            "T0104-COLLECT_SOURCES_02_03-001",
+                            "T0104-COLLECT_SOURCES_02_03-002",
+                            "T0104-COLLECT_SOURCES_02_03-003",
+                            "T0104-COLLECT_SOURCES_02_03-004",
+                            "T0104-COLLECT_SOURCES_02_03-005"
+                        ],
+        "sourceUrls":  [
+                           "https://pyairtable.readthedocs.io/en/stable/api.html",
+                           "https://apitracker.io/a/airtable",
+                           "https://support.airtable.com/docs/airtable-enterprise-api",
+                           "https://airtable.com/guides/scale/using-airtable-api",
+                           "https://checkthat.ai/brands/airtable/reviews",
+                           "https://themarketingagency.ca/blog/honest-review-airtable",
+                           "https://zite.com/blog/airtable-reviews",
+                           "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                           "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                       ],
+        "suggestion":  "ç¡®ä¿ææå¼ç¨çè¯æ®IDåå­å¨äºå½åä»»å¡è¯æ®åºä¸­ï¼ä¸ºææå®¢è§éè¿°æä¾å\u0085·ä½æ¥æºï¼é¿å\u0085ä½¿ç¨æ æ¥æºå£°æã"
+    },
+    {
+        "type":  "coverage_gap",
+        "section":  "ç­æ¿ä¸é£é© / å¸åºå®ä½ãä¼å¿å¤æ­",
+        "severity":  "WARNING",
+        "level":  "MAJOR",
+        "dimensionCode":  "STRUCTURE_COMPLETENESS",
+        "dimensionName":  "ç»æå®æ´æ§",
+        "evidenceBasis":  "ç¼ºè¯æ®ç« è=æ ï¼è¯æ®ä¸è¦çç« è=ç­æ¿ä¸é£é©ï¼æ¨¡åæç­ç« è=æ ï¼ç©ºå­æ®µç« è=å¸åºå®ä½ãä¼å¿å¤æ­ï¼é»æ­å­æ®µ=æ ",
+        "evidenceIds":  [
+
+                        ],
+        "sourceUrls":  [
+                           "https://pyairtable.readthedocs.io/en/stable/api.html",
+                           "https://apitracker.io/a/airtable",
+                           "https://support.airtable.com/docs/airtable-enterprise-api",
+                           "https://airtable.com/guides/scale/using-airtable-api",
+                           "https://checkthat.ai/brands/airtable/reviews",
+                           "https://themarketingagency.ca/blog/honest-review-airtable",
+                           "https://zite.com/blog/airtable-reviews",
+                           "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                           "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                       ],
+        "suggestion":  "è¯·ä¼å\u0085è¡¥é½ç¼ºè¯æ®ç« èï¼å¹¶å¨éè·æ½ååå¤æ ¸å¯¹åºæ¥åæ®µè½æ¯å¦ä»ä¿çæ ä¾æ®ç»è®ºã"
+    }
+]

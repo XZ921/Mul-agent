@@ -95,7 +95,7 @@ Gate（`TavilyPrefetchedContentGate.java:129-138`）对这 9 条判定 `skipNetw
 | collect_sources_02_02 (Airtable DOCS) | 150s | **586s** | SUCCESS（应为 SUCCESS_DEGRADED） |
 | collect_sources_02_03 (Airtable REVIEW) | 120s | **335s** | SUCCESS（应为 SUCCESS_DEGRADED） |
 
-02_02 从 15:58 到 16:03+ 在 Playwright 里对 Airtable 文档页**串行**反复渲染（每页失败→换下一个→重试），150s 硬 deadline 未能中断。
+02_02 从 17:31:13 起跑到 17:40:59 结束（共 586s），期间在 Playwright 里对 Airtable 文档页**串行**反复渲染（每页失败→换下一个→重试），150s 硬 deadline 未能中断。
 
 ### 根因（代码定位）
 
@@ -103,7 +103,7 @@ hard deadline 的检查点是分段的、每段各自计时的：
 - `executeSearchWithinHardDeadline`（`CollectorAgent.java:1807`）：search 超时 → drain 给 30s
 - `executeCollectionCoordinatorWithinHardDeadline`（`CollectorAgent.java:1980`）：collection 超时 → drain 再给 30s
 
-`drainCollectionReportAfterHardDeadline`（`CollectorAgent.java:2026`）用 `future.get(graceMillis)`。当 `CollectionExecutionCoordinator` 内部是**多目标串行循环**（02_02 有 8 个 target 逐个 Playwright 渲染），外层每轮 drain 只要拿到「这一批部分 report」就 return，循环继续下一批 → **grace 被内层循环反复续期**，30s 闸门失效。
+`drainCollectionReportAfterHardDeadline`（`CollectorAgent.java:2026`）用 `future.get(graceMillis)`。更精确地说：`CollectionExecutionCoordinator` 内部的多目标 queue / join / Playwright retry **不消费**外层的共享 deadline token，而外层的 `future.cancel(true)` 对不可中断的采集调用（Playwright 渲染、阻塞式 HTTP）约束不足——中断信号无法真正打断正在进行的采集。两者叠加，导致超预算的采集结果仍被正常收口返回，30s 闸门形同虚设。
 
 这与记忆 `task86-sitemap-blocking-http-same-class-as-83` 同构：闸门在外层，真正烧时间的循环在内层，外层 deadline token 管不到内层每一圈。
 

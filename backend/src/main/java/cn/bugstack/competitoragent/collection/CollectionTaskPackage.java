@@ -40,4 +40,7 @@ public class CollectionTaskPackage {
      */
     Integer discoveryDepth;
     List<String> sourceUrls;
+    Long collectorHardDeadlineEpochMillis;
+    Long collectorDeadlineGraceMillis;
+    String collectorDeadlineReason;
 }

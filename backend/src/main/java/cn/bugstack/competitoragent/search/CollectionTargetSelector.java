@@ -34,6 +34,9 @@ public class CollectionTargetSelector {
     );
 
     private static final String TAVILY_PREFETCH_SELECTED_REASON = "Tavily prefetch 正文可用";
+    private static final String TAVILY_PREFETCH_UNVERIFIED_REASON = "Tavily prefetch 未完成验证，拒绝进入正式采集目标";
+    private static final String TAVILY_FAST_LANE_VERIFICATION_REASON = "TAVILY_FAST_LANE_GATE_VERIFIED";
+    private static final String TAVILY_VERIFICATION_SKIPPED_SIGNAL = "TAVILY_VERIFICATION_SKIPPED";
 
     private final CanonicalUrlResolver canonicalUrlResolver;
     private final CandidateOwnershipPolicy candidateOwnershipPolicy;
@@ -199,14 +202,23 @@ public class CollectionTargetSelector {
 
         if (isUsablePrefetchedCandidate(candidate)) {
             /**
-             * Tavily Fast Lane 候选在 gate 阶段已经完成原始正文长度与质量可用性判定，
-             * 这里直接复用 fastLaneUsable + hasPrefetchedContent + prefetchedContentRef 三元组作为正式入选条件。
-             * 这样 selector 的放行条件与下游 CollectionTaskPackageBuilder 触发 TAVILY_PREFETCHED 的条件严格对齐，
-             * 保证“这里放进去的候选，下游一定能按 prefetched ref 取回正文”。
+             * selector 这里只消费 Gate 已经写下来的“免网络验证授权”信号，
+             * 不在这里重新判断正文长度、页面类型或 Tavily score。
+             * 只要 skipNetworkVerification=true，说明上游 Gate 已确认它可以直接按 Fast Lane 正文进入正式采集。
              */
             return new SelectionEligibility(true,
                     TAVILY_PREFETCH_SELECTED_REASON,
                     TAVILY_PREFETCH_SELECTED_REASON);
+        }
+
+        /**
+         * 这里专门兜住“有 prefetch 正文，但还没拿到验证章”的候选。
+         * 它们不能再走后面的通用未验证兜底分支，否则 verified=null 的 Tavily 证据会再次混进正式采集目标。
+         */
+        if (shouldRejectPrefetchedCandidateForMissingVerification(candidate)) {
+            return new SelectionEligibility(false,
+                    TAVILY_PREFETCH_UNVERIFIED_REASON,
+                    TAVILY_PREFETCH_UNVERIFIED_REASON);
         }
 
         if (isDiscoveryOnlyCandidate(candidate) && attemptedTarget == null) {
@@ -325,17 +337,28 @@ public class CollectionTargetSelector {
                 || joined.contains("ANTI_BOT_PARTIAL");
     }
 
-    /**
-     * prefetch 候选是否可直接进入正式采集，完全对齐下游 TAVILY_PREFETCHED 的激活条件：
-     * 1. gate 判过可用（fastLaneUsable=true）
-     * 2. 确实有预取正文
-     * 3. 持有可消费的轻量 ref
-     */
     private boolean isUsablePrefetchedCandidate(SourceCandidate candidate) {
+        return hasReusablePrefetchedContent(candidate)
+                && Boolean.TRUE.equals(candidate.getSkipNetworkVerification());
+    }
+
+    /**
+     * 这里单独识别“候选已经带着可消费 prefetch 正文进入 selector”，
+     * 但不把它等同于“允许免验证”。
+     * 这样我们既能继续复用下游 prefetched executor，又不会把 skip=false 的候选误当成已盖章证据。
+     */
+    private boolean hasReusablePrefetchedContent(SourceCandidate candidate) {
         return candidate != null
+                && "tavily".equalsIgnoreCase(candidate.getProviderKey())
                 && Boolean.TRUE.equals(candidate.getFastLaneUsable())
                 && Boolean.TRUE.equals(candidate.getHasPrefetchedContent())
                 && StringUtils.hasText(candidate.getPrefetchedContentRef());
+    }
+
+    private boolean shouldRejectPrefetchedCandidateForMissingVerification(SourceCandidate candidate) {
+        return hasReusablePrefetchedContent(candidate)
+                && !Boolean.TRUE.equals(candidate.getSkipNetworkVerification())
+                && !Boolean.TRUE.equals(candidate.getVerified());
     }
 
     private boolean isDiscoveryOnlyCandidate(SourceCandidate candidate) {
@@ -703,7 +726,10 @@ public class CollectionTargetSelector {
         SearchCollectionTarget attemptedTarget = attemptedTargets.get(normalizedUrl);
         if (isUsablePrefetchedCandidate(candidate)) {
             return candidate.toBuilder()
-                    .selectionStage("SELECTED")
+                    .verified(true)
+                    .verificationReason(TAVILY_FAST_LANE_VERIFICATION_REASON)
+                    .qualitySignals(appendQualitySignal(candidate.getQualitySignals(), TAVILY_VERIFICATION_SKIPPED_SIGNAL))
+                    .selectionStage("VERIFIED")
                     .selectionReason(TAVILY_PREFETCH_SELECTED_REASON)
                     .selectionSummary(TAVILY_PREFETCH_SELECTED_REASON)
                     .build();
@@ -749,6 +775,17 @@ public class CollectionTargetSelector {
                 .selectionReason(selectedReason)
                 .selectionSummary(selectedSummary)
                 .build();
+    }
+
+    private List<String> appendQualitySignal(List<String> qualitySignals, String signal) {
+        List<String> merged = new ArrayList<>();
+        if (qualitySignals != null) {
+            merged.addAll(qualitySignals);
+        }
+        if (StringUtils.hasText(signal) && !merged.contains(signal)) {
+            merged.add(signal);
+        }
+        return merged;
     }
 
     /**

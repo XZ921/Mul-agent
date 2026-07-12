@@ -1,0 +1,114 @@
+﻿[
+    {
+        "nodeName":  "collect_sources_01_01",
+        "agentType":  "COLLECTOR",
+        "status":  "SUCCESS_DEGRADED",
+        "required":  true,
+        "errorMessage":  null,
+        "failureCategory":  null
+    },
+    {
+        "nodeName":  "collect_sources_01_02",
+        "agentType":  "COLLECTOR",
+        "status":  "SUCCESS_DEGRADED",
+        "required":  true,
+        "errorMessage":  null,
+        "failureCategory":  null
+    },
+    {
+        "nodeName":  "collect_sources_01_03",
+        "agentType":  "COLLECTOR",
+        "status":  "SUCCESS_DEGRADED",
+        "required":  true,
+        "errorMessage":  null,
+        "failureCategory":  null
+    },
+    {
+        "nodeName":  "collect_sources_02_01",
+        "agentType":  "COLLECTOR",
+        "status":  "SUCCESS_DEGRADED",
+        "required":  true,
+        "errorMessage":  null,
+        "failureCategory":  null
+    },
+    {
+        "nodeName":  "collect_sources_02_02",
+        "agentType":  "COLLECTOR",
+        "status":  "SUCCESS_DEGRADED",
+        "required":  true,
+        "errorMessage":  null,
+        "failureCategory":  null
+    },
+    {
+        "nodeName":  "collect_sources_02_03",
+        "agentType":  "COLLECTOR",
+        "status":  "SUCCESS",
+        "required":  true,
+        "errorMessage":  null,
+        "failureCategory":  null
+    },
+    {
+        "nodeName":  "extract_schema",
+        "agentType":  "EXTRACTOR",
+        "status":  "SUCCESS",
+        "required":  true,
+        "errorMessage":  null,
+        "failureCategory":  null
+    },
+    {
+        "nodeName":  "analyze_competitors",
+        "agentType":  "ANALYZER",
+        "status":  "SUCCESS",
+        "required":  true,
+        "errorMessage":  null,
+        "failureCategory":  null
+    },
+    {
+        "nodeName":  "write_report",
+        "agentType":  "WRITER",
+        "status":  "SUCCESS",
+        "required":  true,
+        "errorMessage":  null,
+        "failureCategory":  null
+    },
+    {
+        "nodeName":  "citation_check",
+        "agentType":  "CITATION",
+        "status":  "SUCCESS",
+        "required":  true,
+        "errorMessage":  null,
+        "failureCategory":  null
+    },
+    {
+        "nodeName":  "quality_check",
+        "agentType":  "REVIEWER",
+        "status":  "SUCCESS",
+        "required":  true,
+        "errorMessage":  null,
+        "failureCategory":  "DOWNSTREAM_CONSUMPTION_GAP"
+    },
+    {
+        "nodeName":  "rewrite_report",
+        "agentType":  "WRITER",
+        "status":  "SKIPPED",
+        "required":  false,
+        "errorMessage":  "跳过修订：初审严重失败，需先人工补证据、调整搜索范围或重跑采集链路",
+        "failureCategory":  null
+    },
+    {
+        "nodeName":  "citation_check_revision",
+        "agentType":  "CITATION",
+        "status":  "SKIPPED",
+        "required":  false,
+        "errorMessage":  "Dependencies not satisfied: rewrite_report=SKIPPED",
+        "failureCategory":  null
+    },
+    {
+        "nodeName":  "quality_check_final",
+        "agentType":  "REVIEWER",
+        "status":  "SKIPPED",
+        "required":  false,
+        "errorMessage":  "Dependencies not satisfied: citation_check_revision=SKIPPED",
+        "failureCategory":  null
+    }
+]

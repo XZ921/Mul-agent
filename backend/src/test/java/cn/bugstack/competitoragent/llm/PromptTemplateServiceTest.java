@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.llm;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -130,5 +131,21 @@ class PromptTemplateServiceTest {
 
         assertTrue(rendered.contains("Notion AI"));
         assertTrue(rendered.toLowerCase().contains("documentation"));
+    }
+
+    @Test
+    void shouldBuildThirdPartyFallbackQueriesWithoutOfficialSiteLock() {
+        List<String> queries = promptTemplateService.buildThirdPartyFallbackQueries("Notion");
+
+        assertThat(queries)
+                .hasSize(2)
+                .allSatisfy(query -> {
+                    assertThat(query).contains("Notion");
+                    assertThat(query).doesNotContain("site:");
+                    assertThat(query).doesNotContain("notion.so");
+                });
+        assertThat(String.join(" ", queries).toLowerCase())
+                .contains("review")
+                .contains("documentation");
     }
 }

@@ -116,12 +116,36 @@ public class CollectionExecutionCoordinator {
                                              String competitorName,
                                              List<SearchCollectionTarget> targets,
                                              CollectionAuditSnapshot checkpoint) {
+        return execute(taskId,
+                nodeName,
+                planVersionId,
+                competitorName,
+                targets,
+                checkpoint,
+                CollectionDeadlineContext.none());
+    }
+
+    /**
+     * 这里显式透传 collector 节点级 deadline，上游只生成一次 deadline token，
+     * 协调器内部的 queue / batch / executor 调度必须统一消费它，不能再各自重开预算。
+     */
+    public CollectionExecutionReport execute(Long taskId,
+                                             String nodeName,
+                                             Long planVersionId,
+                                             String competitorName,
+                                             List<SearchCollectionTarget> targets,
+                                             CollectionAuditSnapshot checkpoint,
+                                             CollectionDeadlineContext deadlineContext) {
         long startedAt = System.currentTimeMillis();
+        CollectionDeadlineContext effectiveDeadline = deadlineContext == null
+                ? CollectionDeadlineContext.none()
+                : deadlineContext;
         if (targets == null || targets.isEmpty()) {
             return emptyReport();
         }
         List<CollectionExecutionResult> results = new ArrayList<>();
         MutableCollectionCounters counters = new MutableCollectionCounters();
+        MutableDeadlineState deadlineState = new MutableDeadlineState();
         Map<String, CollectionExecutionResult> checkpointResultMap = indexReusableCheckpointResults(checkpoint);
         Map<String, CollectionExecutionResult> checkpointIdentityMap = indexReusableCheckpointResultsByIdentity(checkpoint);
         Set<String> consumedCheckpointKeys = ConcurrentHashMap.newKeySet();
@@ -144,6 +168,14 @@ public class CollectionExecutionCoordinator {
         }
 
         while (!queue.isEmpty()) {
+            /**
+             * 这里专门堵住“当前 batch 已经处理完，但内部发现页还能继续一层层续命”的根因。
+             * 一旦 collector hard deadline 到点，内层队列只允许停止，不允许再启动下一批 target 或 child page。
+             */
+            if (isDeadlineExpired(effectiveDeadline)) {
+                deadlineState.markReached();
+                break;
+            }
             int currentDepth = queue.peekFirst().discoveryDepth();
             List<QueuedCollectionTask> currentBatch = new ArrayList<>();
             while (!queue.isEmpty() && queue.peekFirst().discoveryDepth() == currentDepth) {
@@ -165,9 +197,15 @@ public class CollectionExecutionCoordinator {
                     checkpointResultMap,
                     checkpointIdentityMap,
                     consumedCheckpointKeys,
-                    counters
+                    counters,
+                    effectiveDeadline,
+                    deadlineState
             );
-            results.addAll(batchResults);
+            for (CollectionExecutionResult batchResult : batchResults) {
+                if (batchResult != null) {
+                    results.add(batchResult);
+                }
+            }
 
             for (int index = 0; index < currentBatch.size(); index++) {
                 enqueueDiscoveredCandidates(
@@ -180,7 +218,8 @@ public class CollectionExecutionCoordinator {
                 );
             }
         }
-        return buildReport(results, buildStats(results, counters, startedAt));
+        CollectionExecutionStats stats = buildStats(results, counters, startedAt, effectiveDeadline, deadlineState.reached());
+        return buildReport(results, stats, effectiveDeadline, deadlineState.reached());
     }
 
     /**
@@ -202,6 +241,9 @@ public class CollectionExecutionCoordinator {
                 .executorCallCount(0)
                 .configuredConcurrency(Math.max(1, collectionExecutionProperties.getConcurrency()))
                 .elapsedMillis(0L)
+                .deadlineReached(false)
+                .deadlineSkippedCount(0)
+                .hardDeadlineEpochMillis(Long.MAX_VALUE)
                 .build();
         CollectionAuditSnapshot auditSnapshot = CollectionAuditSnapshot.builder()
                 .summary(CollectionAuditSummary.builder()
@@ -211,6 +253,7 @@ public class CollectionExecutionCoordinator {
                         .reusedCount(0)
                         .status("SUCCESS")
                         .sourceUrls(List.of())
+                        .degradationReasons(List.of())
                         .build())
                 .status("SUCCESS")
                 .results(List.of())
@@ -219,6 +262,8 @@ public class CollectionExecutionCoordinator {
                 .build();
         return CollectionExecutionReport.builder()
                 .status("SUCCESS")
+                .degraded(false)
+                .degradationReasons(List.of())
                 .results(List.of())
                 .auditSnapshot(auditSnapshot)
                 .sourceUrls(List.of())
@@ -344,14 +389,22 @@ public class CollectionExecutionCoordinator {
                                                          Map<String, CollectionExecutionResult> checkpointResultMap,
                                                          Map<String, CollectionExecutionResult> checkpointIdentityMap,
                                                          Set<String> consumedCheckpointKeys,
-                                                         MutableCollectionCounters counters) {
+                                                         MutableCollectionCounters counters,
+                                                         CollectionDeadlineContext deadlineContext,
+                                                         MutableDeadlineState deadlineState) {
         List<QueuedCollectionTask> executionBatch = collectionExecutionProperties.isPrioritizePrefetchedPackages()
                 ? sortBatchForExecution(batch)
                 : batch;
         int concurrency = Math.max(1, collectionExecutionProperties.getConcurrency());
         if (concurrency == 1 || executionBatch.size() <= 1) {
             Map<QueuedCollectionTask, CollectionExecutionResult> resultByTask = new LinkedHashMap<>();
-            for (QueuedCollectionTask task : executionBatch) {
+            for (int index = 0; index < executionBatch.size(); index++) {
+                QueuedCollectionTask task = executionBatch.get(index);
+                if (!canStartCollectionTask(deadlineContext)) {
+                    deadlineState.markReached();
+                    counters.incrementDeadlineSkipped(executionBatch.size() - index);
+                    break;
+                }
                 resultByTask.put(task, executeQueuedTask(
                         task,
                         taskId,
@@ -361,15 +414,29 @@ public class CollectionExecutionCoordinator {
                         checkpointResultMap,
                         checkpointIdentityMap,
                         consumedCheckpointKeys,
-                        counters
+                        counters,
+                        deadlineContext
                 ));
             }
             return batch.stream().map(resultByTask::get).toList();
         }
 
+        List<QueuedCollectionTask> startableTasks = new ArrayList<>();
+        for (QueuedCollectionTask task : executionBatch) {
+            if (canStartCollectionTask(deadlineContext)) {
+                startableTasks.add(task);
+                continue;
+            }
+            deadlineState.markReached();
+            counters.incrementDeadlineSkipped(1);
+        }
+        if (startableTasks.isEmpty()) {
+            return batch.stream().map(ignored -> (CollectionExecutionResult) null).toList();
+        }
+
         ExecutorService executor = Executors.newFixedThreadPool(Math.min(concurrency, executionBatch.size()));
         try {
-            List<CompletableFuture<Map.Entry<QueuedCollectionTask, CollectionExecutionResult>>> futures = executionBatch.stream()
+            List<CompletableFuture<Map.Entry<QueuedCollectionTask, CollectionExecutionResult>>> futures = startableTasks.stream()
                     .map(task -> CompletableFuture.supplyAsync(
                             () -> Map.entry(
                                     task,
@@ -382,7 +449,8 @@ public class CollectionExecutionCoordinator {
                                             checkpointResultMap,
                                             checkpointIdentityMap,
                                             consumedCheckpointKeys,
-                                            counters
+                                            counters,
+                                            deadlineContext
                                     )
                             ),
                             executor
@@ -408,6 +476,17 @@ public class CollectionExecutionCoordinator {
                 .toList();
     }
 
+    private boolean isDeadlineExpired(CollectionDeadlineContext deadlineContext) {
+        return deadlineContext != null && deadlineContext.isExpired();
+    }
+
+    /**
+     * 内层循环启动新工作时只能消费 hard deadline，绝不能把 drain grace 当成“还可以再开一个任务”的额外预算。
+     */
+    private boolean canStartCollectionTask(CollectionDeadlineContext deadlineContext) {
+        return deadlineContext == null || deadlineContext.canStartWork(1L);
+    }
+
     private boolean isPrefetchedPriorityTask(QueuedCollectionTask task) {
         SourceCandidate candidate = task == null ? null : task.candidate();
         return Boolean.TRUE.equals(candidate == null ? null : candidate.getFastLaneUsable())
@@ -423,7 +502,8 @@ public class CollectionExecutionCoordinator {
                                                         Map<String, CollectionExecutionResult> checkpointResultMap,
                                                         Map<String, CollectionExecutionResult> checkpointIdentityMap,
                                                         Set<String> consumedCheckpointKeys,
-                                                        MutableCollectionCounters counters) {
+                                                        MutableCollectionCounters counters,
+                                                        CollectionDeadlineContext deadlineContext) {
         CollectionTaskPackage taskPackage = packageBuilder.build(
                 taskId,
                 nodeName,
@@ -431,7 +511,8 @@ public class CollectionExecutionCoordinator {
                 competitorName,
                 queuedTask.candidate(),
                 queuedTask.targetIndex(),
-                queuedTask.discoveryDepth()
+                queuedTask.discoveryDepth(),
+                deadlineContext
         );
         CollectionExecutionResult reusedResult = resolveReusableCheckpointResult(
                 taskPackage,
@@ -662,6 +743,12 @@ public class CollectionExecutionCoordinator {
     }
 
     private CollectionExecutionReport buildReport(List<CollectionExecutionResult> results) {
+        return buildReport(results, CollectionDeadlineContext.none(), false);
+    }
+
+    private CollectionExecutionReport buildReport(List<CollectionExecutionResult> results,
+                                                  CollectionDeadlineContext deadlineContext,
+                                                  boolean deadlineReached) {
         List<CollectionExecutionResult> stableResults = results == null ? List.of() : results;
         List<CollectionReplayTimelineItem> replayTimeline = new ArrayList<>();
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
@@ -693,7 +780,19 @@ public class CollectionExecutionCoordinator {
                     .build());
         }
 
-        String status = resolveAggregateStatus(stableResults, successCount, failedCount);
+        boolean hasReusableResult = stableResults.stream()
+                .anyMatch(result -> result != null
+                        && result.isSuccess()
+                        && result.getSourceUrls() != null
+                        && !result.getSourceUrls().isEmpty());
+        List<String> degradationReasons = deadlineReached && StringUtils.hasText(deadlineContext.degradationReason())
+                ? List.of(deadlineContext.degradationReason())
+                : List.of();
+        String status = deadlineReached && hasReusableResult
+                ? "SUCCESS_DEGRADED"
+                : deadlineReached && stableResults.isEmpty()
+                ? "FAILED"
+                : resolveAggregateStatus(stableResults, successCount, failedCount);
         String recoveryCheckpoint = resolveRecoveryCheckpoint(stableResults);
         CollectionAuditSnapshot auditSnapshot = CollectionAuditSnapshot.builder()
                 .status(status)
@@ -706,10 +805,13 @@ public class CollectionExecutionCoordinator {
                 .status(status)
                 .recoveryCheckpoint(recoveryCheckpoint)
                 .sourceUrls(new ArrayList<>(sourceUrls))
+                .degradationReasons(degradationReasons)
                 .build());
 
         return CollectionExecutionReport.builder()
                 .status(status)
+                .degraded(deadlineReached && hasReusableResult)
+                .degradationReasons(degradationReasons)
                 .results(stableResults)
                 .auditSnapshot(auditSnapshot)
                 .sourceUrls(new ArrayList<>(sourceUrls))
@@ -718,14 +820,25 @@ public class CollectionExecutionCoordinator {
 
     private CollectionExecutionReport buildReport(List<CollectionExecutionResult> results,
                                                   CollectionExecutionStats stats) {
-        return buildReport(results).toBuilder()
+        return buildReport(results, CollectionDeadlineContext.none(), Boolean.TRUE.equals(stats == null ? null : stats.getDeadlineReached())).toBuilder()
+                .stats(stats)
+                .build();
+    }
+
+    private CollectionExecutionReport buildReport(List<CollectionExecutionResult> results,
+                                                  CollectionExecutionStats stats,
+                                                  CollectionDeadlineContext deadlineContext,
+                                                  boolean deadlineReached) {
+        return buildReport(results, deadlineContext, deadlineReached).toBuilder()
                 .stats(stats)
                 .build();
     }
 
     private CollectionExecutionStats buildStats(List<CollectionExecutionResult> results,
                                                 MutableCollectionCounters counters,
-                                                long startedAt) {
+                                                long startedAt,
+                                                CollectionDeadlineContext deadlineContext,
+                                                boolean deadlineReached) {
         List<CollectionExecutionResult> stableResults = results == null ? List.of() : results;
         int successCount = 0;
         int failedCount = 0;
@@ -745,6 +858,9 @@ public class CollectionExecutionCoordinator {
                 .executorCallCount(counters.executorCallCount)
                 .configuredConcurrency(Math.max(1, collectionExecutionProperties.getConcurrency()))
                 .elapsedMillis(Math.max(0L, System.currentTimeMillis() - startedAt))
+                .deadlineReached(deadlineReached)
+                .deadlineSkippedCount(counters.deadlineSkippedCount)
+                .hardDeadlineEpochMillis(deadlineContext == null ? Long.MAX_VALUE : deadlineContext.hardDeadlineEpochMillis())
                 .build();
     }
 
@@ -791,6 +907,7 @@ public class CollectionExecutionCoordinator {
         private int prefetchedReuseCount;
         private int checkpointReuseCount;
         private int executorCallCount;
+        private int deadlineSkippedCount;
 
         private synchronized void incrementPrefetchedReuse() {
             prefetchedReuseCount++;
@@ -803,6 +920,10 @@ public class CollectionExecutionCoordinator {
         private synchronized void incrementExecutorCall() {
             executorCallCount++;
         }
+
+        private synchronized void incrementDeadlineSkipped(int count) {
+            deadlineSkippedCount += Math.max(0, count);
+        }
     }
 
     private static class MutableQueueState {
@@ -813,6 +934,19 @@ public class CollectionExecutionCoordinator {
         private MutableQueueState(int nextTargetIndex, int totalDiscoveredLinks) {
             this.nextTargetIndex = nextTargetIndex;
             this.totalDiscoveredLinks = totalDiscoveredLinks;
+        }
+    }
+
+    private static class MutableDeadlineState {
+
+        private boolean reached;
+
+        private boolean reached() {
+            return reached;
+        }
+
+        private void markReached() {
+            reached = true;
         }
     }
 }

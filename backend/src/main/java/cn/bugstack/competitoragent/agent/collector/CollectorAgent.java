@@ -4,14 +4,18 @@ import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.agent.BaseAgent;
 import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
+import cn.bugstack.competitoragent.collection.CollectionDeadlineContext;
+import cn.bugstack.competitoragent.config.ThirdPartyFallbackProperties;
 import cn.bugstack.competitoragent.collection.CollectionExecutionCoordinator;
 import cn.bugstack.competitoragent.collection.CollectionExecutionReport;
 import cn.bugstack.competitoragent.collection.CollectionExecutionResult;
+import cn.bugstack.competitoragent.collection.CollectionExecutionStats;
 import cn.bugstack.competitoragent.collection.quality.EvidenceQualityContext;
 import cn.bugstack.competitoragent.collection.quality.EvidenceQualityGate;
 import cn.bugstack.competitoragent.collection.quality.EvidenceQualityGateProperties;
 import cn.bugstack.competitoragent.collection.quality.EvidenceQualityVerdict;
 import cn.bugstack.competitoragent.context.AgentContextAssembler;
+import cn.bugstack.competitoragent.llm.PromptTemplateService;
 import cn.bugstack.competitoragent.model.entity.AnalysisTask;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
 import cn.bugstack.competitoragent.model.entity.KnowledgeDocument;
@@ -42,6 +46,7 @@ import cn.bugstack.competitoragent.search.SearchExecutionStep;
 import cn.bugstack.competitoragent.search.SearchExecutionUpdate;
 import cn.bugstack.competitoragent.search.tavily.FieldEvidenceQueryExecutionAudit;
 import cn.bugstack.competitoragent.source.SourceCollector;
+import cn.bugstack.competitoragent.source.SourceTrustTier;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.workflow.contract.CollectResult;
 import cn.bugstack.competitoragent.workflow.contract.CollectedDocument;
@@ -53,6 +58,7 @@ import cn.bugstack.competitoragent.workflow.coverage.DimensionEvidencePlan;
 import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceCoverage;
 import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceCoverageAggregator;
 import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceCoverageStatus;
+import cn.bugstack.competitoragent.model.dto.CollectionAuditSummary;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -66,6 +72,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -88,6 +95,7 @@ public class CollectorAgent extends BaseAgent {
 
     private static final String DISCARDED_AFTER_STOP = "DISCARDED_AFTER_STOP";
     private static final String HARD_DEADLINE_REACHED = "HARD_DEADLINE_REACHED";
+    private static final String OFFICIAL_UNREACHABLE_THIRDPARTY_FALLBACK = "OFFICIAL_UNREACHABLE_THIRDPARTY_FALLBACK";
     private static final long OFFICIAL_COLLECTOR_HARD_DEADLINE_MILLIS = 90_000L;
     private static final long PRICING_COLLECTOR_HARD_DEADLINE_MILLIS = 90_000L;
     private static final long DOCS_COLLECTOR_HARD_DEADLINE_MILLIS = 150_000L;
@@ -111,6 +119,25 @@ public class CollectorAgent extends BaseAgent {
     private final EvidenceSourceSanitizer evidenceSourceSanitizer;
     private final PublicEvidenceRecoveryService publicEvidenceRecoveryService;
     private final FieldEvidenceCoverageAggregator fieldEvidenceCoverageAggregator;
+    /**
+     * 第三方回退配置。用 setter 注入并给出默认值，避免改动既有多态构造链与测试调用点。
+     */
+    private ThirdPartyFallbackProperties thirdPartyFallbackProperties = new ThirdPartyFallbackProperties();
+    private PromptTemplateService promptTemplateService;
+
+    @Autowired(required = false)
+    public void setThirdPartyFallbackProperties(ThirdPartyFallbackProperties thirdPartyFallbackProperties) {
+        if (thirdPartyFallbackProperties != null) {
+            this.thirdPartyFallbackProperties = thirdPartyFallbackProperties;
+        }
+    }
+
+    @Autowired(required = false)
+    public void setPromptTemplateService(PromptTemplateService promptTemplateService) {
+        if (promptTemplateService != null) {
+            this.promptTemplateService = promptTemplateService;
+        }
+    }
 
     public CollectorAgent(AgentExecutionLogRepository logRepository,
                           SourceCollector sourceCollector,
@@ -263,6 +290,15 @@ public class CollectorAgent extends BaseAgent {
 
         String sourceType = !StringUtils.hasText(config.getSourceType()) ? "OFFICIAL" : config.getSourceType();
         long collectorHardDeadlineEpochMillis = resolveCollectorHardDeadlineEpochMillis(config, sourceType);
+        /*
+         * collector hard deadline 必须在一次节点执行里只生成一份共享 token。
+         * 首轮 search/collection、以及字段证据第二轮 recollection 都要消费同一份 token，
+         * 这样才能保证“deadline 到点后不再启动新工作”的语义不会被补采分支从侧门绕开。
+         */
+        CollectionDeadlineContext collectorDeadlineContext = CollectionDeadlineContext.hardDeadline(
+                collectorHardDeadlineEpochMillis,
+                resolveCollectorDeadlineDrainGraceMillis(config, sourceType)
+        );
         List<Map<String, Object>> results = new ArrayList<>();
         List<FieldEvidenceClaimCleanup> fieldEvidenceClaimCleanups = new ArrayList<>();
         int[] successCounterRef = new int[] {0};
@@ -278,6 +314,7 @@ public class CollectorAgent extends BaseAgent {
                     config,
                     sourceType,
                     collectorHardDeadlineEpochMillis,
+                    collectorDeadlineContext,
                     searchProgressListener
             );
         } catch (TimeoutException e) {
@@ -328,6 +365,30 @@ public class CollectorAgent extends BaseAgent {
                 : searchExecutionResult.getSelectedTargets();
         List<SearchCollectionTarget> failedPrefetchedAttemptTargets =
                 resolveFailedPrefetchedAttemptTargets(searchExecutionResult);
+        if (targets.isEmpty() && shouldAttemptThirdPartyFallback(config, sourceType)) {
+            // 官网采集选中 0：Notion 这类强反爬官网走到这里就永久空。
+            // 用第三方源 query 再搜一次，把官网失败降级成“第三方转述证据”，而不是直接饿死。
+            SearchExecutionResult fallbackResult = attemptThirdPartyFallback(
+                    context,
+                    config,
+                    sourceType,
+                    collectorHardDeadlineEpochMillis,
+                    collectorDeadlineContext,
+                    searchProgressListener);
+            List<SearchCollectionTarget> fallbackTargets = fallbackResult == null
+                    || fallbackResult.getSelectedTargets() == null
+                    ? List.of()
+                    : fallbackResult.getSelectedTargets();
+            if (!fallbackTargets.isEmpty()) {
+                registerFieldEvidenceClaimCleanup(context, config, fallbackResult, fieldEvidenceClaimCleanups);
+                searchExecutionResult = fallbackResult;
+                executionPlan = fallbackResult.getExecutionPlan();
+                progressSnapshots = fallbackResult.getProgressSnapshots() == null
+                        ? new ArrayList<>()
+                        : new ArrayList<>(fallbackResult.getProgressSnapshots());
+                targets = fallbackTargets;
+            }
+        }
         if (targets.isEmpty() && !failedPrefetchedAttemptTargets.isEmpty()) {
             return executePrefetchedAttemptFailurePhase(
                     context,
@@ -380,6 +441,7 @@ public class CollectorAgent extends BaseAgent {
                     config,
                     sourceType,
                     collectorHardDeadlineEpochMillis,
+                    collectorDeadlineContext,
                     searchExecutionResult,
                     executionPlan,
                     progressSnapshots,
@@ -403,7 +465,8 @@ public class CollectorAgent extends BaseAgent {
                 context.getPlanVersionId(),
                 config.getCompetitorName(),
                 executableTargets,
-                config.getCollectionAuditCheckpoint()
+                config.getCollectionAuditCheckpoint(),
+                collectorDeadlineContext
         );
         List<CollectionExecutionResult> collectionResults = collectionReport == null || collectionReport.getResults() == null
                 ? List.of()
@@ -590,6 +653,7 @@ public class CollectorAgent extends BaseAgent {
                 context,
                 config,
                 sourceType,
+                collectorDeadlineContext,
                 searchExecutionResult,
                 collectionReport,
                 auditResults,
@@ -657,7 +721,9 @@ public class CollectorAgent extends BaseAgent {
             String outputJson = buildCollectorOutput(
                     config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, collectionReport, progressSnapshots, results, successCounterRef[0], targets);
             return AgentResult.builder()
-                    .status(TaskNodeStatus.SUCCESS)
+                    .status(isThirdPartyFallbackApplied(searchExecutionResult)
+                            ? TaskNodeStatus.SUCCESS_DEGRADED
+                            : TaskNodeStatus.SUCCESS)
                     .outputData(outputJson)
                     .outputSummary("已完成 " + config.getCompetitorName() + " 的 " + sourceType + " 采集，可用来源 "
                             + successCounterRef[0] + "/" + results.size() + " 条")
@@ -873,12 +939,13 @@ public class CollectorAgent extends BaseAgent {
      * 这里显式把入口页结果和内部发现页结果拆开消费，确保 documents / collectionAudit / progress 都包含递归子页。
      */
     private AgentResult executeCollectionPhaseWithRecursiveResults(AgentContext context,
-                                                                  CollectorNodeConfig config,
-                                                                  String sourceType,
-                                                                  long collectorHardDeadlineEpochMillis,
-                                                                  SearchExecutionResult searchExecutionResult,
-                                                                  SearchExecutionPlan executionPlan,
-                                                                   List<SearchProgressSnapshot> progressSnapshots,
+                                                                   CollectorNodeConfig config,
+                                                                   String sourceType,
+                                                                   long collectorHardDeadlineEpochMillis,
+                                                                   CollectionDeadlineContext collectorDeadlineContext,
+                                                                   SearchExecutionResult searchExecutionResult,
+                                                                   SearchExecutionPlan executionPlan,
+                                                                    List<SearchProgressSnapshot> progressSnapshots,
                                                                    List<SearchCollectionTarget> targets,
                                                                    List<Map<String, Object>> results,
                                                                    int[] successCounterRef,
@@ -930,10 +997,18 @@ public class CollectorAgent extends BaseAgent {
                     context,
                     config,
                     executableTargets,
-                    collectorHardDeadlineEpochMillis
+                    collectorHardDeadlineEpochMillis,
+                    collectorDeadlineContext
             );
             collectionReport = collectionDeadlineResult.report();
             if (collectionDeadlineResult.hardDeadlineReached()) {
+                collectionHardDeadlineReached = true;
+                searchExecutionResult = markSearchExecutionResultAsHardDeadlineReached(
+                        searchExecutionResult,
+                        collectorHardDeadlineEpochMillis
+                );
+            }
+            if (isCollectionHardDeadlineReached(collectionReport)) {
                 collectionHardDeadlineReached = true;
                 searchExecutionResult = markSearchExecutionResultAsHardDeadlineReached(
                         searchExecutionResult,
@@ -1098,6 +1173,7 @@ public class CollectorAgent extends BaseAgent {
                 context,
                 config,
                 sourceType,
+                collectorDeadlineContext,
                 searchExecutionResult,
                 collectionReport,
                 auditResults,
@@ -1110,9 +1186,25 @@ public class CollectorAgent extends BaseAgent {
         searchExecutionResult = fieldEvidenceLoopOutcome.searchExecutionResult();
         targets = fieldEvidenceLoopOutcome.targets();
         int fieldEvidenceLoopRounds = fieldEvidenceLoopOutcome.rounds();
+        if (collectionHardDeadlineReached || isHardDeadlineReached(searchExecutionResult)) {
+            collectionReport = preserveCollectionHardDeadlineContract(collectionReport, successCounterRef[0] > 0);
+        }
 
         try {
             boolean hasFormalSelectedTargets = hasFormalSelectedTargets(targets);
+            AgentResult thirdPartyFallbackResult = tryExecuteThirdPartyFallbackCollectionAfterNoUsableEvidence(
+                    context,
+                    config,
+                    sourceType,
+                    collectorHardDeadlineEpochMillis,
+                    collectorDeadlineContext,
+                    searchExecutionResult,
+                    successCounterRef[0],
+                    fieldEvidenceClaimCleanups
+            );
+            if (thirdPartyFallbackResult != null) {
+                return thirdPartyFallbackResult;
+            }
             if (successCounterRef[0] == 0) {
                 if (collectionHardDeadlineReached || isHardDeadlineReached(searchExecutionResult)) {
                     return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
@@ -1182,7 +1274,7 @@ public class CollectorAgent extends BaseAgent {
                     config, sourceType, context.getTaskRagPromptContext(), searchExecutionResult, collectionReport,
                     progressSnapshots, results, successCounterRef[0], targets, fieldEvidenceLoopRounds);
             return AgentResult.builder()
-                    .status(isHardDeadlineReached(searchExecutionResult)
+                    .status(isHardDeadlineReached(searchExecutionResult) || isThirdPartyFallbackApplied(searchExecutionResult)
                             ? TaskNodeStatus.SUCCESS_DEGRADED
                             : TaskNodeStatus.SUCCESS)
                     .outputData(outputJson)
@@ -1801,6 +1893,231 @@ public class CollectorAgent extends BaseAgent {
     }
 
     /**
+     * 是否对当前节点尝试第三方回退：开关开启、sourceType 在允许列表内、且已预生成第三方 query。
+     */
+    private boolean shouldAttemptThirdPartyFallback(CollectorNodeConfig config, String sourceType) {
+        if (!isThirdPartyFallbackEligible(config, sourceType)) {
+            return false;
+        }
+        return thirdPartyFallbackProperties.isTriggerOnZeroSelected();
+    }
+
+    private boolean shouldAttemptThirdPartyFallbackAfterCollection(CollectorNodeConfig config,
+                                                                   String sourceType,
+                                                                   SearchExecutionResult searchExecutionResult,
+                                                                   int successCounter) {
+        if (!isThirdPartyFallbackEligible(config, sourceType)
+                || isThirdPartyFallbackApplied(searchExecutionResult)) {
+            return false;
+        }
+        int threshold = Math.max(1, thirdPartyFallbackProperties.getMinEvidenceThreshold());
+        return successCounter < threshold;
+    }
+
+    /**
+     * 第三方回退只允许 OFFICIAL/DOCS 这类强官网依赖节点使用，且必须已有规划期 fallback query。
+     * 这样 Airtable 等官网可采节点不会被提前改道，非官网证据节点也不会误触发。
+     */
+    private boolean isThirdPartyFallbackEligible(CollectorNodeConfig config, String sourceType) {
+        if (thirdPartyFallbackProperties == null || !thirdPartyFallbackProperties.isEnabled()) {
+            return false;
+        }
+        if (config == null) {
+            return false;
+        }
+        String normalized = sourceType == null ? "" : sourceType.trim().toUpperCase(Locale.ROOT);
+        List<String> allowed = thirdPartyFallbackProperties.getSourceTypes();
+        return allowed != null && allowed.stream()
+                .filter(StringUtils::hasText)
+                .anyMatch(type -> type.trim().toUpperCase(Locale.ROOT).equals(normalized));
+    }
+
+    /**
+     * 官网目标已经选中但正式采集没有形成可用证据时，不能继续死磕官网失败结果。
+     * 这里改用第三方 query 重搜并重新采集；若第三方链路没有拿到目标，则返回 null 让原失败语义继续收口。
+     */
+    private AgentResult tryExecuteThirdPartyFallbackCollectionAfterNoUsableEvidence(
+            AgentContext context,
+            CollectorNodeConfig config,
+            String sourceType,
+            long collectorHardDeadlineEpochMillis,
+            CollectionDeadlineContext collectorDeadlineContext,
+            SearchExecutionResult originalSearchExecutionResult,
+            int successCounter,
+            List<FieldEvidenceClaimCleanup> fieldEvidenceClaimCleanups) {
+        if (!shouldAttemptThirdPartyFallbackAfterCollection(
+                config,
+                sourceType,
+                originalSearchExecutionResult,
+                successCounter
+        )) {
+            return null;
+        }
+        SearchExecutionResult fallbackSearchResult = attemptThirdPartyFallback(
+                context,
+                config,
+                sourceType,
+                collectorHardDeadlineEpochMillis,
+                collectorDeadlineContext,
+                null
+        );
+        List<SearchCollectionTarget> fallbackTargets = fallbackSearchResult == null
+                || fallbackSearchResult.getSelectedTargets() == null
+                ? List.of()
+                : fallbackSearchResult.getSelectedTargets();
+        if (fallbackTargets.isEmpty()) {
+            return null;
+        }
+        registerFieldEvidenceClaimCleanup(context, config, fallbackSearchResult, fieldEvidenceClaimCleanups);
+        List<SearchProgressSnapshot> fallbackProgressSnapshots = fallbackSearchResult.getProgressSnapshots() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(fallbackSearchResult.getProgressSnapshots());
+        return executeCollectionPhaseWithRecursiveResults(
+                context,
+                config,
+                sourceType,
+                collectorHardDeadlineEpochMillis,
+                collectorDeadlineContext,
+                fallbackSearchResult,
+                fallbackSearchResult.getExecutionPlan(),
+                fallbackProgressSnapshots,
+                fallbackTargets,
+                new ArrayList<>(),
+                new int[] {0},
+                fieldEvidenceClaimCleanups
+        );
+    }
+
+    /**
+     * 官网采集失败后的第三方源回退：用预生成的第三方 query 重跑一次搜索，
+     * 复用同一份 hard deadline token（不为回退额外延长预算），
+     * 把选中的候选统一改写为 THIRD_PARTY_FALLBACK + 中可信，让下游归属校验豁免官方域名、trustTier 如实降级。
+     * 仍受节点 deadline 约束；到点或异常时返回 null，由调用方按原选中 0 语义收口。
+     */
+    private SearchExecutionResult attemptThirdPartyFallback(AgentContext context,
+                                                            CollectorNodeConfig config,
+                                                            String sourceType,
+                                                            long collectorHardDeadlineEpochMillis,
+                                                            CollectionDeadlineContext collectorDeadlineContext,
+                                                            Consumer<SearchExecutionUpdate> progressListener) {
+        if (resolveRemainingCollectorHardDeadlineMillis(collectorHardDeadlineEpochMillis) <= 0L) {
+            return null;
+        }
+        List<String> fallbackQueries = resolveThirdPartyFallbackQueries(config);
+        if (fallbackQueries.isEmpty()) {
+            return null;
+        }
+        // 构造第三方回退专用 config：替换 query，清空官方域名限定，避免 site: 锚点把回退又拉回官网。
+        CollectorNodeConfig fallbackConfig = config.toBuilder()
+                .competitorUrls(List.of())
+                .sourceCandidates(List.of())
+                .searchQueries(fallbackQueries)
+                .preferredDomains(List.of())
+                .includeDomains(List.of())
+                .tavilyQueryMode("OPEN_WEB")
+                .thirdPartyFallbackActive(Boolean.TRUE)
+                .searchExecutionPlan(null)
+                .build();
+        SearchExecutionResult fallbackResult;
+        try {
+            fallbackResult = executeSearchWithinHardDeadline(
+                    context,
+                    fallbackConfig,
+                    sourceType,
+                    collectorHardDeadlineEpochMillis,
+                    collectorDeadlineContext,
+                    progressListener);
+        } catch (TimeoutException e) {
+            return null;
+        } catch (RuntimeException e) {
+            log.warn("third-party fallback search failed, keep original official failure semantics: taskId={}, sourceType={}, error={}",
+                    context == null ? null : context.getTaskId(), sourceType, e.getMessage());
+            return null;
+        }
+        if (fallbackResult == null || fallbackResult.getSelectedTargets() == null
+                || fallbackResult.getSelectedTargets().isEmpty()) {
+            return fallbackResult;
+        }
+        List<SearchCollectionTarget> retagged = fallbackResult.getSelectedTargets().stream()
+                .map(this::markTargetAsThirdPartyFallback)
+                .toList();
+        fallbackResult.setSelectedTargets(retagged);
+        markSearchResultAsThirdPartyFallback(fallbackResult);
+        return fallbackResult;
+    }
+
+    /**
+     * 第三方回退 query 优先使用规划期预生成值；旧任务或手写节点缺字段时，
+     * 运行期复用 PromptTemplateService 的同一套模板兜底生成，避免计划/执行接缝让回退能力消失。
+     */
+    private List<String> resolveThirdPartyFallbackQueries(CollectorNodeConfig config) {
+        if (config == null) {
+            return List.of();
+        }
+        List<String> configuredQueries = config.getThirdPartyFallbackQueries() == null
+                ? List.of()
+                : config.getThirdPartyFallbackQueries().stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .distinct()
+                .toList();
+        if (!configuredQueries.isEmpty()) {
+            return configuredQueries;
+        }
+        if (!StringUtils.hasText(config.getCompetitorName())) {
+            return List.of();
+        }
+        PromptTemplateService fallbackPromptTemplateService = promptTemplateService != null
+                ? promptTemplateService
+                : new PromptTemplateService(objectMapper);
+        return fallbackPromptTemplateService.buildThirdPartyFallbackQueries(config.getCompetitorName());
+    }
+
+    /**
+     * 官网不可达、改走第三方源属于降级：在 executionTrace 打上降级标记，
+     * 让节点收口为 SUCCESS_DEGRADED 并向下游/前端如实暴露 OFFICIAL_UNREACHABLE_THIRDPARTY_FALLBACK，
+     * 不把“官网采不到、靠第三方兜底”伪装成普通 SUCCESS。
+     */
+    private void markSearchResultAsThirdPartyFallback(SearchExecutionResult searchExecutionResult) {
+        if (searchExecutionResult == null) {
+            return;
+        }
+        SearchExecutionTrace trace = searchExecutionResult.getExecutionTrace();
+        if (trace == null) {
+            trace = SearchExecutionTrace.builder().build();
+            searchExecutionResult.setExecutionTrace(trace);
+        }
+        trace.setDegraded(true);
+        trace.setDegradationReason(OFFICIAL_UNREACHABLE_THIRDPARTY_FALLBACK);
+    }
+
+    /**
+     * 第三方回退是否已生效：executionTrace 携带 OFFICIAL_UNREACHABLE_THIRDPARTY_FALLBACK 降级原因。
+     */
+    private boolean isThirdPartyFallbackApplied(SearchExecutionResult searchExecutionResult) {
+        return searchExecutionResult != null
+                && searchExecutionResult.getExecutionTrace() != null
+                && OFFICIAL_UNREACHABLE_THIRDPARTY_FALLBACK.equals(
+                        searchExecutionResult.getExecutionTrace().getDegradationReason());
+    }
+
+    /**
+     * 把回退候选打标 THIRD_PARTY_FALLBACK 并降为中可信。
+     * 打标发生在采集/验证/报告消费之前，保证归属豁免与 trustTier 降级生效。
+     */
+    private SearchCollectionTarget markTargetAsThirdPartyFallback(SearchCollectionTarget target) {
+        if (target == null || target.getCandidate() == null) {
+            return target;
+        }
+        SourceCandidate retagged = target.getCandidate().toBuilder()
+                .discoveryMethod("THIRD_PARTY_FALLBACK")
+                .trustTier(SourceTrustTier.MEDIUM)
+                .trustTierLabel(SourceTrustTier.MEDIUM.getDisplayName())
+                .build();
+        return target.toBuilder().candidate(retagged).build();
+    }
+
+    /**
      * 节点级 hard deadline 必须覆盖 search + collect 全链路。
      * 旧实现只限制 collection coordinator，DOCS 这类长尾 search 会在进入采集前无限拖住节点。
      */
@@ -1808,18 +2125,26 @@ public class CollectorAgent extends BaseAgent {
                                                                   CollectorNodeConfig config,
                                                                   String sourceType,
                                                                   long collectorHardDeadlineEpochMillis,
+                                                                  CollectionDeadlineContext collectorDeadlineContext,
                                                                   Consumer<SearchExecutionUpdate> progressListener)
             throws TimeoutException {
         long remainingMillis = resolveRemainingCollectorHardDeadlineMillis(collectorHardDeadlineEpochMillis);
         if (remainingMillis <= 0L) {
             throw new TimeoutException(HARD_DEADLINE_REACHED);
         }
+        CollectionDeadlineContext deadlineContext = collectorDeadlineContext == null
+                ? CollectionDeadlineContext.hardDeadline(
+                collectorHardDeadlineEpochMillis,
+                resolveCollectorDeadlineDrainGraceMillis(config, sourceType)
+        )
+                : collectorDeadlineContext;
         ExecutorService executorService = Executors.newSingleThreadExecutor();
         Future<SearchExecutionResult> future = executorService.submit(() -> searchExecutionCoordinator.execute(
                 config,
                 context.getTaskId(),
                 context.getFieldEvidenceFingerprintClaims(),
-                progressListener
+                progressListener,
+                deadlineContext
         ));
         try {
             return future.get(remainingMillis, TimeUnit.MILLISECONDS);
@@ -1978,13 +2303,20 @@ public class CollectorAgent extends BaseAgent {
     }
 
     private CollectionDeadlineResult executeCollectionCoordinatorWithinHardDeadline(AgentContext context,
-                                                                                   CollectorNodeConfig config,
-                                                                                   List<SearchCollectionTarget> targets,
-                                                                                   long collectorHardDeadlineEpochMillis) throws TimeoutException {
+                                                                                    CollectorNodeConfig config,
+                                                                                    List<SearchCollectionTarget> targets,
+                                                                                    long collectorHardDeadlineEpochMillis,
+                                                                                    CollectionDeadlineContext collectorDeadlineContext) throws TimeoutException {
         long remainingMillis = resolveRemainingCollectorHardDeadlineMillis(collectorHardDeadlineEpochMillis);
         if (remainingMillis <= 0L) {
             throw new TimeoutException(HARD_DEADLINE_REACHED);
         }
+        CollectionDeadlineContext deadlineContext = collectorDeadlineContext == null
+                ? CollectionDeadlineContext.hardDeadline(
+                collectorHardDeadlineEpochMillis,
+                resolveCollectorDeadlineDrainGraceMillis(config, config == null ? null : config.getSourceType())
+        )
+                : collectorDeadlineContext;
         ExecutorService executorService = Executors.newSingleThreadExecutor();
         Future<CollectionExecutionReport> future = executorService.submit(() -> collectionExecutionCoordinator.execute(
                 context.getTaskId(),
@@ -1992,7 +2324,8 @@ public class CollectorAgent extends BaseAgent {
                 context.getPlanVersionId(),
                 config.getCompetitorName(),
                 targets,
-                config.getCollectionAuditCheckpoint()
+                config.getCollectionAuditCheckpoint(),
+                deadlineContext
         ));
         try {
             return new CollectionDeadlineResult(future.get(remainingMillis, TimeUnit.MILLISECONDS), false);
@@ -2167,12 +2500,16 @@ public class CollectorAgent extends BaseAgent {
                 true,
                 HARD_DEADLINE_REACHED));
         try {
+            CollectionExecutionReport normalizedCollectionReport = preserveCollectionHardDeadlineContract(
+                    collectionReport,
+                    successCounter > 0
+            );
             String outputJson = buildCollectorOutput(
                     config,
                     sourceType,
                     context.getTaskRagPromptContext(),
                     searchExecutionResult,
-                    collectionReport,
+                    normalizedCollectionReport,
                     progressSnapshots,
                     results,
                     successCounter,
@@ -2217,9 +2554,75 @@ public class CollectorAgent extends BaseAgent {
     }
 
     /**
+     * coordinator 内层已经主动停机时，会先把事实写进 collection report/audit。
+     * CollectorAgent 必须消费这份事实并走统一的降级收口，不能再被后续普通 SUCCESS 分支覆盖。
+     */
+    private boolean isCollectionHardDeadlineReached(CollectionExecutionReport collectionReport) {
+        return collectionReport != null
+                && collectionReport.getDegradationReasons() != null
+                && collectionReport.getDegradationReasons().contains(HARD_DEADLINE_REACHED);
+    }
+
+    /**
      * collection future 的返回结果与是否已经越过 hard deadline 需要一起传递。
      * 这样即使 grace 窗口内拿到了正式证据，节点也会保持降级语义，而不是伪装成普通 SUCCESS。
      */
+    /**
+     * coordinator 在内层 queue/batch 命中 hard deadline 后，Collector 仍然会继续做结果 gate、持久化与 audit 汇总。
+     * 这一步如果直接重新 summarize，很容易把内层已经判定好的 SUCCESS_DEGRADED / HARD_DEADLINE_REACHED 洗回普通 SUCCESS。
+     * 因此这里在最终输出前显式恢复 deadline 降级契约，确保节点状态、collectionStatus、collectionAudit.summary 三处语义一致。
+     */
+    private CollectionExecutionReport preserveCollectionHardDeadlineContract(CollectionExecutionReport collectionReport,
+                                                                             boolean hasUsableEvidence) {
+        if (collectionReport == null) {
+            return null;
+        }
+        List<String> degradationReasons = List.of(HARD_DEADLINE_REACHED);
+        String status = hasUsableEvidence
+                ? "SUCCESS_DEGRADED"
+                : firstNonBlank(collectionReport.getStatus(), "FAILED");
+        CollectionAuditSnapshot auditSnapshot = collectionReport.getAuditSnapshot();
+        if (auditSnapshot == null) {
+            auditSnapshot = CollectionAuditSnapshot.builder()
+                    .status(collectionReport.getStatus())
+                    .results(collectionReport.getResults() == null ? List.of() : collectionReport.getResults())
+                    .replayTimeline(List.of())
+                    .sourceUrls(collectionReport.getSourceUrls() == null ? List.of() : collectionReport.getSourceUrls())
+                    .build();
+        }
+        CollectionAuditSummary summary = CollectionAuditSummary.from(auditSnapshot).toBuilder()
+                .status(status)
+                .recoveryCheckpoint(auditSnapshot.getRecoveryCheckpoint())
+                .sourceUrls(auditSnapshot.getSourceUrls() == null ? List.of() : auditSnapshot.getSourceUrls())
+                .degradationReasons(degradationReasons)
+                .build();
+        CollectionExecutionStats stats = collectionReport.getStats() == null
+                ? null
+                : CollectionExecutionStats.builder()
+                .totalPackageCount(collectionReport.getStats().getTotalPackageCount())
+                .successCount(collectionReport.getStats().getSuccessCount())
+                .failedCount(collectionReport.getStats().getFailedCount())
+                .prefetchedReuseCount(collectionReport.getStats().getPrefetchedReuseCount())
+                .checkpointReuseCount(collectionReport.getStats().getCheckpointReuseCount())
+                .executorCallCount(collectionReport.getStats().getExecutorCallCount())
+                .configuredConcurrency(collectionReport.getStats().getConfiguredConcurrency())
+                .elapsedMillis(collectionReport.getStats().getElapsedMillis())
+                .deadlineReached(true)
+                .deadlineSkippedCount(collectionReport.getStats().getDeadlineSkippedCount())
+                .hardDeadlineEpochMillis(collectionReport.getStats().getHardDeadlineEpochMillis())
+                .build();
+        return collectionReport.toBuilder()
+                .status(status)
+                .degraded(hasUsableEvidence)
+                .degradationReasons(degradationReasons)
+                .auditSnapshot(auditSnapshot.toBuilder()
+                        .status(status)
+                        .summary(summary)
+                        .build())
+                .stats(stats)
+                .build();
+    }
+
     private record CollectionDeadlineResult(CollectionExecutionReport report, boolean hardDeadlineReached) {
     }
 
@@ -2646,6 +3049,7 @@ public class CollectorAgent extends BaseAgent {
     private FieldEvidenceLoopOutcome applyFieldEvidenceLoopIfNeeded(AgentContext context,
                                                                     CollectorNodeConfig config,
                                                                     String sourceType,
+                                                                    CollectionDeadlineContext collectorDeadlineContext,
                                                                     SearchExecutionResult searchExecutionResult,
                                                                     CollectionExecutionReport collectionReport,
                                                                     List<CollectionExecutionResult> auditResults,
@@ -2659,6 +3063,11 @@ public class CollectorAgent extends BaseAgent {
         );
         config.setDimensionEvidencePlan(updatedPlan);
         int rounds = 1;
+        // collector hard deadline 一旦命中，就不能再启动新的补采搜索或第二轮 collection。
+        // 否则外层已经决定“停止新工作”，字段补采又会从侧门重新拉起 search/collect，破坏统一的 deadline 语义。
+        if (isHardDeadlineReached(searchExecutionResult) || isCollectionHardDeadlineReached(collectionReport)) {
+            return new FieldEvidenceLoopOutcome(collectionReport, searchExecutionResult, targets, rounds);
+        }
         if (!shouldRunFieldEvidenceRecollection(config, updatedPlan, rounds)) {
             return new FieldEvidenceLoopOutcome(collectionReport, searchExecutionResult, targets, rounds);
         }
@@ -2674,12 +3083,15 @@ public class CollectorAgent extends BaseAgent {
              * 第二轮补采服务于第一轮未覆盖字段，不能继续复用首轮 fingerprint claim set。
              * 这里仅切换 claim scope，不关闭同一补采轮内的跨节点去重，避免把 task88 的降本能力整体回滚。
              */
+            // 第二轮字段补采必须复用首轮同一份 collector deadline token，
+            // 这样 deadline 到点后，recollection 分支也不会从侧门重新启动新工作。
             secondRoundSearchResult = searchExecutionCoordinator.execute(
                     config,
                     context.getTaskId(),
                     context.getFieldEvidenceFingerprintClaims(),
                     update ->
-                    persistRunningOutput(context, config, sourceType, update, results, successCounterRef[0]));
+                    persistRunningOutput(context, config, sourceType, update, results, successCounterRef[0]),
+                    collectorDeadlineContext);
             registerFieldEvidenceClaimCleanup(context, config, secondRoundSearchResult, fieldEvidenceClaimCleanups);
         } finally {
             config.setFieldEvidenceClaimScope(previousClaimScope);
@@ -2691,6 +3103,7 @@ public class CollectorAgent extends BaseAgent {
                 context,
                 config,
                 sourceType,
+                collectorDeadlineContext,
                 secondRoundSearchResult,
                 secondRoundTargets,
                 results,
@@ -2759,6 +3172,7 @@ public class CollectorAgent extends BaseAgent {
     private CollectionExecutionReport collectFieldEvidenceRound(AgentContext context,
                                                                 CollectorNodeConfig config,
                                                                 String sourceType,
+                                                                CollectionDeadlineContext collectorDeadlineContext,
                                                                 SearchExecutionResult searchExecutionResult,
                                                                 List<SearchCollectionTarget> targets,
                                                                 List<Map<String, Object>> results,
@@ -2772,7 +3186,8 @@ public class CollectorAgent extends BaseAgent {
                 context.getPlanVersionId(),
                 config.getCompetitorName(),
                 targets.stream().filter(this::requiresCoordinatorExecution).toList(),
-                config.getCollectionAuditCheckpoint()
+                config.getCollectionAuditCheckpoint(),
+                collectorDeadlineContext
         );
         List<CollectionExecutionResult> collectionResults = collectionReport == null || collectionReport.getResults() == null
                 ? List.of()

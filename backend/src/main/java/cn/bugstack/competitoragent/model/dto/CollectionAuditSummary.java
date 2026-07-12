@@ -30,6 +30,7 @@ public class CollectionAuditSummary {
     private String status;
     private String recoveryCheckpoint;
     private List<String> sourceUrls;
+    private List<String> degradationReasons;
 
     /**
      * 从正式审计快照提取轻量摘要。
@@ -43,6 +44,7 @@ public class CollectionAuditSummary {
                     .failedCount(0)
                     .reusedCount(0)
                     .sourceUrls(List.of())
+                    .degradationReasons(List.of())
                     .build();
         }
         List<CollectionExecutionResult> results = snapshot.getResults() == null ? List.of() : snapshot.getResults();
@@ -70,6 +72,7 @@ public class CollectionAuditSummary {
                 .status(snapshot.getStatus())
                 .recoveryCheckpoint(snapshot.getRecoveryCheckpoint())
                 .sourceUrls(snapshot.getSourceUrls() == null ? List.of() : snapshot.getSourceUrls())
+                .degradationReasons(List.of())
                 .build();
     }
 }

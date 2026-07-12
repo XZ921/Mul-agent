@@ -171,8 +171,12 @@ public class CandidateVerifier {
             List<String> directMatchedSignals = collectMatchedSignals(candidate, directPage, sourceType);
             boolean directMarketingPage = isMarketingLandingPage(directPage, sourceType);
             boolean directRejectedMediator = candidateOwnershipPolicy.isRejectedMediator(candidate, directPage);
-            boolean directOwnershipMatched = !candidateOwnershipPolicy.shouldRequireOwnershipValidation(candidate, sourceType)
-                    || candidateOwnershipPolicy.hasCompetitorEvidenceOwnershipSignal(competitorName, candidate, directPage);
+            boolean directOwnershipMatched = resolveEvidenceOwnershipMatched(
+                    competitorName,
+                    sourceType,
+                    candidate,
+                    directPage
+            );
             boolean directVerified = isVerified(
                     directPage,
                     directMatchedSignals,
@@ -199,8 +203,12 @@ public class CandidateVerifier {
         List<String> matchedSignals = collectMatchedSignals(candidate, page, sourceType);
         boolean marketingPage = isMarketingLandingPage(page, sourceType);
         boolean rejectedMediator = candidateOwnershipPolicy.isRejectedMediator(candidate, page);
-        boolean ownershipMatched = !candidateOwnershipPolicy.shouldRequireOwnershipValidation(candidate, sourceType)
-                || candidateOwnershipPolicy.hasCompetitorEvidenceOwnershipSignal(competitorName, candidate, page);
+        boolean ownershipMatched = resolveEvidenceOwnershipMatched(
+                competitorName,
+                sourceType,
+                candidate,
+                page
+        );
         return buildVerificationTarget(
                 candidate,
                 page,
@@ -211,6 +219,21 @@ public class CandidateVerifier {
                 ownershipMatched,
                 null
         );
+    }
+
+    /**
+     * 第三方回退只豁免“必须是官方域名”的门槛，不能豁免正文里的竞品归属信号。
+     * 否则开放 web 搜索可能把泛文档/测评页当成 Notion/Airtable 证据，重新引入不可追溯的假阳性。
+     */
+    private boolean resolveEvidenceOwnershipMatched(String competitorName,
+                                                    String sourceType,
+                                                    SourceCandidate candidate,
+                                                    SourceCollector.CollectedPage page) {
+        if (candidateOwnershipPolicy.isThirdPartyFallbackCandidate(candidate)) {
+            return candidateOwnershipPolicy.hasCompetitorEvidenceOwnershipSignal(competitorName, candidate, page);
+        }
+        return !candidateOwnershipPolicy.shouldRequireOwnershipValidation(candidate, sourceType)
+                || candidateOwnershipPolicy.hasCompetitorEvidenceOwnershipSignal(competitorName, candidate, page);
     }
 
     private SearchCollectionTarget buildVerificationTarget(SourceCandidate candidate,

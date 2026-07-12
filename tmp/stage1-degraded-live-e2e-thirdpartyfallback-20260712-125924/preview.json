@@ -1,0 +1,1223 @@
+﻿{
+    "code":  200,
+    "message":  "æä½æå",
+    "data":  {
+                 "contractType":  "TASK_PLAN_PREVIEW_V1",
+                 "goal":  "å´ç» ä¼ä¸çº§ç¥è¯åä½ä¸ä½ä»£ç å·¥ä½å° å¼å±ç«åç ç©¶",
+                 "competitorCount":  2,
+                 "collectorCount":  6,
+                 "pipelineCount":  8,
+                 "lanes":  [
+
+                           ],
+                 "stages":  [
+                                {
+                                    "key":  "goal",
+                                    "stageCode":  "GOAL",
+                                    "title":  "æç¡®ä»»å¡ç®æ ",
+                                    "summary":  "é¶æ®µ1éçº§å¥çº¦åç«å E2Eï¼Notion ä¸ Airtable ä¸æ¸¸å¥çº¦å¤æµ",
+                                    "detail":  "å´ç» ä¼ä¸çº§ç¥è¯åä½ä¸ä½ä»£ç å·¥ä½å° å¼å±ç«åç ç©¶",
+                                    "sourceUrls":  [
+                                                       "https://www.notion.so",
+                                                       "https://www.airtable.com"
+                                                   ]
+                                },
+                                {
+                                    "key":  "source-strategy",
+                                    "stageCode":  "SOURCE_STRATEGY",
+                                    "title":  "è§åæ¥æºç­ç¥",
+                                    "summary":  "æ 2 ä¸ªç«åè§åèµæå\u0085¥å£ï¼ä¼å\u0085è¦ç å®ç½ãå®¢æ·æ¡ä¾ãäº§åææ¡£ ç­ 4 é¡¹",
+                                    "detail":  "å½åè®¡åå·²ææ 6 ä¸ªééåæ¯ï¼æ§è¡æ¶å°å¤ç¨åä¸ä»½æ­£å¼è®¡åå¿«ç\u0085§",
+                                    "sourceUrls":  [
+                                                       "https://www.notion.so",
+                                                       "https://www.notion.so/docs",
+                                                       "https://www.notion.so/documentation",
+                                                       "https://www.notion.so/help",
+                                                       "https://www.notion.so/guide",
+                                                       "https://www.g2.com/search?query=Notion",
+                                                       "https://www.capterra.com/search/?query=Notion",
+                                                       "https://www.notion.so/case-studies",
+                                                       "https://www.notion.so/compare",
+                                                       "https://www.notion.so/customers",
+                                                       "https://www.airtable.com",
+                                                       "https://www.airtable.com/docs",
+                                                       "https://www.airtable.com/documentation",
+                                                       "https://www.airtable.com/help",
+                                                       "https://www.airtable.com/guide",
+                                                       "https://www.g2.com/search?query=Airtable",
+                                                       "https://www.capterra.com/search/?query=Airtable",
+                                                       "https://www.airtable.com/case-studies",
+                                                       "https://www.airtable.com/compare",
+                                                       "https://www.airtable.com/customers"
+                                                   ]
+                                },
+                                {
+                                    "key":  "collect",
+                                    "stageCode":  "COLLECT",
+                                    "title":  "å¹¶è¡ééèµæ",
+                                    "summary":  "æç«åä¸æ¥æºèå´å±å¼ééåæ¯ï¼æ­£å¼æ§è¡æ¶å¹¶è¡æ¶éè¯æ®",
+                                    "detail":  "ééåæ¯ä¼ä¼å\u0085ä½¿ç¨å·²ç¥å\u0085¥å£ï¼ä¸è¶³æ¶åæ fallback é¡ºåºè¡¥æº",
+                                    "sourceUrls":  [
+                                                       "https://www.notion.so",
+                                                       "https://www.notion.so/docs",
+                                                       "https://www.notion.so/documentation",
+                                                       "https://www.notion.so/help",
+                                                       "https://www.notion.so/guide",
+                                                       "https://www.g2.com/search?query=Notion",
+                                                       "https://www.capterra.com/search/?query=Notion",
+                                                       "https://www.notion.so/case-studies",
+                                                       "https://www.notion.so/compare",
+                                                       "https://www.notion.so/customers",
+                                                       "https://www.airtable.com",
+                                                       "https://www.airtable.com/docs",
+                                                       "https://www.airtable.com/documentation",
+                                                       "https://www.airtable.com/help",
+                                                       "https://www.airtable.com/guide",
+                                                       "https://www.g2.com/search?query=Airtable",
+                                                       "https://www.capterra.com/search/?query=Airtable",
+                                                       "https://www.airtable.com/case-studies",
+                                                       "https://www.airtable.com/compare",
+                                                       "https://www.airtable.com/customers"
+                                                   ]
+                                },
+                                {
+                                    "key":  "extract",
+                                    "stageCode":  "EXTRACT",
+                                    "title":  "ç»æåæå",
+                                    "summary":  "å°ééç»ææ´çä¸ºç»æåå­æ®µï¼éç¹è¦ç äº§åæ¦è¿°ãå¸åºå®ä½ãç®æ ç¨æ· ç­ 5 é¡¹",
+                                    "detail":  "æ½åç»æå¿\u0085é¡»ä¿ç sourceUrlsï¼ä¾¿äºåç»­åæãåä½ä¸å®¡è®¡åæº¯",
+                                    "sourceUrls":  [
+                                                       "https://www.notion.so",
+                                                       "https://www.notion.so/docs",
+                                                       "https://www.notion.so/documentation",
+                                                       "https://www.notion.so/help",
+                                                       "https://www.notion.so/guide",
+                                                       "https://www.g2.com/search?query=Notion",
+                                                       "https://www.capterra.com/search/?query=Notion",
+                                                       "https://www.notion.so/case-studies",
+                                                       "https://www.notion.so/compare",
+                                                       "https://www.notion.so/customers",
+                                                       "https://www.airtable.com",
+                                                       "https://www.airtable.com/docs",
+                                                       "https://www.airtable.com/documentation",
+                                                       "https://www.airtable.com/help",
+                                                       "https://www.airtable.com/guide",
+                                                       "https://www.g2.com/search?query=Airtable",
+                                                       "https://www.capterra.com/search/?query=Airtable",
+                                                       "https://www.airtable.com/case-studies",
+                                                       "https://www.airtable.com/compare",
+                                                       "https://www.airtable.com/customers"
+                                                   ]
+                                },
+                                {
+                                    "key":  "analyze",
+                                    "stageCode":  "ANALYZE",
+                                    "title":  "æ±æ»åæ",
+                                    "summary":  "åºäºç»æåå­æ®µçæç«åå¯¹æ¯ç»è®º",
+                                    "detail":  "åæç»æä¼å´ç»ç«åæ°éãåæç»´åº¦åè¯æ®å\u0085\u0085åæ§å½¢æç»ä¸å¤æ­",
+                                    "sourceUrls":  [
+                                                       "https://www.notion.so",
+                                                       "https://www.notion.so/docs",
+                                                       "https://www.notion.so/documentation",
+                                                       "https://www.notion.so/help",
+                                                       "https://www.notion.so/guide",
+                                                       "https://www.g2.com/search?query=Notion",
+                                                       "https://www.capterra.com/search/?query=Notion",
+                                                       "https://www.notion.so/case-studies",
+                                                       "https://www.notion.so/compare",
+                                                       "https://www.notion.so/customers",
+                                                       "https://www.airtable.com",
+                                                       "https://www.airtable.com/docs",
+                                                       "https://www.airtable.com/documentation",
+                                                       "https://www.airtable.com/help",
+                                                       "https://www.airtable.com/guide",
+                                                       "https://www.g2.com/search?query=Airtable",
+                                                       "https://www.capterra.com/search/?query=Airtable",
+                                                       "https://www.airtable.com/case-studies",
+                                                       "https://www.airtable.com/compare",
+                                                       "https://www.airtable.com/customers"
+                                                   ]
+                                },
+                                {
+                                    "key":  "deliver",
+                                    "stageCode":  "DELIVER",
+                                    "title":  "è¾åºä¸å¤æ ¸",
+                                    "summary":  "çææ¥åãæ§è¡å¼ç¨æ ¸æ¥ï¼å¹¶å¨å¿\u0085è¦æ¶è¿å\u0085¥è¯å®¡æ¹åé­ç¯",
+                                    "detail":  "äº¤ä»é¶æ®µä¼ä¾æ¬¡ç»è¿ WriterãCitationãReviewerï¼è´¨éæå¼ç¨é¨æ§æªè¾¾æ æ¶ï¼ç³»ç»ä¼èªå¨çæä¿®è®¢è®¡åå¹¶æ§è¡å¤æ ¸",
+                                    "sourceUrls":  [
+                                                       "https://www.notion.so",
+                                                       "https://www.notion.so/docs",
+                                                       "https://www.notion.so/documentation",
+                                                       "https://www.notion.so/help",
+                                                       "https://www.notion.so/guide",
+                                                       "https://www.g2.com/search?query=Notion",
+                                                       "https://www.capterra.com/search/?query=Notion",
+                                                       "https://www.notion.so/case-studies",
+                                                       "https://www.notion.so/compare",
+                                                       "https://www.notion.so/customers",
+                                                       "https://www.airtable.com",
+                                                       "https://www.airtable.com/docs",
+                                                       "https://www.airtable.com/documentation",
+                                                       "https://www.airtable.com/help",
+                                                       "https://www.airtable.com/guide",
+                                                       "https://www.g2.com/search?query=Airtable",
+                                                       "https://www.capterra.com/search/?query=Airtable",
+                                                       "https://www.airtable.com/case-studies",
+                                                       "https://www.airtable.com/compare",
+                                                       "https://www.airtable.com/customers"
+                                                   ]
+                                }
+                            ],
+                 "nodes":  [
+                               {
+                                   "nodeName":  "collect_sources_01_01",
+                                   "displayName":  "Notion - OFFICIALéé",
+                                   "agentType":  "COLLECTOR",
+                                   "stageCode":  "SOURCE_STRATEGY",
+                                   "goal":  "ä¼å\u0085è¦ç OFFICIAL æ¥æºï¼å¹¶å¨å¿\u0085è¦æ¶è¡¥å\u0085\u0085å\u0085¬ç½æç´¢",
+                                   "summary":  "Notion è®¡åä¼å\u0085è¦ç å®ç½ãå®¢æ·æ¡ä¾ãäº§åææ¡£ ç­ 4 é¡¹",
+                                   "configSummaryData":  {
+                                                             "summaryText":  "Notion è®¡åä¼å\u0085è¦ç å®ç½ãå®¢æ·æ¡ä¾ãäº§åææ¡£ ç­ 4 é¡¹",
+                                                             "competitorName":  "Notion",
+                                                             "sourceType":  "OFFICIAL",
+                                                             "sourceFamilyKey":  "official",
+                                                             "sourceFamilyRole":  "PRIMARY_VERTICAL",
+                                                             "primaryTools":  [
+                                                                                  "PUBLIC_SEARCH"
+                                                                              ],
+                                                             "auxiliaryTools":  [
+                                                                                    "WEB_SCRAPER",
+                                                                                    "JINA_READER"
+                                                                                ],
+                                                             "queryTemplates":  [
+                                                                                    "search-official",
+                                                                                    "search-official-domain",
+                                                                                    "search-pricing-primary",
+                                                                                    "search-docs-primary"
+                                                                                ],
+                                                             "sourceTypeLabel":  "å®ç½",
+                                                             "searchMode":  "HYBRID",
+                                                             "searchModeLabel":  "æ··å",
+                                                             "candidateCount":  1,
+                                                             "queryCount":  2,
+                                                             "stepCount":  6,
+                                                             "browserSearchEnabled":  true,
+                                                             "verificationEnabled":  true,
+                                                             "minVerifiedCandidates":  1,
+                                                             "sourceScope":  [
+                                                                                 "å®ç½",
+                                                                                 "å®¢æ·æ¡ä¾",
+                                                                                 "äº§åææ¡£",
+                                                                                 "å\u0085¬å¼æµè¯"
+                                                                             ],
+                                                             "preferredDomains":  [
+                                                                                      "www.notion.so"
+                                                                                  ],
+                                                             "competitorUrls":  [
+                                                                                    "https://www.notion.so"
+                                                                                ],
+                                                             "discoveryNotes":  "Official siteï¼ä¿ç 1 ä¸ªåéæ¥æºï¼å\u0085¶ä¸­æç´¢è¡¥æº 0 ä¸ªï¼åºäºç¨æ·æä¾ URL æ©å±å¹¶ç»åæç´¢å¼è¡¥æº",
+                                                             "mode":  null,
+                                                             "reportLanguage":  null,
+                                                             "reportTemplate":  null,
+                                                             "qualityPolicy":  null,
+                                                             "sourceNode":  null,
+                                                             "competitorCount":  null,
+                                                             "dimensionCount":  null,
+                                                             "dimensions":  null
+                                                         },
+                                   "dependsOn":  [
+
+                                                 ],
+                                   "required":  true,
+                                   "executionOrder":  0,
+                                   "fallbackOrder":  [
+                                                         "PLANNED",
+                                                         "BROWSER",
+                                                         "HTTP"
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://www.notion.so"
+                                                  ]
+                               },
+                               {
+                                   "nodeName":  "collect_sources_01_02",
+                                   "displayName":  "Notion - DOCSéé",
+                                   "agentType":  "COLLECTOR",
+                                   "stageCode":  "SOURCE_STRATEGY",
+                                   "goal":  "ä¼å\u0085è¦ç DOCS æ¥æºï¼å¹¶å¨å¿\u0085è¦æ¶è¡¥å\u0085\u0085å\u0085¬ç½æç´¢",
+                                   "summary":  "Notion è®¡åä¼å\u0085è¦ç å®ç½ãå®¢æ·æ¡ä¾ãäº§åææ¡£ ç­ 4 é¡¹",
+                                   "configSummaryData":  {
+                                                             "summaryText":  "Notion è®¡åä¼å\u0085è¦ç å®ç½ãå®¢æ·æ¡ä¾ãäº§åææ¡£ ç­ 4 é¡¹",
+                                                             "competitorName":  "Notion",
+                                                             "sourceType":  "DOCS",
+                                                             "sourceFamilyKey":  "official",
+                                                             "sourceFamilyRole":  "PRIMARY_VERTICAL",
+                                                             "primaryTools":  [
+                                                                                  "PUBLIC_SEARCH"
+                                                                              ],
+                                                             "auxiliaryTools":  [
+                                                                                    "WEB_SCRAPER",
+                                                                                    "JINA_READER"
+                                                                                ],
+                                                             "queryTemplates":  [
+                                                                                    "search-official",
+                                                                                    "search-official-domain",
+                                                                                    "search-pricing-primary",
+                                                                                    "search-docs-primary"
+                                                                                ],
+                                                             "sourceTypeLabel":  "äº§åææ¡£",
+                                                             "searchMode":  "HYBRID",
+                                                             "searchModeLabel":  "æ··å",
+                                                             "candidateCount":  4,
+                                                             "queryCount":  3,
+                                                             "stepCount":  6,
+                                                             "browserSearchEnabled":  true,
+                                                             "verificationEnabled":  true,
+                                                             "minVerifiedCandidates":  2,
+                                                             "sourceScope":  [
+                                                                                 "å®ç½",
+                                                                                 "å®¢æ·æ¡ä¾",
+                                                                                 "äº§åææ¡£",
+                                                                                 "å\u0085¬å¼æµè¯"
+                                                                             ],
+                                                             "preferredDomains":  [
+                                                                                      "www.notion.so"
+                                                                                  ],
+                                                             "competitorUrls":  [
+                                                                                    "https://www.notion.so/docs",
+                                                                                    "https://www.notion.so/documentation",
+                                                                                    "https://www.notion.so/help",
+                                                                                    "https://www.notion.so/guide"
+                                                                                ],
+                                                             "discoveryNotes":  "Documentationï¼ä¿ç 4 ä¸ªåéæ¥æºï¼å\u0085¶ä¸­æç´¢è¡¥æº 0 ä¸ªï¼åºäºç¨æ·æä¾ URL æ©å±å¹¶ç»åæç´¢å¼è¡¥æº",
+                                                             "mode":  null,
+                                                             "reportLanguage":  null,
+                                                             "reportTemplate":  null,
+                                                             "qualityPolicy":  null,
+                                                             "sourceNode":  null,
+                                                             "competitorCount":  null,
+                                                             "dimensionCount":  null,
+                                                             "dimensions":  null
+                                                         },
+                                   "dependsOn":  [
+
+                                                 ],
+                                   "required":  true,
+                                   "executionOrder":  1,
+                                   "fallbackOrder":  [
+                                                         "PLANNED",
+                                                         "BROWSER",
+                                                         "HTTP"
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://www.notion.so",
+                                                      "https://www.notion.so/docs",
+                                                      "https://www.notion.so/documentation",
+                                                      "https://www.notion.so/help",
+                                                      "https://www.notion.so/guide"
+                                                  ]
+                               },
+                               {
+                                   "nodeName":  "collect_sources_01_03",
+                                   "displayName":  "Notion - REVIEWéé",
+                                   "agentType":  "COLLECTOR",
+                                   "stageCode":  "SOURCE_STRATEGY",
+                                   "goal":  "ä¼å\u0085è¦ç REVIEW æ¥æºï¼å¹¶å¨å¿\u0085è¦æ¶è¡¥å\u0085\u0085å\u0085¬ç½æç´¢",
+                                   "summary":  "Notion è®¡åä¼å\u0085è¦ç å®ç½ãå®¢æ·æ¡ä¾ãäº§åææ¡£ ç­ 4 é¡¹",
+                                   "configSummaryData":  {
+                                                             "summaryText":  "Notion è®¡åä¼å\u0085è¦ç å®ç½ãå®¢æ·æ¡ä¾ãäº§åææ¡£ ç­ 4 é¡¹",
+                                                             "competitorName":  "Notion",
+                                                             "sourceType":  "REVIEW",
+                                                             "sourceFamilyKey":  "official",
+                                                             "sourceFamilyRole":  "PRIMARY_VERTICAL",
+                                                             "primaryTools":  [
+                                                                                  "PUBLIC_SEARCH"
+                                                                              ],
+                                                             "auxiliaryTools":  [
+                                                                                    "WEB_SCRAPER",
+                                                                                    "JINA_READER"
+                                                                                ],
+                                                             "queryTemplates":  [
+                                                                                    "search-official",
+                                                                                    "search-official-domain",
+                                                                                    "search-pricing-primary",
+                                                                                    "search-docs-primary"
+                                                                                ],
+                                                             "sourceTypeLabel":  "æµè¯",
+                                                             "searchMode":  "HYBRID",
+                                                             "searchModeLabel":  "æ··å",
+                                                             "candidateCount":  5,
+                                                             "queryCount":  4,
+                                                             "stepCount":  6,
+                                                             "browserSearchEnabled":  true,
+                                                             "verificationEnabled":  true,
+                                                             "minVerifiedCandidates":  2,
+                                                             "sourceScope":  [
+                                                                                 "å®ç½",
+                                                                                 "å®¢æ·æ¡ä¾",
+                                                                                 "äº§åææ¡£",
+                                                                                 "å\u0085¬å¼æµè¯"
+                                                                             ],
+                                                             "preferredDomains":  [
+                                                                                      "www.g2.com",
+                                                                                      "www.capterra.com",
+                                                                                      "www.notion.so"
+                                                                                  ],
+                                                             "competitorUrls":  [
+                                                                                    "https://www.g2.com/search?query=Notion",
+                                                                                    "https://www.capterra.com/search/?query=Notion",
+                                                                                    "https://www.notion.so/case-studies",
+                                                                                    "https://www.notion.so/compare",
+                                                                                    "https://www.notion.so/customers"
+                                                                                ],
+                                                             "discoveryNotes":  "Public reviewsï¼ä¿ç 5 ä¸ªåéæ¥æºï¼å\u0085¶ä¸­æç´¢è¡¥æº 0 ä¸ªï¼åºäºç¨æ·æä¾ URL æ©å±å¹¶ç»åæç´¢å¼è¡¥æº",
+                                                             "mode":  null,
+                                                             "reportLanguage":  null,
+                                                             "reportTemplate":  null,
+                                                             "qualityPolicy":  null,
+                                                             "sourceNode":  null,
+                                                             "competitorCount":  null,
+                                                             "dimensionCount":  null,
+                                                             "dimensions":  null
+                                                         },
+                                   "dependsOn":  [
+
+                                                 ],
+                                   "required":  true,
+                                   "executionOrder":  2,
+                                   "fallbackOrder":  [
+                                                         "PLANNED",
+                                                         "BROWSER",
+                                                         "HTTP"
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://www.notion.so",
+                                                      "https://www.g2.com/search?query=Notion",
+                                                      "https://www.capterra.com/search/?query=Notion",
+                                                      "https://www.notion.so/case-studies",
+                                                      "https://www.notion.so/compare",
+                                                      "https://www.notion.so/customers"
+                                                  ]
+                               },
+                               {
+                                   "nodeName":  "collect_sources_02_01",
+                                   "displayName":  "Airtable - OFFICIALéé",
+                                   "agentType":  "COLLECTOR",
+                                   "stageCode":  "SOURCE_STRATEGY",
+                                   "goal":  "ä¼å\u0085è¦ç OFFICIAL æ¥æºï¼å¹¶å¨å¿\u0085è¦æ¶è¡¥å\u0085\u0085å\u0085¬ç½æç´¢",
+                                   "summary":  "Airtable è®¡åä¼å\u0085è¦ç å®ç½ãå®¢æ·æ¡ä¾ãäº§åææ¡£ ç­ 4 é¡¹",
+                                   "configSummaryData":  {
+                                                             "summaryText":  "Airtable è®¡åä¼å\u0085è¦ç å®ç½ãå®¢æ·æ¡ä¾ãäº§åææ¡£ ç­ 4 é¡¹",
+                                                             "competitorName":  "Airtable",
+                                                             "sourceType":  "OFFICIAL",
+                                                             "sourceFamilyKey":  "official",
+                                                             "sourceFamilyRole":  "PRIMARY_VERTICAL",
+                                                             "primaryTools":  [
+                                                                                  "PUBLIC_SEARCH"
+                                                                              ],
+                                                             "auxiliaryTools":  [
+                                                                                    "WEB_SCRAPER",
+                                                                                    "JINA_READER"
+                                                                                ],
+                                                             "queryTemplates":  [
+                                                                                    "search-official",
+                                                                                    "search-official-domain",
+                                                                                    "search-pricing-primary",
+                                                                                    "search-docs-primary"
+                                                                                ],
+                                                             "sourceTypeLabel":  "å®ç½",
+                                                             "searchMode":  "HYBRID",
+                                                             "searchModeLabel":  "æ··å",
+                                                             "candidateCount":  1,
+                                                             "queryCount":  2,
+                                                             "stepCount":  6,
+                                                             "browserSearchEnabled":  true,
+                                                             "verificationEnabled":  true,
+                                                             "minVerifiedCandidates":  1,
+                                                             "sourceScope":  [
+                                                                                 "å®ç½",
+                                                                                 "å®¢æ·æ¡ä¾",
+                                                                                 "äº§åææ¡£",
+                                                                                 "å\u0085¬å¼æµè¯"
+                                                                             ],
+                                                             "preferredDomains":  [
+                                                                                      "www.airtable.com"
+                                                                                  ],
+                                                             "competitorUrls":  [
+                                                                                    "https://www.airtable.com"
+                                                                                ],
+                                                             "discoveryNotes":  "Official siteï¼ä¿ç 1 ä¸ªåéæ¥æºï¼å\u0085¶ä¸­æç´¢è¡¥æº 0 ä¸ªï¼åºäºç¨æ·æä¾ URL æ©å±å¹¶ç»åæç´¢å¼è¡¥æº",
+                                                             "mode":  null,
+                                                             "reportLanguage":  null,
+                                                             "reportTemplate":  null,
+                                                             "qualityPolicy":  null,
+                                                             "sourceNode":  null,
+                                                             "competitorCount":  null,
+                                                             "dimensionCount":  null,
+                                                             "dimensions":  null
+                                                         },
+                                   "dependsOn":  [
+
+                                                 ],
+                                   "required":  true,
+                                   "executionOrder":  3,
+                                   "fallbackOrder":  [
+                                                         "PLANNED",
+                                                         "BROWSER",
+                                                         "HTTP"
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://www.airtable.com"
+                                                  ]
+                               },
+                               {
+                                   "nodeName":  "collect_sources_02_02",
+                                   "displayName":  "Airtable - DOCSéé",
+                                   "agentType":  "COLLECTOR",
+                                   "stageCode":  "SOURCE_STRATEGY",
+                                   "goal":  "ä¼å\u0085è¦ç DOCS æ¥æºï¼å¹¶å¨å¿\u0085è¦æ¶è¡¥å\u0085\u0085å\u0085¬ç½æç´¢",
+                                   "summary":  "Airtable è®¡åä¼å\u0085è¦ç å®ç½ãå®¢æ·æ¡ä¾ãäº§åææ¡£ ç­ 4 é¡¹",
+                                   "configSummaryData":  {
+                                                             "summaryText":  "Airtable è®¡åä¼å\u0085è¦ç å®ç½ãå®¢æ·æ¡ä¾ãäº§åææ¡£ ç­ 4 é¡¹",
+                                                             "competitorName":  "Airtable",
+                                                             "sourceType":  "DOCS",
+                                                             "sourceFamilyKey":  "official",
+                                                             "sourceFamilyRole":  "PRIMARY_VERTICAL",
+                                                             "primaryTools":  [
+                                                                                  "PUBLIC_SEARCH"
+                                                                              ],
+                                                             "auxiliaryTools":  [
+                                                                                    "WEB_SCRAPER",
+                                                                                    "JINA_READER"
+                                                                                ],
+                                                             "queryTemplates":  [
+                                                                                    "search-official",
+                                                                                    "search-official-domain",
+                                                                                    "search-pricing-primary",
+                                                                                    "search-docs-primary"
+                                                                                ],
+                                                             "sourceTypeLabel":  "äº§åææ¡£",
+                                                             "searchMode":  "HYBRID",
+                                                             "searchModeLabel":  "æ··å",
+                                                             "candidateCount":  4,
+                                                             "queryCount":  3,
+                                                             "stepCount":  6,
+                                                             "browserSearchEnabled":  true,
+                                                             "verificationEnabled":  true,
+                                                             "minVerifiedCandidates":  2,
+                                                             "sourceScope":  [
+                                                                                 "å®ç½",
+                                                                                 "å®¢æ·æ¡ä¾",
+                                                                                 "äº§åææ¡£",
+                                                                                 "å\u0085¬å¼æµè¯"
+                                                                             ],
+                                                             "preferredDomains":  [
+                                                                                      "www.airtable.com"
+                                                                                  ],
+                                                             "competitorUrls":  [
+                                                                                    "https://www.airtable.com/docs",
+                                                                                    "https://www.airtable.com/documentation",
+                                                                                    "https://www.airtable.com/help",
+                                                                                    "https://www.airtable.com/guide"
+                                                                                ],
+                                                             "discoveryNotes":  "Documentationï¼ä¿ç 4 ä¸ªåéæ¥æºï¼å\u0085¶ä¸­æç´¢è¡¥æº 0 ä¸ªï¼åºäºç¨æ·æä¾ URL æ©å±å¹¶ç»åæç´¢å¼è¡¥æº",
+                                                             "mode":  null,
+                                                             "reportLanguage":  null,
+                                                             "reportTemplate":  null,
+                                                             "qualityPolicy":  null,
+                                                             "sourceNode":  null,
+                                                             "competitorCount":  null,
+                                                             "dimensionCount":  null,
+                                                             "dimensions":  null
+                                                         },
+                                   "dependsOn":  [
+
+                                                 ],
+                                   "required":  true,
+                                   "executionOrder":  4,
+                                   "fallbackOrder":  [
+                                                         "PLANNED",
+                                                         "BROWSER",
+                                                         "HTTP"
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://www.airtable.com",
+                                                      "https://www.airtable.com/docs",
+                                                      "https://www.airtable.com/documentation",
+                                                      "https://www.airtable.com/help",
+                                                      "https://www.airtable.com/guide"
+                                                  ]
+                               },
+                               {
+                                   "nodeName":  "collect_sources_02_03",
+                                   "displayName":  "Airtable - REVIEWéé",
+                                   "agentType":  "COLLECTOR",
+                                   "stageCode":  "SOURCE_STRATEGY",
+                                   "goal":  "ä¼å\u0085è¦ç REVIEW æ¥æºï¼å¹¶å¨å¿\u0085è¦æ¶è¡¥å\u0085\u0085å\u0085¬ç½æç´¢",
+                                   "summary":  "Airtable è®¡åä¼å\u0085è¦ç å®ç½ãå®¢æ·æ¡ä¾ãäº§åææ¡£ ç­ 4 é¡¹",
+                                   "configSummaryData":  {
+                                                             "summaryText":  "Airtable è®¡åä¼å\u0085è¦ç å®ç½ãå®¢æ·æ¡ä¾ãäº§åææ¡£ ç­ 4 é¡¹",
+                                                             "competitorName":  "Airtable",
+                                                             "sourceType":  "REVIEW",
+                                                             "sourceFamilyKey":  "official",
+                                                             "sourceFamilyRole":  "PRIMARY_VERTICAL",
+                                                             "primaryTools":  [
+                                                                                  "PUBLIC_SEARCH"
+                                                                              ],
+                                                             "auxiliaryTools":  [
+                                                                                    "WEB_SCRAPER",
+                                                                                    "JINA_READER"
+                                                                                ],
+                                                             "queryTemplates":  [
+                                                                                    "search-official",
+                                                                                    "search-official-domain",
+                                                                                    "search-pricing-primary",
+                                                                                    "search-docs-primary"
+                                                                                ],
+                                                             "sourceTypeLabel":  "æµè¯",
+                                                             "searchMode":  "HYBRID",
+                                                             "searchModeLabel":  "æ··å",
+                                                             "candidateCount":  5,
+                                                             "queryCount":  4,
+                                                             "stepCount":  6,
+                                                             "browserSearchEnabled":  true,
+                                                             "verificationEnabled":  true,
+                                                             "minVerifiedCandidates":  2,
+                                                             "sourceScope":  [
+                                                                                 "å®ç½",
+                                                                                 "å®¢æ·æ¡ä¾",
+                                                                                 "äº§åææ¡£",
+                                                                                 "å\u0085¬å¼æµè¯"
+                                                                             ],
+                                                             "preferredDomains":  [
+                                                                                      "www.g2.com",
+                                                                                      "www.capterra.com",
+                                                                                      "www.airtable.com"
+                                                                                  ],
+                                                             "competitorUrls":  [
+                                                                                    "https://www.g2.com/search?query=Airtable",
+                                                                                    "https://www.capterra.com/search/?query=Airtable",
+                                                                                    "https://www.airtable.com/case-studies",
+                                                                                    "https://www.airtable.com/compare",
+                                                                                    "https://www.airtable.com/customers"
+                                                                                ],
+                                                             "discoveryNotes":  "Public reviewsï¼ä¿ç 5 ä¸ªåéæ¥æºï¼å\u0085¶ä¸­æç´¢è¡¥æº 0 ä¸ªï¼åºäºç¨æ·æä¾ URL æ©å±å¹¶ç»åæç´¢å¼è¡¥æº",
+                                                             "mode":  null,
+                                                             "reportLanguage":  null,
+                                                             "reportTemplate":  null,
+                                                             "qualityPolicy":  null,
+                                                             "sourceNode":  null,
+                                                             "competitorCount":  null,
+                                                             "dimensionCount":  null,
+                                                             "dimensions":  null
+                                                         },
+                                   "dependsOn":  [
+
+                                                 ],
+                                   "required":  true,
+                                   "executionOrder":  5,
+                                   "fallbackOrder":  [
+                                                         "PLANNED",
+                                                         "BROWSER",
+                                                         "HTTP"
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://www.airtable.com",
+                                                      "https://www.g2.com/search?query=Airtable",
+                                                      "https://www.capterra.com/search/?query=Airtable",
+                                                      "https://www.airtable.com/case-studies",
+                                                      "https://www.airtable.com/compare",
+                                                      "https://www.airtable.com/customers"
+                                                  ]
+                               },
+                               {
+                                   "nodeName":  "extract_schema",
+                                   "displayName":  "ç«åç»æåæå",
+                                   "agentType":  "EXTRACTOR",
+                                   "stageCode":  "EXTRACT",
+                                   "goal":  "å°ééè¯æ®æ½åä¸ºç»æåå­æ®µ",
+                                   "summary":  "å°ééç»ææ´çä¸ºç»æåå­æ®µï¼éç¹è¦ç äº§åæ¦è¿°ãå¸åºå®ä½ãç®æ ç¨æ· ç­ 5 é¡¹",
+                                   "configSummaryData":  {
+                                                             "summaryText":  "å°ééç»ææ´çä¸ºç»æåå­æ®µï¼éç¹è¦ç äº§åæ¦è¿°ãå¸åºå®ä½ãç®æ ç¨æ· ç­ 5 é¡¹",
+                                                             "competitorName":  null,
+                                                             "sourceType":  null,
+                                                             "sourceFamilyKey":  null,
+                                                             "sourceFamilyRole":  null,
+                                                             "primaryTools":  null,
+                                                             "auxiliaryTools":  null,
+                                                             "queryTemplates":  null,
+                                                             "sourceTypeLabel":  null,
+                                                             "searchMode":  null,
+                                                             "searchModeLabel":  null,
+                                                             "candidateCount":  null,
+                                                             "queryCount":  null,
+                                                             "stepCount":  null,
+                                                             "browserSearchEnabled":  null,
+                                                             "verificationEnabled":  null,
+                                                             "minVerifiedCandidates":  null,
+                                                             "sourceScope":  null,
+                                                             "preferredDomains":  null,
+                                                             "competitorUrls":  null,
+                                                             "discoveryNotes":  null,
+                                                             "mode":  null,
+                                                             "reportLanguage":  null,
+                                                             "reportTemplate":  null,
+                                                             "qualityPolicy":  null,
+                                                             "sourceNode":  null,
+                                                             "competitorCount":  null,
+                                                             "dimensionCount":  null,
+                                                             "dimensions":  [
+                                                                                "äº§åæ¦è¿°",
+                                                                                "å¸åºå®ä½",
+                                                                                "ç®æ ç¨æ·",
+                                                                                "æ ¸å¿åè½",
+                                                                                "ä»·æ ¼ç­ç¥"
+                                                                            ]
+                                                         },
+                                   "dependsOn":  [
+                                                     "collect_sources_01_01",
+                                                     "collect_sources_01_02",
+                                                     "collect_sources_01_03",
+                                                     "collect_sources_02_01",
+                                                     "collect_sources_02_02",
+                                                     "collect_sources_02_03"
+                                                 ],
+                                   "required":  true,
+                                   "executionOrder":  6,
+                                   "fallbackOrder":  [
+
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://www.notion.so",
+                                                      "https://www.notion.so/docs",
+                                                      "https://www.notion.so/documentation",
+                                                      "https://www.notion.so/help",
+                                                      "https://www.notion.so/guide",
+                                                      "https://www.g2.com/search?query=Notion",
+                                                      "https://www.capterra.com/search/?query=Notion",
+                                                      "https://www.notion.so/case-studies",
+                                                      "https://www.notion.so/compare",
+                                                      "https://www.notion.so/customers",
+                                                      "https://www.airtable.com",
+                                                      "https://www.airtable.com/docs",
+                                                      "https://www.airtable.com/documentation",
+                                                      "https://www.airtable.com/help",
+                                                      "https://www.airtable.com/guide",
+                                                      "https://www.g2.com/search?query=Airtable",
+                                                      "https://www.capterra.com/search/?query=Airtable",
+                                                      "https://www.airtable.com/case-studies",
+                                                      "https://www.airtable.com/compare",
+                                                      "https://www.airtable.com/customers"
+                                                  ]
+                               },
+                               {
+                                   "nodeName":  "analyze_competitors",
+                                   "displayName":  "ç«åç»¼ååæ",
+                                   "agentType":  "ANALYZER",
+                                   "stageCode":  "ANALYZE",
+                                   "goal":  "æ±æ»ç«åä¿¡æ¯å¹¶å®ææ¨ªåå¯¹æ¯",
+                                   "summary":  "åºäºç»æåå­æ®µè¾åºç«ååæç»è®º",
+                                   "configSummaryData":  {
+                                                             "summaryText":  "åºäºç»æåå­æ®µè¾åºç«ååæç»è®º",
+                                                             "competitorName":  null,
+                                                             "sourceType":  null,
+                                                             "sourceFamilyKey":  null,
+                                                             "sourceFamilyRole":  null,
+                                                             "primaryTools":  null,
+                                                             "auxiliaryTools":  null,
+                                                             "queryTemplates":  null,
+                                                             "sourceTypeLabel":  null,
+                                                             "searchMode":  null,
+                                                             "searchModeLabel":  null,
+                                                             "candidateCount":  null,
+                                                             "queryCount":  null,
+                                                             "stepCount":  null,
+                                                             "browserSearchEnabled":  null,
+                                                             "verificationEnabled":  null,
+                                                             "minVerifiedCandidates":  null,
+                                                             "sourceScope":  null,
+                                                             "preferredDomains":  null,
+                                                             "competitorUrls":  null,
+                                                             "discoveryNotes":  null,
+                                                             "mode":  null,
+                                                             "reportLanguage":  null,
+                                                             "reportTemplate":  null,
+                                                             "qualityPolicy":  null,
+                                                             "sourceNode":  null,
+                                                             "competitorCount":  2,
+                                                             "dimensionCount":  5,
+                                                             "dimensions":  null
+                                                         },
+                                   "dependsOn":  [
+                                                     "extract_schema"
+                                                 ],
+                                   "required":  true,
+                                   "executionOrder":  7,
+                                   "fallbackOrder":  [
+
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://www.notion.so",
+                                                      "https://www.notion.so/docs",
+                                                      "https://www.notion.so/documentation",
+                                                      "https://www.notion.so/help",
+                                                      "https://www.notion.so/guide",
+                                                      "https://www.g2.com/search?query=Notion",
+                                                      "https://www.capterra.com/search/?query=Notion",
+                                                      "https://www.notion.so/case-studies",
+                                                      "https://www.notion.so/compare",
+                                                      "https://www.notion.so/customers",
+                                                      "https://www.airtable.com",
+                                                      "https://www.airtable.com/docs",
+                                                      "https://www.airtable.com/documentation",
+                                                      "https://www.airtable.com/help",
+                                                      "https://www.airtable.com/guide",
+                                                      "https://www.g2.com/search?query=Airtable",
+                                                      "https://www.capterra.com/search/?query=Airtable",
+                                                      "https://www.airtable.com/case-studies",
+                                                      "https://www.airtable.com/compare",
+                                                      "https://www.airtable.com/customers"
+                                                  ]
+                               },
+                               {
+                                   "nodeName":  "write_report",
+                                   "displayName":  "çæåææ¥å",
+                                   "agentType":  "WRITER",
+                                   "stageCode":  "DELIVER",
+                                   "goal":  "çæå¯äº¤ä»çåææ¥å",
+                                   "summary":  "ææ¥åè¯­è¨ä¸æ¨¡æ¿è¾åºé¦çæ¥å",
+                                   "configSummaryData":  {
+                                                             "summaryText":  "ææ¥åè¯­è¨ä¸æ¨¡æ¿è¾åºé¦çæ¥å",
+                                                             "competitorName":  null,
+                                                             "sourceType":  null,
+                                                             "sourceFamilyKey":  null,
+                                                             "sourceFamilyRole":  null,
+                                                             "primaryTools":  null,
+                                                             "auxiliaryTools":  null,
+                                                             "queryTemplates":  null,
+                                                             "sourceTypeLabel":  null,
+                                                             "searchMode":  null,
+                                                             "searchModeLabel":  null,
+                                                             "candidateCount":  null,
+                                                             "queryCount":  null,
+                                                             "stepCount":  null,
+                                                             "browserSearchEnabled":  null,
+                                                             "verificationEnabled":  null,
+                                                             "minVerifiedCandidates":  null,
+                                                             "sourceScope":  null,
+                                                             "preferredDomains":  null,
+                                                             "competitorUrls":  null,
+                                                             "discoveryNotes":  null,
+                                                             "mode":  "initial",
+                                                             "reportLanguage":  "ä¸­æ",
+                                                             "reportTemplate":  "é¶æ®µ1é¦æ¥",
+                                                             "qualityPolicy":  null,
+                                                             "sourceNode":  null,
+                                                             "competitorCount":  null,
+                                                             "dimensionCount":  null,
+                                                             "dimensions":  null
+                                                         },
+                                   "dependsOn":  [
+                                                     "analyze_competitors"
+                                                 ],
+                                   "required":  true,
+                                   "executionOrder":  8,
+                                   "fallbackOrder":  [
+
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://www.notion.so",
+                                                      "https://www.notion.so/docs",
+                                                      "https://www.notion.so/documentation",
+                                                      "https://www.notion.so/help",
+                                                      "https://www.notion.so/guide",
+                                                      "https://www.g2.com/search?query=Notion",
+                                                      "https://www.capterra.com/search/?query=Notion",
+                                                      "https://www.notion.so/case-studies",
+                                                      "https://www.notion.so/compare",
+                                                      "https://www.notion.so/customers",
+                                                      "https://www.airtable.com",
+                                                      "https://www.airtable.com/docs",
+                                                      "https://www.airtable.com/documentation",
+                                                      "https://www.airtable.com/help",
+                                                      "https://www.airtable.com/guide",
+                                                      "https://www.g2.com/search?query=Airtable",
+                                                      "https://www.capterra.com/search/?query=Airtable",
+                                                      "https://www.airtable.com/case-studies",
+                                                      "https://www.airtable.com/compare",
+                                                      "https://www.airtable.com/customers"
+                                                  ]
+                               },
+                               {
+                                   "nodeName":  "citation_check",
+                                   "displayName":  "æ¥åå¼ç¨æ ¸æ¥",
+                                   "agentType":  "CITATION",
+                                   "stageCode":  "DELIVER",
+                                   "goal":  "æ ¸æ¥é¦çæ¥åå¼ç¨è¦çãè¯æ®ç¼å·æææ§åæ¥æºå¯ä¿¡åº¦",
+                                   "summary":  "å¨è´¨éåå®¡åç¡®è®¤æ¥åç»è®ºå¯åææ¥æº",
+                                   "configSummaryData":  {
+                                                             "summaryText":  "æ ¸æ¥ write_report å¼ç¨è¦çï¼æä½è¦çç 0.85",
+                                                             "competitorName":  null,
+                                                             "sourceType":  null,
+                                                             "sourceFamilyKey":  null,
+                                                             "sourceFamilyRole":  null,
+                                                             "primaryTools":  null,
+                                                             "auxiliaryTools":  null,
+                                                             "queryTemplates":  null,
+                                                             "sourceTypeLabel":  null,
+                                                             "searchMode":  null,
+                                                             "searchModeLabel":  null,
+                                                             "candidateCount":  null,
+                                                             "queryCount":  null,
+                                                             "stepCount":  null,
+                                                             "browserSearchEnabled":  null,
+                                                             "verificationEnabled":  null,
+                                                             "minVerifiedCandidates":  null,
+                                                             "sourceScope":  null,
+                                                             "preferredDomains":  null,
+                                                             "competitorUrls":  null,
+                                                             "discoveryNotes":  null,
+                                                             "mode":  null,
+                                                             "reportLanguage":  null,
+                                                             "reportTemplate":  null,
+                                                             "qualityPolicy":  "official-first",
+                                                             "sourceNode":  "write_report",
+                                                             "competitorCount":  null,
+                                                             "dimensionCount":  null,
+                                                             "dimensions":  null
+                                                         },
+                                   "dependsOn":  [
+                                                     "write_report"
+                                                 ],
+                                   "required":  true,
+                                   "executionOrder":  9,
+                                   "fallbackOrder":  [
+
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://www.notion.so",
+                                                      "https://www.notion.so/docs",
+                                                      "https://www.notion.so/documentation",
+                                                      "https://www.notion.so/help",
+                                                      "https://www.notion.so/guide",
+                                                      "https://www.g2.com/search?query=Notion",
+                                                      "https://www.capterra.com/search/?query=Notion",
+                                                      "https://www.notion.so/case-studies",
+                                                      "https://www.notion.so/compare",
+                                                      "https://www.notion.so/customers",
+                                                      "https://www.airtable.com",
+                                                      "https://www.airtable.com/docs",
+                                                      "https://www.airtable.com/documentation",
+                                                      "https://www.airtable.com/help",
+                                                      "https://www.airtable.com/guide",
+                                                      "https://www.g2.com/search?query=Airtable",
+                                                      "https://www.capterra.com/search/?query=Airtable",
+                                                      "https://www.airtable.com/case-studies",
+                                                      "https://www.airtable.com/compare",
+                                                      "https://www.airtable.com/customers"
+                                                  ]
+                               },
+                               {
+                                   "nodeName":  "quality_check",
+                                   "displayName":  "æ¥åè´¨éåå®¡",
+                                   "agentType":  "REVIEWER",
+                                   "stageCode":  "DELIVER",
+                                   "goal":  "æ£æ¥æ¥åæ¯å¦æ»¡è¶³äº¤ä»è¦æ±",
+                                   "summary":  "å¯¹é¦çæ¥åæ§è¡è´¨éå®¡æ ¸å¹¶è¾åºä¿®è®¢è®¡å",
+                                   "configSummaryData":  {
+                                                             "summaryText":  "å¯¹é¦çæ¥åæ§è¡è´¨éå®¡æ ¸å¹¶è¾åºä¿®è®¢è®¡å",
+                                                             "competitorName":  null,
+                                                             "sourceType":  null,
+                                                             "sourceFamilyKey":  null,
+                                                             "sourceFamilyRole":  null,
+                                                             "primaryTools":  null,
+                                                             "auxiliaryTools":  null,
+                                                             "queryTemplates":  null,
+                                                             "sourceTypeLabel":  null,
+                                                             "searchMode":  null,
+                                                             "searchModeLabel":  null,
+                                                             "candidateCount":  null,
+                                                             "queryCount":  null,
+                                                             "stepCount":  null,
+                                                             "browserSearchEnabled":  null,
+                                                             "verificationEnabled":  null,
+                                                             "minVerifiedCandidates":  null,
+                                                             "sourceScope":  null,
+                                                             "preferredDomains":  null,
+                                                             "competitorUrls":  null,
+                                                             "discoveryNotes":  null,
+                                                             "mode":  null,
+                                                             "reportLanguage":  null,
+                                                             "reportTemplate":  null,
+                                                             "qualityPolicy":  "score\u003e=80 and no ERROR issues",
+                                                             "sourceNode":  null,
+                                                             "competitorCount":  null,
+                                                             "dimensionCount":  null,
+                                                             "dimensions":  null
+                                                         },
+                                   "dependsOn":  [
+                                                     "citation_check"
+                                                 ],
+                                   "required":  true,
+                                   "executionOrder":  10,
+                                   "fallbackOrder":  [
+
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://www.notion.so",
+                                                      "https://www.notion.so/docs",
+                                                      "https://www.notion.so/documentation",
+                                                      "https://www.notion.so/help",
+                                                      "https://www.notion.so/guide",
+                                                      "https://www.g2.com/search?query=Notion",
+                                                      "https://www.capterra.com/search/?query=Notion",
+                                                      "https://www.notion.so/case-studies",
+                                                      "https://www.notion.so/compare",
+                                                      "https://www.notion.so/customers",
+                                                      "https://www.airtable.com",
+                                                      "https://www.airtable.com/docs",
+                                                      "https://www.airtable.com/documentation",
+                                                      "https://www.airtable.com/help",
+                                                      "https://www.airtable.com/guide",
+                                                      "https://www.g2.com/search?query=Airtable",
+                                                      "https://www.capterra.com/search/?query=Airtable",
+                                                      "https://www.airtable.com/case-studies",
+                                                      "https://www.airtable.com/compare",
+                                                      "https://www.airtable.com/customers"
+                                                  ]
+                               },
+                               {
+                                   "nodeName":  "rewrite_report",
+                                   "displayName":  "æ ¹æ®è¯å®¡æ¹åæ¥å",
+                                   "agentType":  "WRITER",
+                                   "stageCode":  "DELIVER",
+                                   "goal":  "æä¿®è®¢å»ºè®®è¡¥å¼ºæ¥åç»è®º",
+                                   "summary":  "ä»\u0085å¨åå®¡å¤±è´¥æ¶è¿å\u0085¥æ¹åé­ç¯",
+                                   "configSummaryData":  {
+                                                             "summaryText":  "ä»\u0085å¨åå®¡å¤±è´¥æ¶è¿å\u0085¥æ¹åé­ç¯",
+                                                             "competitorName":  null,
+                                                             "sourceType":  null,
+                                                             "sourceFamilyKey":  null,
+                                                             "sourceFamilyRole":  null,
+                                                             "primaryTools":  null,
+                                                             "auxiliaryTools":  null,
+                                                             "queryTemplates":  null,
+                                                             "sourceTypeLabel":  null,
+                                                             "searchMode":  null,
+                                                             "searchModeLabel":  null,
+                                                             "candidateCount":  null,
+                                                             "queryCount":  null,
+                                                             "stepCount":  null,
+                                                             "browserSearchEnabled":  null,
+                                                             "verificationEnabled":  null,
+                                                             "minVerifiedCandidates":  null,
+                                                             "sourceScope":  null,
+                                                             "preferredDomains":  null,
+                                                             "competitorUrls":  null,
+                                                             "discoveryNotes":  null,
+                                                             "mode":  "revision",
+                                                             "reportLanguage":  "ä¸­æ",
+                                                             "reportTemplate":  "æ åç",
+                                                             "qualityPolicy":  null,
+                                                             "sourceNode":  "quality_check",
+                                                             "competitorCount":  null,
+                                                             "dimensionCount":  null,
+                                                             "dimensions":  null
+                                                         },
+                                   "dependsOn":  [
+                                                     "quality_check"
+                                                 ],
+                                   "required":  false,
+                                   "executionOrder":  11,
+                                   "fallbackOrder":  [
+
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://www.notion.so",
+                                                      "https://www.notion.so/docs",
+                                                      "https://www.notion.so/documentation",
+                                                      "https://www.notion.so/help",
+                                                      "https://www.notion.so/guide",
+                                                      "https://www.g2.com/search?query=Notion",
+                                                      "https://www.capterra.com/search/?query=Notion",
+                                                      "https://www.notion.so/case-studies",
+                                                      "https://www.notion.so/compare",
+                                                      "https://www.notion.so/customers",
+                                                      "https://www.airtable.com",
+                                                      "https://www.airtable.com/docs",
+                                                      "https://www.airtable.com/documentation",
+                                                      "https://www.airtable.com/help",
+                                                      "https://www.airtable.com/guide",
+                                                      "https://www.g2.com/search?query=Airtable",
+                                                      "https://www.capterra.com/search/?query=Airtable",
+                                                      "https://www.airtable.com/case-studies",
+                                                      "https://www.airtable.com/compare",
+                                                      "https://www.airtable.com/customers"
+                                                  ]
+                               },
+                               {
+                                   "nodeName":  "citation_check_revision",
+                                   "displayName":  "ä¿®è®¢æ¥åå¼ç¨å¤æ ¸",
+                                   "agentType":  "CITATION",
+                                   "stageCode":  "DELIVER",
+                                   "goal":  "å¤æ ¸ä¿®è®¢æ¥åå¼ç¨è¦çãè¯æ®ç¼å·æææ§åæ¥æºå¯ä¿¡åº¦",
+                                   "summary":  "å¨ç»å®¡åç¡®è®¤ä¿®è®¢åçæ¥åç»è®ºå¯åææ¥æº",
+                                   "configSummaryData":  {
+                                                             "summaryText":  "æ ¸æ¥ rewrite_report å¼ç¨è¦çï¼æä½è¦çç 0.9",
+                                                             "competitorName":  null,
+                                                             "sourceType":  null,
+                                                             "sourceFamilyKey":  null,
+                                                             "sourceFamilyRole":  null,
+                                                             "primaryTools":  null,
+                                                             "auxiliaryTools":  null,
+                                                             "queryTemplates":  null,
+                                                             "sourceTypeLabel":  null,
+                                                             "searchMode":  null,
+                                                             "searchModeLabel":  null,
+                                                             "candidateCount":  null,
+                                                             "queryCount":  null,
+                                                             "stepCount":  null,
+                                                             "browserSearchEnabled":  null,
+                                                             "verificationEnabled":  null,
+                                                             "minVerifiedCandidates":  null,
+                                                             "sourceScope":  null,
+                                                             "preferredDomains":  null,
+                                                             "competitorUrls":  null,
+                                                             "discoveryNotes":  null,
+                                                             "mode":  null,
+                                                             "reportLanguage":  null,
+                                                             "reportTemplate":  null,
+                                                             "qualityPolicy":  "official-first",
+                                                             "sourceNode":  "rewrite_report",
+                                                             "competitorCount":  null,
+                                                             "dimensionCount":  null,
+                                                             "dimensions":  null
+                                                         },
+                                   "dependsOn":  [
+                                                     "rewrite_report"
+                                                 ],
+                                   "required":  false,
+                                   "executionOrder":  12,
+                                   "fallbackOrder":  [
+
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://www.notion.so",
+                                                      "https://www.notion.so/docs",
+                                                      "https://www.notion.so/documentation",
+                                                      "https://www.notion.so/help",
+                                                      "https://www.notion.so/guide",
+                                                      "https://www.g2.com/search?query=Notion",
+                                                      "https://www.capterra.com/search/?query=Notion",
+                                                      "https://www.notion.so/case-studies",
+                                                      "https://www.notion.so/compare",
+                                                      "https://www.notion.so/customers",
+                                                      "https://www.airtable.com",
+                                                      "https://www.airtable.com/docs",
+                                                      "https://www.airtable.com/documentation",
+                                                      "https://www.airtable.com/help",
+                                                      "https://www.airtable.com/guide",
+                                                      "https://www.g2.com/search?query=Airtable",
+                                                      "https://www.capterra.com/search/?query=Airtable",
+                                                      "https://www.airtable.com/case-studies",
+                                                      "https://www.airtable.com/compare",
+                                                      "https://www.airtable.com/customers"
+                                                  ]
+                               },
+                               {
+                                   "nodeName":  "quality_check_final",
+                                   "displayName":  "æ¥åç»å®¡å¤æ ¸",
+                                   "agentType":  "REVIEWER",
+                                   "stageCode":  "DELIVER",
+                                   "goal":  "ç¡®è®¤æ¹ååçæ¥åæ»¡è¶³æç»äº¤ä»æ å",
+                                   "summary":  "ä»\u0085å¨æ§è¡è¿æ¹ååè¿å\u0085¥ç»å®¡å¤æ ¸",
+                                   "configSummaryData":  {
+                                                             "summaryText":  "ä»\u0085å¨æ§è¡è¿æ¹ååè¿å\u0085¥ç»å®¡å¤æ ¸",
+                                                             "competitorName":  null,
+                                                             "sourceType":  null,
+                                                             "sourceFamilyKey":  null,
+                                                             "sourceFamilyRole":  null,
+                                                             "primaryTools":  null,
+                                                             "auxiliaryTools":  null,
+                                                             "queryTemplates":  null,
+                                                             "sourceTypeLabel":  null,
+                                                             "searchMode":  null,
+                                                             "searchModeLabel":  null,
+                                                             "candidateCount":  null,
+                                                             "queryCount":  null,
+                                                             "stepCount":  null,
+                                                             "browserSearchEnabled":  null,
+                                                             "verificationEnabled":  null,
+                                                             "minVerifiedCandidates":  null,
+                                                             "sourceScope":  null,
+                                                             "preferredDomains":  null,
+                                                             "competitorUrls":  null,
+                                                             "discoveryNotes":  null,
+                                                             "mode":  null,
+                                                             "reportLanguage":  null,
+                                                             "reportTemplate":  null,
+                                                             "qualityPolicy":  "final pass after revision",
+                                                             "sourceNode":  "rewrite_report",
+                                                             "competitorCount":  null,
+                                                             "dimensionCount":  null,
+                                                             "dimensions":  null
+                                                         },
+                                   "dependsOn":  [
+                                                     "citation_check_revision"
+                                                 ],
+                                   "required":  false,
+                                   "executionOrder":  13,
+                                   "fallbackOrder":  [
+
+                                                     ],
+                                   "sourceUrls":  [
+                                                      "https://www.notion.so",
+                                                      "https://www.notion.so/docs",
+                                                      "https://www.notion.so/documentation",
+                                                      "https://www.notion.so/help",
+                                                      "https://www.notion.so/guide",
+                                                      "https://www.g2.com/search?query=Notion",
+                                                      "https://www.capterra.com/search/?query=Notion",
+                                                      "https://www.notion.so/case-studies",
+                                                      "https://www.notion.so/compare",
+                                                      "https://www.notion.so/customers",
+                                                      "https://www.airtable.com",
+                                                      "https://www.airtable.com/docs",
+                                                      "https://www.airtable.com/documentation",
+                                                      "https://www.airtable.com/help",
+                                                      "https://www.airtable.com/guide",
+                                                      "https://www.g2.com/search?query=Airtable",
+                                                      "https://www.capterra.com/search/?query=Airtable",
+                                                      "https://www.airtable.com/case-studies",
+                                                      "https://www.airtable.com/compare",
+                                                      "https://www.airtable.com/customers"
+                                                  ]
+                               }
+                           ],
+                 "sourceUrls":  [
+                                    "https://www.notion.so",
+                                    "https://www.notion.so/docs",
+                                    "https://www.notion.so/documentation",
+                                    "https://www.notion.so/help",
+                                    "https://www.notion.so/guide",
+                                    "https://www.g2.com/search?query=Notion",
+                                    "https://www.capterra.com/search/?query=Notion",
+                                    "https://www.notion.so/case-studies",
+                                    "https://www.notion.so/compare",
+                                    "https://www.notion.so/customers",
+                                    "https://www.airtable.com",
+                                    "https://www.airtable.com/docs",
+                                    "https://www.airtable.com/documentation",
+                                    "https://www.airtable.com/help",
+                                    "https://www.airtable.com/guide",
+                                    "https://www.g2.com/search?query=Airtable",
+                                    "https://www.capterra.com/search/?query=Airtable",
+                                    "https://www.airtable.com/case-studies",
+                                    "https://www.airtable.com/compare",
+                                    "https://www.airtable.com/customers"
+                                ]
+             },
+    "timestamp":  "2026-07-12T13:00:36.778124",
+    "traceId":  "1fcdaf05e4084b809c2d09c7cc818e63"
+}

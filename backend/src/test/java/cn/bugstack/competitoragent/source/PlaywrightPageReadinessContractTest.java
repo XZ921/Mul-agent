@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -73,7 +74,7 @@ class PlaywrightPageReadinessContractTest {
                 .sourceUrls(List.of("https://pricing.example.com"))
                 .build());
 
-        verify(page).waitForLoadState(LoadState.DOMCONTENTLOADED);
+        verify(page).waitForLoadState(eq(LoadState.DOMCONTENTLOADED), any(Page.WaitForLoadStateOptions.class));
         verify(page).waitForSelector(anyString(), any(Page.WaitForSelectorOptions.class));
     }
 }

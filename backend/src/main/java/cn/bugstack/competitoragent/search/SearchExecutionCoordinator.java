@@ -1,6 +1,7 @@
 package cn.bugstack.competitoragent.search;
 
 import cn.bugstack.competitoragent.agent.collector.CollectorNodeConfig;
+import cn.bugstack.competitoragent.collection.CollectionDeadlineContext;
 import cn.bugstack.competitoragent.model.dto.SearchAuditSummary;
 import cn.bugstack.competitoragent.search.tavily.FieldEvidenceQueryExecutionAudit;
 import cn.bugstack.competitoragent.search.tavily.TavilyFastLaneAudit;
@@ -9,6 +10,7 @@ import cn.bugstack.competitoragent.source.SearchSourceRequest;
 import cn.bugstack.competitoragent.source.SearchSourceProvider;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
+import cn.bugstack.competitoragent.source.SourceTrustTier;
 import cn.bugstack.competitoragent.workflow.coverage.DimensionEvidencePlan;
 import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceCoverage;
 import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
@@ -42,6 +44,7 @@ public class SearchExecutionCoordinator {
     private static final String EXPLICIT_URL_CANONICALIZE_FAILED = "EXPLICIT_URL_CANONICALIZE_FAILED";
     private static final String EXPLICIT_URL_DUPLICATE_CANONICAL = "EXPLICIT_URL_DUPLICATE_CANONICAL";
     private static final String STAGE1_QUORUM_READY_DEFER_FIELD_EVIDENCE = "STAGE1_QUORUM_READY_DEFER_FIELD_EVIDENCE";
+    private static final String HARD_DEADLINE_REACHED = "HARD_DEADLINE_REACHED";
 
     private final CandidateVerifier candidateVerifier;
     private final BrowserSearchRuntimeService browserSearchRuntimeService;
@@ -183,7 +186,7 @@ public class SearchExecutionCoordinator {
     }
 
     public SearchExecutionResult execute(CollectorNodeConfig config) {
-        return execute(config, null, null, null);
+        return execute(config, null, null, null, CollectionDeadlineContext.none());
     }
 
 
@@ -212,13 +215,30 @@ public class SearchExecutionCoordinator {
 
     public SearchExecutionResult execute(CollectorNodeConfig config,
                                          Consumer<SearchExecutionUpdate> progressListener) {
-        return execute(config, null, null, progressListener);
+        return execute(config, null, null, progressListener, CollectionDeadlineContext.none());
     }
 
     public SearchExecutionResult execute(CollectorNodeConfig config,
                                          Long taskId,
                                          Map<String, Set<String>> fieldEvidenceFingerprintClaims,
                                          Consumer<SearchExecutionUpdate> progressListener) {
+        return execute(
+                config,
+                taskId,
+                fieldEvidenceFingerprintClaims,
+                progressListener,
+                CollectionDeadlineContext.none()
+        );
+    }
+
+    public SearchExecutionResult execute(CollectorNodeConfig config,
+                                         Long taskId,
+                                         Map<String, Set<String>> fieldEvidenceFingerprintClaims,
+                                         Consumer<SearchExecutionUpdate> progressListener,
+                                         CollectionDeadlineContext collectorDeadlineContext) {
+        CollectionDeadlineContext effectiveCollectorDeadlineContext = collectorDeadlineContext == null
+                ? CollectionDeadlineContext.none()
+                : collectorDeadlineContext;
         long searchStartedAt = System.currentTimeMillis();
         SearchExecutionPlan executionPlan = initializePlan(config.getSearchExecutionPlan());
         long baseSearchTimeoutMillis = searchPolicyResolver.resolveSearchTimeoutMillis(
@@ -236,9 +256,12 @@ public class SearchExecutionCoordinator {
                 searchTimeoutMillis,
                 fieldEvidenceQueryPlan.getExecutable()
         );
-        Long fieldEvidenceExecutionDeadlineEpochMillis = resolveFieldEvidenceExecutionDeadlineEpochMillis(
-                searchTimeoutMillis,
-                fieldEvidenceQueryPlan
+        Long fieldEvidenceExecutionDeadlineEpochMillis = minPositiveDeadline(
+                resolveFieldEvidenceExecutionDeadlineEpochMillis(
+                        searchTimeoutMillis,
+                        fieldEvidenceQueryPlan
+                ),
+                effectiveCollectorDeadlineContext.hardDeadlineEpochMillis()
         );
         List<SearchProgressSnapshot> progressSnapshots = new ArrayList<>();
         Map<String, SearchCollectionTarget> attemptedTargets = new LinkedHashMap<>();
@@ -276,8 +299,10 @@ public class SearchExecutionCoordinator {
         int maxCandidatePoolSize = searchPolicyResolver.resolveMaxCandidatePoolSize(runtimePolicy, targetCount);
         int maxCandidatesPerDomain = searchPolicyResolver.resolveMaxCandidatesPerDomain(runtimePolicy);
         executionPlan = enrichExecutionPlan(executionPlan, config, targetCount, minVerifiedCount);
-        boolean circuitBroken = false;
-        String degradationReason = null;
+        boolean circuitBroken = isCollectorHardDeadlineExpired(effectiveCollectorDeadlineContext);
+        String degradationReason = circuitBroken
+                ? resolveCollectorHardDeadlineDegradationReason(effectiveCollectorDeadlineContext)
+                : null;
 
         markStepRunning(executionPlan, "LOAD_CANDIDATES", "loading planned candidates");
         appendSnapshotAndPublish(progressSnapshots, executionPlan, "LOAD_CANDIDATES",
@@ -294,36 +319,45 @@ public class SearchExecutionCoordinator {
 
         TavilyBootstrapDecision bootstrapDecision = tavilyBootstrapPlanner.plan(config, allCandidates);
         if (bootstrapDecision.isShouldExecute()) {
-            markStepRunning(executionPlan, "TAVILY_BOOTSTRAP_ENRICH", bootstrapDecision.getReason());
-            appendSnapshotAndPublish(progressSnapshots, executionPlan, "TAVILY_BOOTSTRAP_ENRICH",
-                    bootstrapDecision.getReason(), false, null, progressListener, allCandidates, List.of(), null);
-            try {
-                List<SourceCandidate> bootstrapCandidates = normalizeCandidates(
-                        searchSourceProvider.search(bootstrapDecision.getRequest()),
-                        "BOOTSTRAPPED",
-                        config
-                );
-                bootstrapCandidates = sourceCandidateRanker.rankDeduplicateAndLimit(
-                        bootstrapCandidates,
-                        bootstrapCandidateLimit,
-                        maxCandidatesPerDomain
-                );
-                allCandidates = sourceCandidateRanker.rankDeduplicateAndLimit(
-                        concat(allCandidates, bootstrapCandidates),
-                        maxCandidatePoolSize,
-                        maxCandidatesPerDomain
-                );
-                String bootstrapMessage = bootstrapCandidates.isEmpty()
-                        ? "Tavily Phase 1 bootstrap returned no new candidates"
-                        : "Tavily Phase 1 bootstrap added " + bootstrapCandidates.size() + " candidates";
-                markStepSuccess(executionPlan, "TAVILY_BOOTSTRAP_ENRICH", bootstrapMessage);
+            if (isCollectorHardDeadlineExpired(effectiveCollectorDeadlineContext)) {
+                circuitBroken = true;
+                degradationReason = resolveCollectorHardDeadlineDegradationReason(effectiveCollectorDeadlineContext);
+                String skipMessage = buildCollectorHardDeadlineSkipMessage("Tavily bootstrap enrichment");
+                markStepSkipped(executionPlan, "TAVILY_BOOTSTRAP_ENRICH", skipMessage);
                 appendSnapshotAndPublish(progressSnapshots, executionPlan, "TAVILY_BOOTSTRAP_ENRICH",
-                        bootstrapMessage, false, null, progressListener, allCandidates, List.of(), null);
-            } catch (RuntimeException exception) {
-                String failOpenMessage = "Tavily Phase 1 bootstrap failed open; keep planned candidates";
-                markStepSuccess(executionPlan, "TAVILY_BOOTSTRAP_ENRICH", failOpenMessage);
+                        skipMessage, true, degradationReason, progressListener, allCandidates, List.of(), null);
+            } else {
+                markStepRunning(executionPlan, "TAVILY_BOOTSTRAP_ENRICH", bootstrapDecision.getReason());
                 appendSnapshotAndPublish(progressSnapshots, executionPlan, "TAVILY_BOOTSTRAP_ENRICH",
-                        failOpenMessage, false, null, progressListener, allCandidates, List.of(), null);
+                        bootstrapDecision.getReason(), false, null, progressListener, allCandidates, List.of(), null);
+                try {
+                    List<SourceCandidate> bootstrapCandidates = normalizeCandidates(
+                            searchSourceProvider.search(bootstrapDecision.getRequest()),
+                            "BOOTSTRAPPED",
+                            config
+                    );
+                    bootstrapCandidates = sourceCandidateRanker.rankDeduplicateAndLimit(
+                            bootstrapCandidates,
+                            bootstrapCandidateLimit,
+                            maxCandidatesPerDomain
+                    );
+                    allCandidates = sourceCandidateRanker.rankDeduplicateAndLimit(
+                            concat(allCandidates, bootstrapCandidates),
+                            maxCandidatePoolSize,
+                            maxCandidatesPerDomain
+                    );
+                    String bootstrapMessage = bootstrapCandidates.isEmpty()
+                            ? "Tavily Phase 1 bootstrap returned no new candidates"
+                            : "Tavily Phase 1 bootstrap added " + bootstrapCandidates.size() + " candidates";
+                    markStepSuccess(executionPlan, "TAVILY_BOOTSTRAP_ENRICH", bootstrapMessage);
+                    appendSnapshotAndPublish(progressSnapshots, executionPlan, "TAVILY_BOOTSTRAP_ENRICH",
+                            bootstrapMessage, false, null, progressListener, allCandidates, List.of(), null);
+                } catch (RuntimeException exception) {
+                    String failOpenMessage = "Tavily Phase 1 bootstrap failed open; keep planned candidates";
+                    markStepSuccess(executionPlan, "TAVILY_BOOTSTRAP_ENRICH", failOpenMessage);
+                    appendSnapshotAndPublish(progressSnapshots, executionPlan, "TAVILY_BOOTSTRAP_ENRICH",
+                            failOpenMessage, false, null, progressListener, allCandidates, List.of(), null);
+                }
             }
         } else {
             markStepSkipped(executionPlan, "TAVILY_BOOTSTRAP_ENRICH", bootstrapDecision.getReason());
@@ -384,6 +418,14 @@ public class SearchExecutionCoordinator {
             appendSnapshotAndPublish(progressSnapshots, executionPlan, "VERIFY_TOP_CANDIDATES",
                     "verification skipped because result page verification is disabled",
                     false, null, progressListener, allCandidates, List.of(), null);
+        } else if (isCollectorHardDeadlineExpired(effectiveCollectorDeadlineContext)) {
+            circuitBroken = true;
+            degradationReason = resolveCollectorHardDeadlineDegradationReason(effectiveCollectorDeadlineContext);
+            String skipMessage = buildCollectorHardDeadlineSkipMessage("verification");
+            markStepSkipped(executionPlan, "VERIFY_TOP_CANDIDATES", skipMessage);
+            appendSnapshotAndPublish(progressSnapshots, executionPlan, "VERIFY_TOP_CANDIDATES",
+                    skipMessage,
+                    true, degradationReason, progressListener, allCandidates, List.of(), null);
         } else if (isTimedOut(searchStartedAt, searchTimeoutMillis)) {
             circuitBroken = true;
             degradationReason = "SEARCH_TIMEOUT_BEFORE_VERIFY";
@@ -443,7 +485,16 @@ public class SearchExecutionCoordinator {
                 searchTimeoutMillis);
         if (candidateSupplementRequired || fieldEvidenceSupplementRequired) {
             boolean pendingFieldEvidenceQueries = fieldEvidenceSupplementRequired;
-            if (isTimedOut(searchStartedAt, searchTimeoutMillis)) {
+            if (isCollectorHardDeadlineExpired(effectiveCollectorDeadlineContext)) {
+                circuitBroken = true;
+                degradationReason = resolveCollectorHardDeadlineDegradationReason(effectiveCollectorDeadlineContext);
+                fallbackDecision = "SKIP_SUPPLEMENT_COLLECTOR_HARD_DEADLINE";
+                String skipMessage = buildCollectorHardDeadlineSkipMessage("supplement");
+                markStepSkipped(executionPlan, "BROWSER_SUPPLEMENT_SEARCH", skipMessage);
+                appendSnapshotAndPublish(progressSnapshots, executionPlan, "BROWSER_SUPPLEMENT_SEARCH",
+                        skipMessage,
+                        true, degradationReason, progressListener, allCandidates, List.of(), null);
+            } else if (isTimedOut(searchStartedAt, searchTimeoutMillis)) {
                 circuitBroken = true;
                 degradationReason = "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT";
                 supplementMethod = "TIMEOUT_FALLBACK";
@@ -473,7 +524,8 @@ public class SearchExecutionCoordinator {
                         allCandidates,
                         supplementTargetPoolSize,
                         fieldEvidenceQueryPlan,
-                        fieldEvidenceExecutionDeadlineEpochMillis
+                        fieldEvidenceExecutionDeadlineEpochMillis,
+                        effectiveCollectorDeadlineContext
                 );
                 List<SourceCandidate> supplementedCandidates = sourceCandidateRanker.rankDeduplicateAndLimit(
                         supplementOutcome.getSupplementedCandidates(),
@@ -485,7 +537,12 @@ public class SearchExecutionCoordinator {
                 providerFallbackUsed = supplementOutcome.isProviderFallbackUsed();
                 providerTavilyFastLaneAudit = supplementOutcome.getProviderTavilyFastLaneAudit();
                 fallbackDecision = supplementOutcome.getFallbackDecision();
+                if (supplementOutcome.isCollectorHardDeadlineReached()) {
+                    circuitBroken = true;
+                    degradationReason = resolveCollectorHardDeadlineDegradationReason(effectiveCollectorDeadlineContext);
+                }
                 supplementedCount = supplementedCandidates.size();
+                boolean collectorHardDeadlineBlockedPostSupplementVerification = false;
                 if (!supplementedCandidates.isEmpty()) {
                     allCandidates = sourceCandidateRanker.rankDeduplicateAndLimit(
                             concat(allCandidates, supplementedCandidates),
@@ -495,7 +552,11 @@ public class SearchExecutionCoordinator {
                     candidatePoolChangedAfterInitialFusion = true;
                     int needed = Math.max(0, minVerifiedCount - verifiedCount);
                     if (Boolean.TRUE.equals(config.getVerifyCandidates()) && resultPageVerificationEnabled && needed > 0) {
-                        if (isTimedOut(searchStartedAt, searchTimeoutMillis)) {
+                        if (isCollectorHardDeadlineExpired(effectiveCollectorDeadlineContext)) {
+                            circuitBroken = true;
+                            degradationReason = resolveCollectorHardDeadlineDegradationReason(effectiveCollectorDeadlineContext);
+                            collectorHardDeadlineBlockedPostSupplementVerification = true;
+                        } else if (isTimedOut(searchStartedAt, searchTimeoutMillis)) {
                             circuitBroken = true;
                             degradationReason = "SEARCH_TIMEOUT_AFTER_SUPPLEMENT";
                         } else {
@@ -531,6 +592,17 @@ public class SearchExecutionCoordinator {
                         && !"BROWSER_DISABLED_USE_HTTP_FALLBACK".equals(fallbackDecision)) {
                     fallbackDecision = "NO_NEW_CANDIDATES_KEEP_PLANNED";
                 }
+                if (circuitBroken
+                        && HARD_DEADLINE_REACHED.equals(degradationReason)
+                        && supplementOutcome.isCollectorHardDeadlineReached()
+                        && supplementedCount == 0) {
+                    supplementMessage += "; collector hard deadline prevented more supplement work";
+                    fallbackDecision = "SKIP_SUPPLEMENT_COLLECTOR_HARD_DEADLINE";
+                }
+                if (collectorHardDeadlineBlockedPostSupplementVerification) {
+                    supplementMessage += "; collector hard deadline blocked post-supplement verification";
+                    fallbackDecision = "SUPPLEMENTED_BUT_SKIP_VERIFY_DUE_COLLECTOR_HARD_DEADLINE";
+                }
                 if (circuitBroken && "SEARCH_TIMEOUT_AFTER_SUPPLEMENT".equals(degradationReason)) {
                     supplementMessage += "; timed out before post-supplement verification";
                     fallbackDecision = "SUPPLEMENTED_BUT_SKIP_VERIFY_DUE_TIMEOUT";
@@ -555,7 +627,13 @@ public class SearchExecutionCoordinator {
                     : "SKIP_SUPPLEMENT_ENOUGH_VERIFIED";
         }
 
-        List<SourceCandidate> sitemapCandidates = normalizeCandidates(
+        if (isCollectorHardDeadlineExpired(effectiveCollectorDeadlineContext)) {
+            circuitBroken = true;
+            degradationReason = resolveCollectorHardDeadlineDegradationReason(effectiveCollectorDeadlineContext);
+        }
+        List<SourceCandidate> sitemapCandidates = isCollectorHardDeadlineExpired(effectiveCollectorDeadlineContext)
+                ? List.of()
+                : normalizeCandidates(
                 discoverCandidatesFromSitemaps(config, allCandidates),
                 "SUPPLEMENTED",
                 config
@@ -567,113 +645,139 @@ public class SearchExecutionCoordinator {
 
         if (shouldTriggerPublicEvidenceRecovery(config, allCandidates, attemptedTargets)) {
             publicEvidenceRecoveryTriggered = true;
-            markStepRunning(executionPlan, "PUBLIC_EVIDENCE_RECOVERY", "running public evidence recovery");
-            appendSnapshotAndPublish(progressSnapshots, executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
-                    "running public evidence recovery", circuitBroken, degradationReason,
-                    progressListener, allCandidates, List.of(), null);
-
-            PublicEvidenceRecoveryService.RecoveryResult recoveryResult = publicEvidenceRecoveryService.recover(
-                    PublicEvidenceRecoveryService.RecoveryContext.builder()
-                            .competitorName(config.getCompetitorName())
-                            .competitorUrls(defaultList(config.getCompetitorUrls()))
-                            .sourceType(config.getSourceType())
-                            .fieldName(config.getRecoveryFieldName())
-                            .evidencePathKey(config.getRecoveryEvidencePathKey())
-                            .queryIntents(defaultList(config.getRecoveryQueryIntents()))
-                            .seedCandidates(allCandidates)
-                            .attemptedTargets(new LinkedHashMap<>(attemptedTargets))
-                            .build()
-            );
-            publicEvidenceAttemptedUrls = recoveryResult.getAttemptedAlternativeUrls() == null
-                    ? List.of()
-                    : recoveryResult.getAttemptedAlternativeUrls();
-            publicEvidenceAttemptedEvidencePaths = recoveryResult.getAttemptedEvidencePaths() == null
-                    ? List.of()
-                    : recoveryResult.getAttemptedEvidencePaths();
-            publicEvidenceRecoveryQueryIntents = recoveryResult.getQueryIntents() == null
-                    ? List.of()
-                    : recoveryResult.getQueryIntents();
-
-            List<SourceCandidate> recoveryCandidates = normalizeCandidates(
-                    removeExistingCandidates(
-                            recoveryResult.getCandidates() == null ? List.of() : recoveryResult.getCandidates(),
-                            allCandidates
-                    ),
-                    "SUPPLEMENTED",
-                    config
-            );
-            publicEvidenceRecoveryCandidateCount = recoveryCandidates.size();
-            EvidenceRepairPlan recoveryRepairPlan = EvidenceRepairPlan.builder()
-                    .state(recoveryCandidates.isEmpty()
-                            ? EvidenceRepairState.REPAIR_FAILED
-                            : EvidenceRepairState.REPAIR_QUERY_PROPOSED)
-                    .reason(recoveryResult.getStatus())
-                    .sourceUrl(resolveFirstRecoverySourceUrl(allCandidates))
-                    .repairQueries(recoveryCandidates.stream()
-                            .map(SourceCandidate::getUrl)
-                            .filter(StringUtils::hasText)
-                            .toList())
-                    .candidateUrls(recoveryCandidates.stream()
-                            .map(SourceCandidate::getUrl)
-                            .filter(StringUtils::hasText)
-                            .toList())
-                    .promotedUrls(List.of())
-                    .build();
-            evidenceRepairPlanProjection = buildRepairAuditProjection(recoveryRepairPlan);
-            if (recoveryCandidates.isEmpty()) {
-                publicEvidenceRecoveryStatus = "RECOVERY_CANDIDATES_EMPTY";
-                markStepSkipped(executionPlan, "PUBLIC_EVIDENCE_RECOVERY", "public evidence recovery produced no candidates");
+            if (isCollectorHardDeadlineExpired(effectiveCollectorDeadlineContext)) {
+                circuitBroken = true;
+                degradationReason = resolveCollectorHardDeadlineDegradationReason(effectiveCollectorDeadlineContext);
+                publicEvidenceRecoveryStatus = "RECOVERY_SKIPPED_COLLECTOR_HARD_DEADLINE";
+                String skipMessage = buildCollectorHardDeadlineSkipMessage("public evidence recovery");
+                markStepSkipped(executionPlan, "PUBLIC_EVIDENCE_RECOVERY", skipMessage);
                 appendSnapshotAndPublish(progressSnapshots, executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
-                        "public evidence recovery produced no candidates", circuitBroken, degradationReason,
+                        skipMessage, true, degradationReason,
                         progressListener, allCandidates, List.of(), null);
-            } else if (Boolean.TRUE.equals(config.getVerifyCandidates()) && resultPageVerificationEnabled) {
-                candidatePoolChangedAfterInitialFusion = true;
-                CandidateVerificationResult recoveryVerification = candidateVerifier.verify(
-                        config.getCompetitorName(),
-                        config.getSourceType(),
-                        recoveryCandidates
-                );
-                allCandidates = mergeCandidateUpdates(allCandidates, recoveryVerification.getUpdatedCandidates());
-                appendAttemptedTargets(attemptedTargets, recoveryVerification.getAttemptedTargets());
-                verificationStats.add(recoveryVerification);
-                publicEvidenceRecoveryVerifiedCount = recoveryVerification.getVerifiedTargets() == null
-                        ? 0
-                        : recoveryVerification.getVerifiedTargets().size();
-                verifiedCount += publicEvidenceRecoveryVerifiedCount;
-                publicEvidenceRecoveryStatus = publicEvidenceRecoveryVerifiedCount > 0
-                        ? "RECOVERED_PUBLIC_PAGE"
-                        : "RECOVERY_CANDIDATES_GENERATED";
-                evidenceRepairPlanProjection = buildRepairAuditProjection(
-                        publicEvidenceRecoveryService.promoteVerifiedUrls(
-                                recoveryRepairPlan,
-                                recoveryVerification.getVerifiedTargets() == null
-                                        ? List.of()
-                                        : recoveryVerification.getVerifiedTargets().stream()
-                                        .filter(target -> target != null && target.getCandidate() != null)
-                                        .map(target -> target.getCandidate().getUrl())
-                                        .filter(StringUtils::hasText)
-                                        .toList()));
-                markStepSuccess(executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
-                        publicEvidenceRecoveryVerifiedCount > 0
-                                ? "public evidence recovery generated " + recoveryCandidates.size() + " candidates, verified "
-                                + publicEvidenceRecoveryVerifiedCount + " targets"
-                                : "public evidence recovery generated " + recoveryCandidates.size() + " candidates but none were verified");
-                appendSnapshotAndPublish(progressSnapshots, executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
-                        publicEvidenceRecoveryVerifiedCount > 0
-                                ? "public evidence recovery generated " + recoveryCandidates.size() + " candidates, verified "
-                                + publicEvidenceRecoveryVerifiedCount + " targets"
-                                : "public evidence recovery generated " + recoveryCandidates.size() + " candidates but none were verified",
-                        circuitBroken, degradationReason, progressListener, allCandidates, List.of(), null);
             } else {
-                allCandidates = sourceCandidateRanker.rankAndDeduplicate(concat(allCandidates, recoveryCandidates));
-                candidatePoolChangedAfterInitialFusion = true;
-                publicEvidenceRecoveryStatus = "RECOVERY_CANDIDATES_GENERATED";
-                evidenceRepairPlanProjection = buildRepairAuditProjection(recoveryRepairPlan);
-                markStepSuccess(executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
-                        "public evidence recovery generated " + recoveryCandidates.size() + " candidates and merged them into the pool");
+                markStepRunning(executionPlan, "PUBLIC_EVIDENCE_RECOVERY", "running public evidence recovery");
                 appendSnapshotAndPublish(progressSnapshots, executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
-                        "public evidence recovery generated " + recoveryCandidates.size() + " candidates and merged them into the pool",
-                        circuitBroken, degradationReason, progressListener, allCandidates, List.of(), null);
+                        "running public evidence recovery", circuitBroken, degradationReason,
+                        progressListener, allCandidates, List.of(), null);
+
+                PublicEvidenceRecoveryService.RecoveryResult recoveryResult = publicEvidenceRecoveryService.recover(
+                        PublicEvidenceRecoveryService.RecoveryContext.builder()
+                                .competitorName(config.getCompetitorName())
+                                .competitorUrls(defaultList(config.getCompetitorUrls()))
+                                .sourceType(config.getSourceType())
+                                .fieldName(config.getRecoveryFieldName())
+                                .evidencePathKey(config.getRecoveryEvidencePathKey())
+                                .queryIntents(defaultList(config.getRecoveryQueryIntents()))
+                                .seedCandidates(allCandidates)
+                                .attemptedTargets(new LinkedHashMap<>(attemptedTargets))
+                                .build()
+                );
+                publicEvidenceAttemptedUrls = recoveryResult.getAttemptedAlternativeUrls() == null
+                        ? List.of()
+                        : recoveryResult.getAttemptedAlternativeUrls();
+                publicEvidenceAttemptedEvidencePaths = recoveryResult.getAttemptedEvidencePaths() == null
+                        ? List.of()
+                        : recoveryResult.getAttemptedEvidencePaths();
+                publicEvidenceRecoveryQueryIntents = recoveryResult.getQueryIntents() == null
+                        ? List.of()
+                        : recoveryResult.getQueryIntents();
+
+                List<SourceCandidate> recoveryCandidates = normalizeCandidates(
+                        removeExistingCandidates(
+                                recoveryResult.getCandidates() == null ? List.of() : recoveryResult.getCandidates(),
+                                allCandidates
+                        ),
+                        "SUPPLEMENTED",
+                        config
+                );
+                publicEvidenceRecoveryCandidateCount = recoveryCandidates.size();
+                EvidenceRepairPlan recoveryRepairPlan = EvidenceRepairPlan.builder()
+                        .state(recoveryCandidates.isEmpty()
+                                ? EvidenceRepairState.REPAIR_FAILED
+                                : EvidenceRepairState.REPAIR_QUERY_PROPOSED)
+                        .reason(recoveryResult.getStatus())
+                        .sourceUrl(resolveFirstRecoverySourceUrl(allCandidates))
+                        .repairQueries(recoveryCandidates.stream()
+                                .map(SourceCandidate::getUrl)
+                                .filter(StringUtils::hasText)
+                                .toList())
+                        .candidateUrls(recoveryCandidates.stream()
+                                .map(SourceCandidate::getUrl)
+                                .filter(StringUtils::hasText)
+                                .toList())
+                        .promotedUrls(List.of())
+                        .build();
+                evidenceRepairPlanProjection = buildRepairAuditProjection(recoveryRepairPlan);
+                if (recoveryCandidates.isEmpty()) {
+                    publicEvidenceRecoveryStatus = "RECOVERY_CANDIDATES_EMPTY";
+                    markStepSkipped(executionPlan, "PUBLIC_EVIDENCE_RECOVERY", "public evidence recovery produced no candidates");
+                    appendSnapshotAndPublish(progressSnapshots, executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
+                            "public evidence recovery produced no candidates", circuitBroken, degradationReason,
+                            progressListener, allCandidates, List.of(), null);
+                } else if (Boolean.TRUE.equals(config.getVerifyCandidates()) && resultPageVerificationEnabled) {
+                    candidatePoolChangedAfterInitialFusion = true;
+                    if (isCollectorHardDeadlineExpired(effectiveCollectorDeadlineContext)) {
+                        circuitBroken = true;
+                        degradationReason = resolveCollectorHardDeadlineDegradationReason(effectiveCollectorDeadlineContext);
+                        allCandidates = sourceCandidateRanker.rankAndDeduplicate(concat(allCandidates, recoveryCandidates));
+                        publicEvidenceRecoveryStatus = "RECOVERY_CANDIDATES_GENERATED";
+                        evidenceRepairPlanProjection = buildRepairAuditProjection(recoveryRepairPlan);
+                        markStepSuccess(executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
+                                "public evidence recovery generated " + recoveryCandidates.size()
+                                        + " candidates but collector hard deadline blocked verification");
+                        appendSnapshotAndPublish(progressSnapshots, executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
+                                "public evidence recovery generated " + recoveryCandidates.size()
+                                        + " candidates but collector hard deadline blocked verification",
+                                true, degradationReason, progressListener, allCandidates, List.of(), null);
+                    } else {
+                        CandidateVerificationResult recoveryVerification = candidateVerifier.verify(
+                                config.getCompetitorName(),
+                                config.getSourceType(),
+                                recoveryCandidates
+                        );
+                        allCandidates = mergeCandidateUpdates(allCandidates, recoveryVerification.getUpdatedCandidates());
+                        appendAttemptedTargets(attemptedTargets, recoveryVerification.getAttemptedTargets());
+                        verificationStats.add(recoveryVerification);
+                        publicEvidenceRecoveryVerifiedCount = recoveryVerification.getVerifiedTargets() == null
+                                ? 0
+                                : recoveryVerification.getVerifiedTargets().size();
+                        verifiedCount += publicEvidenceRecoveryVerifiedCount;
+                        publicEvidenceRecoveryStatus = publicEvidenceRecoveryVerifiedCount > 0
+                                ? "RECOVERED_PUBLIC_PAGE"
+                                : "RECOVERY_CANDIDATES_GENERATED";
+                        evidenceRepairPlanProjection = buildRepairAuditProjection(
+                                publicEvidenceRecoveryService.promoteVerifiedUrls(
+                                        recoveryRepairPlan,
+                                        recoveryVerification.getVerifiedTargets() == null
+                                                ? List.of()
+                                                : recoveryVerification.getVerifiedTargets().stream()
+                                                .filter(target -> target != null && target.getCandidate() != null)
+                                                .map(target -> target.getCandidate().getUrl())
+                                                .filter(StringUtils::hasText)
+                                                .toList()));
+                        markStepSuccess(executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
+                                publicEvidenceRecoveryVerifiedCount > 0
+                                        ? "public evidence recovery generated " + recoveryCandidates.size() + " candidates, verified "
+                                        + publicEvidenceRecoveryVerifiedCount + " targets"
+                                        : "public evidence recovery generated " + recoveryCandidates.size() + " candidates but none were verified");
+                        appendSnapshotAndPublish(progressSnapshots, executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
+                                publicEvidenceRecoveryVerifiedCount > 0
+                                        ? "public evidence recovery generated " + recoveryCandidates.size() + " candidates, verified "
+                                        + publicEvidenceRecoveryVerifiedCount + " targets"
+                                        : "public evidence recovery generated " + recoveryCandidates.size() + " candidates but none were verified",
+                                circuitBroken, degradationReason, progressListener, allCandidates, List.of(), null);
+                    }
+                } else {
+                    allCandidates = sourceCandidateRanker.rankAndDeduplicate(concat(allCandidates, recoveryCandidates));
+                    candidatePoolChangedAfterInitialFusion = true;
+                    publicEvidenceRecoveryStatus = "RECOVERY_CANDIDATES_GENERATED";
+                    evidenceRepairPlanProjection = buildRepairAuditProjection(recoveryRepairPlan);
+                    markStepSuccess(executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
+                            "public evidence recovery generated " + recoveryCandidates.size() + " candidates and merged them into the pool");
+                    appendSnapshotAndPublish(progressSnapshots, executionPlan, "PUBLIC_EVIDENCE_RECOVERY",
+                            "public evidence recovery generated " + recoveryCandidates.size() + " candidates and merged them into the pool",
+                            circuitBroken, degradationReason, progressListener, allCandidates, List.of(), null);
+                }
             }
         } else {
             markStepSkipped(executionPlan, "PUBLIC_EVIDENCE_RECOVERY", "public evidence recovery skipped because the candidate pool already satisfies the recovery conditions");
@@ -1136,12 +1240,14 @@ public class SearchExecutionCoordinator {
                                                                         List<SourceCandidate> existingCandidates,
                                                                         int targetPoolSize,
                                                                         ResolvedFieldEvidenceQueryPlan fieldEvidenceQueryPlan,
-                                                                        Long fieldEvidenceExecutionDeadlineEpochMillis) {
+                                                                        Long fieldEvidenceExecutionDeadlineEpochMillis,
+                                                                        CollectionDeadlineContext collectorDeadlineContext) {
         BrowserSearchRuntimeResult browserSearchResult = defaultBrowserSupplementResult(config);
         List<SourceCandidate> supplementedCandidates = new ArrayList<>();
         boolean providerFallbackUsed = false;
         String supplementMethod = "NONE";
         String fallbackDecision = "USE_PLANNED_CANDIDATES";
+        boolean collectorHardDeadlineReached = false;
         boolean browserModeEnabled = Boolean.TRUE.equals(config.getBrowserSearchEnabled())
                 && !"HTTP_ONLY".equalsIgnoreCase(config.getSearchMode());
         boolean httpModeEnabled = !"BROWSER_ONLY".equalsIgnoreCase(config.getSearchMode())
@@ -1156,6 +1262,15 @@ public class SearchExecutionCoordinator {
         for (String stage : resolveSearchFallbackOrder(config)) {
             if (existingCandidates.size() + supplementedCandidates.size() >= targetPoolSize
                     && !pendingFieldEvidenceQueries) {
+                break;
+            }
+            /*
+             * supplement fallback 可能连续触发多个外部搜索阶段。
+             * 每次真正启动 browser / HTTP provider 前都要再次检查 collector hard deadline，
+             * 避免同一个补采步骤在前一段刚结束后又继续起新的外部调用。
+             */
+            if (isCollectorHardDeadlineExpired(collectorDeadlineContext)) {
+                collectorHardDeadlineReached = true;
                 break;
             }
 
@@ -1222,13 +1337,17 @@ public class SearchExecutionCoordinator {
         if (supplementedCandidates.isEmpty()) {
             fallbackDecision = resolveEmptySupplementDecision(browserModeEnabled, httpModeEnabled, browserExecuted, httpExecuted);
         }
+        if (collectorHardDeadlineReached && supplementedCandidates.isEmpty()) {
+            fallbackDecision = "SKIP_SUPPLEMENT_COLLECTOR_HARD_DEADLINE";
+        }
 
         return new SupplementExecutionOutcome(browserSearchResult,
                 supplementedCandidates,
                 supplementMethod,
                 fallbackDecision,
                 providerFallbackUsed,
-                sourceRequest == null ? null : sourceRequest.getTavilyFastLaneAudit());
+                sourceRequest == null ? null : sourceRequest.getTavilyFastLaneAudit(),
+                collectorHardDeadlineReached);
     }
 
     /**
@@ -1255,7 +1374,7 @@ public class SearchExecutionCoordinator {
                     String effectiveReason = StringUtils.hasText(base.getSelectionReason())
                             ? base.getSelectionReason()
                             : ("PLANNED".equals(stage) ? "planned candidate retained for search execution" : "candidate retained after runtime supplementation");
-                    return base.toBuilder()
+                    SourceCandidate normalizedCandidate = base.toBuilder()
                             .sourceFamilyKey(StringUtils.hasText(base.getSourceFamilyKey())
                                     ? base.getSourceFamilyKey()
                                     : sourceFamilyKey)
@@ -1270,11 +1389,28 @@ public class SearchExecutionCoordinator {
                             .selectionStage(effectiveStage)
                             .selectionReason(effectiveReason)
                             .build();
+                    return markThirdPartyFallbackCandidateIfNeeded(normalizedCandidate, config);
                 })
                 .filter(java.util.Objects::nonNull)
                 .filter(candidate -> !isBlockedDomain(candidate, config.getBlockedDomains()))
                 .toList();
         return sourceCandidateRanker.rankAndDeduplicate(normalized);
+    }
+
+    /**
+     * 第三方回退必须在验证/选靶前生效，而不是等 selectedTargets 产生后再补标签。
+     * 否则归属校验仍会按 OFFICIAL/DOCS 的官方域名门槛处理，反爬官网会继续把第三方证据饿死。
+     */
+    private SourceCandidate markThirdPartyFallbackCandidateIfNeeded(SourceCandidate candidate,
+                                                                    CollectorNodeConfig config) {
+        if (candidate == null || config == null || !Boolean.TRUE.equals(config.getThirdPartyFallbackActive())) {
+            return candidate;
+        }
+        return candidate.toBuilder()
+                .discoveryMethod("THIRD_PARTY_FALLBACK")
+                .trustTier(SourceTrustTier.MEDIUM)
+                .trustTierLabel(SourceTrustTier.MEDIUM.getDisplayName())
+                .build();
     }
 
     /**
@@ -1449,6 +1585,58 @@ public class SearchExecutionCoordinator {
 
     /**
      * 缂傚倸鍊搁崐鎼佸磹閹间礁纾归柟闂寸绾惧綊鏌ｉ幋锝呅撻柛銈呭閺屾盯顢曢敐鍡欘槬缂備焦鍔栭〃鍫ュ焵椤掆偓缁犲秹宕曢崡鐏绘椽濡搁埡浣侯攨濠殿喗顭堥崺鏍磹閻㈠憡鈷掗柛顐ゅ枔閳洟鏌涢悢鍝勪槐闁哄本绋撻埀顒婄秵閸嬫捇鎳撻崸妤佺厸閻忕偟鍋撶粈鍐偓鍨緲鐎氭澘鐣烽崡鐐嶇喖鎳￠妶鍛偧缂傚倸鍊搁崐椋庣矆娓氣偓钘濋梺顒€绉寸粈鍌涙叏濡炶浜鹃悗娈垮枦椤曆囧煡婢跺ň鏋庨柟瀵稿Х濡插洭姊绘担鍛婂暈闁告棑闄勭粋宥呪攽鐎ｎ亪妫锋繛瀵稿帶閻°劑鍩?providerKey闂傚倸鍊搁崐鎼佸磹閻戣姤鍊块柨鏃堟暜閸嬫挾绮☉妯诲櫧闁活厽鐟╅弻鐔衡偓鐢殿焾娴犙囨⒒閸曨偄顏柡宀嬬節瀹曟﹢濡搁妷銏犱壕闁荤喐澹嗛弳锕傛煕濞嗗浚妲归柛娆忕箲娣囧﹪顢涘顓炰淮闂佸憡绻冨浠嬪箖濡も偓椤繈顢橀垾鎰佹闂傚倸娲らˇ鐢稿蓟閵娿儮鏀介柛鈩兠▍銈夋⒑閸濄儱鏋旈柛瀣ㄥ€濆璇测槈濞嗘垹鐦堥梺鍛婃处閸撴艾袙閸曨厾纾藉ù锝勭矙閸濇椽鏌熷灞藉惞缂侇噮鍙冮幃銏ゆ偂鎼达絽鈧偤鎮峰鍐ら柣姘劤椤撳吋寰勭€Ｑ勫闂傚倸鍊搁悧鍐疾濠靛牃鍋撻棃娑栧仮闁哄本绋戣灃闁逞屽墴瀹曨垶宕稿Δ瀣◤闂婎偄娲︾粙鎴︽煥閵堝棔绻嗛柕鍫濆€告禍鎯旈悩闈涗杭闁搞劍妞介獮鍫ュΩ閵夊海鍠愬鍕矙閹稿骸鍓甸梻鍌欑閹芥粓宕戦悙鍝勭闁告劕妯婂鏍煕濠靛棗鈻曢柧蹇撴贡绾惧吋淇婇婵嗕汗闁绘稏鍨荤槐鎾诲磼濞嗘埈妲梺鍏兼た閸ㄥ爼骞冮妷锔鹃檮缂佸瀵уΣ顒勬⒑闁偛鑻晶顖炴煏閸パ冾伃妤犵偛顑夐弫鎰板幢濞嗗秮鍋撴繝鍌ゆ富闁靛牆绻楅娲⒒閸曨偄顏┑锛勬暬瀹曠喖顢涘槌栧晪闂備焦鍎冲ù姘跺磻閸涙潙绐楅柟鎵閳锋垿鏌ｉ悢鍛婄凡婵¤尙绮妵鍕箣濠垫劖鈻堥悗瑙勬礉椤濡堕敐澶婄闁宠桨鐒﹂缁樹繆閻愵亜鈧牜鏁幒妤€纾圭憸鐗堝笒缁愭绻涢幋娆忕仾闁抽攱甯掗湁闁挎繂鐗滃鎰版煕鐎ｎ剙鈻堥柡灞剧⊕閹棃濮€閻橆偅鐏嗛柣搴ゎ潐濞叉﹢宕归崸妤€绠栨繛鍡樻尭娴肩娀鏌涢弴銊ュ⒒婵☆偆鍠庨埞鎴︽倷鐎涙ê闉嶉梺绯曟櫅閸熸潙鐣烽幋锕€绠荤紓浣诡焽閸樻悂鏌ｈ箛鏇炰户闁哄拋鍋呴弲鍫曟晜闁款垰浜鹃悷娆忓缁€鍐煕閺冣偓閻熲晠鐛崘顔碱潊闁绘ê鐏氬▓婵嬫⒑閸濆嫷妲兼繛澶嬫礋椤㈡﹢鎮滃Ο鑲╃槇闂佹眹鍨藉褎绂掗敃鍌涚厵婵繂鑻崥褰掓煕閻樿宸ユい鎾炽偢瀹曞爼濡搁妷銉у搸闂傚倷鑳剁涵鍫曞礈濠靛鍋＄憸鏃堝箚鐏炴儳绶為柟閭﹀幘閸橀亶姊洪弬銉︽珔闁哥喍鍗抽獮濠囧川鐎涙鍘藉銈嗘尵閸犳捇骞婇崶顒佺厸閻忕偛澧藉ú瀛橆殽閻愬弶鍠樻い銏＄☉椤繃娼忛…鎴濇畱闂傚倸鍊风粈渚€骞栭鈶芥盯寮崼婵堫攨闂佸憡鍔曞顒€鈽夐姀鐘茬獩闂佸湱鈷堥崢浠嬪疾閵忥紕绡€闁靛骏绲剧涵楣冩煥閺囶亞鎮奸柤娲憾閹粙宕ㄦ繛鐐闂備礁鎲＄缓鍧楀磿鏉堛劎顩插┑鍌氭啞閻撴洖鈹戦悩鎻掓殶缂佺姵鐗曡彁?     */
+    /**
+     * field-evidence 子预算和 collector 节点 hard deadline 都可能约束同一轮 provider search。
+     * 这里统一取更早的那个有限 deadline，避免内层 provider 只看到局部超时而继续消耗 collector 剩余预算。
+     */
+    private Long minPositiveDeadline(Long firstDeadlineEpochMillis, Long secondDeadlineEpochMillis) {
+        Long normalizedFirst = normalizeFiniteDeadline(firstDeadlineEpochMillis);
+        Long normalizedSecond = normalizeFiniteDeadline(secondDeadlineEpochMillis);
+        if (normalizedFirst == null) {
+            return normalizedSecond;
+        }
+        if (normalizedSecond == null) {
+            return normalizedFirst;
+        }
+        return Math.min(normalizedFirst, normalizedSecond);
+    }
+
+    private Long normalizeFiniteDeadline(Long deadlineEpochMillis) {
+        if (deadlineEpochMillis == null
+                || deadlineEpochMillis <= 0L
+                || deadlineEpochMillis == Long.MAX_VALUE) {
+            return null;
+        }
+        return deadlineEpochMillis;
+    }
+
+    /**
+     * search 内层只关心“还能不能再启动新的外部工作”。
+     * drain grace 只给 CollectorAgent 外层在超线后回收已在飞结果使用，不能被 search 内层拿来继续起新请求。
+     */
+    private boolean isCollectorHardDeadlineExpired(CollectionDeadlineContext collectorDeadlineContext) {
+        return collectorDeadlineContext != null
+                && collectorDeadlineContext.hardDeadlineEpochMillis() != null
+                && collectorDeadlineContext.hardDeadlineEpochMillis() != Long.MAX_VALUE
+                && collectorDeadlineContext.isExpired();
+    }
+
+    private String resolveCollectorHardDeadlineDegradationReason(CollectionDeadlineContext collectorDeadlineContext) {
+        if (collectorDeadlineContext != null
+                && StringUtils.hasText(collectorDeadlineContext.degradationReason())) {
+            return collectorDeadlineContext.degradationReason().trim();
+        }
+        return HARD_DEADLINE_REACHED;
+    }
+
+    private String buildCollectorHardDeadlineSkipMessage(String blockedWorkDescription) {
+        String workDescription = StringUtils.hasText(blockedWorkDescription)
+                ? blockedWorkDescription.trim()
+                : "search work";
+        return "collector hard deadline reached before " + workDescription
+                + "; skip starting new external work";
+    }
+
     private String resolveProviderKey(SourceCandidate candidate, String stage) {
         if (candidate != null && StringUtils.hasText(candidate.getProviderKey())) {
             return candidate.getProviderKey();
@@ -2690,6 +2878,9 @@ public class SearchExecutionCoordinator {
                                        BrowserSearchRuntimeResult browserSearchResult,
                                        List<SearchCollectionTarget> selectedTargets,
                                        CollectorNodeConfig config) {
+        if (circuitBroken && HARD_DEADLINE_REACHED.equals(degradationReason)) {
+            return "collector hard deadline reached; resume from the latest completed search checkpoint after extending the collector deadline budget";
+        }
         if (circuitBroken && StringUtils.hasText(degradationReason)) {
             return "search timed out before "
                     + resolveRecoveryStepForReason(degradationReason)
@@ -2714,6 +2905,7 @@ public class SearchExecutionCoordinator {
             case "SEARCH_TIMEOUT_BEFORE_VERIFY" -> "LOAD_CANDIDATES";
             case "SEARCH_TIMEOUT_BEFORE_SUPPLEMENT" -> "VERIFY_TOP_CANDIDATES";
             case "SEARCH_TIMEOUT_AFTER_SUPPLEMENT" -> "BROWSER_SUPPLEMENT_SEARCH";
+            case HARD_DEADLINE_REACHED -> "the latest completed search checkpoint";
             default -> "SELECT_TARGETS";
         };
     }
@@ -2833,19 +3025,22 @@ public class SearchExecutionCoordinator {
         private final String fallbackDecision;
         private final boolean providerFallbackUsed;
         private final TavilyFastLaneAudit providerTavilyFastLaneAudit;
+        private final boolean collectorHardDeadlineReached;
 
         private SupplementExecutionOutcome(BrowserSearchRuntimeResult browserSearchResult,
                                            List<SourceCandidate> supplementedCandidates,
                                            String supplementMethod,
                                            String fallbackDecision,
                                            boolean providerFallbackUsed,
-                                           TavilyFastLaneAudit providerTavilyFastLaneAudit) {
+                                           TavilyFastLaneAudit providerTavilyFastLaneAudit,
+                                           boolean collectorHardDeadlineReached) {
             this.browserSearchResult = browserSearchResult;
             this.supplementedCandidates = supplementedCandidates;
             this.supplementMethod = supplementMethod;
             this.fallbackDecision = fallbackDecision;
             this.providerFallbackUsed = providerFallbackUsed;
             this.providerTavilyFastLaneAudit = providerTavilyFastLaneAudit;
+            this.collectorHardDeadlineReached = collectorHardDeadlineReached;
         }
 
         private BrowserSearchRuntimeResult getBrowserSearchResult() {
@@ -2870,6 +3065,10 @@ public class SearchExecutionCoordinator {
 
         private TavilyFastLaneAudit getProviderTavilyFastLaneAudit() {
             return providerTavilyFastLaneAudit;
+        }
+
+        private boolean isCollectorHardDeadlineReached() {
+            return collectorHardDeadlineReached;
         }
     }
 

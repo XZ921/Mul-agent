@@ -79,6 +79,9 @@ public class CollectorPlanTemplateFactory {
                 .sourceCandidates(sourcePlan == null || sourcePlan.getCandidates() == null ? List.of() : sourcePlan.getCandidates())
                 .searchMode(searchMode)
                 .searchQueries(searchQueries)
+                .thirdPartyFallbackQueries(buildThirdPartyFallbackQueries(
+                        competitorName,
+                        sourcePlan == null ? null : sourcePlan.getSourceType()))
                 .searchFallbackOrder(fallbackOrder)
                 .verifyCandidates(Boolean.TRUE)
                 .verifyResultPage(searchBrowserProperties.isVerifyResultPage())
@@ -190,6 +193,18 @@ public class CollectorPlanTemplateFactory {
                 .findFirst()
                 .orElse(null);
         return promptTemplateService.buildSearchQueries(competitorName, sourceType, domainHint);
+    }
+
+    /**
+     * 只为强官网依赖的 OFFICIAL/DOCS 节点预生成第三方回退 query，
+     * 其它 sourceType（REVIEW/NEWS 等）本就走非官网源，无需回退。
+     */
+    private List<String> buildThirdPartyFallbackQueries(String competitorName, String sourceType) {
+        String normalized = sourceType == null ? "" : sourceType.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!"OFFICIAL".equals(normalized) && !"DOCS".equals(normalized)) {
+            return List.of();
+        }
+        return promptTemplateService.buildThirdPartyFallbackQueries(competitorName);
     }
 
     private List<String> buildPreferredDomains(List<SourceCandidate> candidates) {

@@ -22,6 +22,8 @@ import java.util.List;
 public class CollectionExecutionReport {
 
     private String status;
+    private Boolean degraded;
+    private List<String> degradationReasons;
     private List<CollectionExecutionResult> results;
     private CollectionAuditSnapshot auditSnapshot;
     private List<String> sourceUrls;

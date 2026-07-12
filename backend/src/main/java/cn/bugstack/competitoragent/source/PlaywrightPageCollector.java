@@ -58,6 +58,9 @@ public class PlaywrightPageCollector implements SourceCollector {
     private static final Pattern CJK_PATTERN = Pattern.compile("[\\u4E00-\\u9FFF]");
     private static final int MIN_HTTP_CONTENT_LENGTH = 280;
     private static final int MIN_MEANINGFUL_TEXT_UNITS = 80;
+    private static final long MIN_HTTP_START_BUDGET_MILLIS = 1000L;
+    private static final long MIN_PLAYWRIGHT_ACTION_TIMEOUT_MILLIS = 250L;
+    private static final String DEFAULT_COLLECTOR_DEADLINE_REASON = "HARD_DEADLINE_REACHED";
     private static final String RENDERABLE_SELECTOR = "main, article, [role='main'], .pricing-card, .docs-outline";
     private static final List<String> SPA_SHELL_SIGNALS = List.of(
             "id=\"root\"",
@@ -210,11 +213,23 @@ public class PlaywrightPageCollector implements SourceCollector {
                     UrlSecurityUtils.maskForLog(competitorName),
                     sourceType);
 
+            CollectedPage deadlineFailure = failIfCollectorDeadlineExpired(
+                    request,
+                    "collector hard deadline reached before page collection");
+            if (deadlineFailure != null) {
+                return deadlineFailure;
+            }
             boolean forceFullRender = requiresFullRender(request.getRenderHint());
             if (!forceFullRender) {
-                CollectedPage httpPage = collectByHttp(url, competitorName, sourceType);
-                if (httpPage.isSuccess()) {
+                CollectedPage httpPage = collectByHttp(request);
+                if (httpPage.isSuccess() || isHardDeadlineFailure(httpPage)) {
                     return httpPage;
+                }
+                CollectedPage fallbackDeadlineFailure = failIfCollectorDeadlineExpired(
+                        request,
+                        "collector hard deadline reached before browser fallback");
+                if (fallbackDeadlineFailure != null) {
+                    return fallbackDeadlineFailure;
                 }
                 log.info("轻量 HTTP 采集未满足要求，回退到 Playwright 渲染, url={}",
                         UrlSecurityUtils.maskForLog(url));
@@ -275,9 +290,28 @@ public class PlaywrightPageCollector implements SourceCollector {
      * 这里改成包内可见，便于测试只覆盖 HTTP 超时语义，而不被浏览器兜底路径掩盖。
      */
     CollectedPage collectByHttp(String url, String competitorName, String sourceType) {
+        return collectByHttp(SourceCollectRequest.builder()
+                .url(url)
+                .competitorName(competitorName)
+                .sourceType(sourceType)
+                .sourceUrls(StringUtils.hasText(url) ? List.of(url) : List.of())
+                .build());
+    }
+
+    CollectedPage collectByHttp(SourceCollectRequest request) {
+        String url = request == null ? null : request.getUrl();
+        String competitorName = request == null ? null : request.getCompetitorName();
+        String sourceType = request == null ? null : request.getSourceType();
         try {
-            HttpRequest request = HttpRequest.newBuilder(UrlSecurityUtils.requireHttpOrHttps(url, "collect.url"))
-                    .timeout(Duration.ofSeconds(Math.max(1, collectorProperties.getPageTimeoutSeconds())))
+            CollectedPage deadlineFailure = failIfCollectorDeadlineExpired(
+                    request,
+                    "collector hard deadline reached before HTTP page collection");
+            if (deadlineFailure != null) {
+                return deadlineFailure;
+            }
+            Duration effectiveTimeout = resolveEffectiveHttpTimeout(request);
+            HttpRequest httpRequest = HttpRequest.newBuilder(UrlSecurityUtils.requireHttpOrHttps(url, "collect.url"))
+                    .timeout(effectiveTimeout)
                     .header("User-Agent", collectorProperties.getUserAgent())
                     .GET()
                     .build();
@@ -286,13 +320,11 @@ public class PlaywrightPageCollector implements SourceCollector {
              * HTTP 快路必须沿用页面采集的既有 timeout 预算，
              * 不能为了解决卡死问题引入更短的固定超时，否则会和浏览器渲染预算口径冲突。
              */
-            Duration protocolTimeout = request.timeout()
-                    .orElse(Duration.ofSeconds(Math.max(1, collectorProperties.getPageTimeoutSeconds())));
             HttpResponse<String> response = HardTimeoutHttpClient.send(
                     httpClient,
-                    request,
+                    httpRequest,
                     HttpResponse.BodyHandlers.ofString(),
-                    protocolTimeout
+                    effectiveTimeout
             );
             if (response.statusCode() < 200 || response.statusCode() >= 400) {
                 return failed(url, competitorName, sourceType, "HTTP status error: " + response.statusCode());
@@ -309,6 +341,8 @@ public class PlaywrightPageCollector implements SourceCollector {
             }
 
             return success(url, competitorName, sourceType, title, content, "http");
+        } catch (CollectorDeadlineReachedException deadlineReachedException) {
+            return deadlineReachedPage(request, deadlineReachedException.getMessage());
         } catch (Exception e) {
             return failed(url, competitorName, sourceType, "HTTP collect failed: " + e.getMessage());
         }
@@ -331,22 +365,41 @@ public class PlaywrightPageCollector implements SourceCollector {
         String url = request.getUrl();
         String competitorName = request.getCompetitorName();
         String sourceType = request.getSourceType();
-        Browser browser = browserManager.getBrowser();
-        if (browser == null) {
-            return failed(url, competitorName, sourceType,
-                    fallbackPolicy.buildCollectionFailureMessage("browser_unavailable", "browser unavailable"));
-        }
+        Browser browser = null;
         Page page = null;
         try {
+            ensureCollectorBudgetOrThrow(
+                    request,
+                    MIN_PLAYWRIGHT_ACTION_TIMEOUT_MILLIS,
+                    "collector hard deadline reached before browser page collection");
+            browser = browserManager.getBrowser();
+            if (browser == null) {
+                return failed(url, competitorName, sourceType,
+                        fallbackPolicy.buildCollectionFailureMessage("browser_unavailable", "browser unavailable"));
+            }
+            ensureCollectorBudgetOrThrow(
+                    request,
+                    MIN_PLAYWRIGHT_ACTION_TIMEOUT_MILLIS,
+                    "collector hard deadline reached before browser page creation");
             page = browser.newPage();
-            page.setDefaultTimeout((double) resolveTimeoutMillis());
-            navigateWithFallback(page, url);
+            double actionTimeoutMillis = resolvePlaywrightActionTimeoutMillis(request, resolveTimeoutMillis());
+            page.setDefaultTimeout(actionTimeoutMillis);
+            page.setDefaultNavigationTimeout(actionTimeoutMillis);
+            navigateWithFallback(page, url, request);
             waitForRenderableContent(page, request);
             return extractRenderedPage(url, competitorName, sourceType, fallbackReason, request, page);
+        } catch (CollectorDeadlineReachedException deadlineReachedException) {
+            return deadlineReachedPage(request, deadlineReachedException.getMessage());
         } catch (Exception e) {
             CollectedPage recoveredPage = tryRecoverPartiallyLoadedPage(url, competitorName, sourceType, fallbackReason, page, e);
             if (recoveredPage != null) {
                 return recoveredPage;
+            }
+            CollectedPage deadlineFailure = failIfCollectorDeadlineExpired(
+                    request,
+                    "collector hard deadline reached before browser retry");
+            if (deadlineFailure != null) {
+                return deadlineFailure;
             }
             BrowserFailureDecision decision = browserFailureClassifier.classify(e, null);
             if (decision.recreateRuntime()) {
@@ -355,6 +408,12 @@ public class PlaywrightPageCollector implements SourceCollector {
             if (decision.restartSharedBrowser()) {
                 log.warn("检测到 Playwright 浏览器疑似失活，准备自动重启后重试: url={}, error={}",
                         UrlSecurityUtils.maskForLog(url), e.getMessage());
+                CollectedPage retryDeadlineFailure = failIfCollectorDeadlineExpired(
+                        request,
+                        "collector hard deadline reached before browser retry");
+                if (retryDeadlineFailure != null) {
+                    return retryDeadlineFailure;
+                }
                 browserManager.restartBrowserIfCurrent(browser, "page collect failure: " + e.getMessage());
                 return retryCollectByBrowserLocked(request, fallbackReason, e);
             }
@@ -381,23 +440,42 @@ public class PlaywrightPageCollector implements SourceCollector {
         String url = request.getUrl();
         String competitorName = request.getCompetitorName();
         String sourceType = request.getSourceType();
-        Browser restartedBrowser = browserManager.getBrowser();
-        if (restartedBrowser == null) {
-            return failed(url, competitorName, sourceType,
-                    fallbackPolicy.buildCollectionFailureMessage("browser_unavailable", originalException.getMessage()));
-        }
+        Browser restartedBrowser = null;
         Page retryPage = null;
         try {
+            ensureCollectorBudgetOrThrow(
+                    request,
+                    MIN_PLAYWRIGHT_ACTION_TIMEOUT_MILLIS,
+                    "collector hard deadline reached before browser retry");
+            restartedBrowser = browserManager.getBrowser();
+            if (restartedBrowser == null) {
+                return failed(url, competitorName, sourceType,
+                        fallbackPolicy.buildCollectionFailureMessage("browser_unavailable", originalException.getMessage()));
+            }
+            ensureCollectorBudgetOrThrow(
+                    request,
+                    MIN_PLAYWRIGHT_ACTION_TIMEOUT_MILLIS,
+                    "collector hard deadline reached before retry page creation");
             retryPage = restartedBrowser.newPage();
-            retryPage.setDefaultTimeout((double) resolveTimeoutMillis());
-            navigateWithFallback(retryPage, url);
+            double actionTimeoutMillis = resolvePlaywrightActionTimeoutMillis(request, resolveTimeoutMillis());
+            retryPage.setDefaultTimeout(actionTimeoutMillis);
+            retryPage.setDefaultNavigationTimeout(actionTimeoutMillis);
+            navigateWithFallback(retryPage, url, request);
             waitForRenderableContent(retryPage, request);
             return extractRenderedPage(url, competitorName, sourceType, fallbackReason, request, retryPage);
+        } catch (CollectorDeadlineReachedException deadlineReachedException) {
+            return deadlineReachedPage(request, deadlineReachedException.getMessage());
         } catch (Exception retryException) {
             CollectedPage recoveredPage = tryRecoverPartiallyLoadedPage(
                     url, competitorName, sourceType, fallbackReason, retryPage, retryException);
             if (recoveredPage != null) {
                 return recoveredPage;
+            }
+            CollectedPage deadlineFailure = failIfCollectorDeadlineExpired(
+                    request,
+                    "collector hard deadline reached before retry page collection");
+            if (deadlineFailure != null) {
+                return deadlineFailure;
             }
             String failureCode = resolveFailureCode(browserFailureClassifier.classify(retryException, null), retryException);
             return failed(url, competitorName, sourceType,
@@ -471,14 +549,75 @@ public class PlaywrightPageCollector implements SourceCollector {
     }
 
     /**
+     * deadline 失败也要把 sourceUrls / failureKind 写回 metadata，
+     * 否则上层只能看到一个模糊的 runtime failure，无法识别这是 hard deadline 主动停机。
+     */
+    private CollectedPage deadlineReachedPage(SourceCollectRequest request, String scene) {
+        String url = request == null ? null : request.getUrl();
+        String competitorName = request == null ? null : request.getCompetitorName();
+        String sourceType = request == null ? null : request.getSourceType();
+        String failureReason = resolveCollectorDeadlineReason(request);
+        return CollectedPage.builder()
+                .url(url)
+                .competitorName(competitorName)
+                .sourceType(sourceType)
+                .metadata(buildFailureMetadata("collector-deadline", request, failureReason, List.of(failureReason)))
+                .collectedAt(LocalDateTime.now().format(DTF))
+                .success(false)
+                .errorMessage(scene + " [" + failureReason + "]")
+                .build();
+    }
+
+    private String buildFailureMetadata(String collector,
+                                        SourceCollectRequest request,
+                                        String failureKind,
+                                        List<String> qualitySignals) {
+        StringBuilder metadata = new StringBuilder();
+        metadata.append("{");
+        metadata.append("\"collector\":\"").append(escapeJson(collector)).append("\"");
+        metadata.append(",\"sourceUrls\":").append(toJsonStringArray(resolveRequestSourceUrls(request)));
+        metadata.append(",\"qualitySignals\":").append(toJsonStringArray(qualitySignals));
+        metadata.append(",\"qualityScore\":0.0");
+        metadata.append(",\"structuredBlocks\":[]");
+        metadata.append(",\"failureKind\":\"").append(escapeJson(failureKind)).append("\"");
+        metadata.append(",\"collectedAt\":\"").append(escapeJson(Instant.now().toString())).append("\"");
+        metadata.append(",\"durationMillis\":0");
+        metadata.append("}");
+        return metadata.toString();
+    }
+
+    private List<String> resolveRequestSourceUrls(SourceCollectRequest request) {
+        if (request == null) {
+            return List.of();
+        }
+        if (request.getSourceUrls() != null && !request.getSourceUrls().isEmpty()) {
+            return request.getSourceUrls();
+        }
+        return StringUtils.hasText(request.getUrl()) ? List.of(request.getUrl()) : List.of();
+    }
+
+    /**
      * 导航阶段只负责把页面打开到可继续判断的状态，不在这里强行等待所有资源彻底完成。
      */
-    private void navigateWithFallback(Page page, String url) {
+    private void navigateWithFallback(Page page, String url, SourceCollectRequest request) {
         UrlSecurityUtils.requireHttpOrHttps(url, "collect.url");
-        page.navigate(url, new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
+        ensureCollectorBudgetOrThrow(
+                request,
+                MIN_PLAYWRIGHT_ACTION_TIMEOUT_MILLIS,
+                "collector hard deadline reached before browser navigation");
+        page.navigate(url, new Page.NavigateOptions()
+                .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
+                .setTimeout(resolvePlaywrightActionTimeoutMillis(request, resolveTimeoutMillis())));
         try {
+            ensureCollectorBudgetOrThrow(
+                    request,
+                    MIN_PLAYWRIGHT_ACTION_TIMEOUT_MILLIS,
+                    "collector hard deadline reached before page load wait");
             page.waitForLoadState(LoadState.LOAD,
-                    new Page.WaitForLoadStateOptions().setTimeout((double) Math.min(5000, resolveTimeoutMillis())));
+                    new Page.WaitForLoadStateOptions()
+                            .setTimeout(resolvePlaywrightActionTimeoutMillis(request, 5000L)));
+        } catch (CollectorDeadlineReachedException deadlineReachedException) {
+            throw deadlineReachedException;
         } catch (Exception e) {
             log.warn("页面 LOAD 等待超时，继续尝试后续提取: url={}, error={}",
                     UrlSecurityUtils.maskForLog(url), e.getMessage());
@@ -490,16 +629,36 @@ public class PlaywrightPageCollector implements SourceCollector {
      * readiness 失败时不直接抛弃页面，后续反爬识别和正文提取仍然可以继续判断是否可用。
      */
     private void waitForRenderableContent(Page page, SourceCollectRequest request) {
-        page.waitForLoadState(LoadState.DOMCONTENTLOADED);
+        ensureCollectorBudgetOrThrow(
+                request,
+                MIN_PLAYWRIGHT_ACTION_TIMEOUT_MILLIS,
+                "collector hard deadline reached before renderable-content wait");
+        page.waitForLoadState(LoadState.DOMCONTENTLOADED,
+                new Page.WaitForLoadStateOptions()
+                        .setTimeout(resolvePlaywrightActionTimeoutMillis(request, resolveTimeoutMillis())));
         try {
+            ensureCollectorBudgetOrThrow(
+                    request,
+                    MIN_PLAYWRIGHT_ACTION_TIMEOUT_MILLIS,
+                    "collector hard deadline reached before page load wait");
             page.waitForLoadState(LoadState.LOAD,
-                    new Page.WaitForLoadStateOptions().setTimeout((double) Math.min(5000, resolveTimeoutMillis())));
+                    new Page.WaitForLoadStateOptions()
+                            .setTimeout(resolvePlaywrightActionTimeoutMillis(request, 5000L)));
+        } catch (CollectorDeadlineReachedException deadlineReachedException) {
+            throw deadlineReachedException;
         } catch (Exception ignored) {
             // 页面可能仍在加载第三方资源，这里不直接中断采集。
         }
         try {
+            ensureCollectorBudgetOrThrow(
+                    request,
+                    MIN_PLAYWRIGHT_ACTION_TIMEOUT_MILLIS,
+                    "collector hard deadline reached before selector wait");
             page.waitForSelector(resolveRenderableSelector(request),
-                    new Page.WaitForSelectorOptions().setTimeout((double) Math.min(4000, resolveTimeoutMillis())));
+                    new Page.WaitForSelectorOptions()
+                            .setTimeout(resolvePlaywrightActionTimeoutMillis(request, 4000L)));
+        } catch (CollectorDeadlineReachedException deadlineReachedException) {
+            throw deadlineReachedException;
         } catch (Exception ignored) {
             // 页面可能没有明确 main/article 结构，继续交给正文提取与反爬识别判断。
         }
@@ -898,6 +1057,82 @@ public class PlaywrightPageCollector implements SourceCollector {
         return Math.max(1000, collectorProperties.getPageTimeoutSeconds() * 1000);
     }
 
+    private CollectedPage failIfCollectorDeadlineExpired(SourceCollectRequest request, String scene) {
+        return isCollectorDeadlineExpired(request) ? deadlineReachedPage(request, scene) : null;
+    }
+
+    private boolean isCollectorDeadlineExpired(SourceCollectRequest request) {
+        long remainingMillis = resolveRemainingCollectorDeadlineMillis(request);
+        return remainingMillis != Long.MAX_VALUE && remainingMillis <= 0L;
+    }
+
+    private long resolveRemainingCollectorDeadlineMillis(SourceCollectRequest request) {
+        if (request == null || request.getCollectorHardDeadlineEpochMillis() == null) {
+            return Long.MAX_VALUE;
+        }
+        long hardDeadlineEpochMillis = request.getCollectorHardDeadlineEpochMillis();
+        if (hardDeadlineEpochMillis == Long.MAX_VALUE) {
+            return Long.MAX_VALUE;
+        }
+        return hardDeadlineEpochMillis - System.currentTimeMillis();
+    }
+
+    /**
+     * Playwright/HTTP 都属于“启动新外部工作”，
+     * 所以在真正发起动作前必须确认剩余 hard deadline 预算足够覆盖最小动作窗口。
+     */
+    private void ensureCollectorBudgetOrThrow(SourceCollectRequest request,
+                                              long minBudgetMillis,
+                                              String scene) {
+        long remainingMillis = resolveRemainingCollectorDeadlineMillis(request);
+        if (remainingMillis == Long.MAX_VALUE) {
+            return;
+        }
+        if (remainingMillis < Math.max(1L, minBudgetMillis)) {
+            throw new CollectorDeadlineReachedException(scene);
+        }
+    }
+
+    private Duration resolveEffectiveHttpTimeout(SourceCollectRequest request) {
+        Duration configuredTimeout = Duration.ofSeconds(Math.max(1, collectorProperties.getPageTimeoutSeconds()));
+        long remainingMillis = resolveRemainingCollectorDeadlineMillis(request);
+        if (remainingMillis == Long.MAX_VALUE) {
+            return configuredTimeout;
+        }
+        ensureCollectorBudgetOrThrow(
+                request,
+                MIN_HTTP_START_BUDGET_MILLIS,
+                "collector hard deadline reached before HTTP page collection");
+        return Duration.ofMillis(Math.min(configuredTimeout.toMillis(), remainingMillis));
+    }
+
+    private double resolvePlaywrightActionTimeoutMillis(SourceCollectRequest request, long configuredTimeoutMillis) {
+        long remainingMillis = resolveRemainingCollectorDeadlineMillis(request);
+        if (remainingMillis == Long.MAX_VALUE) {
+            return (double) configuredTimeoutMillis;
+        }
+        return (double) Math.max(
+                MIN_PLAYWRIGHT_ACTION_TIMEOUT_MILLIS,
+                Math.min(configuredTimeoutMillis, remainingMillis));
+    }
+
+    private boolean isHardDeadlineFailure(CollectedPage page) {
+        if (page == null) {
+            return false;
+        }
+        return (StringUtils.hasText(page.getErrorMessage())
+                && page.getErrorMessage().contains(DEFAULT_COLLECTOR_DEADLINE_REASON))
+                || (StringUtils.hasText(page.getMetadata())
+                && page.getMetadata().contains(DEFAULT_COLLECTOR_DEADLINE_REASON));
+    }
+
+    private String resolveCollectorDeadlineReason(SourceCollectRequest request) {
+        if (request == null || !StringUtils.hasText(request.getCollectorDeadlineReason())) {
+            return DEFAULT_COLLECTOR_DEADLINE_REASON;
+        }
+        return request.getCollectorDeadlineReason();
+    }
+
     private boolean requiresFullRender(WebPageRenderHint renderHint) {
         return renderHint == WebPageRenderHint.FULL_RENDER
                 || renderHint == WebPageRenderHint.LOGIN_REQUIRED
@@ -994,5 +1229,12 @@ public class PlaywrightPageCollector implements SourceCollector {
             return "PAGE";
         }
         return "NONE";
+    }
+
+    private static class CollectorDeadlineReachedException extends RuntimeException {
+
+        private CollectorDeadlineReachedException(String message) {
+            super(message);
+        }
     }
 }

@@ -40,6 +40,50 @@ class TavilyPrefetchedContentGateTest {
     }
 
     @Test
+    void shouldKeepUsablePrefetchButRequireVerificationWhenRawContentDoesNotReachSkipThreshold() {
+        SourceCandidate candidate = baseCandidate(
+                "https://example.com/blog/platform-guide",
+                "DOCS",
+                "OPEN_WEB",
+                0.72D);
+        TavilyPrefetchedContent content = TavilyPrefetchedContent.builder()
+                .url(candidate.getUrl())
+                .title("平台指南")
+                .content("平台指南摘要")
+                .rawContent(repeat('文', 1999))
+                .cleanedContent(repeat('文', 1999))
+                .sourceUrls(List.of(candidate.getUrl()))
+                .build();
+
+        SourceCandidate gated = gate.apply(candidate, content, Set.of());
+
+        assertThat(gated.getFastLaneUsable()).isTrue();
+        assertThat(gated.getSkipNetworkVerification()).isFalse();
+    }
+
+    @Test
+    void shouldAuthorizeSkipVerificationWhenRawContentAndScoreBothReachThreshold() {
+        SourceCandidate candidate = baseCandidate(
+                "https://example.com/blog/platform-guide",
+                "DOCS",
+                "OPEN_WEB",
+                0.72D);
+        TavilyPrefetchedContent content = TavilyPrefetchedContent.builder()
+                .url(candidate.getUrl())
+                .title("平台指南")
+                .content("平台指南摘要")
+                .rawContent(repeat('文', 2000))
+                .cleanedContent(repeat('文', 2000))
+                .sourceUrls(List.of(candidate.getUrl()))
+                .build();
+
+        SourceCandidate gated = gate.apply(candidate, content, Set.of());
+
+        assertThat(gated.getFastLaneUsable()).isTrue();
+        assertThat(gated.getSkipNetworkVerification()).isTrue();
+    }
+
+    @Test
     void shouldKeepPdfUsableButMarkCompletenessPartial() {
         SourceCandidate candidate = baseCandidate(
                 "https://pdf.dfcfw.com/pdf/H3_AP202404191630123.pdf",

@@ -1,0 +1,68 @@
+﻿{
+    "code":  200,
+    "message":  "Task created",
+    "data":  {
+                 "id":  104,
+                 "taskName":  "é¶æ®µ1éçº§å¥çº¦åç«å E2Eï¼Notion ä¸ Airtable ä¸æ¸¸å¥çº¦å¤æµ",
+                 "subjectProduct":  "ä¼ä¸çº§ç¥è¯åä½ä¸ä½ä»£ç å·¥ä½å°",
+                 "competitorNames":  "[\"Notion\",\"Airtable\"]",
+                 "competitorUrls":  "[\"https://www.notion.so\",\"https://www.airtable.com\"]",
+                 "analysisDimensions":  "[\"äº§åæ¦è¿°\",\"å¸åºå®ä½\",\"ç®æ ç¨æ·\",\"æ ¸å¿åè½\",\"ä»·æ ¼ç­ç¥\"]",
+                 "sourceScope":  "[\"å®ç½\",\"å®¢æ·æ¡ä¾\",\"äº§åææ¡£\",\"å\u0085¬å¼æµè¯\"]",
+                 "status":  "PENDING",
+                 "errorMessage":  null,
+                 "statusSummary":  null,
+                 "currentPlanVersionId":  74,
+                 "currentPlanVersion":  1,
+                 "totalNodes":  14,
+                 "completedNodes":  0,
+                 "waitingRetryNodeCount":  0,
+                 "waitingInterventionNodeCount":  0,
+                 "compensatedNodeCount":  0,
+                 "createdAt":  [
+                                   2026,
+                                   7,
+                                   11,
+                                   20,
+                                   2,
+                                   46,
+                                   529182900
+                               ],
+                 "updatedAt":  [
+                                   2026,
+                                   7,
+                                   11,
+                                   20,
+                                   2,
+                                   47,
+                                   166890700
+                               ],
+                 "completedAt":  null,
+                 "canExecute":  true,
+                 "canResume":  false,
+                 "canRetry":  false,
+                 "canStop":  false,
+                 "canViewReport":  false,
+                 "canViewDraftReport":  false,
+                 "interventionSummary":  "ä»»å¡å°æªå¼å§ï¼å¯ç´æ¥å¯å¨æ§è¡ï¼èç¹çº§æ¯ææåå¾\u0085æ§è¡èç¹ãæå¨è·³è¿å¾\u0085æ§è¡èç¹ï¼ä»¥åä»æå®èç¹éè·ã",
+                 "resumeAdvice":  null,
+                 "retryAdvice":  null,
+                 "replayEntrySummary":  null,
+                 "currentStage":  "Notion - OFFICIALéé",
+                 "activeNodeNames":  [
+
+                                     ],
+                 "snapshotUpdatedAt":  [
+                                           2026,
+                                           7,
+                                           11,
+                                           20,
+                                           2,
+                                           47,
+                                           172253100
+                                       ],
+                 "eventStreamPath":  "/api/task/104/events"
+             },
+    "timestamp":  "2026-07-11T20:02:47.191657400",
+    "traceId":  "7cf659291ec94700afa9956ce424ec6a"
+}

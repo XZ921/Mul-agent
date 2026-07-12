@@ -4,6 +4,7 @@ import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
 import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.context.TaskRagContextBundle;
+import cn.bugstack.competitoragent.collection.CollectionDeadlineContext;
 import cn.bugstack.competitoragent.collection.CollectionExecutionCoordinator;
 import cn.bugstack.competitoragent.collection.CollectionExecutionReport;
 import cn.bugstack.competitoragent.collection.CollectionExecutor;
@@ -188,6 +189,250 @@ class CollectorAgentTest {
                 "unexpected error: " + result.getErrorMessage() + " / " + result.getOutputSummary());
         assertTrue(result.getErrorMessage().contains("建议："));
         verify(evidenceRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldFallbackToThirdPartyWhenOfficialTargetSelectedButCollectionHasNoUsableEvidence() throws Exception {
+        SearchExecutionCoordinator mockedSearchExecutionCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectorAgent fallbackCollectorAgent = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                mockedSearchExecutionCoordinator,
+                collectionExecutionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper
+        );
+        SearchExecutionResult officialSearchResult = buildSearchExecutionResult(SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://www.notion.so/help")
+                        .title("Notion Help")
+                        .sourceType("DOCS")
+                        .discoveryMethod("DIRECT_LOCATOR")
+                        .providerKey("planned")
+                        .domain("www.notion.so")
+                        .sourceUrls(List.of("https://www.notion.so/help"))
+                        .selectionStage("SELECTED")
+                        .selectionReason("planned official candidate")
+                        .build())
+                .build());
+        SearchExecutionResult fallbackSearchResult = buildSearchExecutionResult(SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://www.getapp.com/collaboration-software/a/notion/reviews/")
+                        .title("Notion third-party review")
+                        .sourceType("DOCS")
+                        .discoveryMethod("HTTP")
+                        .providerKey("tavily")
+                        .domain("www.getapp.com")
+                        .sourceUrls(List.of("https://www.getapp.com/collaboration-software/a/notion/reviews/"))
+                        .selectionStage("SELECTED")
+                        .selectionReason("third-party evidence")
+                        .build())
+                .build());
+        when(mockedSearchExecutionCoordinator.execute(
+                any(CollectorNodeConfig.class),
+                any(),
+                any(),
+                any(),
+                any(CollectionDeadlineContext.class)))
+                .thenReturn(officialSearchResult, fallbackSearchResult);
+        mockCollectedPage("https://www.notion.so/help", "Notion", "DOCS", SourceCollector.CollectedPage.builder()
+                .url("https://www.notion.so/help")
+                .competitorName("Notion")
+                .sourceType("DOCS")
+                .success(false)
+                .errorMessage("official page blocked")
+                .build());
+        mockCollectedPage("https://www.getapp.com/collaboration-software/a/notion/reviews/", "Notion", "DOCS",
+                SourceCollector.CollectedPage.builder()
+                        .url("https://www.getapp.com/collaboration-software/a/notion/reviews/")
+                        .title("Notion reviews")
+                        .content("Notion documentation and workspace features are described by third-party review evidence.")
+                        .snippet("Notion workspace features")
+                        .competitorName("Notion")
+                        .sourceType("DOCS")
+                        .success(true)
+                        .build());
+
+        AgentResult result = fallbackCollectorAgent.execute(buildThirdPartyFallbackContext());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS_DEGRADED", result.getStatus().name(),
+                result.getErrorMessage() + " / " + result.getOutputSummary());
+        assertEquals(1, output.path("successCollected").asInt());
+        assertTrue(output.path("degradationReasons").toString()
+                .contains("OFFICIAL_UNREACHABLE_THIRDPARTY_FALLBACK"));
+        assertEquals("https://www.getapp.com/collaboration-software/a/notion/reviews/",
+                output.path("documents").get(0).path("sourceUrls").get(0).asText());
+        assertEquals("THIRD_PARTY_FALLBACK", output.path("results").get(0).path("discoveryMethod").asText());
+        assertEquals("MEDIUM", output.path("results").get(0).path("trustTier").asText());
+
+        ArgumentCaptor<CollectorNodeConfig> configCaptor = ArgumentCaptor.forClass(CollectorNodeConfig.class);
+        verify(mockedSearchExecutionCoordinator, times(2)).execute(
+                configCaptor.capture(),
+                any(),
+                any(),
+                any(),
+                any(CollectionDeadlineContext.class));
+        CollectorNodeConfig fallbackConfig = configCaptor.getAllValues().get(1);
+        assertEquals(List.of("Notion third-party docs evidence"), fallbackConfig.getSearchQueries());
+        assertTrue(fallbackConfig.getCompetitorUrls().isEmpty());
+        assertTrue(fallbackConfig.getSourceCandidates().isEmpty());
+        assertTrue(fallbackConfig.getPreferredDomains().isEmpty());
+        assertTrue(fallbackConfig.getIncludeDomains().isEmpty());
+        assertEquals("OPEN_WEB", fallbackConfig.getTavilyQueryMode());
+        assertEquals(Boolean.TRUE, fallbackConfig.getThirdPartyFallbackActive());
+    }
+
+    @Test
+    void shouldFallbackToThirdPartyWhenPrefetchedOfficialAttemptFailedAndNoTargetSelected() throws Exception {
+        SearchExecutionCoordinator mockedSearchExecutionCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectorAgent fallbackCollectorAgent = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                mockedSearchExecutionCoordinator,
+                collectionExecutionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper
+        );
+        SearchCollectionTarget failedOfficialAttempt = SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://www.notion.so/help")
+                        .title("Notion Help")
+                        .sourceType("DOCS")
+                        .discoveryMethod("DIRECT_LOCATOR")
+                        .providerKey("planned")
+                        .domain("www.notion.so")
+                        .sourceUrls(List.of("https://www.notion.so/help"))
+                        .selectionStage("ATTEMPTED")
+                        .selectionReason("official docs prefetched during verification")
+                        .build())
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url("https://www.notion.so/help")
+                        .competitorName("Notion")
+                        .sourceType("DOCS")
+                        .success(false)
+                        .errorMessage("official page blocked during verification")
+                        .build())
+                .build();
+        SearchExecutionResult officialSearchResult = buildSearchExecutionResultWithAttemptedTargets(
+                List.of(failedOfficialAttempt));
+        SearchExecutionResult fallbackSearchResult = buildSearchExecutionResult(SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://www.getapp.com/collaboration-software/a/notion/reviews/")
+                        .title("Notion third-party review")
+                        .sourceType("DOCS")
+                        .discoveryMethod("HTTP")
+                        .providerKey("tavily")
+                        .domain("www.getapp.com")
+                        .sourceUrls(List.of("https://www.getapp.com/collaboration-software/a/notion/reviews/"))
+                        .selectionStage("SELECTED")
+                        .selectionReason("third-party evidence")
+                        .build())
+                .build());
+        when(mockedSearchExecutionCoordinator.execute(
+                any(CollectorNodeConfig.class),
+                any(),
+                any(),
+                any(),
+                any(CollectionDeadlineContext.class)))
+                .thenReturn(officialSearchResult, fallbackSearchResult);
+        mockCollectedPage("https://www.getapp.com/collaboration-software/a/notion/reviews/", "Notion", "DOCS",
+                SourceCollector.CollectedPage.builder()
+                        .url("https://www.getapp.com/collaboration-software/a/notion/reviews/")
+                        .title("Notion reviews")
+                        .content("Notion docs and workspace capabilities are described by third-party review evidence.")
+                        .snippet("Notion workspace docs")
+                        .competitorName("Notion")
+                        .sourceType("DOCS")
+                        .success(true)
+                        .build());
+
+        AgentResult result = fallbackCollectorAgent.execute(buildThirdPartyFallbackContext());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS_DEGRADED", result.getStatus().name(),
+                result.getErrorMessage() + " / " + result.getOutputSummary());
+        assertEquals(1, output.path("successCollected").asInt());
+        assertTrue(output.path("degradationReasons").toString()
+                .contains("OFFICIAL_UNREACHABLE_THIRDPARTY_FALLBACK"));
+        assertEquals("THIRD_PARTY_FALLBACK", output.path("results").get(0).path("discoveryMethod").asText());
+        verify(mockedSearchExecutionCoordinator, times(2)).execute(
+                any(CollectorNodeConfig.class),
+                any(),
+                any(),
+                any(),
+                any(CollectionDeadlineContext.class));
+    }
+
+    @Test
+    void shouldGenerateThirdPartyFallbackQueriesAtRuntimeWhenPlanOmittedThem() throws Exception {
+        SearchExecutionCoordinator mockedSearchExecutionCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectorAgent fallbackCollectorAgent = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                mockedSearchExecutionCoordinator,
+                collectionExecutionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper
+        );
+        SearchExecutionResult officialSearchResult = buildSearchExecutionResult();
+        SearchExecutionResult fallbackSearchResult = buildSearchExecutionResult(SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://www.getapp.com/collaboration-software/a/notion/reviews/")
+                        .title("Notion third-party review")
+                        .sourceType("DOCS")
+                        .discoveryMethod("HTTP")
+                        .providerKey("tavily")
+                        .domain("www.getapp.com")
+                        .sourceUrls(List.of("https://www.getapp.com/collaboration-software/a/notion/reviews/"))
+                        .selectionStage("SELECTED")
+                        .selectionReason("third-party evidence")
+                        .build())
+                .build());
+        when(mockedSearchExecutionCoordinator.execute(
+                any(CollectorNodeConfig.class),
+                any(),
+                any(),
+                any(),
+                any(CollectionDeadlineContext.class)))
+                .thenReturn(officialSearchResult, fallbackSearchResult);
+        mockCollectedPage("https://www.getapp.com/collaboration-software/a/notion/reviews/", "Notion", "DOCS",
+                SourceCollector.CollectedPage.builder()
+                        .url("https://www.getapp.com/collaboration-software/a/notion/reviews/")
+                        .title("Notion reviews")
+                        .content("Notion docs and workspace capabilities are described by third-party review evidence.")
+                        .snippet("Notion workspace docs")
+                        .competitorName("Notion")
+                        .sourceType("DOCS")
+                        .success(true)
+                        .build());
+
+        AgentResult result = fallbackCollectorAgent.execute(buildThirdPartyFallbackContextWithoutPreplannedQueries());
+
+        assertEquals("SUCCESS_DEGRADED", result.getStatus().name(),
+                result.getErrorMessage() + " / " + result.getOutputSummary());
+        ArgumentCaptor<CollectorNodeConfig> configCaptor = ArgumentCaptor.forClass(CollectorNodeConfig.class);
+        verify(mockedSearchExecutionCoordinator, times(2)).execute(
+                configCaptor.capture(),
+                any(),
+                any(),
+                any(),
+                any(CollectionDeadlineContext.class));
+        CollectorNodeConfig fallbackConfig = configCaptor.getAllValues().get(1);
+        assertEquals(List.of(
+                "Notion overview features guide",
+                "Notion tutorial documentation review"
+        ), fallbackConfig.getSearchQueries());
+        assertEquals(Boolean.TRUE, fallbackConfig.getThirdPartyFallbackActive());
     }
 
     @Test
@@ -487,7 +732,7 @@ class CollectorAgentTest {
                 taskRetrievalIndexService,
                 objectMapper
         );
-        when(searchCoordinator.execute(any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
+        when(searchCoordinator.execute(any(), any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
                 .executionPlan(SearchExecutionPlan.builder()
                         .steps(List.of())
                         .build())
@@ -496,7 +741,7 @@ class CollectorAgentTest {
                         .candidate(buildSourceCandidate("http://www.example.com/docs/?utm_source=dup"))
                         .build()))
                 .build());
-        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
                 .status("SUCCESS")
                 .results(List.of(
                         buildSuccessfulCollectionResult(
@@ -546,7 +791,7 @@ class CollectorAgentTest {
                 taskRetrievalIndexService,
                 objectMapper
         );
-        when(searchCoordinator.execute(any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
+        when(searchCoordinator.execute(any(), any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
                 .executionPlan(SearchExecutionPlan.builder()
                         .steps(List.of())
                         .build())
@@ -555,7 +800,7 @@ class CollectorAgentTest {
                         .candidate(buildSourceCandidate("https://example.com/docs"))
                         .build()))
                 .build());
-        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
                 .status("SUCCESS")
                 .results(List.of(CollectionExecutionResult.builder()
                         .taskPackageKey("collect_sources_01_03#001")
@@ -608,7 +853,7 @@ class CollectorAgentTest {
                 taskRetrievalIndexService,
                 objectMapper
         );
-        when(searchCoordinator.execute(any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
+        when(searchCoordinator.execute(any(), any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
                 .executionPlan(SearchExecutionPlan.builder()
                         .steps(List.of())
                         .build())
@@ -617,7 +862,7 @@ class CollectorAgentTest {
                         .candidate(buildSourceCandidate("https://example.com/docs/auth"))
                         .build()))
                 .build());
-        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
                 .status("SUCCESS")
                 .results(List.of(CollectionExecutionResult.builder()
                         .taskPackageKey("collect_sources_01_03#001")
@@ -673,7 +918,7 @@ class CollectorAgentTest {
                 taskRetrievalIndexService,
                 objectMapper
         );
-        when(searchCoordinator.execute(any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
+        when(searchCoordinator.execute(any(), any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
                 .executionPlan(SearchExecutionPlan.builder()
                         .steps(List.of(SearchExecutionStep.builder()
                                 .stepCode("COLLECT_PAGES")
@@ -684,7 +929,7 @@ class CollectorAgentTest {
                 .sourceCandidates(List.of())
                 .selectedTargets(List.of(SearchCollectionTarget.builder().build()))
                 .build());
-        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
                 .status("SUCCESS")
                 .results(List.of(buildSuccessfulCollectionResult(
                         "collect_sources_01_03#001",
@@ -733,7 +978,7 @@ class CollectorAgentTest {
                 taskRetrievalIndexService,
                 objectMapper
         );
-        when(searchCoordinator.execute(any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
+        when(searchCoordinator.execute(any(), any(), any(), any(), any())).thenReturn(SearchExecutionResult.builder()
                 .executionPlan(SearchExecutionPlan.builder()
                         .steps(List.of())
                         .build())
@@ -758,7 +1003,7 @@ class CollectorAgentTest {
                                 .build())
                         .build()))
                 .build());
-        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any(), any())).thenReturn(CollectionExecutionReport.builder()
                 .status("SUCCESS")
                 .results(List.of(buildSuccessfulCollectionResult(
                         "collect_sources_01_03#001",
@@ -1049,9 +1294,9 @@ class CollectorAgentTest {
         SearchCollectionTarget pendingTarget = SearchCollectionTarget.builder()
                 .candidate(buildSourceCandidate("https://example.com/help"))
                 .build();
-        when(searchCoordinator.execute(any(), any(), any(), any()))
+        when(searchCoordinator.execute(any(), any(), any(), any(), any()))
                 .thenReturn(buildSearchExecutionResult(prefetchedTarget, pendingTarget));
-        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any()))
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> {
                     Thread.sleep(200L);
                     return buildCollectionReport(List.of());
@@ -1098,9 +1343,9 @@ class CollectorAgentTest {
         SearchCollectionTarget pendingTarget = SearchCollectionTarget.builder()
                 .candidate(buildSourceCandidate("https://example.com/help"))
                 .build();
-        when(searchCoordinator.execute(any(), any(), any(), any()))
+        when(searchCoordinator.execute(any(), any(), any(), any(), any()))
                 .thenReturn(buildSearchExecutionResult(pendingTarget));
-        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any()))
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> {
                     Thread.sleep(200L);
                     return buildCollectionReport(List.of());
@@ -1148,7 +1393,7 @@ class CollectorAgentTest {
                 .candidate(buildSourceCandidate("https://example.com/docs"))
                 .collectedPage(successfulCollectedPage("https://example.com/docs", "Docs"))
                 .build();
-        when(searchCoordinator.execute(any(), any(), any(), any()))
+        when(searchCoordinator.execute(any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> {
                     Thread.sleep(80L);
                     return buildSearchExecutionResult(prefetchedTarget);
@@ -1193,9 +1438,9 @@ class CollectorAgentTest {
         SearchCollectionTarget pendingTarget = SearchCollectionTarget.builder()
                 .candidate(buildSourceCandidate("https://example.com/docs"))
                 .build();
-        when(searchCoordinator.execute(any(), any(), any(), any()))
+        when(searchCoordinator.execute(any(), any(), any(), any(), any()))
                 .thenReturn(buildSearchExecutionResult(pendingTarget));
-        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any()))
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> {
                     Thread.sleep(80L);
                     return buildCollectionReport(List.of(buildSuccessfulCollectionResult(
@@ -1245,7 +1490,7 @@ class CollectorAgentTest {
                 return 0L;
             }
         };
-        when(searchCoordinator.execute(any(), any(), any(), any()))
+        when(searchCoordinator.execute(any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> {
                     Thread.sleep(5_000L);
                     return buildSearchExecutionResult(SearchCollectionTarget.builder()
@@ -1265,7 +1510,53 @@ class CollectorAgentTest {
         assertNull(result.getErrorMessage());
         assertTrue(result.getOutputData().contains("HARD_DEADLINE_REACHED"));
         assertFalse(output.path("readyForQuorum").asBoolean());
-        verify(collectionCoordinator, never()).execute(any(), any(), any(), any(), any(), any());
+        verify(collectionCoordinator, never()).execute(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void shouldReturnSuccessDegradedWhenCoordinatorStopsInsideDeadlineLoop() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent deadlineAwareCollector = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchCoordinator,
+                collectionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper,
+                new DownstreamEvidenceViewAssembler(objectMapper),
+                new EvidenceQualityGate(new EvidenceQualityGateProperties()),
+                new EvidenceSourceSanitizer(),
+                null
+        );
+        SearchCollectionTarget pendingTarget = SearchCollectionTarget.builder()
+                .candidate(buildSourceCandidate("https://example.com/docs"))
+                .build();
+        when(searchCoordinator.execute(any(), any(), any(), any(), any()))
+                .thenReturn(buildSearchExecutionResult(pendingTarget));
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(buildHardDeadlineDegradedCollectionReport(List.of(buildSuccessfulCollectionResult(
+                        "collect_sources_01_01#001",
+                        1,
+                        "https://example.com/docs",
+                        "Docs"))));
+        when(collectionCoordinator.summarize(any()))
+                .thenAnswer(invocation -> buildCollectionReport(invocation.getArgument(0)));
+
+        AgentResult result = deadlineAwareCollector.execute(
+                buildSingleCandidateContext("https://example.com/docs", "Docs", "DOCS"));
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS_DEGRADED", result.getStatus().name(), result.getErrorMessage());
+        assertEquals("SUCCESS_DEGRADED", output.path("collectionStatus").asText());
+        assertEquals("SUCCESS_DEGRADED", output.path("collectionAudit").path("status").asText());
+        assertEquals("SUCCESS_DEGRADED", output.path("collectionAudit").path("summary").path("status").asText());
+        assertTrue(output.path("degradationReasons").toString().contains("HARD_DEADLINE_REACHED"));
+        assertTrue(output.path("collectionAudit").path("summary").path("degradationReasons").toString()
+                .contains("HARD_DEADLINE_REACHED"));
     }
 
     @Test
@@ -1471,6 +1762,56 @@ class CollectorAgentTest {
                 .build();
     }
 
+    private AgentContext buildThirdPartyFallbackContext() {
+        return AgentContext.builder()
+                .taskId(22L)
+                .taskName("task")
+                .currentNodeName("collect_sources_notion_docs")
+                .currentNodeConfig("""
+                        {
+                          "competitorName": "Notion",
+                          "competitorUrls": ["https://www.notion.so/help"],
+                          "sourceType": "DOCS",
+                          "discoveryNotes": "official docs first",
+                          "verifyCandidates": true,
+                          "verifyResultPage": true,
+                          "browserSearchEnabled": false,
+                          "searchMode": "HTTP_ONLY",
+                          "searchQueries": ["site:notion.so Notion docs"],
+                          "thirdPartyFallbackQueries": ["Notion third-party docs evidence"],
+                          "tavilyQueryMode": "OFFICIAL_DOCS",
+                          "preferredDomains": ["notion.so"],
+                          "includeDomains": ["notion.so"],
+                          "minVerifiedCandidates": 1,
+                          "maxSearchResults": 1,
+                          "sourceCandidates": [
+                            {
+                              "url": "https://www.notion.so/help",
+                              "title": "Notion Help",
+                              "sourceType": "DOCS",
+                              "discoveryMethod": "DIRECT_LOCATOR",
+                              "providerKey": "planned",
+                              "reason": "official docs",
+                              "domain": "www.notion.so",
+                              "sourceUrls": ["https://www.notion.so/help"],
+                              "selectionStage": "PLANNED",
+                              "selectionReason": "official docs"
+                            }
+                          ]
+                        }
+                        """)
+                .build();
+    }
+
+    private AgentContext buildThirdPartyFallbackContextWithoutPreplannedQueries() {
+        AgentContext context = buildThirdPartyFallbackContext();
+        return context.toBuilder()
+                .currentNodeConfig(context.getCurrentNodeConfig().replaceAll(
+                        "\\s*\"thirdPartyFallbackQueries\"\\s*:\\s*\\[\"Notion third-party docs evidence\"\\],\\R?",
+                        ""))
+                .build();
+    }
+
     private SearchExecutionResult buildSearchExecutionResult(SearchCollectionTarget... targets) {
         List<SearchCollectionTarget> selectedTargets = targets == null ? List.of() : List.of(targets);
         return SearchExecutionResult.builder()
@@ -1506,6 +1847,17 @@ class CollectorAgentTest {
                 .build();
     }
 
+    private SearchExecutionResult buildSearchExecutionResultWithAttemptedTargets(
+            List<SearchCollectionTarget> attemptedTargets) {
+        SearchExecutionResult result = buildSearchExecutionResult();
+        List<SearchCollectionTarget> safeAttemptedTargets = attemptedTargets == null ? List.of() : attemptedTargets;
+        result.setAttemptedTargets(safeAttemptedTargets);
+        result.setSourceCandidates(safeAttemptedTargets.stream()
+                .map(SearchCollectionTarget::getCandidate)
+                .collect(Collectors.toList()));
+        return result;
+    }
+
     private CollectionExecutionReport buildCollectionReport(List<CollectionExecutionResult> results) {
         List<CollectionExecutionResult> safeResults = results == null ? List.of() : results;
         int successCount = (int) safeResults.stream().filter(CollectionExecutionResult::isSuccess).count();
@@ -1533,6 +1885,28 @@ class CollectorAgentTest {
                                 .reusedCount(0)
                                 .status(status)
                                 .sourceUrls(sourceUrls)
+                                .build())
+                        .build())
+                .build();
+    }
+
+    private CollectionExecutionReport buildHardDeadlineDegradedCollectionReport(List<CollectionExecutionResult> results) {
+        CollectionExecutionReport baseReport = buildCollectionReport(results);
+        CollectionAuditSnapshot auditSnapshot = baseReport.getAuditSnapshot();
+        CollectionAuditSummary summary = auditSnapshot == null ? null : auditSnapshot.getSummary();
+        return baseReport.toBuilder()
+                .status("SUCCESS_DEGRADED")
+                .degraded(true)
+                .degradationReasons(List.of("HARD_DEADLINE_REACHED"))
+                .auditSnapshot(auditSnapshot == null
+                        ? null
+                        : auditSnapshot.toBuilder()
+                        .status("SUCCESS_DEGRADED")
+                        .summary(summary == null
+                                ? null
+                                : summary.toBuilder()
+                                .status("SUCCESS_DEGRADED")
+                                .degradationReasons(List.of("HARD_DEADLINE_REACHED"))
                                 .build())
                         .build())
                 .build();

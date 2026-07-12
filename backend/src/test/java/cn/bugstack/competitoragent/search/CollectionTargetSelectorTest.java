@@ -39,6 +39,8 @@ class CollectionTargetSelectorTest {
                 .hasPrefetchedContent(Boolean.TRUE)
                 .prefetchedContentRef("prefetch-related-domain")
                 .prefetchedRawContentLength(8_000)
+                .skipNetworkVerification(Boolean.TRUE)
+                .sourceUrls(List.of("https://op.jinritemai.com"))
                 .totalScore(0.99)
                 .build();
         SourceCandidate officialDocument = SourceCandidate.builder()
@@ -54,8 +56,10 @@ class CollectionTargetSelectorTest {
                 .hasPrefetchedContent(Boolean.TRUE)
                 .prefetchedContentRef("prefetch-official-doc")
                 .prefetchedRawContentLength(4_000)
+                .skipNetworkVerification(Boolean.TRUE)
                 .queryIntent("API_DOCS")
                 .evidencePathKey("OFFICIAL_PUBLIC_PROFILE")
+                .sourceUrls(List.of("https://open.douyin.com/platform/resource/docs/develop/permission/overall-permission"))
                 .totalScore(0.56)
                 .build();
 
@@ -98,6 +102,8 @@ class CollectionTargetSelectorTest {
                 .hasPrefetchedContent(Boolean.TRUE)
                 .prefetchedContentRef("prefetch-misclassified-related-domain")
                 .prefetchedRawContentLength(8_000)
+                .skipNetworkVerification(Boolean.TRUE)
+                .sourceUrls(List.of("https://op.jinritemai.com"))
                 .totalScore(0.99)
                 .build();
         SourceCandidate officialDocument = SourceCandidate.builder()
@@ -113,8 +119,10 @@ class CollectionTargetSelectorTest {
                 .hasPrefetchedContent(Boolean.TRUE)
                 .prefetchedContentRef("prefetch-official-doc")
                 .prefetchedRawContentLength(4_000)
+                .skipNetworkVerification(Boolean.TRUE)
                 .queryIntent("OFFICIAL_DOCS")
                 .evidencePathKey("OFFICIAL_PUBLIC_PROFILE")
+                .sourceUrls(List.of("https://open.douyin.com/platform/resource/docs/develop/permission/overall-permission"))
                 .totalScore(0.56)
                 .build();
 
@@ -149,6 +157,8 @@ class CollectionTargetSelectorTest {
                 .hasPrefetchedContent(Boolean.TRUE)
                 .prefetchedContentRef("prefetch-explinks")
                 .prefetchedRawContentLength(5_000)
+                .skipNetworkVerification(Boolean.TRUE)
+                .sourceUrls(List.of("https://explinks.com/api/scd20240709052919a4a3d7"))
                 .totalScore(0.72)
                 .build();
 
@@ -183,6 +193,8 @@ class CollectionTargetSelectorTest {
                 .hasPrefetchedContent(Boolean.TRUE)
                 .prefetchedContentRef("prefetch-explinks")
                 .prefetchedRawContentLength(5_000)
+                .skipNetworkVerification(Boolean.TRUE)
+                .sourceUrls(List.of("https://explinks.com/api/scd20240709052919a4a3d7"))
                 .totalScore(0.99)
                 .build();
         SourceCandidate verifiedOfficialDocs = SourceCandidate.builder()
@@ -542,6 +554,7 @@ class CollectionTargetSelectorTest {
                 .url("https://open.douyin.com/platform/resource/docs/develop/guide")
                 .title("开发指南")
                 .sourceType("DOCS")
+                .providerKey("tavily")
                 .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
                 .selectionStage("BOOTSTRAPPED")
                 .verified(null)
@@ -549,6 +562,9 @@ class CollectionTargetSelectorTest {
                 .hasPrefetchedContent(Boolean.TRUE)
                 .prefetchedContentRef("tavily:req-75:1")
                 .prefetchedRawContentLength(2049)
+                .skipNetworkVerification(Boolean.TRUE)
+                .pageType("OFFICIAL_DOC")
+                .sourceUrls(List.of("https://open.douyin.com/platform/resource/docs/develop/guide"))
                 .totalScore(0.41)
                 .build();
 
@@ -572,12 +588,12 @@ class CollectionTargetSelectorTest {
         );
 
         assertEquals(1, decision.getSelectedTargets().size());
-        assertEquals(prefetchedLongForm.getUrl(), decision.getSelectedTargets().get(0).getCandidate().getUrl());
-        assertEquals("SELECTED", decision.getSelectedTargets().get(0).getCandidate().getSelectionStage());
-        assertEquals("Tavily prefetch 正文可用",
-                decision.getSelectedTargets().get(0).getCandidate().getSelectionReason());
-        assertEquals("Tavily prefetch 正文可用",
-                decision.getSelectedTargets().get(0).getCandidate().getSelectionSummary());
+        SourceCandidate selectedCandidate = decision.getSelectedTargets().get(0).getCandidate();
+        assertEquals(prefetchedLongForm.getUrl(), selectedCandidate.getUrl());
+        assertEquals("VERIFIED", selectedCandidate.getSelectionStage());
+        assertTrue(Boolean.TRUE.equals(selectedCandidate.getVerified()));
+        assertEquals("TAVILY_FAST_LANE_GATE_VERIFIED", selectedCandidate.getVerificationReason());
+        assertTrue(selectedCandidate.getQualitySignals().contains("TAVILY_VERIFICATION_SKIPPED"));
     }
 
     @Test
@@ -595,6 +611,7 @@ class CollectionTargetSelectorTest {
                 .url("https://open.douyin.com/platform/resource/docs/develop/guide")
                 .title("开发指南")
                 .sourceType("DOCS")
+                .providerKey("tavily")
                 .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
                 .selectionStage("BOOTSTRAPPED")
                 .verified(null)
@@ -602,6 +619,9 @@ class CollectionTargetSelectorTest {
                 .hasPrefetchedContent(Boolean.TRUE)
                 .prefetchedContentRef("tavily:req-75:2")
                 .prefetchedRawContentLength(2049)
+                .skipNetworkVerification(Boolean.TRUE)
+                .pageType("OFFICIAL_DOC")
+                .sourceUrls(List.of("https://open.douyin.com/platform/resource/docs/develop/guide"))
                 .totalScore(0.41)
                 .build();
 
@@ -718,6 +738,8 @@ class CollectionTargetSelectorTest {
                 .url("https://open-live.bilibili.com/document/doc/guide")
                 .title("哔哩哔哩直播开放平台文档")
                 .providerKey("tavily")
+                .sourceType("DOCS")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
                 .tavilyQueryMode("TRUSTED_WEB_EXPANSION")
                 .qualityTier("STRONG")
                 .fastLaneUsable(Boolean.TRUE)
@@ -725,6 +747,8 @@ class CollectionTargetSelectorTest {
                 .prefetchedContentRef("prefetch-bilibili-live")
                 .prefetchedRawContentLength(7_444)
                 .skipNetworkVerification(Boolean.TRUE)
+                .pageType("OFFICIAL_DOC")
+                .sourceUrls(List.of("https://open-live.bilibili.com/document/doc/guide"))
                 .totalScore(0.86)
                 .build();
 
@@ -747,8 +771,64 @@ class CollectionTargetSelectorTest {
         );
 
         assertEquals(1, decision.getSelectedTargets().size());
-        assertEquals("https://open-live.bilibili.com/document/doc/guide",
-                decision.getSelectedTargets().get(0).getCandidate().getUrl());
+        SourceCandidate selectedCandidate = decision.getSelectedTargets().get(0).getCandidate();
+        assertEquals("https://open-live.bilibili.com/document/doc/guide", selectedCandidate.getUrl());
+        assertEquals("VERIFIED", selectedCandidate.getSelectionStage());
+        assertTrue(Boolean.TRUE.equals(selectedCandidate.getVerified()));
+    }
+
+    @Test
+    void shouldRejectPrefetchedCandidateWhenGateDidNotAuthorizeSkipNetworkVerification() {
+        SourceCandidate needsVerification = SourceCandidate.builder()
+                .url("https://support.airtable.com/docs/automation-guide")
+                .title("Airtable docs")
+                .sourceType("DOCS")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .selectionStage("BOOTSTRAPPED")
+                .verified(null)
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("tavily:req-103:02_02")
+                .skipNetworkVerification(Boolean.FALSE)
+                .pageType("OFFICIAL_DOC")
+                .sourceUrls(List.of("https://support.airtable.com/docs/automation-guide"))
+                .totalScore(0.91)
+                .build();
+
+        SearchSelectionDecision decision = selector.selectTargets(List.of(needsVerification), Map.of(), 1);
+
+        assertTrue(decision.getSelectedTargets().isEmpty());
+        assertTrue(decision.getDiscardedCandidates().stream()
+                .anyMatch(candidate -> "Tavily prefetch 未完成验证，拒绝进入正式采集目标".equals(candidate.getSelectionReason())));
+    }
+
+    @Test
+    void shouldPromoteAuthorizedPrefetchCandidateAsVerifiedSelection() {
+        SourceCandidate authorized = SourceCandidate.builder()
+                .url("https://open.douyin.com/docs/api")
+                .title("开放平台 API 文档")
+                .sourceType("DOCS")
+                .providerKey("tavily")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .selectionStage("BOOTSTRAPPED")
+                .verified(null)
+                .fastLaneUsable(Boolean.TRUE)
+                .hasPrefetchedContent(Boolean.TRUE)
+                .prefetchedContentRef("tavily:req-ok:1")
+                .skipNetworkVerification(Boolean.TRUE)
+                .pageType("OFFICIAL_DOC")
+                .sourceUrls(List.of("https://open.douyin.com/docs/api"))
+                .totalScore(0.86)
+                .build();
+
+        SearchSelectionDecision decision = selector.selectTargets(List.of(authorized), Map.of(), 1);
+        SourceCandidate selected = decision.getSelectedTargets().get(0).getCandidate();
+
+        assertTrue(Boolean.TRUE.equals(selected.getVerified()));
+        assertEquals("VERIFIED", selected.getSelectionStage());
+        assertEquals("TAVILY_FAST_LANE_GATE_VERIFIED", selected.getVerificationReason());
+        assertTrue(selected.getQualitySignals().contains("TAVILY_VERIFICATION_SKIPPED"));
     }
 
     @Test
@@ -898,6 +978,8 @@ class CollectionTargetSelectorTest {
                 .hasPrefetchedContent(Boolean.TRUE)
                 .prefetchedContentRef("prefetch-official")
                 .prefetchedRawContentLength(9_000)
+                .skipNetworkVerification(Boolean.TRUE)
+                .pageType("ARTICLE")
                 .sourceUrls(List.of("https://open.example.com/protocol"))
                 .totalScore(0.95)
                 .build();
@@ -912,6 +994,8 @@ class CollectionTargetSelectorTest {
                 .hasPrefetchedContent(Boolean.TRUE)
                 .prefetchedContentRef("prefetch-docs")
                 .prefetchedRawContentLength(12_000)
+                .skipNetworkVerification(Boolean.TRUE)
+                .pageType("OFFICIAL_DOC")
                 .sourceUrls(List.of("https://developer.example.com/docs"))
                 .totalScore(0.92)
                 .build();
@@ -926,6 +1010,8 @@ class CollectionTargetSelectorTest {
                 .hasPrefetchedContent(Boolean.TRUE)
                 .prefetchedContentRef("prefetch-news")
                 .prefetchedRawContentLength(2_000)
+                .skipNetworkVerification(Boolean.TRUE)
+                .pageType("ARTICLE")
                 .sourceUrls(List.of("https://news.example.com/platform-review"))
                 .totalScore(0.87)
                 .build();

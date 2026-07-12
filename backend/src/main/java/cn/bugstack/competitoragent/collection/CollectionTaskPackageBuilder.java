@@ -38,7 +38,7 @@ public class CollectionTaskPackageBuilder {
                                        String competitorName,
                                        SourceCandidate candidate,
                                        int priority) {
-        return build(taskId, nodeName, planVersionId, competitorName, candidate, priority, 0);
+        return build(taskId, nodeName, planVersionId, competitorName, candidate, priority, 0, CollectionDeadlineContext.none());
     }
 
     /**
@@ -53,11 +53,37 @@ public class CollectionTaskPackageBuilder {
                                        SourceCandidate candidate,
                                        int priority,
                                        int discoveryDepth) {
+        return build(taskId,
+                nodeName,
+                planVersionId,
+                competitorName,
+                candidate,
+                priority,
+                discoveryDepth,
+                CollectionDeadlineContext.none());
+    }
+
+    /**
+     * 这里把 collector 节点级 deadline 显式写入任务包，
+     * 让协调器、网页执行器和最终的 SourceCollectRequest 共享同一个截止时间锚点，
+     * 避免各层重新各算一份“自己的 timeout 预算”。
+     */
+    public CollectionTaskPackage build(Long taskId,
+                                       String nodeName,
+                                       Long planVersionId,
+                                       String competitorName,
+                                       SourceCandidate candidate,
+                                       int priority,
+                                       int discoveryDepth,
+                                       CollectionDeadlineContext deadlineContext) {
         String sourceFamilyKey = candidate == null ? null : candidate.getSourceFamilyKey();
         String sourceType = candidate == null ? null : candidate.getSourceType();
         String url = candidate == null ? null : candidate.getUrl();
         WebPageRenderHint renderHint = resolveRenderHint(sourceFamilyKey, sourceType);
         String primaryTool = resolvePrimaryTool(candidate, sourceFamilyKey, sourceType, url, renderHint);
+        CollectionDeadlineContext effectiveDeadline = deadlineContext == null
+                ? CollectionDeadlineContext.none()
+                : deadlineContext;
         return CollectionTaskPackage.builder()
                 .taskId(taskId)
                 .nodeName(nodeName)
@@ -81,6 +107,9 @@ public class CollectionTaskPackageBuilder {
                 .priority(priority)
                 .discoveryDepth(Math.max(0, discoveryDepth))
                 .sourceUrls(resolveSourceUrls(candidate, url))
+                .collectorHardDeadlineEpochMillis(effectiveDeadline.hardDeadlineEpochMillis())
+                .collectorDeadlineGraceMillis(effectiveDeadline.drainGraceMillis())
+                .collectorDeadlineReason(effectiveDeadline.degradationReason())
                 .build();
     }
 

@@ -1,0 +1,2 @@
+{"attempt":0,"timestamp":"2026-07-12T12:59:56.4181724+08:00","ok":false,"error":"远程服务器返回错误: (503) 服务器不可用。"}
+{"attempt":1,"timestamp":"2026-07-12T13:00:02.3221004+08:00","ok":true,"response":{"status":"UP","groups":["liveness","readiness"]}}

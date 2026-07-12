@@ -154,7 +154,9 @@ public class PromptTemplateService {
             new AbstractMap.SimpleEntry<>("search-review-secondary", "{competitorName} alternatives comparison g2 capterra"),
             new AbstractMap.SimpleEntry<>("search-review-zhihu", "site:zhihu.com {competitorName} 评测 对比"),
             new AbstractMap.SimpleEntry<>("search-github-repository", "site:github.com {competitorName} repository open source"),
-            new AbstractMap.SimpleEntry<>("search-github-release", "site:github.com {competitorName} releases changelog")
+            new AbstractMap.SimpleEntry<>("search-github-release", "site:github.com {competitorName} releases changelog"),
+            new AbstractMap.SimpleEntry<>("search-thirdparty-primary", "{competitorName} overview features guide"),
+            new AbstractMap.SimpleEntry<>("search-thirdparty-secondary", "{competitorName} tutorial documentation review")
     );
 
     private final Map<String, String> templates = new ConcurrentHashMap<>();
@@ -327,6 +329,28 @@ public class PromptTemplateService {
             return buildChineseSearchQueries(competitorName, sourceType, domainHint);
         }
         return buildEnglishSearchQueries(competitorName, sourceType, domainHint);
+    }
+
+    /**
+     * 官网采集失败（反爬/超时/选中0）后的第三方源回退 query。
+     * 不锁定官方域名，用第三方转述的产品事实/文档/教程召回，让 Notion 这类强反爬官网也能产出证据。
+     * 与正常 buildSearchQueries 正交：只有 CollectorAgent 判定官网失败时才调用。
+     */
+    public List<String> buildThirdPartyFallbackQueries(String competitorName) {
+        ensureInitialized();
+        Map<String, String> variables = Map.of("competitorName", safe(competitorName));
+        List<String> queries = new ArrayList<>();
+        if (containsChinese(competitorName)) {
+            queries.add(buildSearchQuery("search-thirdparty-primary", variables));
+            queries.add(buildSearchQuery("search-thirdparty-secondary", variables));
+        } else {
+            queries.add(renderEnglishSearchQuery("search-thirdparty-primary", variables));
+            queries.add(renderEnglishSearchQuery("search-thirdparty-secondary", variables));
+        }
+        return queries.stream()
+                .filter(query -> !query.isBlank())
+                .distinct()
+                .toList();
     }
 
     /**

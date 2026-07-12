@@ -1,0 +1,30 @@
+﻿2026-07-11 20:01:47.712 [main] INFO  c.b.c.config.PlaywrightConfig - ��ʼ�� Playwright ʵ��...
+2026-07-11 20:01:50.667 [main] INFO  c.b.c.c.PlaywrightBrowserManager - Playwright ����������Ԥ���ѹرգ����������ڻ�ȡ��ʱ�������ʱ�������
+2026-07-11 20:02:07.331 [main] INFO  c.b.c.s.SearchBrowserConfigurationGuard - ����������ݴ����: continueOnBrowserUnavailable=true, continueOnSearchTimeout=true, continueOnPageCollectFailure=true, recoverPartialContentOnTimeout=true
+2026-07-11 20:02:22.281 [scheduling-1] DEBUG c.b.c.c.PlaywrightBrowserManager - Playwright ��ʱ������������������Ԥ�ȣ������������״λ�ȡʱ�������
+2026-07-11 20:03:02.026 [pool-11-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - ��ʼ�ɼ�ҳ��: url=[REDACTED]https://notion.so/docs, competitor=[REDACTED]Notion, sourceType=DOCS
+2026-07-11 20:03:02.748 [pool-11-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - ���� HTTP �ɼ�δ����Ҫ�󣬻��˵� Playwright ��Ⱦ, url=[REDACTED]https://notion.so/docs
+2026-07-11 20:03:02.749 [pool-11-thread-1] INFO  c.b.c.c.PlaywrightBrowserManager - ��� Playwright �����: browser=chromium, channel=null, executablePath=D:\Aplaywright\chromium-1117\chrome-win\chrome.exe, headless=true, reason=runtime acquire, attempt=1/1
+2026-07-11 20:03:53.138 [pool-11-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - ҳ��ɼ��ɹ�: collector=playwright; fallbackReason=HTTP collect failed: Remote host terminated the handshake, title=Docs | Notion, contentLength=4651
+2026-07-11 20:04:02.003 [pool-12-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - ��ʼ�ɼ�ҳ��: url=[REDACTED]https://notion.so/api, competitor=[REDACTED]Notion, sourceType=DOCS
+2026-07-11 20:04:02.897 [pool-12-thread-3] INFO  c.b.c.source.PlaywrightPageCollector - ���� HTTP �ɼ�δ����Ҫ�󣬻��˵� Playwright ��Ⱦ, url=[REDACTED]https://notion.so/api
+2026-07-11 20:04:03.437 [pool-12-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - ��ʼ�ɼ�ҳ��: url=[REDACTED]https://developers.notion.com/api, competitor=[REDACTED]Notion, sourceType=DOCS
+2026-07-11 20:04:06.004 [pool-12-thread-1] INFO  c.b.c.source.PlaywrightPageCollector - ���� HTTP �ɼ�δ����Ҫ�󣬻��˵� Playwright ��Ⱦ, url=[REDACTED]https://developers.notion.com/api
+2026-07-11 20:04:17.059 [pool-12-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - ��ʼ�ɼ�ҳ��: url=[REDACTED]https://developers.notion.com/guide, competitor=[REDACTED]Notion, sourceType=DOCS
+2026-07-11 20:04:17.859 [pool-12-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - ��ʼ�ɼ�ҳ��: url=[REDACTED]https://developers.notion.com/docs, competitor=[REDACTED]Notion, sourceType=DOCS
+2026-07-11 20:04:21.974 [pool-12-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - ���� HTTP �ɼ�δ����Ҫ�󣬻��˵� Playwright ��Ⱦ, url=[REDACTED]https://developers.notion.com/guide
+  message='Timeout 8000ms exceeded.
+  name='TimeoutError
+  stack='TimeoutError: Timeout 8000ms exceeded.
+    at ProgressController.run (C:\Users\Lenovo\.competitor-agent\playwright-driver\playwright-java-3870471236933505612\package\lib\server\progress.js:78:26)
+    at Frame.goto (C:\Users\Lenovo\.competitor-agent\playwright-driver\playwright-java-3870471236933505612\package\lib\server\frames.js:517:23)
+    at FrameDispatcher.goto (C:\Users\Lenovo\.competitor-agent\playwright-driver\playwright-java-3870471236933505612\package\lib\server\dispatchers\frameDispatcher.js:81:119)
+    at FrameDispatcher._handleCommand (C:\Users\Lenovo\.competitor-agent\playwright-driver\playwright-java-3870471236933505612\package\lib\server\dispatchers\dispatcher.js:94:40)
+    at DispatcherConnection.dispatch (C:\Users\Lenovo\.competitor-agent\playwright-driver\playwright-java-3870471236933505612\package\lib\server\dispatchers\dispatcher.js:361:39)
+2026-07-11 20:04:31.479 [pool-12-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - ���� HTTP �ɼ�δ����Ҫ�󣬻��˵� Playwright ��Ⱦ, url=[REDACTED]https://developers.notion.com/docs
+2026-07-11 20:07:10.080 [pool-12-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - ҳ��ɼ��ɹ�: collector=playwright; fallbackReason=HTTP status error: 404, title=Page Not Found, contentLength=79
+2026-07-11 20:07:27.691 [pool-12-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - ��ʼ�ɼ�ҳ��: url=[REDACTED]https://developers.notion.com/help, competitor=[REDACTED]Notion, sourceType=DOCS
+2026-07-11 20:07:35.538 [pool-12-thread-2] INFO  c.b.c.source.PlaywrightPageCollector - ���� HTTP �ɼ�δ����Ҫ�󣬻��˵� Playwright ��Ⱦ, url=[REDACTED]https://developers.notion.com/help
+2026-07-11 20:09:35.915 [pool-12-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - ҳ��ɼ��ɹ�: collector=playwright; fallbackReason=HTTP status error: 404, title=Page Not Found, contentLength=79
+2026-07-11 20:09:37.434 [pool-12-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - ��ʼ�ɼ�ҳ��: url=[REDACTED]https://notion.so/guide, competitor=[REDACTED]Notion, sourceType=DOCS
+2026-07-11 20:09:37.656 [pool-12-thread-4] INFO  c.b.c.source.PlaywrightPageCollector - ���� HTTP �ɼ�δ����Ҫ�󣬻��˵� Playwright ��Ⱦ, url=[REDACTED]https://notion.so/guide

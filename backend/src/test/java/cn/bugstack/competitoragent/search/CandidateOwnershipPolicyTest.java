@@ -62,6 +62,29 @@ class CandidateOwnershipPolicyTest {
     }
 
     @Test
+    void shouldExemptThirdPartyFallbackCandidateFromOfficialOwnershipValidation() {
+        SourceCandidate fallbackCandidate = SourceCandidate.builder()
+                .url("https://www.getapp.com/collaboration-software/a/notion/reviews/")
+                .domain("www.getapp.com")
+                .title("Notion third-party review")
+                .sourceType("DOCS")
+                .discoveryMethod("THIRD_PARTY_FALLBACK")
+                .providerKey("tavily")
+                .build();
+        SourceCandidate normalSearchCandidate = SourceCandidate.builder()
+                .url("https://partner.example.com/notion-docs")
+                .domain("partner.example.com")
+                .title("Notion docs mirror")
+                .sourceType("OFFICIAL")
+                .discoveryMethod("TAVILY_PHASE1_BOOTSTRAP")
+                .providerKey("tavily")
+                .build();
+
+        assertFalse(policy.shouldRequireOwnershipValidation(fallbackCandidate, "OFFICIAL"));
+        assertTrue(policy.shouldRequireOwnershipValidation(normalSearchCandidate, "OFFICIAL"));
+    }
+
+    @Test
     void shouldKeepDirectOfficialDomainWhenOwnershipSignalMatches() {
         SourceCandidate candidate = SourceCandidate.builder()
                 .url("https://app.bilibili.com")

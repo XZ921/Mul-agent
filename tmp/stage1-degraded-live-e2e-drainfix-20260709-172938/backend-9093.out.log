@@ -152208,3 +152208,3196 @@ com.fasterxml.jackson.core.JsonParseException: Unexpected close marker ']': expe
         twe1_0.created_at 
     fetch
         first ? rows only
+2026-07-09 18:54:52.321 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:54:57.325 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:55:02.329 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:55:07.333 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:55:12.336 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:55:17.360 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:55:22.404 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:55:27.414 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:55:32.422 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:55:37.430 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:55:42.434 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:55:47.438 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:55:52.444 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:55:57.447 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:56:02.452 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:56:07.457 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:56:12.460 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:56:17.464 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:56:22.468 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:56:27.472 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:56:32.476 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:56:37.480 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:56:42.484 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:56:47.505 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:56:52.509 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:56:57.513 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:57:02.517 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:57:07.522 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:57:12.525 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:57:17.529 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:57:22.534 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:57:27.537 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:57:32.541 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:57:37.546 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:57:42.549 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:57:47.554 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:57:52.558 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:57:57.563 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:58:02.567 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:58:07.571 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:58:12.575 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:58:17.580 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:58:22.587 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:58:27.591 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:58:32.595 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:58:37.598 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:58:42.604 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:58:47.609 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:58:52.614 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:58:57.617 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:59:02.622 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:59:07.626 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:59:12.632 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:59:17.635 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:59:22.638 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:59:27.645 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:59:32.648 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:59:37.652 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:59:42.656 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:59:47.661 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:59:52.665 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 18:59:57.669 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:00:02.682 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:00:07.686 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:00:12.691 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:00:17.693 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:00:22.700 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:00:27.704 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:00:32.709 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:00:37.715 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:00:42.720 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:00:47.725 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:00:52.729 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:00:57.733 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:01:02.737 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:01:07.742 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:01:12.746 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:01:17.751 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:01:22.756 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:01:27.761 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:01:32.774 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:01:37.779 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:01:42.782 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:01:47.804 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:01:52.809 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:01:57.814 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:02:02.818 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:02:07.821 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:02:12.826 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:02:17.842 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:02:22.847 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:02:27.851 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:02:32.855 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:02:37.859 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:02:42.864 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:02:47.868 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:02:52.872 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:02:57.876 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:03:02.880 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:03:07.884 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:03:12.890 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:03:17.894 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only
+2026-07-09 19:03:22.900 [scheduling-1] DEBUG org.hibernate.SQL - 
+    select
+        twe1_0.id,
+        twe1_0.branch_key,
+        twe1_0.consumed_at,
+        twe1_0.created_at,
+        twe1_0.delivery_status,
+        twe1_0.event_id,
+        twe1_0.event_type,
+        twe1_0.last_error,
+        twe1_0.max_retry_count,
+        twe1_0.next_attempt_at,
+        twe1_0.node_name,
+        twe1_0.payload,
+        twe1_0.plan_version_id,
+        twe1_0.published_at,
+        twe1_0.retry_count,
+        twe1_0.source_urls,
+        twe1_0.tag,
+        twe1_0.task_id,
+        twe1_0.topic,
+        twe1_0.updated_at 
+    from
+        task_workflow_event twe1_0 
+    where
+        twe1_0.delivery_status in (?) 
+        and twe1_0.next_attempt_at<=? 
+    order by
+        twe1_0.created_at 
+    fetch
+        first ? rows only

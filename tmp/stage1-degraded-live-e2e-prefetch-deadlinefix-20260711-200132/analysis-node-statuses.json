@@ -1,0 +1,239 @@
+﻿[
+    {
+        "nodeName":  "collect_sources_01_01",
+        "status":  "SUCCESS_DEGRADED",
+        "sourceUrls":  [
+                           "https://www.notion.so",
+                           "https://en.wikipedia.org/wiki/Notion_(productivity_software)",
+                           "https://www.notion.com",
+                           "https://super.so",
+                           "https://play.google.com/store/apps/details?id=notion.id",
+                           "https://sync2sheets.com/blog/notion-sites",
+                           "https://aiqicha.baidu.com/feedback/official?from=baidu\u0026type=gw"
+                       ],
+        "outputSummary":  "Notion / OFFICIALï¼éä¸­ 1 æ¡ï¼ééæå 0/0 æ¡ï¼è¡¥æºæ¹å¼=BROWSERï¼è¿åº¦ç¶æ=DEGRADEDï¼éçº§åå =HARD_DEADLINE_REACHED",
+        "statusSummary":  "èç¹éçº§æå",
+        "errorMessage":  null
+    },
+    {
+        "nodeName":  "collect_sources_01_02",
+        "status":  "SUCCESS_DEGRADED",
+        "sourceUrls":  [
+                           "https://www.notion.so/docs",
+                           "https://www.notion.so/documentation",
+                           "https://www.notion.so/help",
+                           "https://www.notion.so/guide",
+                           "https://developers.notion.com/robots.txt",
+                           "https://developers.notion.com/sitemap.xml",
+                           "https://developers.notion.com/reference/database",
+                           "https://developers.notion.com/reference/intro",
+                           "https://thomasjfrank.com/notion-api-crash-course"
+                       ],
+        "outputSummary":  "Notion / DOCSï¼éä¸­ 0 æ¡ï¼ééæå 0/0 æ¡ï¼è¿åº¦ç¶æ=FAILEDï¼éçº§åå =HARD_DEADLINE_REACHED",
+        "statusSummary":  "èç¹éçº§æå",
+        "errorMessage":  null
+    },
+    {
+        "nodeName":  "collect_sources_01_03",
+        "status":  "SUCCESS_DEGRADED",
+        "sourceUrls":  [
+                           "https://www.g2.com/search?query=Notion",
+                           "https://www.capterra.com/search/?query=Notion",
+                           "https://www.notion.so/case-studies",
+                           "https://www.notion.so/compare",
+                           "https://www.notion.so/customers",
+                           "https://hackceleration.com/labs/review/notion",
+                           "https://www.saner.ai/blogs/notion-ai-review",
+                           "https://seatable.com/notion-experiences",
+                           "https://learn.g2.com/is-notion-worth-it",
+                           "https://getoden.com/blog/g2-vs-capterra-vs-trustradius-vs-gartner-peer-insights"
+                       ],
+        "outputSummary":  "Notion / REVIEWï¼éä¸­ 0 æ¡ï¼ééæå 0/0 æ¡ï¼è¿åº¦ç¶æ=FAILEDï¼éçº§åå =HARD_DEADLINE_REACHED",
+        "statusSummary":  "èç¹éçº§æå",
+        "errorMessage":  null
+    },
+    {
+        "nodeName":  "collect_sources_02_01",
+        "status":  "SUCCESS_DEGRADED",
+        "sourceUrls":  [
+                           "https://www.airtable.com",
+                           "https://en.wikipedia.org/wiki/Airtable",
+                           "https://www.linkedin.com/company/airtable",
+                           "https://apps.make.com/airtable",
+                           "https://academy.airtable.com",
+                           "https://blog.airtable.com"
+                       ],
+        "outputSummary":  "Airtable / OFFICIALï¼éä¸­ 0 æ¡ï¼ééæå 0/0 æ¡ï¼è¿åº¦ç¶æ=FAILEDï¼éçº§åå =HARD_DEADLINE_REACHED",
+        "statusSummary":  "èç¹éçº§æå",
+        "errorMessage":  null
+    },
+    {
+        "nodeName":  "collect_sources_02_02",
+        "status":  "SUCCESS_DEGRADED",
+        "sourceUrls":  [
+                           "https://pyairtable.readthedocs.io/en/stable/api.html",
+                           "https://apitracker.io/a/airtable",
+                           "https://support.airtable.com/docs/airtable-enterprise-api",
+                           "https://www.airtable.com/guides/scale/using-airtable-api",
+                           "https://airtable.com/guides/scale/using-airtable-api",
+                           "https://support.airtable.com/docs/api",
+                           "https://www.airtable.com/docs",
+                           "https://www.airtable.com/documentation",
+                           "https://www.airtable.com/help",
+                           "https://www.airtable.com/guide"
+                       ],
+        "outputSummary":  "Airtable / DOCSï¼éä¸­ 4 æ¡ï¼ééæå 4/8 æ¡ï¼è¡¥æºæ¹å¼=NONEï¼è¿åº¦ç¶æ=DEGRADEDï¼éçº§åå =HARD_DEADLINE_REACHED",
+        "statusSummary":  "èç¹éçº§æå",
+        "errorMessage":  null
+    },
+    {
+        "nodeName":  "collect_sources_02_03",
+        "status":  "SUCCESS",
+        "sourceUrls":  [
+                           "https://checkthat.ai/brands/airtable/reviews",
+                           "https://themarketingagency.ca/blog/honest-review-airtable",
+                           "https://www.zite.com/blog/airtable-reviews",
+                           "https://zite.com/blog/airtable-reviews",
+                           "https://www.softwaresuggest.com/compare/capterra-vs-g2-com",
+                           "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                           "https://www.smartsuite.com/blog/airtable-review?338ea48f_page=8",
+                           "https://smartsuite.com/blog/airtable-review?338ea48f_page=8",
+                           "https://www.g2.com/search?query=Airtable",
+                           "https://www.capterra.com/search/?query=Airtable",
+                           "https://www.airtable.com/case-studies",
+                           "https://www.airtable.com/compare",
+                           "https://www.airtable.com/customers"
+                       ],
+        "outputSummary":  "Airtable / REVIEWï¼éä¸­ 5 æ¡ï¼ééæå 5/10 æ¡ï¼è¡¥æºæ¹å¼=TIMEOUT_FALLBACKï¼è¿åº¦ç¶æ=DEGRADEDï¼éçº§åå =SEARCH_TIMEOUT_BEFORE_SUPPLEMENT",
+        "statusSummary":  "èç¹æ§è¡æå",
+        "errorMessage":  null
+    },
+    {
+        "nodeName":  "extract_schema",
+        "status":  "SUCCESS",
+        "sourceUrls":  [
+                           "https://pyairtable.readthedocs.io/en/stable/api.html",
+                           "https://www.notion.so",
+                           "https://www.notion.so/docs",
+                           "https://www.notion.so/documentation",
+                           "https://www.notion.so/help",
+                           "https://www.notion.so/guide",
+                           "https://www.g2.com/search?query=Notion",
+                           "https://www.capterra.com/search/?query=Notion",
+                           "https://www.notion.so/case-studies",
+                           "https://www.notion.so/compare",
+                           "https://www.notion.so/customers",
+                           "https://www.airtable.com",
+                           "https://apitracker.io/a/airtable",
+                           "https://support.airtable.com/docs/airtable-enterprise-api",
+                           "https://www.airtable.com/guides/scale/using-airtable-api",
+                           "https://airtable.com/guides/scale/using-airtable-api",
+                           "https://checkthat.ai/brands/airtable/reviews",
+                           "https://themarketingagency.ca/blog/honest-review-airtable",
+                           "https://www.zite.com/blog/airtable-reviews",
+                           "https://zite.com/blog/airtable-reviews",
+                           "https://www.softwaresuggest.com/compare/capterra-vs-g2-com",
+                           "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                           "https://www.smartsuite.com/blog/airtable-review?338ea48f_page=8",
+                           "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                       ],
+        "outputSummary":  "{\"contractVersion\":\"1.0\",\"totalCompetitors\":1,\"successCount\":1,\"results\":[{\"issueFlags\":[\"PROMPT_CONTENT_TRUNCATED\",\"SKIPPED_UNUSABLE_EVIDENCE\",\"PROMPT_BUDGET_SKIPPED\",\"STAGE1_COLLECTOR_QUORUM_READY\",\"COLLECTOR_QUORUM_DEGRADED\",\"COLLECTOR_F...",
+        "statusSummary":  "èç¹æ§è¡æå",
+        "errorMessage":  null
+    },
+    {
+        "nodeName":  "analyze_competitors",
+        "status":  "SUCCESS",
+        "sourceUrls":  [
+                           "https://pyairtable.readthedocs.io/en/stable/api.html",
+                           "https://checkthat.ai/brands/airtable/reviews",
+                           "https://www.zite.com/blog/airtable-reviews",
+                           "https://themarketingagency.ca/blog/honest-review-airtable",
+                           "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                       ],
+        "outputSummary":  "{\"contractVersion\":\"1.0\",\"overview\":\"Airtable æ¯ä¸ä¸ªå°æ°æ®åºä¸çµå­è¡¨æ ¼ç¸ç»åççµæ´»åä½å¹³å°ï¼æä¾ REST API ä¾å¼åè\u0085ç¨åºåè®¿é®æ°æ®ï¼å¹¶éè¿ä½ä»£ç å·¥å\u0085·æå»ºåºç¨ãå\u0085¶æ ¸å¿ä¼å¿å¨äºå\u0085³ç³»åæ°æ®å»ºæ¨¡ãå¤è§å¾è®¾è®¡åæ ä»£ç èªå¨åãç¶èï¼éçå¢éè§æ¨¡æ©å¤§ï¼å\u0085¶æå¸­ä½è®¡è´¹çæ¨¡å¼ä¼å¯¼è´ææ¬æ¾èä¸åï¼é«çº§åè½è¢«éå¨æ´é«å¥é¤ä¸­ï¼ä¸å­¦ä¹ æ²çº¿è¾é¡ãæ¬æ¹äº§åâä¼ä¸çº§ç¥è¯åä½ä¸ä½ä»£ç å·¥ä½å°âåæ´ä¾§éäºç¥è¯ç®¡çä¸ä½ä»£ç å¼åçä¸ä½åï¼ææå¨ç¥è¯æ²æ·ãææ¡£åä½åè½»...",
+        "statusSummary":  "èç¹æ§è¡æå",
+        "errorMessage":  null
+    },
+    {
+        "nodeName":  "write_report",
+        "status":  "SUCCESS",
+        "sourceUrls":  [
+                           "https://pyairtable.readthedocs.io/en/stable/api.html",
+                           "https://checkthat.ai/brands/airtable/reviews",
+                           "https://www.zite.com/blog/airtable-reviews",
+                           "https://themarketingagency.ca/blog/honest-review-airtable",
+                           "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                       ],
+        "outputSummary":  "{\"contractVersion\":\"1.0\",\"content\":\"# é¶æ®µ1éçº§å¥çº¦åç«å E2Eï¼Notion ä¸ Airtable ä¸æ¸¸å¥çº¦å¤æµ\\n\\n**æ¥åæ¥æ**ï¼2026-07-11\\n**æ¬æ¹äº§å**ï¼ä¼ä¸çº§ç¥è¯åä½ä¸ä½ä»£ç å·¥ä½å°\\n**åæå¯¹è±¡**ï¼NotionãAirtable\\n\\n---\\n\\n## 1. æ§è¡æè¦\\n\\næ¬æ¥åæ¯éå¯¹ç«å **Notion** ä¸ **Airtable** çé¶æ®µ1ä¸æ¸¸å¥çº¦å¤æµï¼æ¨å¨éªè¯äº§åå®ä½ãç®æ ç¨æ·ãæ ¸å¿åè½...",
+        "statusSummary":  "èç¹æ§è¡æå",
+        "errorMessage":  null
+    },
+    {
+        "nodeName":  "citation_check",
+        "status":  "SUCCESS",
+        "sourceUrls":  [
+                           "https://pyairtable.readthedocs.io/en/stable/api.html",
+                           "https://checkthat.ai/brands/airtable/reviews",
+                           "https://www.zite.com/blog/airtable-reviews",
+                           "https://themarketingagency.ca/blog/honest-review-airtable",
+                           "https://smartsuite.com/blog/airtable-review?338ea48f_page=8",
+                           "https://apitracker.io/a/airtable",
+                           "https://support.airtable.com/docs/airtable-enterprise-api",
+                           "https://airtable.com/guides/scale/using-airtable-api",
+                           "https://zite.com/blog/airtable-reviews",
+                           "https://softwaresuggest.com/compare/capterra-vs-g2-com"
+                       ],
+        "outputSummary":  "{\"contractVersion\":\"1.0\",\"checkedSourceNode\":\"write_report\",\"citationEvidenceState\":\"PARTIAL_SOURCE\",\"citationRiskSeverity\":\"ERROR\",\"citationCoverageRate\":0.8421052631578947,\"claims\":[{\"claimId\":\"claim-001\",\"sectionKey\":\"é¶æ®µ1éçº§å¥çº¦åç«å_e2e_noti...",
+        "statusSummary":  "èç¹æ§è¡æå",
+        "errorMessage":  null
+    },
+    {
+        "nodeName":  "quality_check",
+        "status":  "SUCCESS",
+        "sourceUrls":  [
+                           "https://pyairtable.readthedocs.io/en/stable/api.html",
+                           "https://apitracker.io/a/airtable",
+                           "https://support.airtable.com/docs/airtable-enterprise-api",
+                           "https://airtable.com/guides/scale/using-airtable-api",
+                           "https://checkthat.ai/brands/airtable/reviews",
+                           "https://themarketingagency.ca/blog/honest-review-airtable",
+                           "https://zite.com/blog/airtable-reviews",
+                           "https://softwaresuggest.com/compare/capterra-vs-g2-com",
+                           "https://smartsuite.com/blog/airtable-review?338ea48f_page=8"
+                       ],
+        "outputSummary":  "è´¨éè¯å®¡æªéè¿ï¼è¯å 24ï¼é®é¢ 6 é¡¹ï¼è¯æ®å¯è¿½æº¯æ§ãä¿®è®¢å¯æ§è¡æ§å­å¨å\u0085³é®ç¼ºå£ï¼ä¸å·²æ 1 æ¡é»æ­çº§è¯æ­ãè¯·å\u0085è¡¥é½è¯æ®é¾ï¼åç»§ç»­èªå¨æ¹åã",
+        "statusSummary":  "èç¹æ§è¡æå",
+        "errorMessage":  null
+    },
+    {
+        "nodeName":  "rewrite_report",
+        "status":  "SKIPPED",
+        "sourceUrls":  [
+
+                       ],
+        "outputSummary":  null,
+        "statusSummary":  "èç¹å·²è·³è¿",
+        "errorMessage":  "è·³è¿ä¿®è®¢ï¼åå®¡ä¸¥éå¤±è´¥ï¼éå\u0085äººå·¥è¡¥è¯æ®ãè°æ´æç´¢èå´æéè·ééé¾è·¯"
+    },
+    {
+        "nodeName":  "citation_check_revision",
+        "status":  "SKIPPED",
+        "sourceUrls":  [
+
+                       ],
+        "outputSummary":  null,
+        "statusSummary":  "èç¹å·²è·³è¿",
+        "errorMessage":  "Dependencies not satisfied: rewrite_report=SKIPPED"
+    },
+    {
+        "nodeName":  "quality_check_final",
+        "status":  "SKIPPED",
+        "sourceUrls":  [
+
+                       ],
+        "outputSummary":  null,
+        "statusSummary":  "èç¹å·²è·³è¿",
+        "errorMessage":  "Dependencies not satisfied: citation_check_revision=SKIPPED"
+    }
+]

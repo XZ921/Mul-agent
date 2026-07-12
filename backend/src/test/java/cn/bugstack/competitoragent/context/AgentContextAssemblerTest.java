@@ -335,6 +335,7 @@ class AgentContextAssemblerTest {
                         "taskRagContextBundle",
                         "sharedState",
                         "sharedOutputEnvelopes",
+                        "fieldEvidenceFingerprintClaims",
                         "createdAt"
                 ),
                 Arrays.stream(AgentContext.class.getDeclaredFields())

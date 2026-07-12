@@ -400,6 +400,12 @@ public class SourceCandidateRanker {
         if (isUtilityPage(candidate)) {
             return SourceTrustTier.LOW;
         }
+        // 第三方回退候选（官网失败后由第三方源召回）统一降为中可信，
+        // 即使 sourceType 仍是 OFFICIAL/DOCS 或域名含 support/help 也不得升到 HIGH，
+        // 让报告层如实呈现“非官方来源”的低置信语义。
+        if ("THIRD_PARTY_FALLBACK".equalsIgnoreCase(candidate.getDiscoveryMethod())) {
+            return SourceTrustTier.MEDIUM;
+        }
         String normalizedDomain = defaultText(domain).toLowerCase(Locale.ROOT);
         String sourceType = defaultText(candidate.getSourceType()).toUpperCase(Locale.ROOT);
         if (normalizedDomain.startsWith("docs.")

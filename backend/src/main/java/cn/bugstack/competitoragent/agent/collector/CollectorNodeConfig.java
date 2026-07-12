@@ -20,7 +20,7 @@ import java.util.List;
  * 从 WorkflowFactory 规划阶段写入，并由 CollectorAgent 在运行时消费。
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -48,6 +48,8 @@ import java.util.List;
         "sourceCandidates",
         "searchMode",
         "searchQueries",
+        "thirdPartyFallbackQueries",
+        "thirdPartyFallbackActive",
         "searchFallbackOrder",
         "verifyCandidates",
         "verifyResultPage",
@@ -194,6 +196,18 @@ public class CollectorNodeConfig {
      * 动态规划生成的搜索引擎查询关键词（Query）列表
      */
     private List<String> searchQueries;
+
+    /**
+     * 官网采集失败（反爬/超时/选中0）后的第三方源回退 query。
+     * 规划期预生成、运行期由 CollectorAgent 在官网失败时消费，不锁定官方域名。
+     */
+    private List<String> thirdPartyFallbackQueries;
+
+    /**
+     * 第三方回退运行期标记：只由 Collector 在官网/DOCS 失败后的第二轮搜索中置为 true。
+     * 搜索层据此在验证和选靶前把候选标成 THIRD_PARTY_FALLBACK，避免仍按官方域名强归属处理。
+     */
+    private Boolean thirdPartyFallbackActive;
 
     /**
      * 搜索失败时的回退兜底策略顺序（例如：优先百度，失败后回退至必应或 HTTP 补源）

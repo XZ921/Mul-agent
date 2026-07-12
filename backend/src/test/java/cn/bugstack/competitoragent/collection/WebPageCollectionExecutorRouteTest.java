@@ -5,6 +5,7 @@ import cn.bugstack.competitoragent.source.JinaReaderClient;
 import cn.bugstack.competitoragent.source.PageContentExtractionResult;
 import cn.bugstack.competitoragent.source.SourceCollectRequest;
 import cn.bugstack.competitoragent.source.SourceCollector;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -22,6 +23,49 @@ import static org.mockito.Mockito.when;
  * 避免后续实现时继续把网页采集退回到“单一路径 + URL 直传”的旧模式。
  */
 class WebPageCollectionExecutorRouteTest {
+
+    @Test
+    void shouldPassCollectorDeadlineToSourceCollectRequest() {
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(sourceCollector.collect(any(SourceCollectRequest.class))).thenReturn(SourceCollector.CollectedPage.builder()
+                .url("https://open.example.com/doc")
+                .title("Open Docs")
+                .content("Playwright 完整渲染后的正文。")
+                .metadata("""
+                        {
+                          "sourceUrls": ["https://open.example.com/doc"],
+                          "qualitySignals": ["FULL_RENDER_READY"],
+                          "qualityScore": 0.82,
+                          "durationMillis": 3000
+                        }
+                        """)
+                .sourceType("DOCS")
+                .competitorName("Acme")
+                .success(true)
+                .build());
+
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(null, null, sourceCollector);
+        long hardDeadlineEpochMillis = System.currentTimeMillis() + 5000L;
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("WEB_SCRAPER")
+                .renderHint(WebPageRenderHint.FULL_RENDER)
+                .url("https://open.example.com/doc")
+                .resourceLocator("https://open.example.com/doc")
+                .sourceType("DOCS")
+                .sourceUrls(List.of("https://open.example.com/doc"))
+                .collectorHardDeadlineEpochMillis(hardDeadlineEpochMillis)
+                .collectorDeadlineGraceMillis(30000L)
+                .collectorDeadlineReason("HARD_DEADLINE_REACHED")
+                .build());
+
+        ArgumentCaptor<SourceCollectRequest> requestCaptor = ArgumentCaptor.forClass(SourceCollectRequest.class);
+        verify(sourceCollector).collect(requestCaptor.capture());
+        SourceCollectRequest request = requestCaptor.getValue();
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(request.getCollectorHardDeadlineEpochMillis()).isEqualTo(hardDeadlineEpochMillis);
+        assertThat(request.getCollectorDeadlineGraceMillis()).isEqualTo(30000L);
+        assertThat(request.getCollectorDeadlineReason()).isEqualTo("HARD_DEADLINE_REACHED");
+    }
 
     @Test
     void shouldUseDirectHtmlBeforeJinaForLightweightDocsPage() {
@@ -234,6 +278,43 @@ class WebPageCollectionExecutorRouteTest {
                 .containsExactly("https://open.example.com/doc/auth", "https://open.example.com/doc/android-sdk");
         verify(jinaReaderClient, never()).collect(any(SourceCollectRequest.class));
         verify(sourceCollector).collect(any(SourceCollectRequest.class));
+    }
+
+    @Test
+    void shouldSkipPlaywrightLinkSupplementWhenDeadlineExpiredAfterLightweightSuccess() {
+        DirectHtmlReaderClient directHtmlReaderClient = mock(DirectHtmlReaderClient.class);
+        JinaReaderClient jinaReaderClient = mock(JinaReaderClient.class);
+        SourceCollector sourceCollector = mock(SourceCollector.class);
+        when(directHtmlReaderClient.collect(any())).thenAnswer(invocation -> {
+            Thread.sleep(120L);
+            return PageContentExtractionResult.builder()
+                    .success(true)
+                    .title("Open Docs")
+                    .mainContent("OPEN API documentation center. Account auth, user management and Android SDK are available.")
+                    .qualityScore(0.82D)
+                    .qualitySignals(List.of("DIRECT_HTML_CONTENT_READY"))
+                    .build();
+        });
+
+        WebPageCollectionExecutor executor = new WebPageCollectionExecutor(directHtmlReaderClient, jinaReaderClient, sourceCollector);
+        CollectionExecutionResult result = executor.execute(CollectionTaskPackage.builder()
+                .primaryTool("JINA_READER")
+                .renderHint(WebPageRenderHint.LIGHTWEIGHT)
+                .url("https://open.example.com/doc")
+                .resourceLocator("https://open.example.com/doc")
+                .sourceType("DOCS")
+                .discoveryDepth(0)
+                .sourceUrls(List.of("https://open.example.com/doc"))
+                .collectorHardDeadlineEpochMillis(System.currentTimeMillis() + 40L)
+                .collectorDeadlineGraceMillis(0L)
+                .collectorDeadlineReason("HARD_DEADLINE_REACHED")
+                .build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getQualitySignals())
+                .contains("DIRECT_HTML_CONTENT_READY", "PLAYWRIGHT_LINK_SUPPLEMENT_SKIPPED_BY_DEADLINE")
+                .doesNotContain("PLAYWRIGHT_LINK_SUPPLEMENT_READY");
+        verify(sourceCollector, never()).collect(any(SourceCollectRequest.class));
     }
 
     @Test

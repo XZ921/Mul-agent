@@ -2,11 +2,13 @@ package cn.bugstack.competitoragent.agent.collector;
 
 import cn.bugstack.competitoragent.agent.AgentContext;
 import cn.bugstack.competitoragent.agent.AgentResult;
+import cn.bugstack.competitoragent.collection.CollectionDeadlineContext;
 import cn.bugstack.competitoragent.collection.CollectionExecutionCoordinator;
 import cn.bugstack.competitoragent.collection.CollectionExecutionReport;
 import cn.bugstack.competitoragent.collection.CollectionExecutionResult;
 import cn.bugstack.competitoragent.context.AgentContextAssembler;
 import cn.bugstack.competitoragent.model.entity.EvidenceSource;
+import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.rag.TaskRetrievalIndexService;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
@@ -19,7 +21,6 @@ import cn.bugstack.competitoragent.search.SearchExecutionResult;
 import cn.bugstack.competitoragent.search.SearchExecutionTrace;
 import cn.bugstack.competitoragent.search.tavily.FieldEvidenceQueryExecutionAudit;
 import cn.bugstack.competitoragent.search.tavily.TavilyFastLaneAudit;
-import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCollector;
 import cn.bugstack.competitoragent.workflow.coverage.DimensionEvidencePlan;
@@ -61,7 +62,11 @@ class CollectorAgentFieldEvidenceLoopTest {
         String claimKey = "fieldEvidence.executedFingerprints::94::bilibili-open-platform";
         String queryFingerprint = "q-retry";
         AtomicInteger searchAttempts = new AtomicInteger();
+        List<CollectionDeadlineContext> searchDeadlineContexts = new ArrayList<>();
+        List<CollectionDeadlineContext> collectionDeadlineContexts = new ArrayList<>();
+
         doAnswer(invocation -> {
+            searchDeadlineContexts.add(invocation.getArgument(4));
             Map<String, Set<String>> claimRegistry = invocation.getArgument(2);
             boolean claimed = claimRegistry
                     .computeIfAbsent(claimKey, ignored -> ConcurrentHashMap.newKeySet())
@@ -104,18 +109,24 @@ class CollectorAgentFieldEvidenceLoopTest {
                             .build())
                     .reasoningSummary("claimed q-retry")
                     .build();
-        }).when(searchExecutionCoordinator).execute(any(CollectorNodeConfig.class), eq(94L), any(), any());
-        when(collectionExecutionCoordinator.execute(any(), any(), any(), eq("bilibili-open-platform"), anyList(), any()))
-                .thenReturn(CollectionExecutionReport.builder()
-                        .status("FAILED")
-                        .results(List.of(CollectionExecutionResult.builder()
-                                .success(false)
-                                .status("FAILED")
-                                .resourceLocator("https://open.bilibili.com")
-                                .sourceUrls(List.of("https://open.bilibili.com"))
-                                .errorMessage("NAVIGATION_SHELL")
-                                .build()))
-                        .build());
+        }).when(searchExecutionCoordinator)
+                .execute(any(CollectorNodeConfig.class), eq(94L), any(), any(), any(CollectionDeadlineContext.class));
+
+        doAnswer(invocation -> {
+            collectionDeadlineContexts.add(invocation.getArgument(6));
+            return CollectionExecutionReport.builder()
+                    .status("FAILED")
+                    .results(List.of(CollectionExecutionResult.builder()
+                            .success(false)
+                            .status("FAILED")
+                            .resourceLocator("https://open.bilibili.com")
+                            .sourceUrls(List.of("https://open.bilibili.com"))
+                            .errorMessage("NAVIGATION_SHELL")
+                            .build()))
+                    .build();
+        }).when(collectionExecutionCoordinator)
+                .execute(any(), any(), any(), eq("bilibili-open-platform"), anyList(), any(), any(CollectionDeadlineContext.class));
+
         when(collectionExecutionCoordinator.summarize(anyList())).thenAnswer(invocation -> CollectionExecutionReport.builder()
                 .status("FAILED")
                 .results(invocation.getArgument(0))
@@ -143,29 +154,39 @@ class CollectorAgentFieldEvidenceLoopTest {
         assertThat(context.getFieldEvidenceFingerprintClaims().getOrDefault(claimKey, Set.of()))
                 .doesNotContain(queryFingerprint);
         assertThat(searchAttempts).hasValue(2);
+        assertThat(searchDeadlineContexts)
+                .hasSize(2)
+                .allSatisfy(deadlineContext -> assertThat(deadlineContext).isNotNull());
+        assertThat(collectionDeadlineContexts)
+                .hasSize(2)
+                .allSatisfy(deadlineContext -> assertThat(deadlineContext).isNotNull());
         verify(collectionExecutionCoordinator, times(2))
-                .execute(any(), any(), any(), eq("bilibili-open-platform"), anyList(), any());
+                .execute(any(), any(), any(), eq("bilibili-open-platform"), anyList(), any(), any(CollectionDeadlineContext.class));
     }
 
     @Test
     void shouldRunSecondRoundOnlyForUnfinishedFieldEvidencePlan() throws Exception {
         List<DimensionEvidencePlan> executedPlans = new ArrayList<>();
         List<String> executedClaimScopes = new ArrayList<>();
+        List<CollectionDeadlineContext> searchDeadlineContexts = new ArrayList<>();
+        List<CollectionDeadlineContext> collectionDeadlineContexts = new ArrayList<>();
+        AtomicInteger collectionRounds = new AtomicInteger();
+
         doAnswer(invocation -> {
             CollectorNodeConfig config = invocation.getArgument(0);
+            searchDeadlineContexts.add(invocation.getArgument(4));
             executedPlans.add(config.getDimensionEvidencePlan());
             executedClaimScopes.add(config.getFieldEvidenceClaimScope());
             int round = executedPlans.size();
+            String url = round == 1
+                    ? "https://open.bilibili.com"
+                    : "https://open.bilibili.com/doc/4/feb66f99";
             SourceCandidate candidate = SourceCandidate.builder()
-                    .url(round == 1
-                            ? "https://open.bilibili.com"
-                            : "https://open.bilibili.com/doc/4/feb66f99")
-                    .title(round == 1 ? "开放平台入口" : "API 文档")
+                    .url(url)
+                    .title(round == 1 ? "open platform" : "API docs")
                     .sourceType("DOCS")
                     .sourceFamilyKey("official")
-                    .sourceUrls(List.of(round == 1
-                            ? "https://open.bilibili.com"
-                            : "https://open.bilibili.com/doc/4/feb66f99"))
+                    .sourceUrls(List.of(url))
                     .fieldName("coreFeatures")
                     .evidencePathKey("DOCS_API_GUIDE")
                     .queryIntent("API_DOCS")
@@ -177,10 +198,14 @@ class CollectorAgentFieldEvidenceLoopTest {
                             .candidate(candidate)
                             .build()))
                     .build();
-        }).when(searchExecutionCoordinator).execute(any(CollectorNodeConfig.class), eq(66L), any(), any());
+        }).when(searchExecutionCoordinator)
+                .execute(any(CollectorNodeConfig.class), eq(66L), any(), any(), any(CollectionDeadlineContext.class));
 
-        when(collectionExecutionCoordinator.execute(any(), any(), any(), eq("哔哩哔哩"), anyList(), any()))
-                .thenReturn(CollectionExecutionReport.builder()
+        doAnswer(invocation -> {
+            collectionDeadlineContexts.add(invocation.getArgument(6));
+            int round = collectionRounds.incrementAndGet();
+            if (round == 1) {
+                return CollectionExecutionReport.builder()
                         .status("SUCCESS")
                         .results(List.of(CollectionExecutionResult.builder()
                                 .success(true)
@@ -193,27 +218,31 @@ class CollectorAgentFieldEvidenceLoopTest {
                                         .state(EvidenceRepairState.REPAIR_QUERY_PROPOSED)
                                         .build())
                                 .build()))
-                        .build())
-                .thenReturn(CollectionExecutionReport.builder()
-                        .status("SUCCESS")
-                        .results(List.of(CollectionExecutionResult.builder()
-                                .success(true)
-                                .status("SUCCESS")
-                                .resourceLocator("https://open.bilibili.com/doc/4/feb66f99")
-                                .content("""
-                                        哔哩哔哩开放平台开发者文档提供 API 接入说明、SDK 集成指南、授权流程、回调配置、
-                                        应用管理和能力开通步骤。该文档面向开发者解释如何通过开放平台调用内容、账号和互动能力，
-                                        并提供接口参数、错误码、示例代码和接入注意事项，足以支撑 coreFeatures 字段判断。
-                                        """)
-                                .sourceUrls(List.of("https://open.bilibili.com/doc/4/feb66f99"))
-                                .publicEvidenceRecoveryFieldName("coreFeatures")
-                                .publicEvidenceRecoveryEvidencePathKey("DOCS_API_GUIDE")
-                                .evidenceRepairPlan(EvidenceRepairPlan.builder()
-                                        .state(EvidenceRepairState.REPAIR_EVIDENCE_PROMOTED)
-                                        .promotedUrls(List.of("https://open.bilibili.com/doc/4/feb66f99"))
-                                        .build())
-                                .build()))
-                        .build());
+                        .build();
+            }
+            return CollectionExecutionReport.builder()
+                    .status("SUCCESS")
+                    .results(List.of(CollectionExecutionResult.builder()
+                            .success(true)
+                            .status("SUCCESS")
+                            .resourceLocator("https://open.bilibili.com/doc/4/feb66f99")
+                            .content("""
+                                    bilibili open platform docs provide API access details, SDK integration guidance,
+                                    auth flow, callback configuration, app management and capability onboarding steps.
+                                    the page has enough body text to support the coreFeatures field judgement.
+                                    """)
+                            .sourceUrls(List.of("https://open.bilibili.com/doc/4/feb66f99"))
+                            .publicEvidenceRecoveryFieldName("coreFeatures")
+                            .publicEvidenceRecoveryEvidencePathKey("DOCS_API_GUIDE")
+                            .evidenceRepairPlan(EvidenceRepairPlan.builder()
+                                    .state(EvidenceRepairState.REPAIR_EVIDENCE_PROMOTED)
+                                    .promotedUrls(List.of("https://open.bilibili.com/doc/4/feb66f99"))
+                                    .build())
+                            .build()))
+                    .build();
+        }).when(collectionExecutionCoordinator)
+                .execute(any(), any(), any(), eq("bilibili-docs"), anyList(), any(), any(CollectionDeadlineContext.class));
+
         when(collectionExecutionCoordinator.summarize(anyList())).thenAnswer(invocation -> CollectionExecutionReport.builder()
                 .status("SUCCESS")
                 .results(invocation.getArgument(0))
@@ -237,16 +266,33 @@ class CollectorAgentFieldEvidenceLoopTest {
 
         JsonNode output = objectMapper.readTree(result.getOutputData());
         JsonNode coreFeatures = findField(output.path("dimensionEvidencePlan"), "coreFeatures");
+
         assertThat(executedPlans).hasSize(2);
         assertThat(executedPlans.get(1).allPlannedQueries())
                 .extracting(query -> query.getEvidencePathKey())
                 .containsOnly("DOCS_API_GUIDE");
         assertThat(executedClaimScopes).containsExactly(null, "recollection-2");
+        assertThat(searchDeadlineContexts).hasSize(2);
+        assertThat(collectionDeadlineContexts).hasSize(2);
+        assertThat(searchDeadlineContexts)
+                .extracting(CollectionDeadlineContext::hardDeadlineEpochMillis)
+                .doesNotContainNull()
+                .containsOnly(searchDeadlineContexts.get(0).hardDeadlineEpochMillis());
+        assertThat(searchDeadlineContexts)
+                .extracting(CollectionDeadlineContext::drainGraceMillis)
+                .containsOnly(searchDeadlineContexts.get(0).drainGraceMillis());
+        assertThat(collectionDeadlineContexts)
+                .extracting(CollectionDeadlineContext::hardDeadlineEpochMillis)
+                .containsOnly(searchDeadlineContexts.get(0).hardDeadlineEpochMillis());
         assertThat(output.path("fieldEvidenceLoopRounds").asInt()).isEqualTo(2);
         assertThat(output.path("fieldEvidenceRecollectionTriggered").asBoolean()).isTrue();
         assertThat(coreFeatures.path("status").asText()).isEqualTo("SUFFICIENT");
         assertThat(coreFeatures.path("lastRepairState").asText()).isEqualTo("REPAIR_FIELD_PATH_COMPLETED");
         assertThat(output.path("sourceUrls").toString()).contains("https://open.bilibili.com/doc/4/feb66f99");
+        verify(searchExecutionCoordinator, times(2))
+                .execute(any(CollectorNodeConfig.class), eq(66L), any(), any(), any(CollectionDeadlineContext.class));
+        verify(collectionExecutionCoordinator, times(2))
+                .execute(any(), any(), any(), eq("bilibili-docs"), anyList(), any(), any(CollectionDeadlineContext.class));
     }
 
     private AgentContext contextWithDimensionEvidencePlan() {
@@ -256,13 +302,13 @@ class CollectorAgentFieldEvidenceLoopTest {
                 .currentNodeName("collect_sources_field_loop")
                 .currentNodeConfig("""
                         {
-                          "competitorName": "哔哩哔哩",
+                          "competitorName": "bilibili-docs",
                           "competitorUrls": ["https://open.bilibili.com"],
                           "sourceType": "DOCS",
                           "verifyCandidates": false,
                           "browserSearchEnabled": false,
                           "dimensionEvidencePlan": {
-                            "competitorName": "哔哩哔哩",
+                            "competitorName": "bilibili-docs",
                             "maxCollectionRounds": 2,
                             "fieldCoverages": [
                               {
@@ -283,9 +329,9 @@ class CollectorAgentFieldEvidenceLoopTest {
                                     "fieldName": "coreFeatures",
                                     "evidencePathKey": "DOCS_API_GUIDE",
                                     "queryIntent": "API_DOCS",
-                                    "query": "哔哩哔哩 开放平台 API 官方文档",
+                                    "query": "bilibili open platform api docs",
                                     "queryFingerprint": "q1",
-                                    "reason": "字段定向查询"
+                                    "reason": "field-oriented search"
                                   }
                                 ]
                               }
