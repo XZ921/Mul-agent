@@ -1,16 +1,16 @@
 package cn.bugstack.competitoragent.event;
 
 import cn.bugstack.competitoragent.model.dto.OrchestrationDecisionSummary;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionSummaryProjector;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
 import cn.bugstack.competitoragent.task.TaskRecoveryService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +28,7 @@ public class TaskEventReplayService {
 
     private final TaskSseHub taskSseHub;
     private final TaskRecoveryService taskRecoveryService;
+    private final ObjectMapper objectMapper;
 
     /**
      * 建立 SSE 订阅。
@@ -99,108 +100,13 @@ public class TaskEventReplayService {
         if (replayEvent == null || replayEvent.getPayload() == null || replayEvent.getPayload().isEmpty()) {
             return null;
         }
-        Map<String, Object> payload = replayEvent.getPayload();
-        Map<String, Object> decisionPayload = payload;
-        Object nestedDecision = payload.get("decision");
-        if (nestedDecision instanceof Map<?, ?> nestedDecisionMap) {
-            decisionPayload = castToStringObjectMap(nestedDecisionMap);
-        }
-        if (!hasDecisionMarker(decisionPayload)) {
-            return null;
-        }
-        return OrchestrationDecisionSummary.builder()
-                .decisionId(textValue(decisionPayload.get("decisionId")))
-                .taskId(longValue(decisionPayload.get("taskId"), replayEvent.getTaskId()))
-                .triggerNodeName(firstNonBlank(textValue(decisionPayload.get("triggerNodeName")), replayEvent.getNodeName()))
-                .decisionType(textValue(decisionPayload.get("decisionType")))
-                .actionType(textValue(decisionPayload.get("actionType")))
-                .targetNode(textValue(decisionPayload.get("targetNode")))
-                .affectedScope(textValue(decisionPayload.get("affectedScope")))
-                .reason(firstNonBlank(textValue(decisionPayload.get("reason")), textValue(payload.get("summary"))))
-                .requiresHumanIntervention(booleanValue(decisionPayload.get("requiresHumanIntervention"), false))
-                .requiresConfirmation(nullableBooleanValue(decisionPayload.get("requiresConfirmation")))
-                .evidenceState(firstNonBlank(
-                        textValue(decisionPayload.get("evidenceState")),
-                        textValue(payload.get("evidenceState"))))
-                .sourceUrls(mergeSourceUrls(
-                        stringListValue(decisionPayload.get("sourceUrls")),
-                        stringListValue(payload.get("sourceUrls"))))
-                .build()
-                .normalized();
-    }
-
-    private boolean hasDecisionMarker(Map<String, Object> decisionPayload) {
-        return hasText(textValue(decisionPayload.get("decisionId")))
-                || hasText(textValue(decisionPayload.get("decisionType")))
-                || hasText(textValue(decisionPayload.get("actionType")));
-    }
-
-    private Map<String, Object> castToStringObjectMap(Map<?, ?> rawMap) {
-        Map<String, Object> normalized = new LinkedHashMap<>();
-        for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
-            if (entry.getKey() != null) {
-                normalized.put(String.valueOf(entry.getKey()), entry.getValue());
-            }
-        }
-        return normalized;
-    }
-
-    private List<String> mergeSourceUrls(List<String> primary, List<String> secondary) {
-        LinkedHashSet<String> merged = new LinkedHashSet<>();
-        merged.addAll(primary == null ? List.of() : primary);
-        merged.addAll(secondary == null ? List.of() : secondary);
-        return new ArrayList<>(merged);
-    }
-
-    private List<String> stringListValue(Object value) {
-        if (!(value instanceof Iterable<?> iterable)) {
-            return List.of();
-        }
-        List<String> values = new ArrayList<>();
-        for (Object item : iterable) {
-            String text = textValue(item);
-            if (hasText(text)) {
-                values.add(text);
-            }
-        }
-        return values;
-    }
-
-    private String firstNonBlank(String primary, String fallback) {
-        return hasText(primary) ? primary : fallback;
-    }
-
-    private String textValue(Object value) {
-        if (value == null) {
-            return null;
-        }
-        String text = String.valueOf(value).trim();
-        return text.isEmpty() ? null : text;
-    }
-
-    private Long longValue(Object value, Long fallback) {
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        return fallback;
-    }
-
-    private boolean booleanValue(Object value, boolean fallback) {
-        if (value instanceof Boolean booleanValue) {
-            return booleanValue;
-        }
-        return fallback;
-    }
-
-    private Boolean nullableBooleanValue(Object value) {
-        if (value instanceof Boolean booleanValue) {
-            return booleanValue;
-        }
-        return null;
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
+        return OrchestrationDecisionSummaryProjector.fromEventPayload(
+                        replayEvent.getPayload(),
+                        replayEvent.getTaskId(),
+                        replayEvent.getNodeName(),
+                        List.of(),
+                        objectMapper)
+                .orElse(null);
     }
 
     /**

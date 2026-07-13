@@ -450,6 +450,12 @@ class ReportServiceTest {
                           "decision": {
                             "decisionId": "od-720-review",
                             "triggerNodeName": "quality_check_final",
+                            "decisionOrigin": "RULE_FALLBACK",
+                            "decisionMetadata": {
+                              "modelName": "deepseek-chat",
+                              "fallbackUsed": true,
+                              "fallbackReason": "LLM_TIMEOUT"
+                            },
                             "decisionType": "WAIT_FOR_HUMAN",
                             "actionType": "MANUAL_REVIEW",
                             "targetNode": "quality_check_final",
@@ -458,6 +464,9 @@ class ReportServiceTest {
                             "requiresConfirmation": false,
                             "evidenceState": "MISSING_SOURCE",
                             "sourceUrls": ["https://docs.example.com/review-gap"]
+                          },
+                          "policyResult": {
+                            "decisionContract": "LEGACY_RULE_SET"
                           }
                         }
                         """)
@@ -476,6 +485,9 @@ class ReportServiceTest {
         JsonNode payload = new ObjectMapper().valueToTree(response);
 
         assertEquals("WAIT_FOR_HUMAN", payload.at("/orchestrationDecision/decisionType").asText());
+        assertEquals("RULE_FALLBACK", payload.at("/orchestrationDecision/decisionOrigin").asText());
+        assertEquals("LEGACY_RULE_SET", payload.at("/orchestrationDecision/decisionContract").asText());
+        assertEquals("LLM_TIMEOUT", payload.at("/orchestrationDecision/fallbackReason").asText());
         assertEquals("MISSING_SOURCE", payload.at("/orchestrationDecision/evidenceState").asText());
         assertEquals("quality_check_final", payload.at("/orchestrationDecision/triggerNodeName").asText());
         assertTrue(payload.at("/sourceUrls").toString().contains("https://docs.example.com/review-gap"));

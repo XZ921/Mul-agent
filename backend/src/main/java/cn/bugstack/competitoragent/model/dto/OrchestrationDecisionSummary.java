@@ -1,5 +1,7 @@
 package cn.bugstack.competitoragent.model.dto;
 
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionOrigin;
+import cn.bugstack.competitoragent.orchestration.OrchestratorDecisionMetadata;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -28,6 +30,17 @@ public class OrchestrationDecisionSummary {
     private String triggerNodeName;
     private String decisionType;
     private String actionType;
+    private String decisionOrigin;
+    private String decisionContract;
+    private String fallbackReason;
+    private String modelName;
+    private Double temperature;
+    private String promptHash;
+    private String llmResponseHash;
+    private Integer parseRetryCount;
+    private boolean fallbackUsed;
+    private Boolean shadowExecuted;
+    private String shadowSkippedReason;
     private String targetNode;
     private String affectedScope;
     private String reason;
@@ -43,6 +56,19 @@ public class OrchestrationDecisionSummary {
      */
     public OrchestrationDecisionSummary normalized() {
         String normalizedDecisionType = upperOrDefault(decisionType, "WAIT_FOR_HUMAN");
+        OrchestrationDecisionOrigin normalizedOrigin = OrchestrationDecisionOrigin.fromValue(decisionOrigin);
+        OrchestratorDecisionMetadata normalizedMetadata = OrchestratorDecisionMetadata.builder()
+                .fallbackReason(fallbackReason)
+                .modelName(modelName)
+                .temperature(temperature)
+                .promptHash(promptHash)
+                .llmResponseHash(llmResponseHash)
+                .parseRetryCount(parseRetryCount)
+                .fallbackUsed(fallbackUsed)
+                .shadowExecuted(shadowExecuted)
+                .shadowSkippedReason(shadowSkippedReason)
+                .build()
+                .normalized(normalizedOrigin);
         List<String> normalizedSourceUrls = normalizeDistinct(sourceUrls);
         String normalizedEvidenceState = upperOrDefault(
                 evidenceState,
@@ -56,6 +82,17 @@ public class OrchestrationDecisionSummary {
                 .triggerNodeName(blankToNull(triggerNodeName))
                 .decisionType(normalizedDecisionType)
                 .actionType(upperOrDefault(actionType, "MANUAL_REVIEW"))
+                .decisionOrigin(normalizedOrigin.name())
+                .decisionContract(normalizedOrigin.decisionContract())
+                .fallbackReason(normalizedMetadata.getFallbackReason())
+                .modelName(normalizedMetadata.getModelName())
+                .temperature(normalizedMetadata.getTemperature())
+                .promptHash(normalizedMetadata.getPromptHash())
+                .llmResponseHash(normalizedMetadata.getLlmResponseHash())
+                .parseRetryCount(normalizedMetadata.getParseRetryCount())
+                .fallbackUsed(normalizedMetadata.isFallbackUsed())
+                .shadowExecuted(normalizedMetadata.getShadowExecuted())
+                .shadowSkippedReason(normalizedMetadata.getShadowSkippedReason())
                 .targetNode(blankToNull(targetNode))
                 .affectedScope(upperOrDefault(affectedScope, "CURRENT_NODE_ONLY"))
                 .reason(blankToDefault(reason, "当前协作决策缺少明确原因说明。"))

@@ -27,6 +27,9 @@ public class OrchestrationDecision {
     private String triggerNodeName;
     private String decisionType;
     private String actionType;
+    private OrchestrationDecisionOrigin decisionOrigin;
+    @Builder.Default
+    private OrchestratorDecisionMetadata decisionMetadata = OrchestratorDecisionMetadata.empty();
     private String targetNode;
     private String affectedScope;
     private String priority;
@@ -49,6 +52,12 @@ public class OrchestrationDecision {
      */
     public OrchestrationDecision normalized() {
         String normalizedDecisionType = upperOrDefault(decisionType, "WAIT_FOR_HUMAN");
+        OrchestrationDecisionOrigin normalizedOrigin = decisionOrigin == null
+                ? OrchestrationDecisionOrigin.defaultOrigin()
+                : decisionOrigin;
+        OrchestratorDecisionMetadata normalizedMetadata = decisionMetadata == null
+                ? OrchestratorDecisionMetadata.empty().normalized(normalizedOrigin)
+                : decisionMetadata.normalized(normalizedOrigin);
         List<String> normalizedSourceUrls = normalizeDistinctList(sourceUrls);
         EvidenceState resolvedEvidenceState = evidenceState == null
                 ? resolveEvidenceState(normalizedSourceUrls)
@@ -57,6 +66,8 @@ public class OrchestrationDecision {
         return toBuilder()
                 .decisionType(normalizedDecisionType)
                 .actionType(upperOrDefault(actionType, "MANUAL_REVIEW"))
+                .decisionOrigin(normalizedOrigin)
+                .decisionMetadata(normalizedMetadata)
                 .targetNode(blankToNull(targetNode))
                 .affectedScope(upperOrDefault(affectedScope, "CURRENT_NODE_ONLY"))
                 .priority(upperOrDefault(priority, "MEDIUM"))

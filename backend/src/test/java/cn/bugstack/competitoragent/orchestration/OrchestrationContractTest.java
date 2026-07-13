@@ -27,6 +27,12 @@ class OrchestrationContractTest {
                 .targetSection("pricing")
                 .reason("终审发现 pricing 缺少可追溯来源")
                 .confidence(0.84d)
+                .decisionOrigin(OrchestrationDecisionOrigin.RULE_FALLBACK)
+                .decisionMetadata(OrchestratorDecisionMetadata.builder()
+                        .modelName("deepseek-chat")
+                        .temperature(0.0d)
+                        .fallbackReason("LLM_TIMEOUT")
+                        .build())
                 .inputRefs(Map.of(
                         "qualityDiagnosisIds", List.of("qd-001"),
                         "agentSuggestionIds", List.of(),
@@ -42,13 +48,34 @@ class OrchestrationContractTest {
         assertThat(decision.getAffectedScope()).isEqualTo("CURRENT_NODE_AND_DOWNSTREAM");
         assertThat(decision.getPriority()).isEqualTo("HIGH");
         assertThat(decision.getConfidence()).isEqualTo(0.84d);
+        assertThat(decision.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_FALLBACK);
+        assertThat(decision.getDecisionMetadata().isFallbackUsed()).isTrue();
+        assertThat(decision.getDecisionMetadata().getFallbackReason()).isEqualTo("LLM_TIMEOUT");
         assertThat(decision.getInputRefs()).containsEntry("triggerNodeName", "quality_check_final");
         assertThat(decision.getEvidenceState()).isEqualTo(EvidenceState.MISSING_SOURCE);
         assertThat(decision.getSourceUrls()).isEmpty();
         assertThat(objectMapper.writeValueAsString(decision))
+                .contains("decisionOrigin")
+                .contains("decisionMetadata")
+                .contains("sourceUrls")
                 .contains("evidenceState")
                 .contains("affectedScope")
                 .contains("inputRefs");
+    }
+
+    @Test
+    void shouldDefaultMissingOriginToLegacyAdapterWithoutPretendingLlm() {
+        OrchestrationDecision decision = OrchestrationDecision.builder()
+                .decisionId("od-legacy-default")
+                .decisionType("NO_ACTION")
+                .actionType("NO_ACTION")
+                .sourceUrls(List.of())
+                .build()
+                .normalized();
+
+        assertThat(decision.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.defaultOrigin());
+        assertThat(decision.getDecisionMetadata()).isNotNull();
+        assertThat(decision.getSourceUrls()).isEmpty();
     }
 
     @Test

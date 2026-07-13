@@ -319,11 +319,19 @@ class TaskReplayProjectionServiceTest {
                           "decision": {
                             "decisionId": "od-120-review",
                             "triggerNodeName": "quality_check_final",
+                            "decisionOrigin": "RULE_FALLBACK",
+                            "decisionMetadata": {
+                              "fallbackUsed": true,
+                              "fallbackReason": "LLM_TIMEOUT"
+                            },
                             "decisionType": "WAIT_FOR_HUMAN",
                             "actionType": "MANUAL_REVIEW",
                             "reason": "终审阻塞，等待人工补证",
                             "evidenceState": "MISSING_SOURCE",
                             "sourceUrls": ["https://docs.example.com/replay-gap"]
+                          },
+                          "policyResult": {
+                            "decisionContract": "LEGACY_RULE_SET"
                           }
                         }
                         """)
@@ -357,6 +365,9 @@ class TaskReplayProjectionServiceTest {
         JsonNode payload = objectMapper.valueToTree(replay);
 
         assertThat(payload.at("/latestOrchestrationDecision/decisionType").asText()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(payload.at("/latestOrchestrationDecision/decisionOrigin").asText()).isEqualTo("RULE_FALLBACK");
+        assertThat(payload.at("/latestOrchestrationDecision/decisionContract").asText()).isEqualTo("LEGACY_RULE_SET");
+        assertThat(payload.at("/latestOrchestrationDecision/fallbackReason").asText()).isEqualTo("LLM_TIMEOUT");
         assertThat(payload.at("/latestOrchestrationDecision/evidenceState").asText()).isEqualTo("MISSING_SOURCE");
         assertThat(payload.at("/timeline/0/orchestrationDecision/decisionId").asText()).isEqualTo("od-120-review");
         assertThat(payload.at("/timeline/0/summary").asText()).contains("WAIT_FOR_HUMAN");

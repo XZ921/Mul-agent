@@ -12,6 +12,8 @@ import cn.bugstack.competitoragent.orchestration.DecisionPolicyService;
 import cn.bugstack.competitoragent.orchestration.DynamicPlanMutation;
 import cn.bugstack.competitoragent.orchestration.EvidenceState;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecision;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionActionMatrix;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionOrigin;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
 import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
@@ -31,8 +33,10 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -59,6 +63,90 @@ class DynamicPlanAppenderTest {
             decisionExecutorAdapter,
             orchestrationTraceService
     );
+
+    @Test
+    void shouldNotAppendNodesForInvalidLlmPairBlockedByPolicy() throws Exception {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(51L)
+                .status(AnalysisTaskStatus.STOPPED)
+                .currentPlanVersionId(10L)
+                .currentPlanVersion(1)
+                .build();
+        TaskNode completedNode = TaskNode.builder()
+                .taskId(51L)
+                .nodeName("quality_check_final")
+                .agentType(AgentType.REVIEWER)
+                .status(TaskNodeStatus.SUCCESS)
+                .planVersionId(10L)
+                .branchKey("root")
+                .outputData("""
+                        {
+                          "reviewStage":"final",
+                          "passed":false,
+                          "requiresHumanIntervention":false,
+                          "summary":"存在非法 LLM 动作组合"
+                        }
+                        """)
+                .build();
+        TaskPlan parentPlan = TaskPlan.builder()
+                .id(10L)
+                .taskId(51L)
+                .planVersion(1)
+                .branchKey("root")
+                .active(true)
+                .planSnapshot(objectMapper.writeValueAsString(WorkflowPlan.builder()
+                        .planVersionId(10L)
+                        .planVersion(1)
+                        .branchKey("root")
+                        .nodes(List.of())
+                        .build()))
+                .build();
+        OrchestrationDecision decision = OrchestrationDecision.builder()
+                .decisionId("od-invalid-llm-appender")
+                .taskId(51L)
+                .decisionOrigin(OrchestrationDecisionOrigin.LLM_PRIMARY)
+                .triggerNodeName("quality_check_final")
+                .decisionType("REWRITE_ONLY")
+                .actionType("SUPPLEMENT_EVIDENCE")
+                .targetNode("rewrite_report")
+                .affectedScope("CURRENT_NODE_ONLY")
+                .sourceUrls(List.of("https://example.com/evidence"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build();
+        DynamicPlanAppender guardedAppender = new DynamicPlanAppender(
+                taskRepository,
+                nodeRepository,
+                dynamicTaskGraphService,
+                taskPlanRepository,
+                objectMapper,
+                orchestrationDecisionService,
+                new DecisionPolicyService(new OrchestrationDecisionActionMatrix()),
+                new DecisionExecutorAdapter(objectMapper),
+                orchestrationTraceService);
+
+        when(taskRepository.findById(51L)).thenReturn(Optional.of(task));
+        when(taskPlanRepository.findById(10L)).thenReturn(Optional.of(parentPlan));
+        when(orchestrationDecisionService.decide(any())).thenReturn(List.of(decision));
+
+        boolean appended = guardedAppender.maybeAppendDynamicPlan(
+                51L,
+                new ArrayList<>(List.of(completedNode)),
+                new LinkedHashMap<>(Map.of(completedNode.getNodeName(), completedNode)),
+                completedNode);
+
+        assertThat(appended).isFalse();
+        verify(orchestrationTraceService).recordDecision(
+                eq(51L),
+                eq(completedNode),
+                eq(decision),
+                argThat(policy -> !policy.isAllowed()
+                        && policy.getBlockedReasons().contains(
+                        "INVALID_DECISION_ACTION_PAIR: REWRITE_ONLY 不允许搭配 SUPPLEMENT_EVIDENCE")),
+                argThat(mutation -> "NO_MUTATION".equals(mutation.getMutationType())));
+        verify(dynamicTaskGraphService, never()).createDynamicPlan(
+                any(), any(), any(DynamicPlanMutation.class), any());
+        verify(nodeRepository, never()).saveAll(any());
+    }
 
     @Test
     void shouldAppendDynamicPlanThroughOrchestratorDecisionPipeline() throws Exception {

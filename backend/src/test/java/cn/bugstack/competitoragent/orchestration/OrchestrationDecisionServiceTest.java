@@ -45,6 +45,7 @@ class OrchestrationDecisionServiceTest {
         assertThat(decisions.get(0).getDecisionType()).isEqualTo("APPEND_DYNAMIC_BRANCH");
         assertThat(decisions.get(0).getActionType()).isEqualTo("SUPPLEMENT_EVIDENCE");
         assertThat(decisions.get(0).getEvidenceState()).isEqualTo(EvidenceState.MISSING_SOURCE);
+        assertThat(decisions.get(0).getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.LEGACY_ADAPTER);
     }
 
     @Test
@@ -81,6 +82,7 @@ class OrchestrationDecisionServiceTest {
 
         assertThat(decisions).hasSize(1);
         assertThat(decisions.get(0).getDecisionType()).isEqualTo("NO_ACTION");
+        assertThat(decisions.get(0).getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_ONLY);
     }
 
     @Test
@@ -330,6 +332,7 @@ class OrchestrationDecisionServiceTest {
         assertThat(decisions.get(0).getActionType()).isEqualTo("REWRITE_SECTION");
         assertThat(decisions.get(0).getTargetNode()).isEqualTo("rewrite_report");
         assertThat(decisions.get(0).getTargetSection()).isEqualTo("pricing");
+        assertThat(decisions.get(0).getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_ONLY);
     }
 
     @Test

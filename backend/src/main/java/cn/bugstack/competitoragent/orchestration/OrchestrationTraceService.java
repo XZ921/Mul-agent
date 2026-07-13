@@ -36,12 +36,23 @@ public class OrchestrationTraceService {
                                OrchestrationDecision decision,
                                DecisionPolicyResult policyResult,
                                DynamicPlanMutation mutation) {
+        // Trace 是决策事实的持久化边界，必须在这里统一归一化，不能依赖每个调用方自行补齐来源和元数据。
+        OrchestrationDecision normalizedDecision = decision == null ? null : decision.normalized();
+        // 旧调用方可能尚未给 policy result 写 origin；同一事件中的 policy 必须继承对应 decision 的来源，避免审计事实分叉。
+        DecisionPolicyResult normalizedPolicyResult = policyResult == null
+                ? null
+                : policyResult.toBuilder()
+                .decisionOrigin(normalizedDecision == null
+                        ? policyResult.getDecisionOrigin()
+                        : normalizedDecision.getDecisionOrigin())
+                .build()
+                .normalized();
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("summary", "Orchestrator 已生成运行期编排决策");
-        payload.put("decision", decision);
-        payload.put("policyResult", policyResult);
+        payload.put("decision", normalizedDecision);
+        payload.put("policyResult", normalizedPolicyResult);
         payload.put("mutation", mutation);
-        payload.put("evidenceState", decision == null ? null : decision.getEvidenceState());
+        payload.put("evidenceState", normalizedDecision == null ? null : normalizedDecision.getEvidenceState());
         workflowEventPublisher.publishOrchestrationEvent(
                 taskId,
                 completedNode == null ? null : completedNode.getNodeName(),
@@ -49,7 +60,7 @@ public class OrchestrationTraceService {
                 completedNode == null ? null : completedNode.getBranchKey(),
                 WorkflowEventType.ORCHESTRATION_DECISION_RECORDED,
                 payload,
-                decision == null ? List.of() : decision.getSourceUrls());
+                normalizedDecision == null ? List.of() : normalizedDecision.getSourceUrls());
     }
 
     /**

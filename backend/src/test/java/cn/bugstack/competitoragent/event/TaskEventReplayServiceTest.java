@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.event;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
 import cn.bugstack.competitoragent.task.TaskRecoveryService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,7 +38,10 @@ class TaskEventReplayServiceTest {
     @BeforeEach
     void setUp() {
         taskSseHub = new TaskSseHub();
-        replayService = new TaskEventReplayService(taskSseHub, taskRecoveryService);
+        replayService = new TaskEventReplayService(
+                taskSseHub,
+                taskRecoveryService,
+                new ObjectMapper().findAndRegisterModules());
     }
 
     @Test
@@ -97,9 +101,14 @@ class TaskEventReplayServiceTest {
         TaskEventPublisher publisher = new TaskEventPublisher(taskSseHub);
         publisher.publishDiagnosisEvent(24L, "quality_check_final", Map.of(
                 "decisionId", "od-24-review",
+                "decisionOrigin", "RULE_FALLBACK",
                 "decisionType", "WAIT_FOR_HUMAN",
                 "actionType", "MANUAL_REVIEW",
                 "reason", "终审发现缺少来源，需要人工确认",
+                "decisionMetadata", Map.of(
+                        "fallbackUsed", true,
+                        "fallbackReason", "LLM_TIMEOUT"),
+                "policyResult", Map.of("decisionContract", "LEGACY_RULE_SET"),
                 "evidenceState", "MISSING_SOURCE",
                 "sourceUrls", List.of("https://docs.example.com/replay-gap")));
 
@@ -108,6 +117,9 @@ class TaskEventReplayServiceTest {
         TaskEventReplayService.TaskReplayFrame frame = replayService.planReplay(24L, null);
 
         assertNotNull(frame.getLatestOrchestrationDecision());
+        assertEquals("RULE_FALLBACK", frame.getLatestOrchestrationDecision().getDecisionOrigin());
+        assertEquals("LEGACY_RULE_SET", frame.getLatestOrchestrationDecision().getDecisionContract());
+        assertEquals("LLM_TIMEOUT", frame.getLatestOrchestrationDecision().getFallbackReason());
         assertEquals("WAIT_FOR_HUMAN", frame.getLatestOrchestrationDecision().getDecisionType());
         assertEquals("MISSING_SOURCE", frame.getLatestOrchestrationDecision().getEvidenceState());
         assertEquals("quality_check_final", frame.getLatestOrchestrationDecision().getTriggerNodeName());

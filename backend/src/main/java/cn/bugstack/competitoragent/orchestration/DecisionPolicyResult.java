@@ -21,6 +21,8 @@ import java.util.Locale;
 public class DecisionPolicyResult {
 
     private String decisionId;
+    private OrchestrationDecisionOrigin decisionOrigin;
+    private String decisionContract;
     private boolean allowed;
     private String riskLevel;
     private boolean requiresConfirmation;
@@ -47,7 +49,12 @@ public class DecisionPolicyResult {
      * 归一化策略结果，保证执行适配器只消费稳定动作和显式证据状态。
      */
     public DecisionPolicyResult normalized() {
+        OrchestrationDecisionOrigin normalizedOrigin = decisionOrigin == null
+                ? OrchestrationDecisionOrigin.defaultOrigin()
+                : decisionOrigin;
         return toBuilder()
+                .decisionOrigin(normalizedOrigin)
+                .decisionContract(normalizedOrigin.decisionContract())
                 .riskLevel(upperOrDefault(riskLevel, allowed ? "LOW" : "HIGH"))
                 .normalizedAction(upperOrDefault(normalizedAction, allowed ? "NO_ACTION" : "MANUAL_ONLY"))
                 .blockedReasons(normalizeDistinctList(blockedReasons))

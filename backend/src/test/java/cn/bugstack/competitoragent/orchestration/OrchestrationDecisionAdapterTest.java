@@ -32,6 +32,7 @@ class OrchestrationDecisionAdapterTest {
         assertThat(decision.getPriority()).isEqualTo("HIGH");
         assertThat(decision.getTargetSection()).isEqualTo("pricing");
         assertThat(decision.getEvidenceState()).isEqualTo(EvidenceState.MISSING_SOURCE);
+        assertThat(decision.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.LEGACY_ADAPTER);
         assertThat(decision.getInputRefs()).containsEntry("triggerNodeName", "quality_check_final");
         assertThat(decision.getSuggestedQueries()).containsExactly("Notion AI pricing official");
     }
@@ -51,5 +52,6 @@ class OrchestrationDecisionAdapterTest {
         assertThat(decision.getActionType()).isEqualTo("REWRITE_SECTION");
         assertThat(decision.getTargetNode()).isEqualTo("rewrite_report");
         assertThat(decision.getEvidenceState()).isEqualTo(EvidenceState.FULL_SOURCE);
+        assertThat(decision.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.LEGACY_ADAPTER);
     }
 }

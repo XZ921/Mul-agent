@@ -15,6 +15,12 @@ import java.util.Locale;
 @Service
 public class DecisionPolicyService {
 
+    private final OrchestrationDecisionActionMatrix actionMatrix;
+
+    public DecisionPolicyService(OrchestrationDecisionActionMatrix actionMatrix) {
+        this.actionMatrix = actionMatrix;
+    }
+
     public DecisionPolicyResult evaluate(OrchestrationDecision rawDecision,
                                          DecisionPolicyRuleSet ruleSet,
                                          int currentDecisionCount,
@@ -25,6 +31,7 @@ public class DecisionPolicyService {
                 .decisionId("od-invalid")
                 .decisionType("WAIT_FOR_HUMAN")
                 .actionType("MANUAL_REVIEW")
+                .decisionOrigin(OrchestrationDecisionOrigin.defaultOrigin())
                 .evidenceState(EvidenceState.MISSING_SOURCE)
                 .build()
                 .normalized()
@@ -40,12 +47,43 @@ public class DecisionPolicyService {
         } else {
             ruleRefs.add("allowedDecisionTypes");
         }
+
+        String normalizedAction;
+        if (decision.getDecisionOrigin().usesLlmActionMatrix()) {
+            OrchestrationDecisionActionMatrix.ActionMatrixValidation matrixResult = actionMatrix.validate(decision);
+            ruleRefs.add("llmDecisionActionMatrix");
+            if (matrixResult.valid()) {
+                ruleRefs.add(matrixResult.ruleId());
+                normalizedAction = matrixResult.normalizedAction();
+            } else {
+                blockedReasons.addAll(toMatrixBlockedReasons(decision, matrixResult));
+                // 非法 LLM 动作只降级审计动作，不改变 allowed=false，也不能触发人工 mutation。
+                normalizedAction = "MANUAL_ONLY";
+            }
+        } else {
+            normalizedAction = resolveLegacyNormalizedAction(decision);
+        }
+        if (!rules.getAllowedDynamicActions().contains(normalizedAction)) {
+            blockedReasons.add("normalizedAction 不在允许列表：" + normalizedAction);
+        } else {
+            ruleRefs.add("allowedDynamicActions");
+        }
+
         if (rules.isRequireSourceUrlsOrEvidenceGap()
                 && decision.getSourceUrls().isEmpty()
                 && decision.getEvidenceState() != EvidenceState.MISSING_SOURCE) {
             blockedReasons.add("缺少 sourceUrls 且未显式声明 MISSING_SOURCE");
         } else {
             ruleRefs.add("requireSourceUrlsOrEvidenceGap");
+        }
+        if (decision.getDecisionOrigin().usesLlmActionMatrix()
+                && "REWRITE_ONLY".equals(decision.getDecisionType())) {
+            if (decision.getSourceUrls().isEmpty()
+                    || decision.getEvidenceState() == EvidenceState.MISSING_SOURCE) {
+                blockedReasons.add("MISSING_SOURCE_FOR_LLM_REWRITE: LLM rewrite 缺少可追溯 sourceUrls");
+            } else {
+                ruleRefs.add("llmRewriteRequiresSourceUrls");
+            }
         }
         if (decision.getSuggestedQueries().size() > rules.getMaxSearchQueriesPerDecision()) {
             blockedReasons.add("搜索补证 query 数量超过上限："
@@ -63,10 +101,6 @@ public class DecisionPolicyService {
             blockedReasons.add("触发节点状态禁止自动编排：" + triggerNodeStatus);
         }
 
-        String normalizedAction = resolveNormalizedAction(decision);
-        if (!rules.getAllowedDynamicActions().contains(normalizedAction)) {
-            blockedReasons.add("normalizedAction 不在允许列表：" + normalizedAction);
-        }
         List<DecisionPolicyRuleSet.PolicyRiskRule> matchedRiskRules = matchRiskRules(decision, rules);
         matchedRiskRules.stream()
                 .map(DecisionPolicyRuleSet.PolicyRiskRule::getRuleId)
@@ -80,6 +114,8 @@ public class DecisionPolicyService {
 
         return DecisionPolicyResult.builder()
                 .decisionId(decision.getDecisionId())
+                .decisionOrigin(decision.getDecisionOrigin())
+                .decisionContract(decision.getDecisionOrigin().decisionContract())
                 .allowed(blockedReasons.isEmpty())
                 .riskLevel(riskLevel)
                 .requiresConfirmation(requiresConfirmation)
@@ -99,7 +135,11 @@ public class DecisionPolicyService {
                 .normalized();
     }
 
-    private String resolveNormalizedAction(OrchestrationDecision decision) {
+    /**
+     * 仅解释 RULE_ONLY、RULE_FALLBACK 和 LEGACY_ADAPTER 的历史动作。
+     * LLM 决策必须由 ActionMatrix 给出 normalizedAction，不能进入该兼容映射。
+     */
+    private String resolveLegacyNormalizedAction(OrchestrationDecision decision) {
         return switch (decision.getActionType()) {
             case "SUPPLEMENT_EVIDENCE" -> "CREATE_SUPPLEMENT_BRANCH";
             case "DOMAIN_HINT_DISCOVERY" -> "MANUAL_ONLY";
@@ -109,6 +149,36 @@ public class DecisionPolicyService {
             case "MANUAL_REVIEW" -> "MANUAL_ONLY";
             default -> "WAIT_FOR_HUMAN".equals(decision.getDecisionType()) ? "MANUAL_ONLY" : "NO_ACTION";
         };
+    }
+
+    /**
+     * 将矩阵稳定错误码转换为可审计文本，期望值仍从同一条矩阵规则读取，
+     * 避免 Policy 再维护一份 target/scope 语义表。
+     */
+    private List<String> toMatrixBlockedReasons(
+            OrchestrationDecision decision,
+            OrchestrationDecisionActionMatrix.ActionMatrixValidation validation) {
+        List<String> reasons = new ArrayList<>();
+        OrchestrationDecisionActionMatrix.ActionRule rule = actionMatrix
+                .findRule(decision.getDecisionType(), decision.getActionType())
+                .orElse(null);
+        for (String violationCode : validation.violationCodes()) {
+            if (OrchestrationDecisionActionMatrix.INVALID_DECISION_ACTION_PAIR.equals(violationCode)) {
+                reasons.add(violationCode + ": " + decision.getDecisionType()
+                        + " 不允许搭配 " + decision.getActionType());
+            } else if (OrchestrationDecisionActionMatrix.INVALID_LLM_TARGET_NODE.equals(violationCode)) {
+                String expectedTarget = rule == null ? null : rule.resolveTargetNode(decision.getTriggerNodeName());
+                reasons.add(violationCode + ": " + decision.getDecisionType() + "/" + decision.getActionType()
+                        + " 必须指向 " + expectedTarget);
+            } else if (OrchestrationDecisionActionMatrix.INVALID_LLM_AFFECTED_SCOPE.equals(violationCode)) {
+                String expectedScope = rule == null ? null : rule.affectedScope();
+                reasons.add(violationCode + ": " + decision.getDecisionType() + "/" + decision.getActionType()
+                        + " 必须使用 " + expectedScope);
+            } else {
+                reasons.add(violationCode);
+            }
+        }
+        return reasons;
     }
 
     private List<DecisionPolicyRuleSet.PolicyRiskRule> matchRiskRules(OrchestrationDecision decision,

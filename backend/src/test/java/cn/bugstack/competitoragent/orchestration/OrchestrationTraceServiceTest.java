@@ -25,6 +25,63 @@ import static org.mockito.Mockito.when;
 class OrchestrationTraceServiceTest {
 
     @Test
+    void shouldTraceOriginalInvalidLlmPairAndStablePolicyReason() {
+        WorkflowEventPublisher publisher = mock(WorkflowEventPublisher.class);
+        TaskWorkflowEventRepository repository = mock(TaskWorkflowEventRepository.class);
+        OrchestrationTraceService service = new OrchestrationTraceService(
+                publisher,
+                repository,
+                new ObjectMapper().findAndRegisterModules());
+        TaskNode triggerNode = TaskNode.builder()
+                .taskId(60L)
+                .nodeName("quality_check_final")
+                .agentType(AgentType.REVIEWER)
+                .planVersionId(10L)
+                .branchKey("root")
+                .build();
+        OrchestrationDecision decision = OrchestrationDecision.builder()
+                .decisionId("od-trace-invalid-llm")
+                .taskId(60L)
+                .decisionOrigin(OrchestrationDecisionOrigin.LLM_PRIMARY)
+                .triggerNodeName("quality_check_final")
+                .decisionType("REWRITE_ONLY")
+                .actionType("SUPPLEMENT_EVIDENCE")
+                .targetNode("rewrite_report")
+                .affectedScope("CURRENT_NODE_ONLY")
+                .sourceUrls(List.of("https://example.com/evidence"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build();
+        DecisionPolicyResult policyResult = new DecisionPolicyService(new OrchestrationDecisionActionMatrix())
+                .evaluate(decision, DecisionPolicyRuleSet.builder().build(), 0, "RUNNING", "SUCCESS");
+        DynamicPlanMutation mutation = new DecisionExecutorAdapter()
+                .toMutation(decision, policyResult, 10L, 2);
+
+        service.recordDecision(60L, triggerNode, decision, policyResult, mutation);
+
+        ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(publisher).publishOrchestrationEvent(
+                eq(60L),
+                eq("quality_check_final"),
+                eq(10L),
+                eq("root"),
+                eq(WorkflowEventType.ORCHESTRATION_DECISION_RECORDED),
+                payloadCaptor.capture(),
+                eq(List.of("https://example.com/evidence")));
+        OrchestrationDecision recordedDecision =
+                (OrchestrationDecision) payloadCaptor.getValue().get("decision");
+        DecisionPolicyResult recordedPolicyResult =
+                (DecisionPolicyResult) payloadCaptor.getValue().get("policyResult");
+        assertThat(recordedDecision.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.LLM_PRIMARY);
+        assertThat(recordedDecision.getDecisionType()).isEqualTo("REWRITE_ONLY");
+        assertThat(recordedDecision.getActionType()).isEqualTo("SUPPLEMENT_EVIDENCE");
+        assertThat(recordedPolicyResult.getDecisionContract()).isEqualTo("LLM_ACTION_MATRIX");
+        assertThat(recordedPolicyResult.isAllowed()).isFalse();
+        assertThat(recordedPolicyResult.getBlockedReasons())
+                .contains("INVALID_DECISION_ACTION_PAIR: REWRITE_ONLY 不允许搭配 SUPPLEMENT_EVIDENCE");
+        assertThat(mutation.getMutationType()).isEqualTo("NO_MUTATION");
+    }
+
+    @Test
     void shouldRecordDecisionAndCheckpointWithIncrementalDecisionCount() {
         WorkflowEventPublisher publisher = mock(WorkflowEventPublisher.class);
         TaskWorkflowEventRepository repository = mock(TaskWorkflowEventRepository.class);
@@ -43,10 +100,15 @@ class OrchestrationTraceServiceTest {
                 .triggerNodeName("quality_check_final")
                 .decisionType("APPEND_DYNAMIC_BRANCH")
                 .actionType("SUPPLEMENT_EVIDENCE")
+                .decisionOrigin(OrchestrationDecisionOrigin.RULE_FALLBACK)
+                .decisionMetadata(OrchestratorDecisionMetadata.builder()
+                        .modelName("deepseek-chat")
+                        .fallbackReason("LLM_TIMEOUT")
+                        .parseRetryCount(-1)
+                        .build())
                 .sourceUrls(List.of())
                 .evidenceState(EvidenceState.MISSING_SOURCE)
-                .build()
-                .normalized();
+                .build();
         DecisionPolicyResult policyResult = DecisionPolicyResult.builder()
                 .decisionId("od-001")
                 .allowed(true)
@@ -94,9 +156,16 @@ class OrchestrationTraceServiceTest {
                 eq(List.of()));
         assertThat(decisionPayloadCaptor.getValue())
                 .containsEntry("summary", "Orchestrator 已生成运行期编排决策")
-                .containsEntry("decision", decision)
-                .containsEntry("policyResult", policyResult)
                 .containsEntry("mutation", mutation);
+        OrchestrationDecision recordedDecision = (OrchestrationDecision) decisionPayloadCaptor.getValue().get("decision");
+        DecisionPolicyResult recordedPolicyResult =
+                (DecisionPolicyResult) decisionPayloadCaptor.getValue().get("policyResult");
+        assertThat(recordedDecision.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_FALLBACK);
+        assertThat(recordedDecision.getDecisionMetadata().isFallbackUsed()).isTrue();
+        assertThat(recordedDecision.getDecisionMetadata().getFallbackReason()).isEqualTo("LLM_TIMEOUT");
+        assertThat(recordedDecision.getDecisionMetadata().getParseRetryCount()).isZero();
+        assertThat(recordedPolicyResult.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_FALLBACK);
+        assertThat(recordedPolicyResult.getDecisionContract()).isEqualTo("LEGACY_RULE_SET");
 
         ArgumentCaptor<Map<String, Object>> checkpointPayloadCaptor = ArgumentCaptor.forClass(Map.class);
         verify(publisher).publishOrchestrationEvent(

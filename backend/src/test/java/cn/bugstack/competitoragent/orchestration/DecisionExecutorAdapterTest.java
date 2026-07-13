@@ -66,6 +66,69 @@ class DecisionExecutorAdapterTest {
         assertThat(mutation.getMutationType()).isEqualTo("NO_MUTATION");
         assertThat(mutation.getNodeTemplates()).isEmpty();
     }
+
+    @Test
+    void shouldReturnNoMutationForInvalidLlmPairBlockedByRealPolicy() {
+        OrchestrationDecision decision = OrchestrationDecision.builder()
+                .decisionId("od-invalid-llm-pair")
+                .decisionOrigin(OrchestrationDecisionOrigin.LLM_PRIMARY)
+                .triggerNodeName("quality_check_final")
+                .decisionType("REWRITE_ONLY")
+                .actionType("SUPPLEMENT_EVIDENCE")
+                .targetNode("rewrite_report")
+                .affectedScope("CURRENT_NODE_ONLY")
+                .sourceUrls(List.of("https://example.com/evidence"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build();
+        DecisionPolicyResult policyResult = new DecisionPolicyService(new OrchestrationDecisionActionMatrix())
+                .evaluate(decision, DecisionPolicyRuleSet.builder().build(), 0, "RUNNING", "SUCCESS");
+
+        DynamicPlanMutation mutation = adapter.toMutation(decision, policyResult, 8L, 2);
+
+        assertThat(policyResult.isAllowed()).isFalse();
+        assertThat(policyResult.getBlockedReasons())
+                .contains("INVALID_DECISION_ACTION_PAIR: REWRITE_ONLY 不允许搭配 SUPPLEMENT_EVIDENCE");
+        assertThat(mutation.getMutationType()).isEqualTo("NO_MUTATION");
+        assertThat(mutation.getNodeTemplates()).isEmpty();
+    }
+
+    @Test
+    void shouldTranslateValidLlmSupplementAndRewriteAfterMatrixPolicyValidation() {
+        DecisionPolicyService policyService = new DecisionPolicyService(new OrchestrationDecisionActionMatrix());
+        OrchestrationDecision supplementDecision = OrchestrationDecision.builder()
+                .decisionId("od-valid-llm-supplement")
+                .decisionOrigin(OrchestrationDecisionOrigin.LLM_PRIMARY)
+                .triggerNodeName("quality_check_final")
+                .decisionType("APPEND_DYNAMIC_BRANCH")
+                .actionType("SUPPLEMENT_EVIDENCE")
+                .targetNode("collect_sources")
+                .affectedScope("CURRENT_NODE_AND_DOWNSTREAM")
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build();
+        OrchestrationDecision rewriteDecision = OrchestrationDecision.builder()
+                .decisionId("od-valid-llm-rewrite")
+                .decisionOrigin(OrchestrationDecisionOrigin.LLM_PRIMARY)
+                .triggerNodeName("quality_check_final")
+                .decisionType("REWRITE_ONLY")
+                .actionType("REWRITE_CLAIM")
+                .targetNode("rewrite_report")
+                .affectedScope("CURRENT_NODE_ONLY")
+                .sourceUrls(List.of("https://example.com/evidence"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build();
+
+        DecisionPolicyResult supplementPolicy = policyService.evaluate(
+                supplementDecision, DecisionPolicyRuleSet.builder().build(), 0, "RUNNING", "SUCCESS");
+        DecisionPolicyResult rewritePolicy = policyService.evaluate(
+                rewriteDecision, DecisionPolicyRuleSet.builder().build(), 0, "RUNNING", "SUCCESS");
+
+        assertThat(adapter.toMutation(supplementDecision, supplementPolicy, 8L, 2).getDynamicAction())
+                .isEqualTo("CREATE_SUPPLEMENT_BRANCH");
+        assertThat(adapter.toMutation(rewriteDecision, rewritePolicy, 8L, 2).getDynamicAction())
+                .isEqualTo("CREATE_REWRITE_BRANCH");
+    }
+
     @Test
     void shouldWriteTavilyHintsIntoSupplementCollectorNodeConfig() {
         OrchestrationDecision decision = OrchestrationDecision.builder()

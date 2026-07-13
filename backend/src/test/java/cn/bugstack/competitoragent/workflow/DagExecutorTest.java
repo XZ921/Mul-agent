@@ -16,6 +16,7 @@ import cn.bugstack.competitoragent.model.enums.TaskNodeControlState;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
 import cn.bugstack.competitoragent.orchestration.DecisionExecutorAdapter;
 import cn.bugstack.competitoragent.orchestration.DecisionPolicyService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionActionMatrix;
 import cn.bugstack.competitoragent.orchestration.AnalyzerSuggestionAssembler;
 import cn.bugstack.competitoragent.orchestration.ExtractorSuggestionAssembler;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionAdapter;
@@ -1564,7 +1565,7 @@ class DagExecutorTest {
                         taskPlanRepository,
                         mapper,
                         new OrchestrationDecisionService(new OrchestrationDecisionAdapter()),
-                        new DecisionPolicyService(),
+                        new DecisionPolicyService(new OrchestrationDecisionActionMatrix()),
                         new DecisionExecutorAdapter(mapper),
                         mock(OrchestrationTraceService.class)),
                 mock(TaskQuotaCoordinator.class)
