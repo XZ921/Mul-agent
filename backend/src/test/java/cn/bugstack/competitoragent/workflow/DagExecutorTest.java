@@ -22,6 +22,7 @@ import cn.bugstack.competitoragent.orchestration.ExtractorSuggestionAssembler;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionAdapter;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
 import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
+import cn.bugstack.competitoragent.orchestration.RuleBasedOrchestratorDecisionBrain;
 import cn.bugstack.competitoragent.orchestration.WriterSuggestionAssembler;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskPlanRepository;
@@ -1564,7 +1565,9 @@ class DagExecutorTest {
                         dynamicTaskGraphService,
                         taskPlanRepository,
                         mapper,
-                        new OrchestrationDecisionService(new OrchestrationDecisionAdapter()),
+                        new OrchestrationDecisionService(
+                                new RuleBasedOrchestratorDecisionBrain(
+                                        new OrchestrationDecisionAdapter())),
                         new DecisionPolicyService(new OrchestrationDecisionActionMatrix()),
                         new DecisionExecutorAdapter(mapper),
                         mock(OrchestrationTraceService.class)),
@@ -2352,7 +2355,9 @@ class DagExecutorTest {
                 new ExtractorSuggestionAssembler(objectMapper),
                 new AnalyzerSuggestionAssembler(objectMapper),
                 new WriterSuggestionAssembler(objectMapper),
-                new OrchestrationDecisionService(new OrchestrationDecisionAdapter()),
+                new OrchestrationDecisionService(
+                        new RuleBasedOrchestratorDecisionBrain(
+                                new OrchestrationDecisionAdapter())),
                 orchestrationTraceService,
                 sharedNodeOutputProjectors
         );

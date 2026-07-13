@@ -23,6 +23,7 @@ import cn.bugstack.competitoragent.orchestration.ExtractorSuggestionAssembler;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionAdapter;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
 import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
+import cn.bugstack.competitoragent.orchestration.RuleBasedOrchestratorDecisionBrain;
 import cn.bugstack.competitoragent.orchestration.WriterSuggestionAssembler;
 import cn.bugstack.competitoragent.report.EvidenceQueryService;
 import cn.bugstack.competitoragent.report.ReportDiagnosisAssembler;
@@ -824,7 +825,9 @@ class StageOneDegradedContractIntegrationTest {
                 new ExtractorSuggestionAssembler(objectMapper),
                 new AnalyzerSuggestionAssembler(objectMapper),
                 new WriterSuggestionAssembler(objectMapper),
-                new OrchestrationDecisionService(new OrchestrationDecisionAdapter()),
+                new OrchestrationDecisionService(
+                        new RuleBasedOrchestratorDecisionBrain(
+                                new OrchestrationDecisionAdapter())),
                 mock(OrchestrationTraceService.class),
                 List.<SharedNodeOutputProjector>of()
         );

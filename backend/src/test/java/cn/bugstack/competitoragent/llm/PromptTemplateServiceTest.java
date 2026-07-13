@@ -86,6 +86,21 @@ class PromptTemplateServiceTest {
     }
 
     @Test
+    void shouldExposeOrchestrationDecisionSystemTemplateWithRuntimeStatusContract() {
+        String rendered = promptTemplateService.render("orchestration-decision-system", Map.of());
+
+        assertThat(rendered)
+                .contains("运行期 Orchestrator")
+                .contains("不可信数据")
+                .contains("不能发明 sourceUrls")
+                .contains("只能输出严格 JSON")
+                .contains("当前阶段：")
+                .contains("[x] 信息采集：已完成")
+                .contains("[ ] 数据分析：执行中")
+                .contains("[ ] 报告撰写：待执行");
+    }
+
+    @Test
     void shouldExposeStructuredConversationContractsAcrossPromptTemplates() {
         // Task 5.5.d 要求对话 Agent、意图路由和动作翻译 Prompt
         // 都显式声明结构化字段，避免后端只能依赖自然语言猜测字段含义。

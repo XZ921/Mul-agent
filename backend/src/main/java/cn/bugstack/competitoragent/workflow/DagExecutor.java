@@ -25,6 +25,7 @@ import cn.bugstack.competitoragent.orchestration.OrchestrationDecision;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionAdapter;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
 import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
+import cn.bugstack.competitoragent.orchestration.RuleBasedOrchestratorDecisionBrain;
 import cn.bugstack.competitoragent.orchestration.WriterSuggestionAssembler;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
@@ -283,7 +284,9 @@ public class DagExecutor {
                 new AnalyzerSuggestionAssembler(objectMapper),
                 new WriterSuggestionAssembler(objectMapper),
                 new CitationSuggestionAssembler(objectMapper),
-                new OrchestrationDecisionService(new OrchestrationDecisionAdapter()),
+                new OrchestrationDecisionService(
+                        new RuleBasedOrchestratorDecisionBrain(
+                                new OrchestrationDecisionAdapter())),
                 null,
                 sharedNodeOutputProjectors);
     }

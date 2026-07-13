@@ -3,15 +3,95 @@ package cn.bugstack.competitoragent.orchestration;
 import cn.bugstack.competitoragent.workflow.contract.QualityDiagnosis;
 import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 class OrchestrationDecisionServiceTest {
 
     private final OrchestrationDecisionService service =
-            new OrchestrationDecisionService(new OrchestrationDecisionAdapter());
+            new OrchestrationDecisionService(new RuleBasedOrchestratorDecisionBrain(
+                    new OrchestrationDecisionAdapter()));
+
+    @Test
+    void shouldNotInvokeRuleBrainWhenRawContextIsNull() {
+        RuleBasedOrchestratorDecisionBrain ruleBrain = mock(RuleBasedOrchestratorDecisionBrain.class);
+        OrchestrationDecisionService delegationService = new OrchestrationDecisionService(ruleBrain);
+
+        List<OrchestrationDecision> decisions = delegationService.decide(null);
+
+        assertThat(decisions).isEmpty();
+        verifyNoInteractions(ruleBrain);
+    }
+
+    @Test
+    void shouldNormalizeRawContextBeforeDelegatingToRuleBrain() {
+        RuleBasedOrchestratorDecisionBrain ruleBrain = mock(RuleBasedOrchestratorDecisionBrain.class);
+        OrchestrationDecisionService delegationService = new OrchestrationDecisionService(ruleBrain);
+        OrchestrationContext rawContext = OrchestrationContext.builder()
+                .taskId(49L)
+                .triggerNodeName("  quality_check_final  ")
+                .currentDecisionCount(-1)
+                .diagnoses(null)
+                .legacyRevisionDirectives(null)
+                .agentSuggestions(null)
+                .sourceUrls(List.of(" https://example.com/source ", "https://example.com/source"))
+                .build();
+        when(ruleBrain.decide(org.mockito.ArgumentMatchers.any(OrchestrationContext.class)))
+                .thenReturn(List.of());
+
+        delegationService.decide(rawContext);
+
+        ArgumentCaptor<OrchestrationContext> contextCaptor =
+                ArgumentCaptor.forClass(OrchestrationContext.class);
+        verify(ruleBrain).decide(contextCaptor.capture());
+        OrchestrationContext normalizedContext = contextCaptor.getValue();
+        assertThat(normalizedContext).isNotSameAs(rawContext);
+        assertThat(normalizedContext.getTriggerNodeName()).isEqualTo("quality_check_final");
+        assertThat(normalizedContext.getCurrentDecisionCount()).isZero();
+        assertThat(normalizedContext.getDiagnoses()).isEmpty();
+        assertThat(normalizedContext.getLegacyRevisionDirectives()).isEmpty();
+        assertThat(normalizedContext.getAgentSuggestions()).isEmpty();
+        assertThat(normalizedContext.getSourceUrls()).containsExactly("https://example.com/source");
+        assertThat(normalizedContext.getEvidenceState()).isEqualTo(EvidenceState.FULL_SOURCE);
+    }
+
+    @Test
+    void shouldReturnRuleBrainOutputWithoutRewritingDecisionFields() {
+        RuleBasedOrchestratorDecisionBrain ruleBrain = mock(RuleBasedOrchestratorDecisionBrain.class);
+        OrchestrationDecisionService delegationService = new OrchestrationDecisionService(ruleBrain);
+        OrchestrationDecision brainDecision = OrchestrationDecision.builder()
+                .decisionId("brain-output-1")
+                .taskId(48L)
+                .triggerNodeName("quality_check_final")
+                .decisionOrigin(OrchestrationDecisionOrigin.LEGACY_ADAPTER)
+                .decisionType("REWRITE_ONLY")
+                .actionType("REWRITE_SECTION")
+                .targetNode("rewrite_report")
+                .affectedScope("CURRENT_NODE_ONLY")
+                .reason("保留 Brain 原始输出")
+                .sourceUrls(List.of("https://example.com/source"))
+                .build();
+        List<OrchestrationDecision> brainOutput = List.of(brainDecision);
+        when(ruleBrain.decide(org.mockito.ArgumentMatchers.any(OrchestrationContext.class)))
+                .thenReturn(brainOutput);
+
+        List<OrchestrationDecision> actual = delegationService.decide(OrchestrationContext.builder()
+                .taskId(48L)
+                .triggerNodeName("quality_check_final")
+                .build());
+
+        assertThat(actual).isSameAs(brainOutput);
+        assertThat(actual.get(0)).isSameAs(brainDecision);
+        assertThat(actual.get(0).getDecisionOrigin())
+                .isEqualTo(OrchestrationDecisionOrigin.LEGACY_ADAPTER);
+    }
 
     @Test
     void shouldGenerateSupplementDecisionForFinalReviewEvidenceGap() {
@@ -431,5 +511,245 @@ class OrchestrationDecisionServiceTest {
         assertThat(decisions.get(0).getDecisionType()).isEqualTo("APPEND_DYNAMIC_BRANCH");
         assertThat(decisions.get(0).getActionType()).isEqualTo("SUPPLEMENT_EVIDENCE");
         assertThat(decisions.get(0).getTargetNode()).isEqualTo("collect_sources");
+    }
+
+    @Test
+    void shouldReturnEmptyFromServiceWhenRawContextIsNull() {
+        assertThat(service.decide(null)).isEmpty();
+    }
+
+    @Test
+    void shouldReturnRuleOnlyNoActionForUnknownTrigger() {
+        OrchestrationContext context = OrchestrationContext.builder()
+                .taskId(60L)
+                .triggerNodeName("quality_check_draft")
+                .sourceUrls(List.of("https://example.com/draft"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build();
+
+        List<OrchestrationDecision> decisions = service.decide(context);
+
+        assertThat(decisions).hasSize(1);
+        OrchestrationDecision decision = decisions.get(0);
+        assertThat(decision.getDecisionId()).isEqualTo("od-60-quality_check_draft-noop");
+        assertThat(decision.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_ONLY);
+        assertThat(decision.getDecisionType()).isEqualTo("NO_ACTION");
+        assertThat(decision.getActionType()).isEqualTo("NO_ACTION");
+        assertThat(decision.getTargetNode()).isEqualTo("quality_check_draft");
+        assertThat(decision.getAffectedScope()).isEqualTo("CURRENT_NODE_ONLY");
+        assertThat(decision.getReason())
+                .isEqualTo("P1/P2/P3 当前仅处理 extract_schema、analyze_competitors、write_report/rewrite_report、citation_check 和 quality_check_final 反馈。");
+        assertThat(decision.getSourceUrls()).containsExactly("https://example.com/draft");
+    }
+
+    @Test
+    void shouldPreserveLegacyDirectiveOrderIdsAndLegacyOrigin() {
+        OrchestrationContext context = OrchestrationContext.builder()
+                .taskId(61L)
+                .triggerNodeName("quality_check_final")
+                .passed(false)
+                .legacyRevisionDirectives(List.of(
+                        RevisionDirective.builder()
+                                .category("EVIDENCE_GAP")
+                                .actionType("SUPPLEMENT_EVIDENCE")
+                                .targetSection("pricing")
+                                .summary("补充定价证据")
+                                .sourceUrls(List.of("https://example.com/pricing"))
+                                .build(),
+                        RevisionDirective.builder()
+                                .category("EXPRESSION_ISSUE")
+                                .actionType("REWRITE_SECTION")
+                                .targetSection("conclusion")
+                                .summary("改写结论")
+                                .sourceUrls(List.of("https://example.com/conclusion"))
+                                .build()))
+                .sourceUrls(List.of("https://example.com/pricing", "https://example.com/conclusion"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build();
+
+        List<OrchestrationDecision> decisions = service.decide(context);
+
+        assertThat(decisions).hasSize(2);
+        assertThat(decisions)
+                .extracting(OrchestrationDecision::getDecisionId)
+                .containsExactly(
+                        "od-61-quality_check_final-1",
+                        "od-61-quality_check_final-2");
+        assertThat(decisions)
+                .extracting(OrchestrationDecision::getActionType)
+                .containsExactly("SUPPLEMENT_EVIDENCE", "REWRITE_SECTION");
+        assertThat(decisions)
+                .extracting(OrchestrationDecision::getDecisionOrigin)
+                .containsOnly(OrchestrationDecisionOrigin.LEGACY_ADAPTER);
+    }
+
+    @Test
+    void shouldPrioritizeBlockingExtractorSuggestionOverExecutableGap() {
+        AgentSuggestion executableGap = AgentSuggestion.builder()
+                .suggestionId("as-task-62-extract_schema-1")
+                .suggestionType("EVIDENCE_GAP")
+                .summary("存在可补证字段")
+                .severity("HIGH")
+                .sourceUrls(List.of("https://example.com/evidence"))
+                .suggestedTargetNode("collect_sources")
+                .build();
+        AgentSuggestion blockingSuggestion = AgentSuggestion.builder()
+                .suggestionId("as-task-62-extract_schema-2")
+                .suggestionType("SCHEMA_CONFLICT")
+                .summary("字段结构冲突")
+                .severity("ERROR")
+                .sourceUrls(List.of("https://example.com/schema"))
+                .suggestedTargetNode("extract_schema")
+                .build();
+
+        List<OrchestrationDecision> decisions = service.decide(OrchestrationContext.builder()
+                .taskId(62L)
+                .triggerNodeName("extract_schema")
+                .agentSuggestions(List.of(executableGap, blockingSuggestion))
+                .sourceUrls(List.of("https://example.com/evidence", "https://example.com/schema"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build());
+
+        assertThat(decisions).hasSize(1);
+        assertThat(decisions.get(0).getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(decisions.get(0).getReason()).contains("字段结构冲突");
+    }
+
+    @Test
+    void shouldPrioritizeMissingSourceGapAcrossSuggestionList() {
+        AgentSuggestion sourceBackedGap = AgentSuggestion.builder()
+                .suggestionId("as-task-63-analyze_competitors-1")
+                .suggestionType("ANALYSIS_GAP")
+                .summary("有来源的分析缺口")
+                .severity("HIGH")
+                .sourceUrls(List.of("https://example.com/analysis"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .suggestedTargetNode("collect_sources")
+                .build();
+        AgentSuggestion missingSourceGap = AgentSuggestion.builder()
+                .suggestionId("as-task-63-analyze_competitors-2")
+                .suggestionType("ANALYSIS_GAP")
+                .summary("无来源的分析缺口")
+                .severity("HIGH")
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .suggestedTargetNode("collect_sources")
+                .build();
+
+        List<OrchestrationDecision> decisions = service.decide(OrchestrationContext.builder()
+                .taskId(63L)
+                .triggerNodeName("analyze_competitors")
+                .agentSuggestions(List.of(sourceBackedGap, missingSourceGap))
+                .sourceUrls(List.of("https://example.com/analysis"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .build());
+
+        assertThat(decisions).hasSize(1);
+        assertThat(decisions.get(0).getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(decisions.get(0).getReason()).contains("缺少 sourceUrls");
+    }
+
+    @Test
+    void shouldSupportWriterAndCitationRevisionTriggerAliases() {
+        AgentSuggestion writerSuggestion = AgentSuggestion.builder()
+                .suggestionId("as-task-64-rewrite_report-1")
+                .suggestionType("CITATION_GAP")
+                .targetSection("pricing")
+                .summary("改写定价引用")
+                .severity("HIGH")
+                .sourceUrls(List.of("https://example.com/pricing"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .suggestedTargetNode("rewrite_report")
+                .build();
+        AgentSuggestion citationSuggestion = AgentSuggestion.builder()
+                .suggestionId("as-task-65-citation_check_revision-1")
+                .suggestionType("CITATION_VERIFICATION_GAP")
+                .targetSection("conclusion")
+                .summary("修订结论引用")
+                .severity("HIGH")
+                .sourceUrls(List.of("https://example.com/conclusion"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .suggestedTargetNode("rewrite_report")
+                .build();
+
+        OrchestrationDecision writerDecision = service.decide(OrchestrationContext.builder()
+                .taskId(64L)
+                .triggerNodeName("rewrite_report")
+                .agentSuggestions(List.of(writerSuggestion))
+                .sourceUrls(writerSuggestion.getSourceUrls())
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .build()).get(0);
+        OrchestrationDecision citationDecision = service.decide(OrchestrationContext.builder()
+                .taskId(65L)
+                .triggerNodeName("citation_check_revision")
+                .agentSuggestions(List.of(citationSuggestion))
+                .sourceUrls(citationSuggestion.getSourceUrls())
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .build()).get(0);
+
+        assertThat(writerDecision.getActionType()).isEqualTo("REWRITE_SECTION");
+        assertThat(citationDecision.getActionType()).isEqualTo("REWRITE_CLAIM");
+    }
+
+    @Test
+    void shouldKeepPassedReviewAheadOfHumanFlagForParity() {
+        OrchestrationDecision decision = service.decide(OrchestrationContext.builder()
+                .taskId(66L)
+                .triggerNodeName("quality_check_final")
+                .passed(true)
+                .requiresHumanIntervention(true)
+                .sourceUrls(List.of("https://example.com/review"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build()).get(0);
+
+        assertThat(decision.getDecisionType()).isEqualTo("NO_ACTION");
+        assertThat(decision.getActionType()).isEqualTo("NO_ACTION");
+        assertThat(decision.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_ONLY);
+    }
+
+    @Test
+    void shouldPreserveCompleteDecisionAuditShape() {
+        AgentSuggestion suggestion = AgentSuggestion.builder()
+                .suggestionId("as-task-67-analyze_competitors-1")
+                .taskId(67L)
+                .producerNodeName("analyze_competitors")
+                .producerAgentType("ANALYZER")
+                .suggestionType("ANALYSIS_GAP")
+                .targetSection("pricing")
+                .summary("补充定价对比证据")
+                .severity("HIGH")
+                .confidence(0.42d)
+                .suggestedQueries(List.of("pricing comparison official"))
+                .sourceUrls(List.of("https://example.com/pricing"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .suggestedTargetNode("collect_sources")
+                .build();
+        OrchestrationContext context = OrchestrationContext.builder()
+                .taskId(67L)
+                .triggerNodeName("analyze_competitors")
+                .agentSuggestions(List.of(suggestion))
+                .sourceUrls(List.of("https://example.com/pricing"))
+                .evidenceState(EvidenceState.PARTIAL_SOURCE)
+                .build();
+
+        OrchestrationDecision decision = service.decide(context).get(0);
+
+        assertThat(decision.getDecisionId()).isEqualTo("od-67-analyze_competitors-suggestion-1");
+        assertThat(decision.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_ONLY);
+        assertThat(decision.getDecisionType()).isEqualTo("APPEND_DYNAMIC_BRANCH");
+        assertThat(decision.getActionType()).isEqualTo("SUPPLEMENT_EVIDENCE");
+        assertThat(decision.getTargetNode()).isEqualTo("collect_sources");
+        assertThat(decision.getAffectedScope()).isEqualTo("CURRENT_NODE_AND_DOWNSTREAM");
+        assertThat(decision.getPriority()).isEqualTo("HIGH");
+        assertThat(decision.getTargetSection()).isEqualTo("pricing");
+        assertThat(decision.getReason()).isEqualTo("补充定价对比证据");
+        assertThat(decision.getConfidence()).isEqualTo(0.42d);
+        assertThat(decision.getSuggestedQueries()).containsExactly("pricing comparison official");
+        assertThat(decision.getInputRefs())
+                .containsEntry("qualityDiagnosisIds", List.of())
+                .containsEntry("agentSuggestionIds", List.of("as-task-67-analyze_competitors-1"))
+                .containsEntry("triggerNodeName", "analyze_competitors");
+        assertThat(decision.getSourceUrls()).containsExactly("https://example.com/pricing");
+        assertThat(decision.getEvidenceState()).isEqualTo(EvidenceState.PARTIAL_SOURCE);
     }
 }

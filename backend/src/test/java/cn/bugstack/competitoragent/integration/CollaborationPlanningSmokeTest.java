@@ -33,6 +33,7 @@ import cn.bugstack.competitoragent.orchestration.OrchestrationDecision;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionAdapter;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
 import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
+import cn.bugstack.competitoragent.orchestration.RuleBasedOrchestratorDecisionBrain;
 import cn.bugstack.competitoragent.orchestration.WriterSuggestionAssembler;
 import cn.bugstack.competitoragent.repository.AgentExecutionLogRepository;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
@@ -179,7 +180,8 @@ class CollaborationPlanningSmokeTest {
         assertThat(suggestions).hasSize(1);
         assertThat(suggestions.get(0).getEvidenceState()).isEqualTo(EvidenceState.MISSING_SOURCE);
 
-        List<OrchestrationDecision> decisions = new OrchestrationDecisionService(new OrchestrationDecisionAdapter())
+        List<OrchestrationDecision> decisions = new OrchestrationDecisionService(
+                new RuleBasedOrchestratorDecisionBrain(new OrchestrationDecisionAdapter()))
                 .decide(OrchestrationContext.builder()
                         .taskId(88L)
                         .triggerNodeName("extract_schema")
@@ -196,7 +198,9 @@ class CollaborationPlanningSmokeTest {
     void shouldRouteAnalyzerGapSuggestionToOrchestratorDecision() {
         ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
         OrchestrationDecisionService orchestrationDecisionService =
-                new OrchestrationDecisionService(new OrchestrationDecisionAdapter());
+                new OrchestrationDecisionService(
+                        new RuleBasedOrchestratorDecisionBrain(
+                                new OrchestrationDecisionAdapter()));
         AnalyzerSuggestionAssembler assembler = new AnalyzerSuggestionAssembler(objectMapper);
 
         List<AgentSuggestion> suggestions = assembler.fromAnalyzerOutput(99L, "analyze_competitors", """
@@ -294,7 +298,9 @@ class CollaborationPlanningSmokeTest {
         ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
         WriterSuggestionAssembler assembler = new WriterSuggestionAssembler(objectMapper);
         OrchestrationDecisionService orchestrationDecisionService =
-                new OrchestrationDecisionService(new OrchestrationDecisionAdapter());
+                new OrchestrationDecisionService(
+                        new RuleBasedOrchestratorDecisionBrain(
+                                new OrchestrationDecisionAdapter()));
 
         List<AgentSuggestion> suggestions = assembler.fromWriterOutput(99L, "write_report", """
                 {
@@ -567,7 +573,9 @@ class CollaborationPlanningSmokeTest {
                 new ExtractorSuggestionAssembler(objectMapper),
                 new AnalyzerSuggestionAssembler(objectMapper),
                 new WriterSuggestionAssembler(objectMapper),
-                new OrchestrationDecisionService(new OrchestrationDecisionAdapter()),
+                new OrchestrationDecisionService(
+                        new RuleBasedOrchestratorDecisionBrain(
+                                new OrchestrationDecisionAdapter())),
                 mock(OrchestrationTraceService.class),
                 List.of());
     }
