@@ -1,0 +1,1337 @@
+{
+    "competitorName":  "抖音",
+    "sourceType":  "OFFICIAL",
+    "sourceFamilyKey":  "official",
+    "sourceFamilyRole":  "PRIMARY_VERTICAL",
+    "primaryTools":  [
+                         "PUBLIC_SEARCH"
+                     ],
+    "auxiliaryTools":  [
+                           "WEB_SCRAPER",
+                           "JINA_READER"
+                       ],
+    "queryTemplates":  [
+                           "search-official",
+                           "search-official-domain",
+                           "search-pricing-primary",
+                           "search-docs-primary"
+                       ],
+    "sourceScope":  [
+                        "官网",
+                        "产品文档",
+                        "公开测评"
+                    ],
+    "schemaName":  null,
+    "coverageContractRef":  "coverage-risk_analysis-v1",
+    "requiredCoverageFields":  [
+                                   "summary",
+                                   "positioning",
+                                   "targetUsers",
+                                   "coreFeatures"
+                               ],
+    "blockingCoverageFields":  [
+                                   "summary",
+                                   "positioning",
+                                   "targetUsers",
+                                   "coreFeatures"
+                               ],
+    "coverageQueryIntents":  [
+                                 "OFFICIAL_DOCS",
+                                 "API_DOCS",
+                                 "SDK_GUIDE",
+                                 "THIRD_PARTY_REVIEW",
+                                 "POLICY",
+                                 "RISK"
+                             ],
+    "dimensionEvidencePlan":  {
+                                  "competitorName":  "抖音",
+                                  "contractVersion":  "coverage-risk_analysis-v1",
+                                  "maxCollectionRounds":  2,
+                                  "fieldCoverages":  [
+                                                         {
+                                                             "fieldName":  "summary",
+                                                             "status":  "NOT_STARTED",
+                                                             "minimumAttemptedPaths":  2,
+                                                             "minDistinctEvidenceCount":  2,
+                                                             "criticalForFirstReport":  true,
+                                                             "evidencePaths":  [
+                                                                                   {
+                                                                                       "pathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                       "sourceTypes":  [
+                                                                                                           "OFFICIAL",
+                                                                                                           "DOCS"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "OFFICIAL_DOCS",
+                                                                                                            "API_DOCS",
+                                                                                                            "SDK_GUIDE"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "FEATURE_BLOCK",
+                                                                                                               "PROFILE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  true,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "EVIDENCE_NOT_COVERING"
+                                                                                   },
+                                                                                   {
+                                                                                       "pathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                       "sourceTypes":  [
+                                                                                                           "REVIEW",
+                                                                                                           "NEWS",
+                                                                                                           "OPEN_WEB"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "THIRD_PARTY_REVIEW"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "FEATURE_BLOCK",
+                                                                                                               "PROFILE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  false,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "OPTIONAL_MISSING"
+                                                                                   }
+                                                                               ],
+                                                             "attemptedPaths":  [
+
+                                                                                ],
+                                                             "completedPaths":  [
+
+                                                                                ],
+                                                             "sourceUrls":  [
+
+                                                                            ],
+                                                             "plannedQueries":  [
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "抖音 产品概述 OFFICIAL DOCS 功能 能力 特性 官方资料 官网",
+                                                                                        "reason":  "根据字段 summary 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 OFFICIAL_DOCS 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "9738ef7ad1fa20c7d50330566d90d9c3",
+                                                                                        "priority":  0,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "抖音 产品概述 API 文档 接口 文档 能力 官方资料 官网",
+                                                                                        "reason":  "根据字段 summary 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 API_DOCS 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "4f892b8b03a26d83613014e17c4985a3",
+                                                                                        "priority":  1,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "抖音 产品概述 SDK 接入指南 接入指南 示例 官方资料 官网",
+                                                                                        "reason":  "根据字段 summary 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 SDK_GUIDE 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "d1f3efb16b0913e1bfdfc6feae9f218e",
+                                                                                        "priority":  2,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "抖音 产品概述 OFFICIAL DOCS 功能 能力 特性 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 summary 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 OFFICIAL_DOCS 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "06b3d40eadc81f95b91228de9205cfd0",
+                                                                                        "priority":  3,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "抖音 产品概述 API 文档 接口 文档 能力 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 summary 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 API_DOCS 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "de48264cabda6dad5b038f5f06b4885c",
+                                                                                        "priority":  4,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "抖音 产品概述 SDK 接入指南 接入指南 示例 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 summary 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 SDK_GUIDE 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "38a1a7b4ff95b62de20a4941bbedc8b7",
+                                                                                        "priority":  5,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "OPEN_WEB",
+                                                                                        "query":  "抖音 产品概述 功能 能力 评测 实测 对比 教程 用户反馈 解读 行业分析",
+                                                                                        "reason":  "为字段 summary（产品概述）补充第三方视角，避免官方来源成为排他门槛，路径 OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryFingerprint":  "afd8c59cc53d414ece8b5d9f2e155986",
+                                                                                        "priority":  6,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "抖音 产品概述 第三方评测 功能 能力 评测 实测 对比",
+                                                                                        "reason":  "根据字段 summary 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "3b16add4bbbadbcac27524a1a76d9cae",
+                                                                                        "priority":  7,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "抖音 产品概述 第三方评测 功能 能力 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 summary 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "47651933064a22497338d703492cc1f9",
+                                                                                        "priority":  8,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    }
+                                                                                ],
+                                                             "lastRepairState":  null,
+                                                             "recommendedNextAction":  "EXECUTE_FIELD_EVIDENCE_QUERIES"
+                                                         },
+                                                         {
+                                                             "fieldName":  "positioning",
+                                                             "status":  "NOT_STARTED",
+                                                             "minimumAttemptedPaths":  2,
+                                                             "minDistinctEvidenceCount":  2,
+                                                             "criticalForFirstReport":  true,
+                                                             "evidencePaths":  [
+                                                                                   {
+                                                                                       "pathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                       "sourceTypes":  [
+                                                                                                           "OFFICIAL",
+                                                                                                           "DOCS"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "OFFICIAL_DOCS",
+                                                                                                            "API_DOCS",
+                                                                                                            "SDK_GUIDE"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "FEATURE_BLOCK",
+                                                                                                               "PROFILE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  true,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "EVIDENCE_NOT_COVERING"
+                                                                                   },
+                                                                                   {
+                                                                                       "pathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                       "sourceTypes":  [
+                                                                                                           "REVIEW",
+                                                                                                           "NEWS",
+                                                                                                           "OPEN_WEB"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "THIRD_PARTY_REVIEW"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "FEATURE_BLOCK",
+                                                                                                               "PROFILE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  false,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "OPTIONAL_MISSING"
+                                                                                   }
+                                                                               ],
+                                                             "attemptedPaths":  [
+
+                                                                                ],
+                                                             "completedPaths":  [
+
+                                                                                ],
+                                                             "sourceUrls":  [
+
+                                                                            ],
+                                                             "plannedQueries":  [
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "抖音 市场定位 OFFICIAL DOCS 功能 能力 特性 官方资料 官网",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 OFFICIAL_DOCS 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "8cefbd9f3ffffe40d6f04f496e50dc1e",
+                                                                                        "priority":  0,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "抖音 市场定位 API 文档 接口 文档 能力 官方资料 官网",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 API_DOCS 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "6d70b5b832f422dbd2c9a6044d15f5dc",
+                                                                                        "priority":  1,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "抖音 市场定位 SDK 接入指南 接入指南 示例 官方资料 官网",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 SDK_GUIDE 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "32775c8b5253e4905dd1ce67abe6be72",
+                                                                                        "priority":  2,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "抖音 市场定位 OFFICIAL DOCS 功能 能力 特性 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 OFFICIAL_DOCS 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "0e5c43178620c45bdbfc532d7fcd9a4d",
+                                                                                        "priority":  3,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "抖音 市场定位 API 文档 接口 文档 能力 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 API_DOCS 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "cbdb4ff16a7b821f2dcefd68b47763a9",
+                                                                                        "priority":  4,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "抖音 市场定位 SDK 接入指南 接入指南 示例 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 SDK_GUIDE 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "616a4be6398bf25bd648f393d5ffb80d",
+                                                                                        "priority":  5,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "OPEN_WEB",
+                                                                                        "query":  "抖音 市场定位 功能 能力 评测 实测 对比 教程 用户反馈 解读 行业分析",
+                                                                                        "reason":  "为字段 positioning（市场定位）补充第三方视角，避免官方来源成为排他门槛，路径 OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryFingerprint":  "1f6eaa7d8082a1af204af946de84ce20",
+                                                                                        "priority":  6,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "抖音 市场定位 第三方评测 功能 能力 评测 实测 对比",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "b5172ea30fc7236d63df0947413922b3",
+                                                                                        "priority":  7,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "抖音 市场定位 第三方评测 功能 能力 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "b0349192d7d75654c3d81285bfcf5568",
+                                                                                        "priority":  8,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    }
+                                                                                ],
+                                                             "lastRepairState":  null,
+                                                             "recommendedNextAction":  "EXECUTE_FIELD_EVIDENCE_QUERIES"
+                                                         },
+                                                         {
+                                                             "fieldName":  "targetUsers",
+                                                             "status":  "NOT_STARTED",
+                                                             "minimumAttemptedPaths":  2,
+                                                             "minDistinctEvidenceCount":  2,
+                                                             "criticalForFirstReport":  true,
+                                                             "evidencePaths":  [
+                                                                                   {
+                                                                                       "pathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                       "sourceTypes":  [
+                                                                                                           "OFFICIAL",
+                                                                                                           "DOCS"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "OFFICIAL_DOCS",
+                                                                                                            "API_DOCS",
+                                                                                                            "SDK_GUIDE"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "FEATURE_BLOCK",
+                                                                                                               "PROFILE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  true,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "EVIDENCE_NOT_COVERING"
+                                                                                   },
+                                                                                   {
+                                                                                       "pathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                       "sourceTypes":  [
+                                                                                                           "REVIEW",
+                                                                                                           "NEWS",
+                                                                                                           "OPEN_WEB"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "THIRD_PARTY_REVIEW"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "FEATURE_BLOCK",
+                                                                                                               "PROFILE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  false,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "OPTIONAL_MISSING"
+                                                                                   }
+                                                                               ],
+                                                             "attemptedPaths":  [
+
+                                                                                ],
+                                                             "completedPaths":  [
+
+                                                                                ],
+                                                             "sourceUrls":  [
+
+                                                                            ],
+                                                             "plannedQueries":  [
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "抖音 目标用户 OFFICIAL DOCS 功能 能力 特性 官方资料 官网",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 OFFICIAL_DOCS 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "26d6f81373d51904356a4c09c474c13b",
+                                                                                        "priority":  0,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "抖音 目标用户 API 文档 接口 文档 能力 官方资料 官网",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 API_DOCS 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "b5eada742980bd740f325ec11cd4c899",
+                                                                                        "priority":  1,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "抖音 目标用户 SDK 接入指南 接入指南 示例 官方资料 官网",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 SDK_GUIDE 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "7f6ebdc3ce3666433d697ee698e5cf6b",
+                                                                                        "priority":  2,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "抖音 目标用户 OFFICIAL DOCS 功能 能力 特性 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 OFFICIAL_DOCS 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "37420b4f2451c5f1185f7f454d70a1ad",
+                                                                                        "priority":  3,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "抖音 目标用户 API 文档 接口 文档 能力 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 API_DOCS 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "e52bfba81080731c73eda8892fda20c0",
+                                                                                        "priority":  4,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "抖音 目标用户 SDK 接入指南 接入指南 示例 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 SDK_GUIDE 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "8936dd10b5cb665b831f3116622add11",
+                                                                                        "priority":  5,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "OPEN_WEB",
+                                                                                        "query":  "抖音 目标用户 功能 能力 评测 实测 对比 教程 用户反馈 解读 行业分析",
+                                                                                        "reason":  "为字段 targetUsers（目标用户）补充第三方视角，避免官方来源成为排他门槛，路径 OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryFingerprint":  "c000bbebbb32149163c55e58594b7585",
+                                                                                        "priority":  6,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "抖音 目标用户 第三方评测 功能 能力 评测 实测 对比",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "f6464e5e7f3ad9c7fce964c3092e7b37",
+                                                                                        "priority":  7,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "抖音 目标用户 第三方评测 功能 能力 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "52d9ae5a0591e61642e203c3911b19ef",
+                                                                                        "priority":  8,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    }
+                                                                                ],
+                                                             "lastRepairState":  null,
+                                                             "recommendedNextAction":  "EXECUTE_FIELD_EVIDENCE_QUERIES"
+                                                         },
+                                                         {
+                                                             "fieldName":  "coreFeatures",
+                                                             "status":  "NOT_STARTED",
+                                                             "minimumAttemptedPaths":  2,
+                                                             "minDistinctEvidenceCount":  2,
+                                                             "criticalForFirstReport":  true,
+                                                             "evidencePaths":  [
+                                                                                   {
+                                                                                       "pathKey":  "DOCS_API_GUIDE",
+                                                                                       "sourceTypes":  [
+                                                                                                           "DOCS",
+                                                                                                           "OFFICIAL"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "API_DOCS",
+                                                                                                            "SDK_GUIDE"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "DEVELOPER_DOCS_BLOCK",
+                                                                                                               "FEATURE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  true,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "EVIDENCE_NOT_COVERING"
+                                                                                   },
+                                                                                   {
+                                                                                       "pathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                       "sourceTypes":  [
+                                                                                                           "REVIEW",
+                                                                                                           "NEWS",
+                                                                                                           "OPEN_WEB"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "THIRD_PARTY_REVIEW"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "FEATURE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  false,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "OPTIONAL_MISSING"
+                                                                                   }
+                                                                               ],
+                                                             "attemptedPaths":  [
+
+                                                                                ],
+                                                             "completedPaths":  [
+
+                                                                                ],
+                                                             "sourceUrls":  [
+
+                                                                            ],
+                                                             "plannedQueries":  [
+                                                                                    {
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "evidencePathKey":  "DOCS_API_GUIDE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "抖音 开放平台 核心功能 API 文档 接口 文档 能力 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 coreFeatures 语义、路径 DOCS_API_GUIDE、意图 API_DOCS 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "4c2eb1b09ef7e14395c49680a277a91c",
+                                                                                        "priority":  0,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "evidencePathKey":  "DOCS_API_GUIDE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "抖音 开放平台 核心功能 SDK 接入指南 接入指南 示例 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 coreFeatures 语义、路径 DOCS_API_GUIDE、意图 SDK_GUIDE 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "81e99ce46181371c6661089e3b8b4af6",
+                                                                                        "priority":  1,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "evidencePathKey":  "DOCS_API_GUIDE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "抖音 开放平台 核心功能 API 文档 接口 文档 能力 官方资料 官网",
+                                                                                        "reason":  "根据字段 coreFeatures 语义、路径 DOCS_API_GUIDE、意图 API_DOCS 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "9fbbad92592c2fe142ddee78065035cb",
+                                                                                        "priority":  2,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "evidencePathKey":  "DOCS_API_GUIDE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "抖音 开放平台 核心功能 SDK 接入指南 接入指南 示例 官方资料 官网",
+                                                                                        "reason":  "根据字段 coreFeatures 语义、路径 DOCS_API_GUIDE、意图 SDK_GUIDE 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "078447e7e617617ef161d6912d91180d",
+                                                                                        "priority":  3,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.douyin.com",
+                                                                                                               "douyin.com",
+                                                                                                               "open.douyin.com",
+                                                                                                               "docs.open-douyin.com",
+                                                                                                               "creator.douyin.com",
+                                                                                                               "oceanengine.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "evidencePathKey":  "DOCS_API_GUIDE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "OPEN_WEB",
+                                                                                        "query":  "抖音 开放平台 核心功能 开发者文档 API 评测 实测 对比 教程 用户反馈 解读 行业分析",
+                                                                                        "reason":  "为字段 coreFeatures（开放平台 核心功能）补充第三方视角，避免官方来源成为排他门槛，路径 DOCS_API_GUIDE",
+                                                                                        "queryFingerprint":  "3f3c0edcdd487aa82592a1c21de6e367",
+                                                                                        "priority":  4,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "抖音 开放平台 核心功能 第三方评测 功能 能力 评测 实测 对比",
+                                                                                        "reason":  "根据字段 coreFeatures 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "610f860a900ee1b605bce92c32f643e0",
+                                                                                        "priority":  5,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "抖音 开放平台 核心功能 第三方评测 功能 能力 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 coreFeatures 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "d02e7c4d0dcbe3f21f25ae50a2b91113",
+                                                                                        "priority":  6,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    }
+                                                                                ],
+                                                             "lastRepairState":  null,
+                                                             "recommendedNextAction":  "EXECUTE_FIELD_EVIDENCE_QUERIES"
+                                                         },
+                                                         {
+                                                             "fieldName":  "weaknesses",
+                                                             "status":  "NOT_STARTED",
+                                                             "minimumAttemptedPaths":  0,
+                                                             "minDistinctEvidenceCount":  0,
+                                                             "criticalForFirstReport":  false,
+                                                             "evidencePaths":  [
+                                                                                   {
+                                                                                       "pathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                       "sourceTypes":  [
+                                                                                                           "TERMS",
+                                                                                                           "POLICY",
+                                                                                                           "REVIEW",
+                                                                                                           "NEWS",
+                                                                                                           "OPEN_WEB"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "POLICY"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "LIMITATION_OR_POLICY_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  true,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "EVIDENCE_NOT_COVERING"
+                                                                                   },
+                                                                                   {
+                                                                                       "pathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                       "sourceTypes":  [
+                                                                                                           "REVIEW",
+                                                                                                           "NEWS"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "THIRD_PARTY_REVIEW",
+                                                                                                            "RISK"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "PUBLIC_RISK_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  true,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "EVIDENCE_NOT_COVERING"
+                                                                                   }
+                                                                               ],
+                                                             "attemptedPaths":  [
+
+                                                                                ],
+                                                             "completedPaths":  [
+
+                                                                                ],
+                                                             "sourceUrls":  [
+
+                                                                            ],
+                                                             "plannedQueries":  [
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                        "queryIntent":  "POLICY",
+                                                                                        "sourceType":  "TERMS",
+                                                                                        "query":  "抖音 短板 风险 规则 风险 限制 条款 协议 服务协议 条款",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 TERMS_OR_SERVICE_AGREEMENT、意图 POLICY 和来源类型 TERMS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "ff5b579cd7afa7020c983dd4672a0b80",
+                                                                                        "priority":  0,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                        "queryIntent":  "POLICY",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "抖音 短板 风险 规则 风险 限制 条款 评测 实测 对比",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 TERMS_OR_SERVICE_AGREEMENT、意图 POLICY 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "f6f873fc08f209286b9098ed4cd34a48",
+                                                                                        "priority":  1,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                        "queryIntent":  "TERMS_BILLING",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "抖音 短板 风险 服务协议 条款 协议 条款 规则 评测 实测 对比",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 TERMS_OR_SERVICE_AGREEMENT、意图 TERMS_BILLING 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "148fbb90632cd8516cd514072d33bab7",
+                                                                                        "priority":  2,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                        "queryIntent":  "POLICY",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "抖音 短板 风险 规则 风险 限制 条款 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 TERMS_OR_SERVICE_AGREEMENT、意图 POLICY 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "10323a35d6ba80286d7064454fa817f3",
+                                                                                        "priority":  3,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                        "queryIntent":  "TERMS_BILLING",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "抖音 短板 风险 服务协议 条款 协议 条款 规则 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 TERMS_OR_SERVICE_AGREEMENT、意图 TERMS_BILLING 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "3d42c8f7e2ee773f1144d0e6eed42dc4",
+                                                                                        "priority":  4,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                        "queryIntent":  "POLICY",
+                                                                                        "sourceType":  "OPEN_WEB",
+                                                                                        "query":  "抖音 短板 风险 规则 风险 限制 条款 教程 用户反馈 经验分享",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 TERMS_OR_SERVICE_AGREEMENT、意图 POLICY 和来源类型 OPEN_WEB 组合生成检索视角",
+                                                                                        "queryFingerprint":  "7fe029facb97b95b6452d550b9a1ac09",
+                                                                                        "priority":  5,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                        "queryIntent":  "TERMS_BILLING",
+                                                                                        "sourceType":  "OPEN_WEB",
+                                                                                        "query":  "抖音 短板 风险 服务协议 条款 协议 条款 规则 教程 用户反馈 经验分享",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 TERMS_OR_SERVICE_AGREEMENT、意图 TERMS_BILLING 和来源类型 OPEN_WEB 组合生成检索视角",
+                                                                                        "queryFingerprint":  "c4dfe1b3fc03ce2092d0671929b99c56",
+                                                                                        "priority":  6,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "抖音 短板 风险 第三方评测 用户反馈 媒体报道 评测 实测 对比",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "3e2b322bfbeb849506e4cf7104a010ce",
+                                                                                        "priority":  7,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "RISK",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "抖音 短板 风险 规则 风险 用户反馈 媒体报道 评测 实测 对比",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 RISK 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "47321be250dc6e805158da026cb813b5",
+                                                                                        "priority":  8,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "抖音 短板 风险 第三方评测 用户反馈 媒体报道 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "016e749c8d0479c42ff2364674ad6878",
+                                                                                        "priority":  9,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "RISK",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "抖音 短板 风险 规则 风险 用户反馈 媒体报道 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 RISK 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "049530e08a1bf3fa13630aa27faf2f37",
+                                                                                        "priority":  10,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    }
+                                                                                ],
+                                                             "lastRepairState":  null,
+                                                             "recommendedNextAction":  "EXECUTE_FIELD_EVIDENCE_QUERIES"
+                                                         }
+                                                     ]
+                              },
+    "fieldEvidenceClaimScope":  null,
+    "recoveryFieldName":  null,
+    "recoveryEvidencePathKey":  null,
+    "recoveryQueryIntents":  null,
+    "discoveryNotes":  "Official site：保留 1 个候选来源，其中搜索补源 0 个，基于用户提供 URL 扩展并结合搜索式补源",
+    "sourceCandidates":  [
+                             {
+                                 "url":  "https://www.douyin.com",
+                                 "title":  "抖音 - OFFICIAL direct entry: https://www.douyin.com",
+                                 "sourceType":  "OFFICIAL",
+                                 "discoveryMethod":  "DIRECT_LOCATOR",
+                                 "reason":  "explicit official direct candidate",
+                                 "domain":  "www.douyin.com",
+                                 "publishedAt":  null,
+                                 "sourceFamilyKey":  "official",
+                                 "sourceFamilyRole":  "PRIMARY_VERTICAL",
+                                 "providerKey":  null,
+                                 "providerRole":  null,
+                                 "templateFallback":  false,
+                                 "fallbackReason":  null,
+                                 "sourceUrls":  [
+                                                    "https://www.douyin.com"
+                                                ],
+                                 "relevanceScore":  0.95,
+                                 "freshnessScore":  0.6,
+                                 "qualityScore":  0.92,
+                                 "totalScore":  0.871,
+                                 "trustTier":  "HIGH",
+                                 "trustTierLabel":  "高可信",
+                                 "qualitySignals":  [
+
+                                                    ],
+                                 "rankingReasons":  [
+                                                        "来源可信度：高可信",
+                                                        "官网或定价入口通常是高权威的一手来源"
+                                                    ],
+                                 "rankingSummary":  "来源可信度：高可信；官网或定价入口通常是高权威的一手来源",
+                                 "fieldName":  null,
+                                 "evidencePathKey":  null,
+                                 "queryIntent":  null,
+                                 "fieldEvidenceQueryFingerprint":  null,
+                                 "fieldEvidenceQueryReason":  null,
+                                 "searchQuery":  null,
+                                 "searchEngine":  null,
+                                 "resultRank":  null,
+                                 "browserTraceId":  null,
+                                 "hasPrefetchedContent":  false,
+                                 "prefetchedContentRef":  null,
+                                 "prefetchedRawContentLength":  null,
+                                 "tavilyScore":  null,
+                                 "tavilyRequestId":  null,
+                                 "tavilyQuery":  null,
+                                 "tavilyQueryMode":  null,
+                                 "pageType":  null,
+                                 "qualityTier":  null,
+                                 "candidateDiscoveryUsable":  false,
+                                 "fastLaneUsable":  false,
+                                 "fastLaneRejectReason":  null,
+                                 "contentCompleteness":  null,
+                                 "skipNetworkVerification":  false,
+                                 "verified":  null,
+                                 "verificationReason":  null,
+                                 "matchedSignals":  null,
+                                 "selectionStage":  null,
+                                 "selectionReason":  null,
+                                 "selectionSummary":  null,
+                                 "selectionTier":  null,
+                                 "selectionRole":  null,
+                                 "selectionTierReason":  null
+                             }
+                         ],
+    "searchMode":  "HYBRID",
+    "searchQueries":  [
+                          "抖音 官方网站",
+                          "site:www.douyin.com 抖音 官方网站 产品介绍"
+                      ],
+    "thirdPartyFallbackQueries":  [
+                                      "抖音 介绍 功能 文档 教程",
+                                      "抖音 使用指南 评测 对比"
+                                  ],
+    "thirdPartyFallbackActive":  null,
+    "searchFallbackOrder":  [
+                                "PLANNED",
+                                "BROWSER",
+                                "HTTP"
+                            ],
+    "verifyCandidates":  true,
+    "verifyResultPage":  true,
+    "minVerifiedCandidates":  1,
+    "preferredSearchProvider":  null,
+    "tavilyQueryMode":  null,
+    "blockedDomains":  [
+
+                       ],
+    "browserSearchEnabled":  true,
+    "maxSearchResults":  1,
+    "searchTimeoutMillis":  18300,
+    "searchRuntimePolicy":  {
+                                "verifyResultPage":  true,
+                                "maxRetries":  2,
+                                "minIntervalMillis":  3000,
+                                "maxSearchesPerTask":  10,
+                                "pageTimeoutMillis":  30000,
+                                "maxOpenResultPages":  3,
+                                "resultPageTimeoutMillis":  8000,
+                                "maxContentLengthPerPage":  500,
+                                "stealthEnabled":  true,
+                                "locale":  "zh-CN",
+                                "timezoneId":  "Asia/Shanghai",
+                                "viewportWidth":  1440,
+                                "viewportHeight":  900,
+                                "shortBodyThreshold":  120,
+                                "minimumPrimaryResultCount":  1,
+                                "suspectBlockedBodyThreshold":  40,
+                                "bootstrapCandidateLimit":  null,
+                                "supplementCandidateLimit":  null,
+                                "maxCandidatePoolSize":  null,
+                                "maxCandidatesPerDomain":  null,
+                                "searchFirstEvidenceTargetFloor":  null,
+                                "searchFirstEvidenceTargetCeiling":  null,
+                                "preSelectionVerificationLimit":  null,
+                                "competitorCoverageSoftGapRatio":  null,
+                                "userAgents":  [
+                                                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                                                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                                                   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+                                                   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                                                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0"
+                                               ],
+                                "blockedSignals":  [
+                                                       "captcha",
+                                                       "unusual traffic",
+                                                       "verify you are human",
+                                                       "access denied",
+                                                       "robot check",
+                                                       "security check"
+                                                   ],
+                                "blockedUrlKeywords":  [
+                                                           "/login",
+                                                           "/signin",
+                                                           "/verify",
+                                                           "/captcha",
+                                                           "/challenge"
+                                                       ],
+                                "continueOnBrowserUnavailable":  null,
+                                "continueOnSearchTimeout":  null,
+                                "continueOnPageCollectFailure":  null,
+                                "recoverPartialContentOnTimeout":  null,
+                                "recoveryHint":  "如搜索中断，优先从 VERIFY_TOP_CANDIDATES 或 BROWSER_SUPPLEMENT_SEARCH 继续排查（展示语义：运行期补源）。"
+                            },
+    "searchExecutionPlan":  {
+                                "stage":  "COLLECTOR_SEARCH_AND_COLLECT",
+                                "searchQueries":  [
+                                                      "抖音 官方网站",
+                                                      "site:www.douyin.com 抖音 官方网站 产品介绍"
+                                                  ],
+                                "fallbackOrder":  [
+                                                      "PLANNED",
+                                                      "BROWSER",
+                                                      "HTTP"
+                                                  ],
+                                "targetCount":  1,
+                                "minVerifiedCount":  1,
+                                "steps":  [
+                                              {
+                                                  "stepCode":  "LOAD_CANDIDATES",
+                                                  "goal":  "读取规划期候选来源",
+                                                  "expectedDurationMs":  500,
+                                                  "dependency":  "nodeConfig",
+                                                  "status":  "PENDING",
+                                                  "message":  null,
+                                                  "startedAt":  null,
+                                                  "completedAt":  null
+                                              },
+                                              {
+                                                  "stepCode":  "TAVILY_BOOTSTRAP_ENRICH",
+                                                  "goal":  "对弱规划期候选执行 Tavily Phase 1 候选增强",
+                                                  "expectedDurationMs":  4000,
+                                                  "dependency":  "tavily",
+                                                  "status":  "PENDING",
+                                                  "message":  null,
+                                                  "startedAt":  null,
+                                                  "completedAt":  null
+                                              },
+                                              {
+                                                  "stepCode":  "VERIFY_TOP_CANDIDATES",
+                                                  "goal":  "验证高优先级候选来源是否可用",
+                                                  "expectedDurationMs":  5000,
+                                                  "dependency":  "browser",
+                                                  "status":  "PENDING",
+                                                  "message":  null,
+                                                  "startedAt":  null,
+                                                  "completedAt":  null
+                                              },
+                                              {
+                                                  "stepCode":  "BROWSER_SUPPLEMENT_SEARCH",
+                                                  "goal":  "候选不足时执行运行期补源",
+                                                  "expectedDurationMs":  8000,
+                                                  "dependency":  "searchEngine",
+                                                  "status":  "PENDING",
+                                                  "message":  null,
+                                                  "startedAt":  null,
+                                                  "completedAt":  null
+                                              },
+                                              {
+                                                  "stepCode":  "SELECT_TARGETS",
+                                                  "goal":  "合并候选并选出最终采集目标",
+                                                  "expectedDurationMs":  1000,
+                                                  "dependency":  "ranker",
+                                                  "status":  "PENDING",
+                                                  "message":  null,
+                                                  "startedAt":  null,
+                                                  "completedAt":  null
+                                              },
+                                              {
+                                                  "stepCode":  "COLLECT_PAGES",
+                                                  "goal":  "抓取页面正文并持久化证据",
+                                                  "expectedDurationMs":  12000,
+                                                  "dependency":  "collector",
+                                                  "status":  "PENDING",
+                                                  "message":  null,
+                                                  "startedAt":  null,
+                                                  "completedAt":  null
+                                              }
+                                          ]
+                            },
+    "searchAuditCheckpoint":  null,
+    "collectionAuditCheckpoint":  null,
+    "includeDomains":  [
+                           "www.douyin.com",
+                           "douyin.com",
+                           "open.douyin.com",
+                           "docs.open-douyin.com",
+                           "creator.douyin.com",
+                           "oceanengine.com"
+                       ],
+    "preferredDomains":  [
+                             "www.douyin.com",
+                             "douyin.com",
+                             "open.douyin.com",
+                             "docs.open-douyin.com",
+                             "creator.douyin.com",
+                             "oceanengine.com"
+                         ],
+    "competitorUrls":  [
+                           "https://www.douyin.com",
+                           "https://douyin.com",
+                           "https://open.douyin.com",
+                           "https://docs.open-douyin.com",
+                           "https://creator.douyin.com",
+                           "https://oceanengine.com"
+                       ]
+}

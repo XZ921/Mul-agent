@@ -1,0 +1,96 @@
+﻿{
+    "taskId":  108,
+    "taskName":  "阶段1 POC样例 E2E：抖音 与 哔哩哔哩 include_domains 校正版",
+    "status":  "FAILED",
+    "errorMessage":  "质量闭环未达到通过条件，请检查评审结果",
+    "totalNodes":  14,
+    "completedNodes":  14,
+    "completedAt":  [
+                        2026,
+                        7,
+                        12,
+                        15,
+                        20,
+                        30,
+                        841609000
+                    ],
+    "canViewReport":  true,
+    "reportQualityScore":  56,
+    "reportQualityPassed":  false,
+    "collectorSummary":  [
+                             {
+                                 "nodeName":  "collect_sources_01_01",
+                                 "displayName":  "抖音 - OFFICIAL采集",
+                                 "sourceType":  "OFFICIAL",
+                                 "status":  "SUCCESS_DEGRADED",
+                                 "totalCollected":  0,
+                                 "successCollected":  0,
+                                 "degradationReasons":  [
+                                                            "HARD_DEADLINE_REACHED"
+                                                        ],
+                                 "fieldEvidenceFinalStatus":  "EVIDENCE_PATH_COVERAGE_NOT_MET"
+                             },
+                             {
+                                 "nodeName":  "collect_sources_01_02",
+                                 "displayName":  "抖音 - DOCS采集",
+                                 "sourceType":  "DOCS",
+                                 "status":  "SUCCESS_DEGRADED",
+                                 "totalCollected":  22,
+                                 "successCollected":  4,
+                                 "degradationReasons":  [
+                                                            "HARD_DEADLINE_REACHED"
+                                                        ],
+                                 "fieldEvidenceFinalStatus":  "EVIDENCE_PATH_COVERAGE_NOT_MET"
+                             },
+                             {
+                                 "nodeName":  "collect_sources_01_03",
+                                 "displayName":  "抖音 - REVIEW采集",
+                                 "sourceType":  "REVIEW",
+                                 "status":  "SUCCESS_DEGRADED",
+                                 "totalCollected":  10,
+                                 "successCollected":  3,
+                                 "degradationReasons":  [
+                                                            "HARD_DEADLINE_REACHED"
+                                                        ],
+                                 "fieldEvidenceFinalStatus":  "EVIDENCE_PATH_COVERAGE_NOT_MET"
+                             },
+                             {
+                                 "nodeName":  "collect_sources_02_01",
+                                 "displayName":  "哔哩哔哩 - OFFICIAL采集",
+                                 "sourceType":  "OFFICIAL",
+                                 "status":  "SUCCESS_DEGRADED",
+                                 "totalCollected":  0,
+                                 "successCollected":  0,
+                                 "degradationReasons":  [
+                                                            "HARD_DEADLINE_REACHED"
+                                                        ],
+                                 "fieldEvidenceFinalStatus":  "EVIDENCE_PATH_COVERAGE_NOT_MET"
+                             },
+                             {
+                                 "nodeName":  "collect_sources_02_02",
+                                 "displayName":  "哔哩哔哩 - DOCS采集",
+                                 "sourceType":  "DOCS",
+                                 "status":  "SUCCESS_DEGRADED",
+                                 "totalCollected":  14,
+                                 "successCollected":  5,
+                                 "degradationReasons":  [
+                                                            "HARD_DEADLINE_REACHED"
+                                                        ],
+                                 "fieldEvidenceFinalStatus":  "EVIDENCE_PATH_COVERAGE_NOT_MET"
+                             },
+                             {
+                                 "nodeName":  "collect_sources_02_03",
+                                 "displayName":  "哔哩哔哩 - REVIEW采集",
+                                 "sourceType":  "REVIEW",
+                                 "status":  "SUCCESS_DEGRADED",
+                                 "totalCollected":  10,
+                                 "successCollected":  3,
+                                 "degradationReasons":  [
+                                                            "HARD_DEADLINE_REACHED"
+                                                        ],
+                                 "fieldEvidenceFinalStatus":  "EVIDENCE_PATH_COVERAGE_NOT_MET"
+                             }
+                         ],
+    "deliveryStatus":  "NEEDS_EVIDENCE",
+    "readyForDelivery":  false
+}

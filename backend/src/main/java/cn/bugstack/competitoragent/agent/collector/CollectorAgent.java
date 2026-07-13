@@ -290,6 +290,7 @@ public class CollectorAgent extends BaseAgent {
 
         String sourceType = !StringUtils.hasText(config.getSourceType()) ? "OFFICIAL" : config.getSourceType();
         long collectorHardDeadlineEpochMillis = resolveCollectorHardDeadlineEpochMillis(config, sourceType);
+        long collectorDeadlineDrainGraceMillis = resolveCollectorDeadlineDrainGraceMillis(config, sourceType);
         /*
          * collector hard deadline 必须在一次节点执行里只生成一份共享 token。
          * 首轮 search/collection、以及字段证据第二轮 recollection 都要消费同一份 token，
@@ -297,7 +298,22 @@ public class CollectorAgent extends BaseAgent {
          */
         CollectionDeadlineContext collectorDeadlineContext = CollectionDeadlineContext.hardDeadline(
                 collectorHardDeadlineEpochMillis,
-                resolveCollectorDeadlineDrainGraceMillis(config, sourceType)
+                collectorDeadlineDrainGraceMillis
+        );
+        // 第三方兜底只借用同一个节点总预算，不额外延长；主路径提前收口，给 fallback 留出真实启动窗口。
+        long primaryCollectorDeadlineEpochMillis = resolvePrimaryDeadlineForThirdPartyFallback(
+                config,
+                sourceType,
+                collectorHardDeadlineEpochMillis
+        );
+        long primaryCollectorDrainGraceMillis = primaryCollectorDeadlineEpochMillis == collectorHardDeadlineEpochMillis
+                ? collectorDeadlineDrainGraceMillis
+                : 0L;
+        CollectionDeadlineContext primaryCollectorDeadlineContext = primaryCollectorDeadlineEpochMillis == collectorHardDeadlineEpochMillis
+                ? collectorDeadlineContext
+                : CollectionDeadlineContext.hardDeadline(
+                primaryCollectorDeadlineEpochMillis,
+                primaryCollectorDrainGraceMillis
         );
         List<Map<String, Object>> results = new ArrayList<>();
         List<FieldEvidenceClaimCleanup> fieldEvidenceClaimCleanups = new ArrayList<>();
@@ -313,8 +329,8 @@ public class CollectorAgent extends BaseAgent {
                     context,
                     config,
                     sourceType,
-                    collectorHardDeadlineEpochMillis,
-                    collectorDeadlineContext,
+                    primaryCollectorDeadlineEpochMillis,
+                    primaryCollectorDeadlineContext,
                     searchProgressListener
             );
         } catch (TimeoutException e) {
@@ -322,13 +338,52 @@ public class CollectorAgent extends BaseAgent {
                     config,
                     sourceType,
                     latestSearchUpdateRef.get(),
-                    collectorHardDeadlineEpochMillis
+                    primaryCollectorDeadlineEpochMillis
             );
             registerFieldEvidenceClaimCleanup(context, config, deadlineMarkedSearchResult, fieldEvidenceClaimCleanups);
             List<SearchProgressSnapshot> progressSnapshots = deadlineMarkedSearchResult.getProgressSnapshots() == null
                     ? new ArrayList<>()
                     : new ArrayList<>(deadlineMarkedSearchResult.getProgressSnapshots());
             List<SearchCollectionTarget> timeoutTargets = resolveDeadlineInterruptedTargets(deadlineMarkedSearchResult);
+            boolean hasUsableTimeoutEvidence = timeoutTargets.stream()
+                    .anyMatch(target -> target != null && isUsableCollectedPage(target.getCollectedPage()));
+            if (!hasUsableTimeoutEvidence && shouldAttemptThirdPartyFallback(config, sourceType)) {
+                // 主搜索被预留 deadline 截断且没有可交接的预抓取证据时，才消费原始 hard deadline 的兜底窗口。
+                SearchExecutionResult fallbackResult = attemptThirdPartyFallback(
+                        context,
+                        config,
+                        sourceType,
+                        collectorHardDeadlineEpochMillis,
+                        collectorDeadlineContext,
+                        searchProgressListener
+                );
+                List<SearchCollectionTarget> fallbackTargets = fallbackResult == null
+                        || fallbackResult.getSelectedTargets() == null
+                        ? List.of()
+                        : fallbackResult.getSelectedTargets();
+                if (!fallbackTargets.isEmpty()) {
+                    registerFieldEvidenceClaimCleanup(context, config, fallbackResult, fieldEvidenceClaimCleanups);
+                    List<SearchProgressSnapshot> fallbackProgressSnapshots = fallbackResult.getProgressSnapshots() == null
+                            ? new ArrayList<>()
+                            : new ArrayList<>(fallbackResult.getProgressSnapshots());
+                    return executeCollectionPhaseWithRecursiveResults(
+                            context,
+                            config,
+                            sourceType,
+                            collectorHardDeadlineEpochMillis,
+                            collectorDeadlineContext,
+                            collectorHardDeadlineEpochMillis,
+                            collectorDeadlineContext,
+                            fallbackResult,
+                            fallbackResult.getExecutionPlan(),
+                            fallbackProgressSnapshots,
+                            fallbackTargets,
+                            results,
+                            successCounterRef,
+                            fieldEvidenceClaimCleanups
+                    );
+                }
+            }
             CollectionExecutionReport deadlineReport = buildDeadlineInterruptedCollectionReportFromPrefetchedTargets(
                     context,
                     config,
@@ -440,6 +495,8 @@ public class CollectorAgent extends BaseAgent {
                     context,
                     config,
                     sourceType,
+                    primaryCollectorDeadlineEpochMillis,
+                    primaryCollectorDeadlineContext,
                     collectorHardDeadlineEpochMillis,
                     collectorDeadlineContext,
                     searchExecutionResult,
@@ -466,7 +523,7 @@ public class CollectorAgent extends BaseAgent {
                 config.getCompetitorName(),
                 executableTargets,
                 config.getCollectionAuditCheckpoint(),
-                collectorDeadlineContext
+                primaryCollectorDeadlineContext
         );
         List<CollectionExecutionResult> collectionResults = collectionReport == null || collectionReport.getResults() == null
                 ? List.of()
@@ -653,7 +710,7 @@ public class CollectorAgent extends BaseAgent {
                 context,
                 config,
                 sourceType,
-                collectorDeadlineContext,
+                primaryCollectorDeadlineContext,
                 searchExecutionResult,
                 collectionReport,
                 auditResults,
@@ -943,6 +1000,8 @@ public class CollectorAgent extends BaseAgent {
                                                                    String sourceType,
                                                                    long collectorHardDeadlineEpochMillis,
                                                                    CollectionDeadlineContext collectorDeadlineContext,
+                                                                   long fallbackHardDeadlineEpochMillis,
+                                                                   CollectionDeadlineContext fallbackDeadlineContext,
                                                                    SearchExecutionResult searchExecutionResult,
                                                                    SearchExecutionPlan executionPlan,
                                                                     List<SearchProgressSnapshot> progressSnapshots,
@@ -1031,6 +1090,19 @@ public class CollectorAgent extends BaseAgent {
                     results,
                     successCounterRef
             );
+            AgentResult thirdPartyFallbackResult = tryExecuteThirdPartyFallbackCollectionAfterNoUsableEvidence(
+                    context,
+                    config,
+                    sourceType,
+                    fallbackHardDeadlineEpochMillis,
+                    fallbackDeadlineContext,
+                    deadlineMarkedSearchResult,
+                    successCounterRef[0],
+                    fieldEvidenceClaimCleanups
+            );
+            if (thirdPartyFallbackResult != null) {
+                return thirdPartyFallbackResult;
+            }
             return releaseFieldEvidenceClaimsAndReturn(context, fieldEvidenceClaimCleanups,
                     buildCollectorHardDeadlineResult(
                             context,
@@ -1196,8 +1268,8 @@ public class CollectorAgent extends BaseAgent {
                     context,
                     config,
                     sourceType,
-                    collectorHardDeadlineEpochMillis,
-                    collectorDeadlineContext,
+                    fallbackHardDeadlineEpochMillis,
+                    fallbackDeadlineContext,
                     searchExecutionResult,
                     successCounterRef[0],
                     fieldEvidenceClaimCleanups
@@ -1893,6 +1965,40 @@ public class CollectorAgent extends BaseAgent {
     }
 
     /**
+     * OFFICIAL/DOCS 主路径提前收口，给第三方兜底留出同一节点预算内的真实时间窗口。
+     * 如果总剩余时间不足 reserve 的两倍，则不预留，避免把主搜索/主采集压缩到必然失败。
+     */
+    private long resolvePrimaryDeadlineForThirdPartyFallback(CollectorNodeConfig config,
+                                                             String sourceType,
+                                                             long collectorHardDeadlineEpochMillis) {
+        if (!isThirdPartyFallbackEligible(config, sourceType)
+                || collectorHardDeadlineEpochMillis == Long.MAX_VALUE) {
+            return collectorHardDeadlineEpochMillis;
+        }
+        long reserveMillis = Math.max(0L, thirdPartyFallbackProperties.getReserveMillis());
+        if (reserveMillis <= 0L) {
+            return collectorHardDeadlineEpochMillis;
+        }
+        long remainingMillis = resolveRemainingCollectorHardDeadlineMillis(collectorHardDeadlineEpochMillis);
+        if (remainingMillis == Long.MAX_VALUE || remainingMillis / 2L < reserveMillis) {
+            return collectorHardDeadlineEpochMillis;
+        }
+        return Math.max(System.currentTimeMillis(), collectorHardDeadlineEpochMillis - reserveMillis);
+    }
+
+    /**
+     * 第三方 fallback 只有在剩余时间足够完成一次真实外部搜索时才启动，避免低于阈值时浪费 Tavily quota。
+     */
+    private boolean hasEnoughRemainingTimeForThirdPartyFallback(long collectorHardDeadlineEpochMillis) {
+        long remainingMillis = resolveRemainingCollectorHardDeadlineMillis(collectorHardDeadlineEpochMillis);
+        if (remainingMillis == Long.MAX_VALUE) {
+            return true;
+        }
+        long minStartMillis = Math.max(0L, thirdPartyFallbackProperties.getMinStartMillis());
+        return remainingMillis > 0L && remainingMillis >= minStartMillis;
+    }
+
+    /**
      * 是否对当前节点尝试第三方回退：开关开启、sourceType 在允许列表内、且已预生成第三方 query。
      */
     private boolean shouldAttemptThirdPartyFallback(CollectorNodeConfig config, String sourceType) {
@@ -1978,6 +2084,8 @@ public class CollectorAgent extends BaseAgent {
                 sourceType,
                 collectorHardDeadlineEpochMillis,
                 collectorDeadlineContext,
+                collectorHardDeadlineEpochMillis,
+                collectorDeadlineContext,
                 fallbackSearchResult,
                 fallbackSearchResult.getExecutionPlan(),
                 fallbackProgressSnapshots,
@@ -2000,7 +2108,7 @@ public class CollectorAgent extends BaseAgent {
                                                             long collectorHardDeadlineEpochMillis,
                                                             CollectionDeadlineContext collectorDeadlineContext,
                                                             Consumer<SearchExecutionUpdate> progressListener) {
-        if (resolveRemainingCollectorHardDeadlineMillis(collectorHardDeadlineEpochMillis) <= 0L) {
+        if (!hasEnoughRemainingTimeForThirdPartyFallback(collectorHardDeadlineEpochMillis)) {
             return null;
         }
         List<String> fallbackQueries = resolveThirdPartyFallbackQueries(config);
@@ -2153,7 +2261,8 @@ public class CollectorAgent extends BaseAgent {
                     future,
                     config,
                     sourceType,
-                    collectorHardDeadlineEpochMillis
+                    collectorHardDeadlineEpochMillis,
+                    deadlineContext
             );
             if (drainedResult != null) {
                 return drainedResult;
@@ -2179,8 +2288,9 @@ public class CollectorAgent extends BaseAgent {
     private SearchExecutionResult drainSearchResultAfterHardDeadline(Future<SearchExecutionResult> future,
                                                                      CollectorNodeConfig config,
                                                                      String sourceType,
-                                                                     long collectorHardDeadlineEpochMillis) {
-        long graceMillis = resolveCollectorDeadlineDrainGraceMillis(config, sourceType);
+                                                                     long collectorHardDeadlineEpochMillis,
+                                                                     CollectionDeadlineContext collectorDeadlineContext) {
+        long graceMillis = resolveDeadlineDrainGraceMillis(config, sourceType, collectorDeadlineContext);
         if (graceMillis <= 0L) {
             return null;
         }
@@ -2247,6 +2357,19 @@ public class CollectorAgent extends BaseAgent {
                 .reasoningSummary("collector hard deadline reached during search phase")
                 .executionTrace(trace)
                 .build();
+    }
+
+    /**
+     * drain grace 必须跟随本次传入的 deadline context。
+     * 原始 hard deadline 可以短暂回收已完成结果，预留出来的 primary deadline 则不能继续 drain 吃掉 fallback 窗口。
+     */
+    private long resolveDeadlineDrainGraceMillis(CollectorNodeConfig config,
+                                                 String sourceType,
+                                                 CollectionDeadlineContext collectorDeadlineContext) {
+        if (collectorDeadlineContext != null && collectorDeadlineContext.drainGraceMillis() != null) {
+            return Math.max(0L, collectorDeadlineContext.drainGraceMillis());
+        }
+        return resolveCollectorDeadlineDrainGraceMillis(config, sourceType);
     }
 
     private SearchExecutionPlan buildFallbackSearchExecutionPlan(CollectorNodeConfig config) {
@@ -2333,7 +2456,8 @@ public class CollectorAgent extends BaseAgent {
             CollectionExecutionReport drainedReport = drainCollectionReportAfterHardDeadline(
                     future,
                     config,
-                    collectorHardDeadlineEpochMillis
+                    collectorHardDeadlineEpochMillis,
+                    deadlineContext
             );
             if (drainedReport != null) {
                 return new CollectionDeadlineResult(drainedReport, true);
@@ -2358,10 +2482,12 @@ public class CollectorAgent extends BaseAgent {
 
     private CollectionExecutionReport drainCollectionReportAfterHardDeadline(Future<CollectionExecutionReport> future,
                                                                              CollectorNodeConfig config,
-                                                                             long collectorHardDeadlineEpochMillis) {
-        long graceMillis = resolveCollectorDeadlineDrainGraceMillis(
+                                                                             long collectorHardDeadlineEpochMillis,
+                                                                             CollectionDeadlineContext collectorDeadlineContext) {
+        long graceMillis = resolveDeadlineDrainGraceMillis(
                 config,
-                config == null ? null : config.getSourceType()
+                config == null ? null : config.getSourceType(),
+                collectorDeadlineContext
         );
         if (graceMillis <= 0L) {
             return null;

@@ -1,0 +1,560 @@
+﻿{
+    "qualityScore":  48,
+    "qualityPassed":  false,
+    "rewriteApplied":  true,
+    "initialReview":  {
+                          "nodeName":  "quality_check",
+                          "nodeStatus":  "SUCCESS",
+                          "score":  33,
+                          "passed":  false,
+                          "requiresHumanIntervention":  true,
+                          "autoRewriteAllowed":  false,
+                          "summary":  "结构完整性、修订可执行性存在关键缺口。模型摘要：报告整体上由于情报采集阶段遇到严重的时间限制和缺失，导致竞品分析不完整，多个核心对比维度（市场定位、目标用户、功能对比）缺失，SWOT分析和行动建议大多基于推测而缺乏有效证据。报告诚实标注了这些缺失，但内容质量较低，不可直接用于决策。需要后续补全情报和重写分析。",
+                          "dimensions":  [
+                                             {
+                                                 "code":  "EVIDENCE_TRACEABILITY",
+                                                 "name":  "证据可追溯性",
+                                                 "description":  "关键结论是否都能回指到稳定的 evidenceId 与来源链接。",
+                                                 "evaluationStandard":  "关键结论必须携带可追溯 evidenceId 或 sourceUrls。",
+                                                 "score":  64,
+                                                 "maxScore":  100,
+                                                 "status":  "ATTENTION"
+                                             },
+                                             {
+                                                 "code":  "CLAIM_SUPPORT",
+                                                 "name":  "结论支撑度",
+                                                 "description":  "判断性结论是否有明确证据支撑，而非只靠模型主观归纳。",
+                                                 "evaluationStandard":  "关键结论不得出现 unsupported claim 或 BLOCKER 级别支撑缺口。",
+                                                 "score":  100,
+                                                 "maxScore":  100,
+                                                 "status":  "HEALTHY"
+                                             },
+                                             {
+                                                 "code":  "STRUCTURE_COMPLETENESS",
+                                                 "name":  "结构完整性",
+                                                 "description":  "上游抽取字段与报告章节是否同时完整，避免信息漂移和字段缺口。",
+                                                 "evaluationStandard":  "关键字段不应长期处于缺证据或空字段状态。",
+                                                 "score":  54,
+                                                 "maxScore":  100,
+                                                 "status":  "CRITICAL"
+                                             },
+                                             {
+                                                 "code":  "ACTIONABILITY",
+                                                 "name":  "修订可执行性",
+                                                 "description":  "当前质检结果是否足够明确，能够驱动下一轮自动改写。",
+                                                 "evaluationStandard":  "修订项应清晰、可执行，且不依赖大量人工补证据。",
+                                                 "score":  50,
+                                                 "maxScore":  100,
+                                                 "status":  "CRITICAL"
+                                             }
+                                         ],
+                          "diagnoses":  [
+                                            {
+                                                "dimensionCode":  "STRUCTURE_COMPLETENESS",
+                                                "dimensionName":  "结构完整性",
+                                                "type":  "coverage_gap",
+                                                "section":  "短板与风险 / 市场定位、目标用户、定价策略、优势判断",
+                                                "severity":  "WARNING",
+                                                "level":  "MAJOR",
+                                                "title":  "结构化字段仍存在覆盖缺口",
+                                                "detail":  "上游抽取结果中仍有字段缺证据或为空，说明报告链路输出质量不稳定。",
+                                                "evidenceBasis":  "缺证据章节=无；证据不覆盖章节=短板与风险；模型拒答章节=无；空字段章节=市场定位、目标用户、定价策略、优势判断；阻断字段=无",
+                                                "evidenceIds":  [
+
+                                                                ],
+                                                "sourceUrls":  [
+                                                                   "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                   "https://apitracker.io/a/airtable",
+                                                                   "https://airtable.com/guides/scale/using-airtable-api",
+                                                                   "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                                   "https://checkthat.ai/brands/airtable/reviews",
+                                                                   "https://copy.ai/go-to-market-tools/airtable-review",
+                                                                   "https://zite.com/blog/airtable-reviews",
+                                                                   "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                                   "https://smartsuite.com/blog/airtable-review"
+                                                               ],
+                                                "repairSuggestion":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。"
+                                            }
+                                        ],
+                          "issues":  [
+                                         {
+                                             "type":  "coverage_gap",
+                                             "section":  "短板与风险 / 市场定位、目标用户、定价策略、优势判断",
+                                             "severity":  "WARNING",
+                                             "level":  "MAJOR",
+                                             "dimensionCode":  "STRUCTURE_COMPLETENESS",
+                                             "dimensionName":  "结构完整性",
+                                             "evidenceBasis":  "缺证据章节=无；证据不覆盖章节=短板与风险；模型拒答章节=无；空字段章节=市场定位、目标用户、定价策略、优势判断；阻断字段=无",
+                                             "evidenceIds":  [
+
+                                                             ],
+                                             "sourceUrls":  [
+                                                                "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                "https://apitracker.io/a/airtable",
+                                                                "https://airtable.com/guides/scale/using-airtable-api",
+                                                                "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                                "https://checkthat.ai/brands/airtable/reviews",
+                                                                "https://copy.ai/go-to-market-tools/airtable-review",
+                                                                "https://zite.com/blog/airtable-reviews",
+                                                                "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                                "https://smartsuite.com/blog/airtable-review"
+                                                            ],
+                                             "suggestion":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。"
+                                         }
+                                     ],
+                          "nextActions":  [
+
+                                          ],
+                          "revisionDirectives":  [
+                                                     {
+                                                         "category":  "STRUCTURE_ISSUE",
+                                                         "actionType":  "RERUN_NODE",
+                                                         "orchestrationAction":  "CREATE_RERUN_BRANCH",
+                                                         "priority":  "HIGH",
+                                                         "targetNode":  "extract_schema",
+                                                         "targetSection":  "短板与风险 / 市场定位、目标用户、定价策略、优势判断",
+                                                         "summary":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。",
+                                                         "searchFeedback":  null,
+                                                         "searchQueries":  [
+                                                                               "Airtable 短板与风险 / 市场定位、目标用户、定价策略、优势判断"
+                                                                           ],
+                                                         "sourceUrls":  [
+                                                                            "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                            "https://apitracker.io/a/airtable",
+                                                                            "https://airtable.com/guides/scale/using-airtable-api",
+                                                                            "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                                            "https://checkthat.ai/brands/airtable/reviews",
+                                                                            "https://copy.ai/go-to-market-tools/airtable-review",
+                                                                            "https://zite.com/blog/airtable-reviews",
+                                                                            "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                                            "https://smartsuite.com/blog/airtable-review"
+                                                                        ],
+                                                         "expectedOutcome":  "短板与风险 / 市场定位、目标用户、定价策略、优势判断需要恢复结构化字段完整性，并让报告章节与字段输出重新对齐。"
+                                                     }
+                                                 ]
+                      },
+    "finalReview":  {
+                        "nodeName":  "quality_check_final",
+                        "nodeStatus":  "SUCCESS",
+                        "score":  48,
+                        "passed":  false,
+                        "requiresHumanIntervention":  true,
+                        "autoRewriteAllowed":  false,
+                        "summary":  "结构完整性、修订可执行性存在关键缺口。模型摘要：本报告因上游情报采集严重缺失，导致核心竞品分析维度（市场定位、目标用户、功能对比等）完全空白，SWOT 分析和行动建议几乎完全基于推测，缺乏任何有效证据支撑。报告虽诚实标注了缺失和推测，但内容质量极低，不可直接用于决策。建议视为“未完成”状态，需重新执行信息采集和分析。",
+                        "dimensions":  [
+                                           {
+                                               "code":  "EVIDENCE_TRACEABILITY",
+                                               "name":  "证据可追溯性",
+                                               "description":  "关键结论是否都能回指到稳定的 evidenceId 与来源链接。",
+                                               "evaluationStandard":  "关键结论必须携带可追溯 evidenceId 或 sourceUrls。",
+                                               "score":  64,
+                                               "maxScore":  100,
+                                               "status":  "ATTENTION"
+                                           },
+                                           {
+                                               "code":  "CLAIM_SUPPORT",
+                                               "name":  "结论支撑度",
+                                               "description":  "判断性结论是否有明确证据支撑，而非只靠模型主观归纳。",
+                                               "evaluationStandard":  "关键结论不得出现 unsupported claim 或 BLOCKER 级别支撑缺口。",
+                                               "score":  100,
+                                               "maxScore":  100,
+                                               "status":  "HEALTHY"
+                                           },
+                                           {
+                                               "code":  "STRUCTURE_COMPLETENESS",
+                                               "name":  "结构完整性",
+                                               "description":  "上游抽取字段与报告章节是否同时完整，避免信息漂移和字段缺口。",
+                                               "evaluationStandard":  "关键字段不应长期处于缺证据或空字段状态。",
+                                               "score":  54,
+                                               "maxScore":  100,
+                                               "status":  "CRITICAL"
+                                           },
+                                           {
+                                               "code":  "ACTIONABILITY",
+                                               "name":  "修订可执行性",
+                                               "description":  "当前质检结果是否足够明确，能够驱动下一轮自动改写。",
+                                               "evaluationStandard":  "修订项应清晰、可执行，且不依赖大量人工补证据。",
+                                               "score":  59,
+                                               "maxScore":  100,
+                                               "status":  "CRITICAL"
+                                           }
+                                       ],
+                        "diagnoses":  [
+                                          {
+                                              "dimensionCode":  "ACTIONABILITY",
+                                              "dimensionName":  "修订可执行性",
+                                              "type":  "coverage_gap",
+                                              "section":  "市场定位、目标用户、功能对比、定价策略、优势判断、短板与风险",
+                                              "severity":  "CRITICAL",
+                                              "level":  "MINOR",
+                                              "title":  "需要修订的质量问题",
+                                              "detail":  "重新采集信息以填充所有缺失维度，并完成结构化对比。",
+                                              "evidenceBasis":  "市场定位、目标用户、功能对比、定价策略、优势判断、短板与风险存在需要收紧或重写的表达，请结合当前诊断继续复核。",
+                                              "evidenceIds":  [
+                                                                  "T0106-COLLECT_SOURCES_02_02-001",
+                                                                  "T0106-COLLECT_SOURCES_02_02-002",
+                                                                  "T0106-COLLECT_SOURCES_02_02-003",
+                                                                  "T0106-COLLECT_SOURCES_02_02-004",
+                                                                  "T0106-COLLECT_SOURCES_02_03-001",
+                                                                  "T0106-COLLECT_SOURCES_02_03-002",
+                                                                  "T0106-COLLECT_SOURCES_02_03-003",
+                                                                  "T0106-COLLECT_SOURCES_02_03-004",
+                                                                  "T0106-COLLECT_SOURCES_02_03-005"
+                                                              ],
+                                              "sourceUrls":  [
+                                                                 "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                 "https://apitracker.io/a/airtable",
+                                                                 "https://airtable.com/guides/scale/using-airtable-api",
+                                                                 "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                                 "https://checkthat.ai/brands/airtable/reviews",
+                                                                 "https://copy.ai/go-to-market-tools/airtable-review",
+                                                                 "https://zite.com/blog/airtable-reviews",
+                                                                 "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                                 "https://smartsuite.com/blog/airtable-review"
+                                                             ],
+                                              "repairSuggestion":  "重新采集信息以填充所有缺失维度，并完成结构化对比。"
+                                          },
+                                          {
+                                              "dimensionCode":  "ACTIONABILITY",
+                                              "dimensionName":  "修订可执行性",
+                                              "type":  "missing_citation",
+                                              "section":  "2. 产品概览与核心商业策略",
+                                              "severity":  "WARNING",
+                                              "level":  "MAJOR",
+                                              "title":  "需要修订的质量问题",
+                                              "detail":  "补充更高可信度来源或明确告知证据局限性。",
+                                              "evidenceBasis":  "2. 产品概览与核心商业策略存在需要收紧或重写的表达，请结合当前诊断继续复核。",
+                                              "evidenceIds":  [
+                                                                  "T0106-COLLECT_SOURCES_02_02-001",
+                                                                  "T0106-COLLECT_SOURCES_02_02-002",
+                                                                  "T0106-COLLECT_SOURCES_02_02-003",
+                                                                  "T0106-COLLECT_SOURCES_02_02-004",
+                                                                  "T0106-COLLECT_SOURCES_02_03-001",
+                                                                  "T0106-COLLECT_SOURCES_02_03-002",
+                                                                  "T0106-COLLECT_SOURCES_02_03-003",
+                                                                  "T0106-COLLECT_SOURCES_02_03-004",
+                                                                  "T0106-COLLECT_SOURCES_02_03-005"
+                                                              ],
+                                              "sourceUrls":  [
+                                                                 "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                 "https://apitracker.io/a/airtable",
+                                                                 "https://airtable.com/guides/scale/using-airtable-api",
+                                                                 "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                                 "https://checkthat.ai/brands/airtable/reviews",
+                                                                 "https://copy.ai/go-to-market-tools/airtable-review",
+                                                                 "https://zite.com/blog/airtable-reviews",
+                                                                 "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                                 "https://smartsuite.com/blog/airtable-review"
+                                                             ],
+                                              "repairSuggestion":  "补充更高可信度来源或明确告知证据局限性。"
+                                          },
+                                          {
+                                              "dimensionCode":  "STRUCTURE_COMPLETENESS",
+                                              "dimensionName":  "结构完整性",
+                                              "type":  "coverage_gap",
+                                              "section":  "短板与风险 / 市场定位、目标用户、定价策略、优势判断",
+                                              "severity":  "WARNING",
+                                              "level":  "MAJOR",
+                                              "title":  "结构化字段仍存在覆盖缺口",
+                                              "detail":  "上游抽取结果中仍有字段缺证据或为空，说明报告链路输出质量不稳定。",
+                                              "evidenceBasis":  "缺证据章节=无；证据不覆盖章节=短板与风险；模型拒答章节=无；空字段章节=市场定位、目标用户、定价策略、优势判断；阻断字段=无",
+                                              "evidenceIds":  [
+
+                                                              ],
+                                              "sourceUrls":  [
+                                                                 "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                 "https://apitracker.io/a/airtable",
+                                                                 "https://airtable.com/guides/scale/using-airtable-api",
+                                                                 "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                                 "https://checkthat.ai/brands/airtable/reviews",
+                                                                 "https://copy.ai/go-to-market-tools/airtable-review",
+                                                                 "https://zite.com/blog/airtable-reviews",
+                                                                 "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                                 "https://smartsuite.com/blog/airtable-review"
+                                                             ],
+                                              "repairSuggestion":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。"
+                                          }
+                                      ],
+                        "issues":  [
+                                       {
+                                           "type":  "coverage_gap",
+                                           "section":  "市场定位、目标用户、功能对比、定价策略、优势判断、短板与风险",
+                                           "severity":  "CRITICAL",
+                                           "level":  "MINOR",
+                                           "dimensionCode":  "ACTIONABILITY",
+                                           "dimensionName":  "修订可执行性",
+                                           "evidenceBasis":  "市场定位、目标用户、功能对比、定价策略、优势判断、短板与风险存在需要收紧或重写的表达，请结合当前诊断继续复核。",
+                                           "evidenceIds":  [
+                                                               "T0106-COLLECT_SOURCES_02_02-001",
+                                                               "T0106-COLLECT_SOURCES_02_02-002",
+                                                               "T0106-COLLECT_SOURCES_02_02-003",
+                                                               "T0106-COLLECT_SOURCES_02_02-004",
+                                                               "T0106-COLLECT_SOURCES_02_03-001",
+                                                               "T0106-COLLECT_SOURCES_02_03-002",
+                                                               "T0106-COLLECT_SOURCES_02_03-003",
+                                                               "T0106-COLLECT_SOURCES_02_03-004",
+                                                               "T0106-COLLECT_SOURCES_02_03-005"
+                                                           ],
+                                           "sourceUrls":  [
+                                                              "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                              "https://apitracker.io/a/airtable",
+                                                              "https://airtable.com/guides/scale/using-airtable-api",
+                                                              "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                              "https://checkthat.ai/brands/airtable/reviews",
+                                                              "https://copy.ai/go-to-market-tools/airtable-review",
+                                                              "https://zite.com/blog/airtable-reviews",
+                                                              "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                              "https://smartsuite.com/blog/airtable-review"
+                                                          ],
+                                           "suggestion":  "重新采集信息以填充所有缺失维度，并完成结构化对比。"
+                                       },
+                                       {
+                                           "type":  "missing_citation",
+                                           "section":  "2. 产品概览与核心商业策略",
+                                           "severity":  "WARNING",
+                                           "level":  "MAJOR",
+                                           "dimensionCode":  "ACTIONABILITY",
+                                           "dimensionName":  "修订可执行性",
+                                           "evidenceBasis":  "2. 产品概览与核心商业策略存在需要收紧或重写的表达，请结合当前诊断继续复核。",
+                                           "evidenceIds":  [
+                                                               "T0106-COLLECT_SOURCES_02_02-001",
+                                                               "T0106-COLLECT_SOURCES_02_02-002",
+                                                               "T0106-COLLECT_SOURCES_02_02-003",
+                                                               "T0106-COLLECT_SOURCES_02_02-004",
+                                                               "T0106-COLLECT_SOURCES_02_03-001",
+                                                               "T0106-COLLECT_SOURCES_02_03-002",
+                                                               "T0106-COLLECT_SOURCES_02_03-003",
+                                                               "T0106-COLLECT_SOURCES_02_03-004",
+                                                               "T0106-COLLECT_SOURCES_02_03-005"
+                                                           ],
+                                           "sourceUrls":  [
+                                                              "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                              "https://apitracker.io/a/airtable",
+                                                              "https://airtable.com/guides/scale/using-airtable-api",
+                                                              "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                              "https://checkthat.ai/brands/airtable/reviews",
+                                                              "https://copy.ai/go-to-market-tools/airtable-review",
+                                                              "https://zite.com/blog/airtable-reviews",
+                                                              "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                              "https://smartsuite.com/blog/airtable-review"
+                                                          ],
+                                           "suggestion":  "补充更高可信度来源或明确告知证据局限性。"
+                                       },
+                                       {
+                                           "type":  "coverage_gap",
+                                           "section":  "短板与风险 / 市场定位、目标用户、定价策略、优势判断",
+                                           "severity":  "WARNING",
+                                           "level":  "MAJOR",
+                                           "dimensionCode":  "STRUCTURE_COMPLETENESS",
+                                           "dimensionName":  "结构完整性",
+                                           "evidenceBasis":  "缺证据章节=无；证据不覆盖章节=短板与风险；模型拒答章节=无；空字段章节=市场定位、目标用户、定价策略、优势判断；阻断字段=无",
+                                           "evidenceIds":  [
+
+                                                           ],
+                                           "sourceUrls":  [
+                                                              "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                              "https://apitracker.io/a/airtable",
+                                                              "https://airtable.com/guides/scale/using-airtable-api",
+                                                              "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                              "https://checkthat.ai/brands/airtable/reviews",
+                                                              "https://copy.ai/go-to-market-tools/airtable-review",
+                                                              "https://zite.com/blog/airtable-reviews",
+                                                              "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                              "https://smartsuite.com/blog/airtable-review"
+                                                          ],
+                                           "suggestion":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。"
+                                       }
+                                   ],
+                        "nextActions":  [
+
+                                        ],
+                        "revisionDirectives":  [
+                                                   {
+                                                       "category":  "STRUCTURE_ISSUE",
+                                                       "actionType":  "RERUN_NODE",
+                                                       "orchestrationAction":  "CREATE_RERUN_BRANCH",
+                                                       "priority":  "HIGH",
+                                                       "targetNode":  "extract_schema",
+                                                       "targetSection":  "市场定位、目标用户、功能对比、定价策略、优势判断、短板与风险",
+                                                       "summary":  "重新采集信息以填充所有缺失维度，并完成结构化对比。",
+                                                       "searchFeedback":  null,
+                                                       "searchQueries":  [
+                                                                             "Airtable 市场定位、目标用户、功能对比、定价策略、优势判断、短板与风险"
+                                                                         ],
+                                                       "sourceUrls":  [
+                                                                          "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                          "https://apitracker.io/a/airtable",
+                                                                          "https://airtable.com/guides/scale/using-airtable-api",
+                                                                          "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                                          "https://checkthat.ai/brands/airtable/reviews",
+                                                                          "https://copy.ai/go-to-market-tools/airtable-review",
+                                                                          "https://zite.com/blog/airtable-reviews",
+                                                                          "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                                          "https://smartsuite.com/blog/airtable-review"
+                                                                      ],
+                                                       "expectedOutcome":  "市场定位、目标用户、功能对比、定价策略、优势判断、短板与风险需要恢复结构化字段完整性，并让报告章节与字段输出重新对齐。"
+                                                   },
+                                                   {
+                                                       "category":  "EVIDENCE_GAP",
+                                                       "actionType":  "SUPPLEMENT_EVIDENCE",
+                                                       "orchestrationAction":  "CREATE_SUPPLEMENT_BRANCH",
+                                                       "priority":  "HIGH",
+                                                       "targetNode":  "collect_sources",
+                                                       "targetSection":  "2. 产品概览与核心商业策略",
+                                                       "summary":  "补充更高可信度来源或明确告知证据局限性。",
+                                                       "searchFeedback":  null,
+                                                       "searchQueries":  [
+                                                                             "Airtable 2. 产品概览与核心商业策略"
+                                                                         ],
+                                                       "sourceUrls":  [
+                                                                          "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                          "https://apitracker.io/a/airtable",
+                                                                          "https://airtable.com/guides/scale/using-airtable-api",
+                                                                          "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                                          "https://checkthat.ai/brands/airtable/reviews",
+                                                                          "https://copy.ai/go-to-market-tools/airtable-review",
+                                                                          "https://zite.com/blog/airtable-reviews",
+                                                                          "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                                          "https://smartsuite.com/blog/airtable-review"
+                                                                      ],
+                                                       "expectedOutcome":  "2. 产品概览与核心商业策略需要补齐来源引用或下调无法验证的判断，确保结论可回溯。"
+                                                   },
+                                                   {
+                                                       "category":  "STRUCTURE_ISSUE",
+                                                       "actionType":  "RERUN_NODE",
+                                                       "orchestrationAction":  "CREATE_RERUN_BRANCH",
+                                                       "priority":  "HIGH",
+                                                       "targetNode":  "extract_schema",
+                                                       "targetSection":  "短板与风险 / 市场定位、目标用户、定价策略、优势判断",
+                                                       "summary":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。",
+                                                       "searchFeedback":  null,
+                                                       "searchQueries":  [
+                                                                             "Airtable 短板与风险 / 市场定位、目标用户、定价策略、优势判断"
+                                                                         ],
+                                                       "sourceUrls":  [
+                                                                          "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                                          "https://apitracker.io/a/airtable",
+                                                                          "https://airtable.com/guides/scale/using-airtable-api",
+                                                                          "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                                          "https://checkthat.ai/brands/airtable/reviews",
+                                                                          "https://copy.ai/go-to-market-tools/airtable-review",
+                                                                          "https://zite.com/blog/airtable-reviews",
+                                                                          "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                                          "https://smartsuite.com/blog/airtable-review"
+                                                                      ],
+                                                       "expectedOutcome":  "短板与风险 / 市场定位、目标用户、定价策略、优势判断需要恢复结构化字段完整性，并让报告章节与字段输出重新对齐。"
+                                                   }
+                                               ]
+                    },
+    "deliverySummary":  {
+                            "readyForDelivery":  false,
+                            "deliveryStatus":  "NEEDS_EVIDENCE",
+                            "summary":  "当前报告暂不可交付，存在 0 个阻塞问题和 2 个证据缺口。",
+                            "primaryIssue":  "结构化字段仍存在覆盖缺口",
+                            "recommendedAction":  "结构完整性、修订可执行性存在关键缺口。模型摘要：本报告因上游情报采集严重缺失，导致核心竞品分析维度（市场定位、目标用户、功能对比等）完全空白，SWOT 分析和行动建议几乎完全基于推测，缺乏任何有效证据支撑。报告虽诚实标注了缺失和推测，但内容质量极低，不可直接用于决策。建议视为“未完成”状态，需重新执行信息采集和分析。",
+                            "blockerCount":  0,
+                            "evidenceGapCount":  2,
+                            "sourceUrls":  [
+                                               "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                               "https://apitracker.io/a/airtable",
+                                               "https://airtable.com/guides/scale/using-airtable-api",
+                                               "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                               "https://checkthat.ai/brands/airtable/reviews",
+                                               "https://copy.ai/go-to-market-tools/airtable-review",
+                                               "https://zite.com/blog/airtable-reviews",
+                                               "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                               "https://smartsuite.com/blog/airtable-review"
+                                           ]
+                        },
+    "qualityIssueCount":  3,
+    "qualityIssues":  [
+                          {
+                              "type":  "coverage_gap",
+                              "section":  "市场定位、目标用户、功能对比、定价策略、优势判断、短板与风险",
+                              "severity":  "CRITICAL",
+                              "level":  "MINOR",
+                              "dimensionCode":  "ACTIONABILITY",
+                              "dimensionName":  "修订可执行性",
+                              "evidenceBasis":  "市场定位、目标用户、功能对比、定价策略、优势判断、短板与风险存在需要收紧或重写的表达，请结合当前诊断继续复核。",
+                              "evidenceIds":  [
+                                                  "T0106-COLLECT_SOURCES_02_02-001",
+                                                  "T0106-COLLECT_SOURCES_02_02-002",
+                                                  "T0106-COLLECT_SOURCES_02_02-003",
+                                                  "T0106-COLLECT_SOURCES_02_02-004",
+                                                  "T0106-COLLECT_SOURCES_02_03-001",
+                                                  "T0106-COLLECT_SOURCES_02_03-002",
+                                                  "T0106-COLLECT_SOURCES_02_03-003",
+                                                  "T0106-COLLECT_SOURCES_02_03-004",
+                                                  "T0106-COLLECT_SOURCES_02_03-005"
+                                              ],
+                              "sourceUrls":  [
+                                                 "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                 "https://apitracker.io/a/airtable",
+                                                 "https://airtable.com/guides/scale/using-airtable-api",
+                                                 "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                 "https://checkthat.ai/brands/airtable/reviews",
+                                                 "https://copy.ai/go-to-market-tools/airtable-review",
+                                                 "https://zite.com/blog/airtable-reviews",
+                                                 "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                 "https://smartsuite.com/blog/airtable-review"
+                                             ],
+                              "suggestion":  "重新采集信息以填充所有缺失维度，并完成结构化对比。"
+                          },
+                          {
+                              "type":  "missing_citation",
+                              "section":  "2. 产品概览与核心商业策略",
+                              "severity":  "WARNING",
+                              "level":  "MAJOR",
+                              "dimensionCode":  "ACTIONABILITY",
+                              "dimensionName":  "修订可执行性",
+                              "evidenceBasis":  "2. 产品概览与核心商业策略存在需要收紧或重写的表达，请结合当前诊断继续复核。",
+                              "evidenceIds":  [
+                                                  "T0106-COLLECT_SOURCES_02_02-001",
+                                                  "T0106-COLLECT_SOURCES_02_02-002",
+                                                  "T0106-COLLECT_SOURCES_02_02-003",
+                                                  "T0106-COLLECT_SOURCES_02_02-004",
+                                                  "T0106-COLLECT_SOURCES_02_03-001",
+                                                  "T0106-COLLECT_SOURCES_02_03-002",
+                                                  "T0106-COLLECT_SOURCES_02_03-003",
+                                                  "T0106-COLLECT_SOURCES_02_03-004",
+                                                  "T0106-COLLECT_SOURCES_02_03-005"
+                                              ],
+                              "sourceUrls":  [
+                                                 "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                 "https://apitracker.io/a/airtable",
+                                                 "https://airtable.com/guides/scale/using-airtable-api",
+                                                 "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                 "https://checkthat.ai/brands/airtable/reviews",
+                                                 "https://copy.ai/go-to-market-tools/airtable-review",
+                                                 "https://zite.com/blog/airtable-reviews",
+                                                 "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                 "https://smartsuite.com/blog/airtable-review"
+                                             ],
+                              "suggestion":  "补充更高可信度来源或明确告知证据局限性。"
+                          },
+                          {
+                              "type":  "coverage_gap",
+                              "section":  "短板与风险 / 市场定位、目标用户、定价策略、优势判断",
+                              "severity":  "WARNING",
+                              "level":  "MAJOR",
+                              "dimensionCode":  "STRUCTURE_COMPLETENESS",
+                              "dimensionName":  "结构完整性",
+                              "evidenceBasis":  "缺证据章节=无；证据不覆盖章节=短板与风险；模型拒答章节=无；空字段章节=市场定位、目标用户、定价策略、优势判断；阻断字段=无",
+                              "evidenceIds":  [
+
+                                              ],
+                              "sourceUrls":  [
+                                                 "https://pyairtable.readthedocs.io/en/stable/api.html",
+                                                 "https://apitracker.io/a/airtable",
+                                                 "https://airtable.com/guides/scale/using-airtable-api",
+                                                 "https://dev.to/zuplo/a-comprehensive-guide-to-understanding-the-airtable-api-ggb",
+                                                 "https://checkthat.ai/brands/airtable/reviews",
+                                                 "https://copy.ai/go-to-market-tools/airtable-review",
+                                                 "https://zite.com/blog/airtable-reviews",
+                                                 "https://blog.kintone.com/business-with-heart/quickbase-vs.-airtable-whats-the-difference",
+                                                 "https://smartsuite.com/blog/airtable-review"
+                                             ],
+                              "suggestion":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。"
+                          }
+                      ]
+}

@@ -59,7 +59,7 @@ public class NodeExecutionRecoveryPolicy {
         if (hasUnfinishedBlockingNode) {
             return false;
         }
-        if (!hasEnoughTraceableWriterSources(nodes)) {
+        if (!hasEnoughTraceableDeliverySources(nodes)) {
             return false;
         }
         boolean hasFailedReview = false;
@@ -377,10 +377,10 @@ public class NodeExecutionRecoveryPolicy {
                 .noneMatch(node -> node.getStatus() == TaskNodeStatus.SUCCESS && requiresHumanIntervention(node.getOutputData()));
     }
 
-    private boolean hasEnoughTraceableWriterSources(List<TaskNode> nodes) {
+    private boolean hasEnoughTraceableDeliverySources(List<TaskNode> nodes) {
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
         for (TaskNode node : nodes == null ? List.<TaskNode>of() : nodes) {
-            if (!isWriterNode(node) || !isReusableWriterStatus(node.getStatus())) {
+            if (!isDeliveryEvidenceNode(node) || !isReusableDeliveryEvidenceStatus(node.getStatus())) {
                 continue;
             }
             collectNestedSourceUrls(readJson(node.getOutputData()), sourceUrls);
@@ -475,7 +475,16 @@ public class NodeExecutionRecoveryPolicy {
                 || (node.getNodeName() != null && node.getNodeName().startsWith("rewrite_revision_patch_v"));
     }
 
-    private boolean isReusableWriterStatus(TaskNodeStatus status) {
+    /**
+     * 阶段1降级交付的 sourceUrls 红线不能只依赖 writer 顶层字段。
+     * 实际链路中最终评审会携带经过引用检查和质量诊断聚合后的来源，如果这些来源已经足够，
+     * 就可以证明“报告可查看但需补证”的首报形态，而不是把整任务判成执行失败。
+     */
+    private boolean isDeliveryEvidenceNode(TaskNode node) {
+        return isWriterNode(node) || isReviewNode(node);
+    }
+
+    private boolean isReusableDeliveryEvidenceStatus(TaskNodeStatus status) {
         return status == TaskNodeStatus.SUCCESS || status == TaskNodeStatus.SUCCESS_DEGRADED;
     }
 

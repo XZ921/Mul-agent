@@ -1,0 +1,873 @@
+﻿{
+    "reportId":  130,
+    "qualityScore":  56,
+    "qualityPassed":  false,
+    "evidenceCount":  15,
+    "finalReview":  {
+                        "nodeName":  "quality_check_final",
+                        "nodeStatus":  "SUCCESS",
+                        "score":  56,
+                        "passed":  false,
+                        "requiresHumanIntervention":  true,
+                        "autoRewriteAllowed":  false,
+                        "summary":  "证据可追溯性、修订可执行性存在关键缺口。模型摘要：最终评审显示，报告在证据可追溯性和结构完整性方面存在改进空间，核心分析维度因证据缺失难以形成有力对比。自动改写无法解决根本问题，建议人工补证。",
+                        "dimensions":  [
+                                           {
+                                               "code":  "EVIDENCE_TRACEABILITY",
+                                               "name":  "证据可追溯性",
+                                               "description":  "关键结论是否都能回指到稳定的 evidenceId 与来源链接。",
+                                               "evaluationStandard":  "关键结论必须携带可追溯 evidenceId 或 sourceUrls。",
+                                               "score":  46,
+                                               "maxScore":  100,
+                                               "status":  "CRITICAL"
+                                           },
+                                           {
+                                               "code":  "CLAIM_SUPPORT",
+                                               "name":  "结论支撑度",
+                                               "description":  "判断性结论是否有明确证据支撑，而非只靠模型主观归纳。",
+                                               "evaluationStandard":  "关键结论不得出现 unsupported claim 或 BLOCKER 级别支撑缺口。",
+                                               "score":  100,
+                                               "maxScore":  100,
+                                               "status":  "HEALTHY"
+                                           },
+                                           {
+                                               "code":  "STRUCTURE_COMPLETENESS",
+                                               "name":  "结构完整性",
+                                               "description":  "上游抽取字段与报告章节是否同时完整，避免信息漂移和字段缺口。",
+                                               "evaluationStandard":  "关键字段不应长期处于缺证据或空字段状态。",
+                                               "score":  82,
+                                               "maxScore":  100,
+                                               "status":  "HEALTHY"
+                                           },
+                                           {
+                                               "code":  "ACTIONABILITY",
+                                               "name":  "修订可执行性",
+                                               "description":  "当前质检结果是否足够明确，能够驱动下一轮自动改写。",
+                                               "evaluationStandard":  "修订项应清晰、可执行，且不依赖大量人工补证据。",
+                                               "score":  53,
+                                               "maxScore":  100,
+                                               "status":  "CRITICAL"
+                                           }
+                                       ],
+                        "diagnoses":  [
+                                          {
+                                              "dimensionCode":  "EVIDENCE_TRACEABILITY",
+                                              "dimensionName":  "证据可追溯性",
+                                              "type":  "weak_evidence",
+                                              "section":  "功能对比",
+                                              "severity":  "WARNING",
+                                              "level":  "MAJOR",
+                                              "title":  "关键结论缺少来源引用",
+                                              "detail":  "尽量补充直接证据或更明确的来源引用。",
+                                              "evidenceBasis":  "功能对比存在无法回指到 [证据：EID] 的判断，需要补齐来源编号与链接。",
+                                              "evidenceIds":  [
+
+                                                              ],
+                                              "sourceUrls":  [
+                                                                 "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                                                                 "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide",
+                                                                 "https://developer.aliyun.com/article/1638911",
+                                                                 "https://juhe.cn/news/index/id/7857",
+                                                                 "https://sj.qq.com/appdetail/com.ss.android.ugc.aweme/review",
+                                                                 "https://apps.apple.com/cn/app/抖音/id1142110895?see-all=reviews\u0026platform=iphone",
+                                                                 "https://blog.wyan.vip/2023/05/tiktok_video_quality.html",
+                                                                 "https://qinshixixing.gitbooks.io/bilibiliapi",
+                                                                 "https://nemo2011.github.io/bilibili-api",
+                                                                 "https://github.com/pskdje/bilibili-API-collect/blob/main/README.md",
+                                                                 "https://pypi.org/project/bilibili-api-dev",
+                                                                 "https://bilibili.com/read/cv21313074",
+                                                                 "https://m.bilibili.com/opus/176188045339958838",
+                                                                 "https://play.google.com/store/apps/details?id=tv.danmaku.bili\u0026hl=zh",
+                                                                 "https://capterra.com/search?query=哔哩哔哩"
+                                                             ],
+                                              "repairSuggestion":  "尽量补充直接证据或更明确的来源引用。"
+                                          },
+                                          {
+                                              "dimensionCode":  "ACTIONABILITY",
+                                              "dimensionName":  "修订可执行性",
+                                              "type":  "coverage_gap",
+                                              "section":  "定价策略 / 优势判断、短板与风险",
+                                              "severity":  "WARNING",
+                                              "level":  "MAJOR",
+                                              "title":  "需要修订的质量问题",
+                                              "detail":  "补充对应章节证据或明确标注信息缺失。",
+                                              "evidenceBasis":  "定价策略 / 优势判断、短板与风险存在需要收紧或重写的表达，请结合当前诊断继续复核。",
+                                              "evidenceIds":  [
+                                                                  "T0108-COLLECT_SOURCES_01_02-001",
+                                                                  "T0108-COLLECT_SOURCES_01_02-002",
+                                                                  "T0108-COLLECT_SOURCES_01_02-003",
+                                                                  "T0108-COLLECT_SOURCES_01_02-004",
+                                                                  "T0108-COLLECT_SOURCES_01_03-001",
+                                                                  "T0108-COLLECT_SOURCES_01_03-002",
+                                                                  "T0108-COLLECT_SOURCES_01_03-005",
+                                                                  "T0108-COLLECT_SOURCES_02_02-001",
+                                                                  "T0108-COLLECT_SOURCES_02_02-002",
+                                                                  "T0108-COLLECT_SOURCES_02_02-003",
+                                                                  "T0108-COLLECT_SOURCES_02_02-004",
+                                                                  "T0108-COLLECT_SOURCES_02_02-005",
+                                                                  "T0108-COLLECT_SOURCES_02_03-001",
+                                                                  "T0108-COLLECT_SOURCES_02_03-002",
+                                                                  "T0108-COLLECT_SOURCES_02_03-005"
+                                                              ],
+                                              "sourceUrls":  [
+                                                                 "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                                                                 "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide",
+                                                                 "https://developer.aliyun.com/article/1638911",
+                                                                 "https://juhe.cn/news/index/id/7857",
+                                                                 "https://sj.qq.com/appdetail/com.ss.android.ugc.aweme/review",
+                                                                 "https://apps.apple.com/cn/app/抖音/id1142110895?see-all=reviews\u0026platform=iphone",
+                                                                 "https://blog.wyan.vip/2023/05/tiktok_video_quality.html",
+                                                                 "https://qinshixixing.gitbooks.io/bilibiliapi",
+                                                                 "https://nemo2011.github.io/bilibili-api",
+                                                                 "https://github.com/pskdje/bilibili-API-collect/blob/main/README.md",
+                                                                 "https://pypi.org/project/bilibili-api-dev",
+                                                                 "https://bilibili.com/read/cv21313074",
+                                                                 "https://m.bilibili.com/opus/176188045339958838",
+                                                                 "https://play.google.com/store/apps/details?id=tv.danmaku.bili\u0026hl=zh",
+                                                                 "https://capterra.com/search?query=哔哩哔哩"
+                                                             ],
+                                              "repairSuggestion":  "补充对应章节证据或明确标注信息缺失。"
+                                          },
+                                          {
+                                              "dimensionCode":  "ACTIONABILITY",
+                                              "dimensionName":  "修订可执行性",
+                                              "type":  "low_actionability",
+                                              "section":  "整体",
+                                              "severity":  "WARNING",
+                                              "level":  "MAJOR",
+                                              "title":  "需要修订的质量问题",
+                                              "detail":  "建议人工介入补充证据后再进行自动化分析。",
+                                              "evidenceBasis":  "整体存在需要收紧或重写的表达，请结合当前诊断继续复核。",
+                                              "evidenceIds":  [
+                                                                  "T0108-COLLECT_SOURCES_01_02-001",
+                                                                  "T0108-COLLECT_SOURCES_01_02-002",
+                                                                  "T0108-COLLECT_SOURCES_01_02-003",
+                                                                  "T0108-COLLECT_SOURCES_01_02-004",
+                                                                  "T0108-COLLECT_SOURCES_01_03-001",
+                                                                  "T0108-COLLECT_SOURCES_01_03-002",
+                                                                  "T0108-COLLECT_SOURCES_01_03-005",
+                                                                  "T0108-COLLECT_SOURCES_02_02-001",
+                                                                  "T0108-COLLECT_SOURCES_02_02-002",
+                                                                  "T0108-COLLECT_SOURCES_02_02-003",
+                                                                  "T0108-COLLECT_SOURCES_02_02-004",
+                                                                  "T0108-COLLECT_SOURCES_02_02-005",
+                                                                  "T0108-COLLECT_SOURCES_02_03-001",
+                                                                  "T0108-COLLECT_SOURCES_02_03-002",
+                                                                  "T0108-COLLECT_SOURCES_02_03-005"
+                                                              ],
+                                              "sourceUrls":  [
+                                                                 "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                                                                 "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide",
+                                                                 "https://developer.aliyun.com/article/1638911",
+                                                                 "https://juhe.cn/news/index/id/7857",
+                                                                 "https://sj.qq.com/appdetail/com.ss.android.ugc.aweme/review",
+                                                                 "https://apps.apple.com/cn/app/抖音/id1142110895?see-all=reviews\u0026platform=iphone",
+                                                                 "https://blog.wyan.vip/2023/05/tiktok_video_quality.html",
+                                                                 "https://qinshixixing.gitbooks.io/bilibiliapi",
+                                                                 "https://nemo2011.github.io/bilibili-api",
+                                                                 "https://github.com/pskdje/bilibili-API-collect/blob/main/README.md",
+                                                                 "https://pypi.org/project/bilibili-api-dev",
+                                                                 "https://bilibili.com/read/cv21313074",
+                                                                 "https://m.bilibili.com/opus/176188045339958838",
+                                                                 "https://play.google.com/store/apps/details?id=tv.danmaku.bili\u0026hl=zh",
+                                                                 "https://capterra.com/search?query=哔哩哔哩"
+                                                             ],
+                                              "repairSuggestion":  "建议人工介入补充证据后再进行自动化分析。"
+                                          },
+                                          {
+                                              "dimensionCode":  "STRUCTURE_COMPLETENESS",
+                                              "dimensionName":  "结构完整性",
+                                              "type":  "coverage_gap",
+                                              "section":  "定价策略 / 优势判断、短板与风险",
+                                              "severity":  "WARNING",
+                                              "level":  "MAJOR",
+                                              "title":  "结构化字段仍存在覆盖缺口",
+                                              "detail":  "上游抽取结果中仍有字段缺证据或为空，说明报告链路输出质量不稳定。",
+                                              "evidenceBasis":  "缺证据章节=无；证据不覆盖章节=定价策略；模型拒答章节=无；空字段章节=优势判断、短板与风险；阻断字段=无",
+                                              "evidenceIds":  [
+
+                                                              ],
+                                              "sourceUrls":  [
+                                                                 "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                                                                 "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide",
+                                                                 "https://developer.aliyun.com/article/1638911",
+                                                                 "https://juhe.cn/news/index/id/7857",
+                                                                 "https://sj.qq.com/appdetail/com.ss.android.ugc.aweme/review",
+                                                                 "https://apps.apple.com/cn/app/抖音/id1142110895?see-all=reviews\u0026platform=iphone",
+                                                                 "https://blog.wyan.vip/2023/05/tiktok_video_quality.html",
+                                                                 "https://qinshixixing.gitbooks.io/bilibiliapi",
+                                                                 "https://nemo2011.github.io/bilibili-api",
+                                                                 "https://github.com/pskdje/bilibili-API-collect/blob/main/README.md",
+                                                                 "https://pypi.org/project/bilibili-api-dev",
+                                                                 "https://bilibili.com/read/cv21313074",
+                                                                 "https://m.bilibili.com/opus/176188045339958838",
+                                                                 "https://play.google.com/store/apps/details?id=tv.danmaku.bili\u0026hl=zh",
+                                                                 "https://capterra.com/search?query=哔哩哔哩"
+                                                             ],
+                                              "repairSuggestion":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。"
+                                          },
+                                          {
+                                              "dimensionCode":  "SEARCH_QUALITY",
+                                              "dimensionName":  "搜索质量",
+                                              "type":  "missing_structured_evidence",
+                                              "section":  "功能对比",
+                                              "severity":  "WARNING",
+                                              "level":  "MAJOR",
+                                              "title":  "结构化证据不足",
+                                              "detail":  "当前来源虽然已命中 sourceUrls，但 structuredBlocks 或 qualitySignals 未达到可用门槛。",
+                                              "evidenceBasis":  "功能对比 的 structuredBlocks 与 qualitySignals 未达到可用门槛。structuredBlocks=0，qualitySignals=[TAVILY_RAW_CONTENT_READY, TAVILY_PREFETCHED_CONTENT_CONSUMED, TAVILY_STRUCTURED_BLOCK_COUNT=0, FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG]，qualityScore=0.59，evidenceCoverage=核心能力:TRACEABLE。",
+                                              "evidenceIds":  [
+                                                                  "T0108-COLLECT_SOURCES_01_02-002"
+                                                              ],
+                                              "sourceUrls":  [
+                                                                 "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide"
+                                                             ],
+                                              "repairSuggestion":  "请补充功能对比对应 structuredBlocks；当前章节先保留 warning / audit，不阻断阶段1首报交付。"
+                                          },
+                                          {
+                                              "dimensionCode":  "SEARCH_QUALITY",
+                                              "dimensionName":  "搜索质量",
+                                              "type":  "missing_structured_evidence",
+                                              "section":  "通用",
+                                              "severity":  "WARNING",
+                                              "level":  "MAJOR",
+                                              "title":  "结构化证据不足",
+                                              "detail":  "当前来源虽然已命中 sourceUrls，但 structuredBlocks 或 qualitySignals 未达到可用门槛。",
+                                              "evidenceBasis":  "通用 的 structuredBlocks 与 qualitySignals 未达到可用门槛。structuredBlocks=0，qualitySignals=[DIRECT_HTML_HTTP_STATUS_ERROR, LIGHTWEIGHT_RUNTIME_FAILURE, UPGRADED_TO_FULL_RENDER, MAIN_CONTENT_READY, NO_STRUCTURED_BLOCKS, FULL_RENDER_READY, FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG, FIELD_RELEVANCE_WEAK, EVIDENCE_REPAIR_REQUIRED, REPAIR_QUERY_PROPOSED]，qualityScore=0.86。",
+                                              "evidenceIds":  [
+                                                                  "T0108-COLLECT_SOURCES_02_03-005"
+                                                              ],
+                                              "sourceUrls":  [
+                                                                 "https://capterra.com/search?query=哔哩哔哩"
+                                                             ],
+                                              "repairSuggestion":  "请将通用记录为审计提醒，必要时后续补齐 structuredBlocks，但当前阶段不要把它作为主阻断项。"
+                                          }
+                                      ],
+                        "issues":  [
+                                       {
+                                           "type":  "weak_evidence",
+                                           "section":  "功能对比",
+                                           "severity":  "WARNING",
+                                           "level":  "MAJOR",
+                                           "dimensionCode":  "EVIDENCE_TRACEABILITY",
+                                           "dimensionName":  "证据可追溯性",
+                                           "evidenceBasis":  "功能对比存在无法回指到 [证据：EID] 的判断，需要补齐来源编号与链接。",
+                                           "evidenceIds":  [
+
+                                                           ],
+                                           "sourceUrls":  [
+                                                              "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                                                              "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide",
+                                                              "https://developer.aliyun.com/article/1638911",
+                                                              "https://juhe.cn/news/index/id/7857",
+                                                              "https://sj.qq.com/appdetail/com.ss.android.ugc.aweme/review",
+                                                              "https://apps.apple.com/cn/app/抖音/id1142110895?see-all=reviews\u0026platform=iphone",
+                                                              "https://blog.wyan.vip/2023/05/tiktok_video_quality.html",
+                                                              "https://qinshixixing.gitbooks.io/bilibiliapi",
+                                                              "https://nemo2011.github.io/bilibili-api",
+                                                              "https://github.com/pskdje/bilibili-API-collect/blob/main/README.md",
+                                                              "https://pypi.org/project/bilibili-api-dev",
+                                                              "https://bilibili.com/read/cv21313074",
+                                                              "https://m.bilibili.com/opus/176188045339958838",
+                                                              "https://play.google.com/store/apps/details?id=tv.danmaku.bili\u0026hl=zh",
+                                                              "https://capterra.com/search?query=哔哩哔哩"
+                                                          ],
+                                           "suggestion":  "尽量补充直接证据或更明确的来源引用。"
+                                       },
+                                       {
+                                           "type":  "coverage_gap",
+                                           "section":  "定价策略 / 优势判断、短板与风险",
+                                           "severity":  "WARNING",
+                                           "level":  "MAJOR",
+                                           "dimensionCode":  "ACTIONABILITY",
+                                           "dimensionName":  "修订可执行性",
+                                           "evidenceBasis":  "定价策略 / 优势判断、短板与风险存在需要收紧或重写的表达，请结合当前诊断继续复核。",
+                                           "evidenceIds":  [
+                                                               "T0108-COLLECT_SOURCES_01_02-001",
+                                                               "T0108-COLLECT_SOURCES_01_02-002",
+                                                               "T0108-COLLECT_SOURCES_01_02-003",
+                                                               "T0108-COLLECT_SOURCES_01_02-004",
+                                                               "T0108-COLLECT_SOURCES_01_03-001",
+                                                               "T0108-COLLECT_SOURCES_01_03-002",
+                                                               "T0108-COLLECT_SOURCES_01_03-005",
+                                                               "T0108-COLLECT_SOURCES_02_02-001",
+                                                               "T0108-COLLECT_SOURCES_02_02-002",
+                                                               "T0108-COLLECT_SOURCES_02_02-003",
+                                                               "T0108-COLLECT_SOURCES_02_02-004",
+                                                               "T0108-COLLECT_SOURCES_02_02-005",
+                                                               "T0108-COLLECT_SOURCES_02_03-001",
+                                                               "T0108-COLLECT_SOURCES_02_03-002",
+                                                               "T0108-COLLECT_SOURCES_02_03-005"
+                                                           ],
+                                           "sourceUrls":  [
+                                                              "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                                                              "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide",
+                                                              "https://developer.aliyun.com/article/1638911",
+                                                              "https://juhe.cn/news/index/id/7857",
+                                                              "https://sj.qq.com/appdetail/com.ss.android.ugc.aweme/review",
+                                                              "https://apps.apple.com/cn/app/抖音/id1142110895?see-all=reviews\u0026platform=iphone",
+                                                              "https://blog.wyan.vip/2023/05/tiktok_video_quality.html",
+                                                              "https://qinshixixing.gitbooks.io/bilibiliapi",
+                                                              "https://nemo2011.github.io/bilibili-api",
+                                                              "https://github.com/pskdje/bilibili-API-collect/blob/main/README.md",
+                                                              "https://pypi.org/project/bilibili-api-dev",
+                                                              "https://bilibili.com/read/cv21313074",
+                                                              "https://m.bilibili.com/opus/176188045339958838",
+                                                              "https://play.google.com/store/apps/details?id=tv.danmaku.bili\u0026hl=zh",
+                                                              "https://capterra.com/search?query=哔哩哔哩"
+                                                          ],
+                                           "suggestion":  "补充对应章节证据或明确标注信息缺失。"
+                                       },
+                                       {
+                                           "type":  "low_actionability",
+                                           "section":  "整体",
+                                           "severity":  "WARNING",
+                                           "level":  "MAJOR",
+                                           "dimensionCode":  "ACTIONABILITY",
+                                           "dimensionName":  "修订可执行性",
+                                           "evidenceBasis":  "整体存在需要收紧或重写的表达，请结合当前诊断继续复核。",
+                                           "evidenceIds":  [
+                                                               "T0108-COLLECT_SOURCES_01_02-001",
+                                                               "T0108-COLLECT_SOURCES_01_02-002",
+                                                               "T0108-COLLECT_SOURCES_01_02-003",
+                                                               "T0108-COLLECT_SOURCES_01_02-004",
+                                                               "T0108-COLLECT_SOURCES_01_03-001",
+                                                               "T0108-COLLECT_SOURCES_01_03-002",
+                                                               "T0108-COLLECT_SOURCES_01_03-005",
+                                                               "T0108-COLLECT_SOURCES_02_02-001",
+                                                               "T0108-COLLECT_SOURCES_02_02-002",
+                                                               "T0108-COLLECT_SOURCES_02_02-003",
+                                                               "T0108-COLLECT_SOURCES_02_02-004",
+                                                               "T0108-COLLECT_SOURCES_02_02-005",
+                                                               "T0108-COLLECT_SOURCES_02_03-001",
+                                                               "T0108-COLLECT_SOURCES_02_03-002",
+                                                               "T0108-COLLECT_SOURCES_02_03-005"
+                                                           ],
+                                           "sourceUrls":  [
+                                                              "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                                                              "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide",
+                                                              "https://developer.aliyun.com/article/1638911",
+                                                              "https://juhe.cn/news/index/id/7857",
+                                                              "https://sj.qq.com/appdetail/com.ss.android.ugc.aweme/review",
+                                                              "https://apps.apple.com/cn/app/抖音/id1142110895?see-all=reviews\u0026platform=iphone",
+                                                              "https://blog.wyan.vip/2023/05/tiktok_video_quality.html",
+                                                              "https://qinshixixing.gitbooks.io/bilibiliapi",
+                                                              "https://nemo2011.github.io/bilibili-api",
+                                                              "https://github.com/pskdje/bilibili-API-collect/blob/main/README.md",
+                                                              "https://pypi.org/project/bilibili-api-dev",
+                                                              "https://bilibili.com/read/cv21313074",
+                                                              "https://m.bilibili.com/opus/176188045339958838",
+                                                              "https://play.google.com/store/apps/details?id=tv.danmaku.bili\u0026hl=zh",
+                                                              "https://capterra.com/search?query=哔哩哔哩"
+                                                          ],
+                                           "suggestion":  "建议人工介入补充证据后再进行自动化分析。"
+                                       },
+                                       {
+                                           "type":  "coverage_gap",
+                                           "section":  "定价策略 / 优势判断、短板与风险",
+                                           "severity":  "WARNING",
+                                           "level":  "MAJOR",
+                                           "dimensionCode":  "STRUCTURE_COMPLETENESS",
+                                           "dimensionName":  "结构完整性",
+                                           "evidenceBasis":  "缺证据章节=无；证据不覆盖章节=定价策略；模型拒答章节=无；空字段章节=优势判断、短板与风险；阻断字段=无",
+                                           "evidenceIds":  [
+
+                                                           ],
+                                           "sourceUrls":  [
+                                                              "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                                                              "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide",
+                                                              "https://developer.aliyun.com/article/1638911",
+                                                              "https://juhe.cn/news/index/id/7857",
+                                                              "https://sj.qq.com/appdetail/com.ss.android.ugc.aweme/review",
+                                                              "https://apps.apple.com/cn/app/抖音/id1142110895?see-all=reviews\u0026platform=iphone",
+                                                              "https://blog.wyan.vip/2023/05/tiktok_video_quality.html",
+                                                              "https://qinshixixing.gitbooks.io/bilibiliapi",
+                                                              "https://nemo2011.github.io/bilibili-api",
+                                                              "https://github.com/pskdje/bilibili-API-collect/blob/main/README.md",
+                                                              "https://pypi.org/project/bilibili-api-dev",
+                                                              "https://bilibili.com/read/cv21313074",
+                                                              "https://m.bilibili.com/opus/176188045339958838",
+                                                              "https://play.google.com/store/apps/details?id=tv.danmaku.bili\u0026hl=zh",
+                                                              "https://capterra.com/search?query=哔哩哔哩"
+                                                          ],
+                                           "suggestion":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。"
+                                       },
+                                       {
+                                           "type":  "missing_structured_evidence",
+                                           "section":  "功能对比",
+                                           "severity":  "WARNING",
+                                           "level":  "MAJOR",
+                                           "dimensionCode":  "SEARCH_QUALITY",
+                                           "dimensionName":  "搜索质量",
+                                           "evidenceBasis":  "功能对比 的 structuredBlocks 与 qualitySignals 未达到可用门槛。structuredBlocks=0，qualitySignals=[TAVILY_RAW_CONTENT_READY, TAVILY_PREFETCHED_CONTENT_CONSUMED, TAVILY_STRUCTURED_BLOCK_COUNT=0, FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG]，qualityScore=0.59，evidenceCoverage=核心能力:TRACEABLE。",
+                                           "evidenceIds":  [
+                                                               "T0108-COLLECT_SOURCES_01_02-002"
+                                                           ],
+                                           "sourceUrls":  [
+                                                              "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide"
+                                                          ],
+                                           "suggestion":  "请补充功能对比对应 structuredBlocks；当前章节先保留 warning / audit，不阻断阶段1首报交付。"
+                                       },
+                                       {
+                                           "type":  "missing_structured_evidence",
+                                           "section":  "通用",
+                                           "severity":  "WARNING",
+                                           "level":  "MAJOR",
+                                           "dimensionCode":  "SEARCH_QUALITY",
+                                           "dimensionName":  "搜索质量",
+                                           "evidenceBasis":  "通用 的 structuredBlocks 与 qualitySignals 未达到可用门槛。structuredBlocks=0，qualitySignals=[DIRECT_HTML_HTTP_STATUS_ERROR, LIGHTWEIGHT_RUNTIME_FAILURE, UPGRADED_TO_FULL_RENDER, MAIN_CONTENT_READY, NO_STRUCTURED_BLOCKS, FULL_RENDER_READY, FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG, FIELD_RELEVANCE_WEAK, EVIDENCE_REPAIR_REQUIRED, REPAIR_QUERY_PROPOSED]，qualityScore=0.86。",
+                                           "evidenceIds":  [
+                                                               "T0108-COLLECT_SOURCES_02_03-005"
+                                                           ],
+                                           "sourceUrls":  [
+                                                              "https://capterra.com/search?query=哔哩哔哩"
+                                                          ],
+                                           "suggestion":  "请将通用记录为审计提醒，必要时后续补齐 structuredBlocks，但当前阶段不要把它作为主阻断项。"
+                                       }
+                                   ],
+                        "nextActions":  [
+                                            {
+                                                "title":  "尽量补充直接证据或更明确的来源引用。",
+                                                "description":  "请优先补充官网文档、定价页、客户案例、技术白皮书或公开报道，并确认报告正文引用新的 evidenceId。",
+                                                "actionType":  "SUPPLEMENT_EVIDENCE",
+                                                "targetNode":  "collect_sources",
+                                                "priority":  "HIGH"
+                                            },
+                                            {
+                                                "title":  "补源后重跑抽取与分析链路",
+                                                "description":  "新增证据入库后，从 extract_schema 节点重跑，让结构化知识、分析结果和报告正文都消费新证据。",
+                                                "actionType":  "RERUN_NODE",
+                                                "targetNode":  "extract_schema",
+                                                "priority":  "HIGH"
+                                            },
+                                            {
+                                                "title":  "复核终审问题清单",
+                                                "description":  "逐条检查终审问题清单，确认每个 ERROR 都已有证据、降级说明或删除处理，再重新触发终审。",
+                                                "actionType":  "MANUAL_REVIEW",
+                                                "targetNode":  "quality_check_final",
+                                                "priority":  "MEDIUM"
+                                            },
+                                            {
+                                                "title":  "删除或降级无法验证的结论",
+                                                "description":  "如果公开资料仍无法支撑相关判断，请把绝对化结论改成“当前公开资料未能验证”，或从报告中删除该结论。",
+                                                "actionType":  "REWRITE_CLAIM",
+                                                "targetNode":  "rewrite_report",
+                                                "priority":  "MEDIUM"
+                                            }
+                                        ],
+                        "revisionDirectives":  [
+                                                   {
+                                                       "category":  "EVIDENCE_GAP",
+                                                       "actionType":  "SUPPLEMENT_EVIDENCE",
+                                                       "orchestrationAction":  "CREATE_SUPPLEMENT_BRANCH",
+                                                       "priority":  "HIGH",
+                                                       "targetNode":  "collect_sources",
+                                                       "targetSection":  "功能对比",
+                                                       "summary":  "尽量补充直接证据或更明确的来源引用。",
+                                                       "searchFeedback":  null,
+                                                       "searchQueries":  [
+                                                                             "抖音 功能对比",
+                                                                             "哔哩哔哩 功能对比"
+                                                                         ],
+                                                       "sourceUrls":  [
+                                                                          "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                                                                          "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide",
+                                                                          "https://developer.aliyun.com/article/1638911",
+                                                                          "https://juhe.cn/news/index/id/7857",
+                                                                          "https://sj.qq.com/appdetail/com.ss.android.ugc.aweme/review",
+                                                                          "https://apps.apple.com/cn/app/抖音/id1142110895?see-all=reviews\u0026platform=iphone",
+                                                                          "https://blog.wyan.vip/2023/05/tiktok_video_quality.html",
+                                                                          "https://qinshixixing.gitbooks.io/bilibiliapi",
+                                                                          "https://nemo2011.github.io/bilibili-api",
+                                                                          "https://github.com/pskdje/bilibili-API-collect/blob/main/README.md",
+                                                                          "https://pypi.org/project/bilibili-api-dev",
+                                                                          "https://bilibili.com/read/cv21313074",
+                                                                          "https://m.bilibili.com/opus/176188045339958838",
+                                                                          "https://play.google.com/store/apps/details?id=tv.danmaku.bili\u0026hl=zh",
+                                                                          "https://capterra.com/search?query=哔哩哔哩"
+                                                                      ],
+                                                       "expectedOutcome":  "功能对比需要补齐来源引用或下调无法验证的判断，确保结论可回溯。"
+                                                   },
+                                                   {
+                                                       "category":  "STRUCTURE_ISSUE",
+                                                       "actionType":  "RERUN_NODE",
+                                                       "orchestrationAction":  "CREATE_RERUN_BRANCH",
+                                                       "priority":  "HIGH",
+                                                       "targetNode":  "extract_schema",
+                                                       "targetSection":  "定价策略 / 优势判断、短板与风险",
+                                                       "summary":  "补充对应章节证据或明确标注信息缺失。",
+                                                       "searchFeedback":  null,
+                                                       "searchQueries":  [
+                                                                             "抖音 定价策略 / 优势判断、短板与风险",
+                                                                             "哔哩哔哩 定价策略 / 优势判断、短板与风险"
+                                                                         ],
+                                                       "sourceUrls":  [
+                                                                          "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                                                                          "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide",
+                                                                          "https://developer.aliyun.com/article/1638911",
+                                                                          "https://juhe.cn/news/index/id/7857",
+                                                                          "https://sj.qq.com/appdetail/com.ss.android.ugc.aweme/review",
+                                                                          "https://apps.apple.com/cn/app/抖音/id1142110895?see-all=reviews\u0026platform=iphone",
+                                                                          "https://blog.wyan.vip/2023/05/tiktok_video_quality.html",
+                                                                          "https://qinshixixing.gitbooks.io/bilibiliapi",
+                                                                          "https://nemo2011.github.io/bilibili-api",
+                                                                          "https://github.com/pskdje/bilibili-API-collect/blob/main/README.md",
+                                                                          "https://pypi.org/project/bilibili-api-dev",
+                                                                          "https://bilibili.com/read/cv21313074",
+                                                                          "https://m.bilibili.com/opus/176188045339958838",
+                                                                          "https://play.google.com/store/apps/details?id=tv.danmaku.bili\u0026hl=zh",
+                                                                          "https://capterra.com/search?query=哔哩哔哩"
+                                                                      ],
+                                                       "expectedOutcome":  "定价策略 / 优势判断、短板与风险需要恢复结构化字段完整性，并让报告章节与字段输出重新对齐。"
+                                                   },
+                                                   {
+                                                       "category":  "EVIDENCE_GAP",
+                                                       "actionType":  "SUPPLEMENT_EVIDENCE",
+                                                       "orchestrationAction":  "CREATE_SUPPLEMENT_BRANCH",
+                                                       "priority":  "HIGH",
+                                                       "targetNode":  "collect_sources",
+                                                       "targetSection":  "整体",
+                                                       "summary":  "建议人工介入补充证据后再进行自动化分析。",
+                                                       "searchFeedback":  null,
+                                                       "searchQueries":  [
+                                                                             "抖音 整体",
+                                                                             "哔哩哔哩 整体"
+                                                                         ],
+                                                       "sourceUrls":  [
+                                                                          "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                                                                          "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide",
+                                                                          "https://developer.aliyun.com/article/1638911",
+                                                                          "https://juhe.cn/news/index/id/7857",
+                                                                          "https://sj.qq.com/appdetail/com.ss.android.ugc.aweme/review",
+                                                                          "https://apps.apple.com/cn/app/抖音/id1142110895?see-all=reviews\u0026platform=iphone",
+                                                                          "https://blog.wyan.vip/2023/05/tiktok_video_quality.html",
+                                                                          "https://qinshixixing.gitbooks.io/bilibiliapi",
+                                                                          "https://nemo2011.github.io/bilibili-api",
+                                                                          "https://github.com/pskdje/bilibili-API-collect/blob/main/README.md",
+                                                                          "https://pypi.org/project/bilibili-api-dev",
+                                                                          "https://bilibili.com/read/cv21313074",
+                                                                          "https://m.bilibili.com/opus/176188045339958838",
+                                                                          "https://play.google.com/store/apps/details?id=tv.danmaku.bili\u0026hl=zh",
+                                                                          "https://capterra.com/search?query=哔哩哔哩"
+                                                                      ],
+                                                       "expectedOutcome":  "整体需要补齐来源引用或下调无法验证的判断，确保结论可回溯。"
+                                                   },
+                                                   {
+                                                       "category":  "SEARCH_QUALITY",
+                                                       "actionType":  "SUPPLEMENT_EVIDENCE",
+                                                       "orchestrationAction":  "CREATE_SUPPLEMENT_BRANCH",
+                                                       "priority":  "HIGH",
+                                                       "targetNode":  "collect_sources",
+                                                       "targetSection":  "功能对比",
+                                                       "summary":  "请补充功能对比对应 structuredBlocks；当前章节先保留 warning / audit，不阻断阶段1首报交付。",
+                                                       "searchFeedback":  "功能对比：当前来源虽然已命中 sourceUrls，但 structuredBlocks 或 qualitySignals 未达到可用门槛。",
+                                                       "searchQueries":  [
+                                                                             "抖音 功能对比",
+                                                                             "哔哩哔哩 功能对比"
+                                                                         ],
+                                                       "sourceUrls":  [
+                                                                          "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide"
+                                                                      ],
+                                                       "expectedOutcome":  "功能对比需要补齐更高可信度的搜索来源，并让该章节重新具备可验证支撑。"
+                                                   },
+                                                   {
+                                                       "category":  "SEARCH_QUALITY",
+                                                       "actionType":  "SUPPLEMENT_EVIDENCE",
+                                                       "orchestrationAction":  "CREATE_SUPPLEMENT_BRANCH",
+                                                       "priority":  "HIGH",
+                                                       "targetNode":  "collect_sources",
+                                                       "targetSection":  "通用",
+                                                       "summary":  "请将通用记录为审计提醒，必要时后续补齐 structuredBlocks，但当前阶段不要把它作为主阻断项。",
+                                                       "searchFeedback":  "通用：当前来源虽然已命中 sourceUrls，但 structuredBlocks 或 qualitySignals 未达到可用门槛。",
+                                                       "searchQueries":  [
+                                                                             "抖音 通用",
+                                                                             "哔哩哔哩 通用"
+                                                                         ],
+                                                       "sourceUrls":  [
+                                                                          "https://capterra.com/search?query=哔哩哔哩"
+                                                                      ],
+                                                       "expectedOutcome":  "通用需要补齐更高可信度的搜索来源，并让该章节重新具备可验证支撑。"
+                                                   }
+                                               ]
+                    },
+    "deliverySummary":  {
+                            "readyForDelivery":  false,
+                            "deliveryStatus":  "NEEDS_EVIDENCE",
+                            "summary":  "当前报告暂不可交付，存在 0 个阻塞问题和 1 个证据缺口；主要缺口已细化为structuredBlocks 缺失 / qualitySignals 命中失败 / evidenceCoverage 缺字段。",
+                            "primaryIssue":  "关键结论缺少充分支撑",
+                            "recommendedAction":  "证据可追溯性、修订可执行性存在关键缺口。模型摘要：最终评审显示，报告在证据可追溯性和结构完整性方面存在改进空间，核心分析维度因证据缺失难以形成有力对比。自动改写无法解决根本问题，建议人工补证。",
+                            "blockerCount":  0,
+                            "evidenceGapCount":  1,
+                            "sourceUrls":  [
+                                               "https://www.juhe.cn/news/index/id/7857",
+                                               "https://juhe.cn/news/index/id/7857",
+                                               "https://qinshixixing.gitbooks.io/bilibiliapi",
+                                               "https://nemo2011.github.io/bilibili-api",
+                                               "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                                               "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide",
+                                               "https://developer.aliyun.com/article/1638911",
+                                               "https://sj.qq.com/appdetail/com.ss.android.ugc.aweme/review",
+                                               "https://apps.apple.com/cn/app/抖音/id1142110895?see-all=reviews\u0026platform=iphone",
+                                               "https://blog.wyan.vip/2023/05/tiktok_video_quality.html",
+                                               "https://github.com/pskdje/bilibili-API-collect/blob/main/README.md",
+                                               "https://pypi.org/project/bilibili-api-dev",
+                                               "https://bilibili.com/read/cv21313074",
+                                               "https://m.bilibili.com/opus/176188045339958838",
+                                               "https://play.google.com/store/apps/details?id=tv.danmaku.bili\u0026hl=zh",
+                                               "https://capterra.com/search?query=哔哩哔哩"
+                                           ]
+                        },
+    "evidenceCoverageOverview":  {
+                                     "totalFields":  14,
+                                     "traceableFields":  10,
+                                     "missingEvidenceFields":  2,
+                                     "emptyFields":  2,
+                                     "statusBreakdown":  {
+                                                             "TRACEABLE":  10,
+                                                             "EVIDENCE_NOT_COVERING":  2,
+                                                             "EMPTY":  2
+                                                         },
+                                     "sections":  [
+                                                      {
+                                                          "sectionKey":  "overview",
+                                                          "sectionTitle":  "产品概览",
+                                                          "totalFields":  2,
+                                                          "traceableFields":  2,
+                                                          "missingEvidenceFields":  0,
+                                                          "emptyFields":  0,
+                                                          "statusBreakdown":  {
+                                                                                  "TRACEABLE":  2
+                                                                              },
+                                                          "missingFields":  [
+
+                                                                            ]
+                                                      },
+                                                      {
+                                                          "sectionKey":  "positioning",
+                                                          "sectionTitle":  "市场定位",
+                                                          "totalFields":  2,
+                                                          "traceableFields":  2,
+                                                          "missingEvidenceFields":  0,
+                                                          "emptyFields":  0,
+                                                          "statusBreakdown":  {
+                                                                                  "TRACEABLE":  2
+                                                                              },
+                                                          "missingFields":  [
+
+                                                                            ]
+                                                      },
+                                                      {
+                                                          "sectionKey":  "target_users",
+                                                          "sectionTitle":  "目标用户",
+                                                          "totalFields":  2,
+                                                          "traceableFields":  2,
+                                                          "missingEvidenceFields":  0,
+                                                          "emptyFields":  0,
+                                                          "statusBreakdown":  {
+                                                                                  "TRACEABLE":  2
+                                                                              },
+                                                          "missingFields":  [
+
+                                                                            ]
+                                                      },
+                                                      {
+                                                          "sectionKey":  "features",
+                                                          "sectionTitle":  "核心能力",
+                                                          "totalFields":  2,
+                                                          "traceableFields":  2,
+                                                          "missingEvidenceFields":  0,
+                                                          "emptyFields":  0,
+                                                          "statusBreakdown":  {
+                                                                                  "TRACEABLE":  2
+                                                                              },
+                                                          "missingFields":  [
+
+                                                                            ]
+                                                      },
+                                                      {
+                                                          "sectionKey":  "pricing",
+                                                          "sectionTitle":  "定价策略",
+                                                          "totalFields":  2,
+                                                          "traceableFields":  0,
+                                                          "missingEvidenceFields":  2,
+                                                          "emptyFields":  0,
+                                                          "statusBreakdown":  {
+                                                                                  "EVIDENCE_NOT_COVERING":  2
+                                                                              },
+                                                          "missingFields":  [
+                                                                                "抖音 / 定价策略",
+                                                                                "哔哩哔哩 / 定价策略"
+                                                                            ]
+                                                      },
+                                                      {
+                                                          "sectionKey":  "strengths",
+                                                          "sectionTitle":  "优势判断",
+                                                          "totalFields":  2,
+                                                          "traceableFields":  1,
+                                                          "missingEvidenceFields":  0,
+                                                          "emptyFields":  1,
+                                                          "statusBreakdown":  {
+                                                                                  "EMPTY":  1,
+                                                                                  "TRACEABLE":  1
+                                                                              },
+                                                          "missingFields":  [
+
+                                                                            ]
+                                                      },
+                                                      {
+                                                          "sectionKey":  "weaknesses",
+                                                          "sectionTitle":  "短板与风险",
+                                                          "totalFields":  2,
+                                                          "traceableFields":  1,
+                                                          "missingEvidenceFields":  0,
+                                                          "emptyFields":  1,
+                                                          "statusBreakdown":  {
+                                                                                  "EMPTY":  1,
+                                                                                  "TRACEABLE":  1
+                                                                              },
+                                                          "missingFields":  [
+
+                                                                            ]
+                                                      }
+                                                  ],
+                                     "competitors":  [
+                                                         {
+                                                             "competitorName":  "抖音",
+                                                             "totalFields":  7,
+                                                             "traceableFields":  4,
+                                                             "missingEvidenceFields":  1,
+                                                             "emptyFields":  2,
+                                                             "statusBreakdown":  {
+                                                                                     "TRACEABLE":  4,
+                                                                                     "EVIDENCE_NOT_COVERING":  1,
+                                                                                     "EMPTY":  2
+                                                                                 },
+                                                             "missingSections":  [
+                                                                                     "定价策略"
+                                                                                 ]
+                                                         },
+                                                         {
+                                                             "competitorName":  "哔哩哔哩",
+                                                             "totalFields":  7,
+                                                             "traceableFields":  6,
+                                                             "missingEvidenceFields":  1,
+                                                             "emptyFields":  0,
+                                                             "statusBreakdown":  {
+                                                                                     "TRACEABLE":  6,
+                                                                                     "EVIDENCE_NOT_COVERING":  1
+                                                                                 },
+                                                             "missingSections":  [
+                                                                                     "定价策略"
+                                                                                 ]
+                                                         }
+                                                     ]
+                                 },
+    "qualityIssues":  [
+                          {
+                              "type":  "weak_evidence",
+                              "section":  "功能对比",
+                              "severity":  "WARNING",
+                              "level":  "MAJOR",
+                              "dimensionCode":  "EVIDENCE_TRACEABILITY",
+                              "evidenceBasis":  "功能对比存在无法回指到 [证据：EID] 的判断，需要补齐来源编号与链接。",
+                              "evidenceIds":  [
+
+                                              ],
+                              "sourceUrlCount":  15,
+                              "suggestion":  "尽量补充直接证据或更明确的来源引用。"
+                          },
+                          {
+                              "type":  "coverage_gap",
+                              "section":  "定价策略 / 优势判断、短板与风险",
+                              "severity":  "WARNING",
+                              "level":  "MAJOR",
+                              "dimensionCode":  "ACTIONABILITY",
+                              "evidenceBasis":  "定价策略 / 优势判断、短板与风险存在需要收紧或重写的表达，请结合当前诊断继续复核。",
+                              "evidenceIds":  [
+                                                  "T0108-COLLECT_SOURCES_01_02-001",
+                                                  "T0108-COLLECT_SOURCES_01_02-002",
+                                                  "T0108-COLLECT_SOURCES_01_02-003",
+                                                  "T0108-COLLECT_SOURCES_01_02-004",
+                                                  "T0108-COLLECT_SOURCES_01_03-001",
+                                                  "T0108-COLLECT_SOURCES_01_03-002",
+                                                  "T0108-COLLECT_SOURCES_01_03-005",
+                                                  "T0108-COLLECT_SOURCES_02_02-001",
+                                                  "T0108-COLLECT_SOURCES_02_02-002",
+                                                  "T0108-COLLECT_SOURCES_02_02-003",
+                                                  "T0108-COLLECT_SOURCES_02_02-004",
+                                                  "T0108-COLLECT_SOURCES_02_02-005",
+                                                  "T0108-COLLECT_SOURCES_02_03-001",
+                                                  "T0108-COLLECT_SOURCES_02_03-002",
+                                                  "T0108-COLLECT_SOURCES_02_03-005"
+                                              ],
+                              "sourceUrlCount":  15,
+                              "suggestion":  "补充对应章节证据或明确标注信息缺失。"
+                          },
+                          {
+                              "type":  "low_actionability",
+                              "section":  "整体",
+                              "severity":  "WARNING",
+                              "level":  "MAJOR",
+                              "dimensionCode":  "ACTIONABILITY",
+                              "evidenceBasis":  "整体存在需要收紧或重写的表达，请结合当前诊断继续复核。",
+                              "evidenceIds":  [
+                                                  "T0108-COLLECT_SOURCES_01_02-001",
+                                                  "T0108-COLLECT_SOURCES_01_02-002",
+                                                  "T0108-COLLECT_SOURCES_01_02-003",
+                                                  "T0108-COLLECT_SOURCES_01_02-004",
+                                                  "T0108-COLLECT_SOURCES_01_03-001",
+                                                  "T0108-COLLECT_SOURCES_01_03-002",
+                                                  "T0108-COLLECT_SOURCES_01_03-005",
+                                                  "T0108-COLLECT_SOURCES_02_02-001",
+                                                  "T0108-COLLECT_SOURCES_02_02-002",
+                                                  "T0108-COLLECT_SOURCES_02_02-003",
+                                                  "T0108-COLLECT_SOURCES_02_02-004",
+                                                  "T0108-COLLECT_SOURCES_02_02-005",
+                                                  "T0108-COLLECT_SOURCES_02_03-001",
+                                                  "T0108-COLLECT_SOURCES_02_03-002",
+                                                  "T0108-COLLECT_SOURCES_02_03-005"
+                                              ],
+                              "sourceUrlCount":  15,
+                              "suggestion":  "建议人工介入补充证据后再进行自动化分析。"
+                          },
+                          {
+                              "type":  "coverage_gap",
+                              "section":  "定价策略 / 优势判断、短板与风险",
+                              "severity":  "WARNING",
+                              "level":  "MAJOR",
+                              "dimensionCode":  "STRUCTURE_COMPLETENESS",
+                              "evidenceBasis":  "缺证据章节=无；证据不覆盖章节=定价策略；模型拒答章节=无；空字段章节=优势判断、短板与风险；阻断字段=无",
+                              "evidenceIds":  [
+
+                                              ],
+                              "sourceUrlCount":  15,
+                              "suggestion":  "请优先补齐缺证据章节，并在重跑抽取后复核对应报告段落是否仍保留无依据结论。"
+                          },
+                          {
+                              "type":  "missing_structured_evidence",
+                              "section":  "功能对比",
+                              "severity":  "WARNING",
+                              "level":  "MAJOR",
+                              "dimensionCode":  "SEARCH_QUALITY",
+                              "evidenceBasis":  "功能对比 的 structuredBlocks 与 qualitySignals 未达到可用门槛。structuredBlocks=0，qualitySignals=[TAVILY_RAW_CONTENT_READY, TAVILY_PREFETCHED_CONTENT_CONSUMED, TAVILY_STRUCTURED_BLOCK_COUNT=0, FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG]，qualityScore=0.59，evidenceCoverage=核心能力:TRACEABLE。",
+                              "evidenceIds":  [
+                                                  "T0108-COLLECT_SOURCES_01_02-002"
+                                              ],
+                              "sourceUrlCount":  1,
+                              "suggestion":  "请补充功能对比对应 structuredBlocks；当前章节先保留 warning / audit，不阻断阶段1首报交付。"
+                          },
+                          {
+                              "type":  "missing_structured_evidence",
+                              "section":  "通用",
+                              "severity":  "WARNING",
+                              "level":  "MAJOR",
+                              "dimensionCode":  "SEARCH_QUALITY",
+                              "evidenceBasis":  "通用 的 structuredBlocks 与 qualitySignals 未达到可用门槛。structuredBlocks=0，qualitySignals=[DIRECT_HTML_HTTP_STATUS_ERROR, LIGHTWEIGHT_RUNTIME_FAILURE, UPGRADED_TO_FULL_RENDER, MAIN_CONTENT_READY, NO_STRUCTURED_BLOCKS, FULL_RENDER_READY, FIELD_CONTEXT_FALLBACK_FROM_NODE_CONFIG, FIELD_RELEVANCE_WEAK, EVIDENCE_REPAIR_REQUIRED, REPAIR_QUERY_PROPOSED]，qualityScore=0.86。",
+                              "evidenceIds":  [
+                                                  "T0108-COLLECT_SOURCES_02_03-005"
+                                              ],
+                              "sourceUrlCount":  1,
+                              "suggestion":  "请将通用记录为审计提醒，必要时后续补齐 structuredBlocks，但当前阶段不要把它作为主阻断项。"
+                          }
+                      ]
+}

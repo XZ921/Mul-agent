@@ -1,0 +1,117 @@
+{
+  "taskId": 109,
+  "runDir": "E:\\java_study\\Mul-agnet\\tmp\\stage1-degraded-live-e2e-successclosure-poc-includedomains-20260712-160453",
+  "backendPort": 9093,
+  "requestName": "阶段1 POC样例 E2E：抖音 与 哔哩哔哩 include_domains 降级收口验证",
+  "finalStatus": "FAILED",
+  "terminalError": "任务存在未恢复的失败节点，请检查节点详情",
+  "canViewReport": false,
+  "reportStatus": "REPORT_NOT_FOUND",
+  "evidenceCount": 0,
+  "nodeStatusSummary": {
+    "SUCCESS_DEGRADED": 6,
+    "SKIPPED": 8
+  },
+  "collectorSummary": [
+    {
+      "nodeName": "collect_sources_01_01",
+      "competitor": "抖音",
+      "sourceType": "OFFICIAL",
+      "status": "SUCCESS_DEGRADED",
+      "selectedTargets": 1,
+      "sourceCandidates": 6,
+      "totalCollected": 0,
+      "successCollected": 0,
+      "evidenceFragments": 0,
+      "documents": 0,
+      "readyForQuorum": false,
+      "degradationReason": "HARD_DEADLINE_REACHED"
+    },
+    {
+      "nodeName": "collect_sources_01_02",
+      "competitor": "抖音",
+      "sourceType": "DOCS",
+      "status": "SUCCESS_DEGRADED",
+      "selectedTargets": 4,
+      "sourceCandidates": 5,
+      "totalCollected": 0,
+      "successCollected": 0,
+      "evidenceFragments": 0,
+      "documents": 0,
+      "readyForQuorum": false,
+      "degradationReason": "HARD_DEADLINE_REACHED"
+    },
+    {
+      "nodeName": "collect_sources_01_03",
+      "competitor": "抖音",
+      "sourceType": "REVIEW",
+      "status": "SUCCESS_DEGRADED",
+      "selectedTargets": 0,
+      "sourceCandidates": 9,
+      "totalCollected": 0,
+      "successCollected": 0,
+      "evidenceFragments": 0,
+      "documents": 0,
+      "readyForQuorum": false,
+      "degradationReason": "HARD_DEADLINE_REACHED"
+    },
+    {
+      "nodeName": "collect_sources_02_01",
+      "competitor": "哔哩哔哩",
+      "sourceType": "OFFICIAL",
+      "status": "SUCCESS_DEGRADED",
+      "selectedTargets": 0,
+      "sourceCandidates": 6,
+      "totalCollected": 0,
+      "successCollected": 0,
+      "evidenceFragments": 0,
+      "documents": 0,
+      "readyForQuorum": false,
+      "degradationReason": "HARD_DEADLINE_REACHED"
+    },
+    {
+      "nodeName": "collect_sources_02_02",
+      "competitor": "哔哩哔哩",
+      "sourceType": "DOCS",
+      "status": "SUCCESS_DEGRADED",
+      "selectedTargets": 7,
+      "sourceCandidates": 12,
+      "totalCollected": 0,
+      "successCollected": 0,
+      "evidenceFragments": 0,
+      "documents": 0,
+      "readyForQuorum": false,
+      "degradationReason": "HARD_DEADLINE_REACHED"
+    },
+    {
+      "nodeName": "collect_sources_02_03",
+      "competitor": "哔哩哔哩",
+      "sourceType": "REVIEW",
+      "status": "SUCCESS_DEGRADED",
+      "selectedTargets": 4,
+      "sourceCandidates": 4,
+      "totalCollected": 4,
+      "successCollected": 0,
+      "evidenceFragments": 0,
+      "documents": 4,
+      "readyForQuorum": false,
+      "degradationReason": "HARD_DEADLINE_REACHED"
+    }
+  ],
+  "dependencyFailure": {
+    "nodeName": "extract_schema",
+    "status": "SKIPPED",
+    "errorMessage": "Dependencies not satisfied",
+    "dependsOn": [
+      "collect_sources_01_01",
+      "collect_sources_01_02",
+      "collect_sources_01_03",
+      "collect_sources_02_01",
+      "collect_sources_02_02",
+      "collect_sources_02_03"
+    ]
+  },
+  "rootCause": "本轮没有进入报告阶段。直接原因是所有采集节点 readyForQuorum=false，Collector quorum 依赖不满足，extract_schema 被跳过；更深层原因是采集在 HARD_DEADLINE_REACHED 前只形成候选 URL，没有形成可复用 evidenceFragments / successCollected。",
+  "includeDomainsFinding": "本轮 OFFICIAL/DOCS 同时给 top-level includeDomains 和 nested plannedQueries includeDomains 加了域名白名单，REVIEW 保持 open。结果比上一轮 task 108 更差，说明把 nested OPEN_WEB/补源查询也收窄后，会削弱第三方/开放网页发现与后续采集余量。",
+  "notExercised": "NodeExecutionRecoveryPolicy 的最终报告成功降级收口路径没有被触发，因为 analyze/write/review 全部未运行。"
+}

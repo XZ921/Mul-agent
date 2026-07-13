@@ -1,0 +1,62 @@
+﻿[
+    {
+        "nodeName":  "collect_sources_01_01",
+        "displayName":  "抖音 - OFFICIAL采集",
+        "competitorName":  "抖音",
+        "sourceType":  "OFFICIAL",
+        "preferredDomains":  "www.douyin.com",
+        "includeDomains":  "www.douyin.com",
+        "thirdPartyFallbackQueries":  2,
+        "sourceCandidates":  1
+    },
+    {
+        "nodeName":  "collect_sources_01_02",
+        "displayName":  "抖音 - DOCS采集",
+        "competitorName":  "抖音",
+        "sourceType":  "DOCS",
+        "preferredDomains":  "www.douyin.com",
+        "includeDomains":  "www.douyin.com",
+        "thirdPartyFallbackQueries":  2,
+        "sourceCandidates":  4
+    },
+    {
+        "nodeName":  "collect_sources_01_03",
+        "displayName":  "抖音 - REVIEW采集",
+        "competitorName":  "抖音",
+        "sourceType":  "REVIEW",
+        "preferredDomains":  "www.g2.com,www.capterra.com,www.douyin.com",
+        "includeDomains":  "",
+        "thirdPartyFallbackQueries":  0,
+        "sourceCandidates":  5
+    },
+    {
+        "nodeName":  "collect_sources_02_01",
+        "displayName":  "哔哩哔哩 - OFFICIAL采集",
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "OFFICIAL",
+        "preferredDomains":  "douyin.com",
+        "includeDomains":  "douyin.com",
+        "thirdPartyFallbackQueries":  2,
+        "sourceCandidates":  1
+    },
+    {
+        "nodeName":  "collect_sources_02_02",
+        "displayName":  "哔哩哔哩 - DOCS采集",
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "DOCS",
+        "preferredDomains":  "douyin.com",
+        "includeDomains":  "douyin.com",
+        "thirdPartyFallbackQueries":  2,
+        "sourceCandidates":  4
+    },
+    {
+        "nodeName":  "collect_sources_02_03",
+        "displayName":  "哔哩哔哩 - REVIEW采集",
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "REVIEW",
+        "preferredDomains":  "www.g2.com,www.capterra.com,douyin.com",
+        "includeDomains":  "",
+        "thirdPartyFallbackQueries":  0,
+        "sourceCandidates":  5
+    }
+]

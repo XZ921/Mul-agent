@@ -1,0 +1,24 @@
+{
+    "reportTemplate":  "阶段1首报",
+    "competitorNames":  [
+                            "抖音",
+                            "哔哩哔哩"
+                        ],
+    "competitorUrls":  [
+                           "https://www.douyin.com",
+                           "https://www.bilibili.com"
+                       ],
+    "reportLanguage":  "中文",
+    "subjectProduct":  "短视频内容平台推荐算法与内容分发机制",
+    "sourceScope":  [
+                        "官网",
+                        "产品文档",
+                        "公开测评"
+                    ],
+    "analysisDimensions":  [
+                               "推荐算法/内容分发机制",
+                               "创作者规则/流量规则",
+                               "开放平台/API文档"
+                           ],
+    "taskName":  "stage1-poc-douyin-bilibili-no-extra-includedomains-e2e"
+}

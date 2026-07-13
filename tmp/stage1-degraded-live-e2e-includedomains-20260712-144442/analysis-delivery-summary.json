@@ -1,0 +1,9 @@
+﻿{
+    "deliveryStatus":  null,
+    "readyForDelivery":  null,
+    "qualityScore":  48,
+    "qualityPassed":  false,
+    "blockerCount":  null,
+    "evidenceGapCount":  null,
+    "canViewReport":  true
+}

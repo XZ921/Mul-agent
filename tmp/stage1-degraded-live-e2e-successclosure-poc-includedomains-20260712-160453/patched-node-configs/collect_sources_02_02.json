@@ -1,0 +1,1562 @@
+{
+    "competitorName":  "哔哩哔哩",
+    "sourceType":  "DOCS",
+    "sourceFamilyKey":  "official",
+    "sourceFamilyRole":  "PRIMARY_VERTICAL",
+    "primaryTools":  [
+                         "PUBLIC_SEARCH"
+                     ],
+    "auxiliaryTools":  [
+                           "WEB_SCRAPER",
+                           "JINA_READER"
+                       ],
+    "queryTemplates":  [
+                           "search-official",
+                           "search-official-domain",
+                           "search-pricing-primary",
+                           "search-docs-primary"
+                       ],
+    "sourceScope":  [
+                        "官网",
+                        "产品文档",
+                        "公开测评"
+                    ],
+    "schemaName":  null,
+    "coverageContractRef":  "coverage-risk_analysis-v1",
+    "requiredCoverageFields":  [
+                                   "summary",
+                                   "positioning",
+                                   "targetUsers",
+                                   "coreFeatures"
+                               ],
+    "blockingCoverageFields":  [
+                                   "summary",
+                                   "positioning",
+                                   "targetUsers",
+                                   "coreFeatures"
+                               ],
+    "coverageQueryIntents":  [
+                                 "OFFICIAL_DOCS",
+                                 "API_DOCS",
+                                 "SDK_GUIDE",
+                                 "THIRD_PARTY_REVIEW",
+                                 "POLICY",
+                                 "RISK"
+                             ],
+    "dimensionEvidencePlan":  {
+                                  "competitorName":  "哔哩哔哩",
+                                  "contractVersion":  "coverage-risk_analysis-v1",
+                                  "maxCollectionRounds":  2,
+                                  "fieldCoverages":  [
+                                                         {
+                                                             "fieldName":  "summary",
+                                                             "status":  "NOT_STARTED",
+                                                             "minimumAttemptedPaths":  2,
+                                                             "minDistinctEvidenceCount":  2,
+                                                             "criticalForFirstReport":  true,
+                                                             "evidencePaths":  [
+                                                                                   {
+                                                                                       "pathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                       "sourceTypes":  [
+                                                                                                           "OFFICIAL",
+                                                                                                           "DOCS"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "OFFICIAL_DOCS",
+                                                                                                            "API_DOCS",
+                                                                                                            "SDK_GUIDE"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "FEATURE_BLOCK",
+                                                                                                               "PROFILE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  true,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "EVIDENCE_NOT_COVERING"
+                                                                                   },
+                                                                                   {
+                                                                                       "pathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                       "sourceTypes":  [
+                                                                                                           "REVIEW",
+                                                                                                           "NEWS",
+                                                                                                           "OPEN_WEB"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "THIRD_PARTY_REVIEW"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "FEATURE_BLOCK",
+                                                                                                               "PROFILE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  false,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "OPTIONAL_MISSING"
+                                                                                   }
+                                                                               ],
+                                                             "attemptedPaths":  [
+
+                                                                                ],
+                                                             "completedPaths":  [
+
+                                                                                ],
+                                                             "sourceUrls":  [
+
+                                                                            ],
+                                                             "plannedQueries":  [
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "哔哩哔哩 产品概述 OFFICIAL DOCS 功能 能力 特性 官方资料 官网",
+                                                                                        "reason":  "根据字段 summary 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 OFFICIAL_DOCS 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "b978c8e423dff4fc46ca6bf3571877d8",
+                                                                                        "priority":  0,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "哔哩哔哩 产品概述 API 文档 接口 文档 能力 官方资料 官网",
+                                                                                        "reason":  "根据字段 summary 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 API_DOCS 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "bcd4d0653ca5b3d92127f15bb1f1a7c3",
+                                                                                        "priority":  1,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "哔哩哔哩 产品概述 SDK 接入指南 接入指南 示例 官方资料 官网",
+                                                                                        "reason":  "根据字段 summary 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 SDK_GUIDE 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "210de86a25c61eff0c05fab84a1639d9",
+                                                                                        "priority":  2,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "哔哩哔哩 产品概述 OFFICIAL DOCS 功能 能力 特性 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 summary 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 OFFICIAL_DOCS 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "2593aea95d1cff0539750376cb5cdf3f",
+                                                                                        "priority":  3,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "哔哩哔哩 产品概述 API 文档 接口 文档 能力 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 summary 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 API_DOCS 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "c90a56362fef707735049e45d6ee9c04",
+                                                                                        "priority":  4,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "哔哩哔哩 产品概述 SDK 接入指南 接入指南 示例 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 summary 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 SDK_GUIDE 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "15649f18fc701b39a881a3b06ddbcd5a",
+                                                                                        "priority":  5,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "OPEN_WEB",
+                                                                                        "query":  "哔哩哔哩 产品概述 功能 能力 评测 实测 对比 教程 用户反馈 解读 行业分析",
+                                                                                        "reason":  "为字段 summary（产品概述）补充第三方视角，避免官方来源成为排他门槛，路径 OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryFingerprint":  "1a938abee76c9b32f215d64c0a8e5974",
+                                                                                        "priority":  6,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "哔哩哔哩 产品概述 第三方评测 功能 能力 评测 实测 对比",
+                                                                                        "reason":  "根据字段 summary 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "da0684c57793dd5790d28ff61b6a636b",
+                                                                                        "priority":  7,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "summary",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "哔哩哔哩 产品概述 第三方评测 功能 能力 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 summary 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "3f2a1b749cc46ab684cce38927fb29fb",
+                                                                                        "priority":  8,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    }
+                                                                                ],
+                                                             "lastRepairState":  null,
+                                                             "recommendedNextAction":  "EXECUTE_FIELD_EVIDENCE_QUERIES"
+                                                         },
+                                                         {
+                                                             "fieldName":  "positioning",
+                                                             "status":  "NOT_STARTED",
+                                                             "minimumAttemptedPaths":  2,
+                                                             "minDistinctEvidenceCount":  2,
+                                                             "criticalForFirstReport":  true,
+                                                             "evidencePaths":  [
+                                                                                   {
+                                                                                       "pathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                       "sourceTypes":  [
+                                                                                                           "OFFICIAL",
+                                                                                                           "DOCS"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "OFFICIAL_DOCS",
+                                                                                                            "API_DOCS",
+                                                                                                            "SDK_GUIDE"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "FEATURE_BLOCK",
+                                                                                                               "PROFILE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  true,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "EVIDENCE_NOT_COVERING"
+                                                                                   },
+                                                                                   {
+                                                                                       "pathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                       "sourceTypes":  [
+                                                                                                           "REVIEW",
+                                                                                                           "NEWS",
+                                                                                                           "OPEN_WEB"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "THIRD_PARTY_REVIEW"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "FEATURE_BLOCK",
+                                                                                                               "PROFILE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  false,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "OPTIONAL_MISSING"
+                                                                                   }
+                                                                               ],
+                                                             "attemptedPaths":  [
+
+                                                                                ],
+                                                             "completedPaths":  [
+
+                                                                                ],
+                                                             "sourceUrls":  [
+
+                                                                            ],
+                                                             "plannedQueries":  [
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "哔哩哔哩 市场定位 OFFICIAL DOCS 功能 能力 特性 官方资料 官网",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 OFFICIAL_DOCS 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "53e9ef5a2871b5d8afc702cb75fab3bd",
+                                                                                        "priority":  0,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "哔哩哔哩 市场定位 API 文档 接口 文档 能力 官方资料 官网",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 API_DOCS 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "348bbc79a68cf94a586fbe0b5428e8fd",
+                                                                                        "priority":  1,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "哔哩哔哩 市场定位 SDK 接入指南 接入指南 示例 官方资料 官网",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 SDK_GUIDE 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "e636b1584ace96772226e39aeecf99cd",
+                                                                                        "priority":  2,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "哔哩哔哩 市场定位 OFFICIAL DOCS 功能 能力 特性 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 OFFICIAL_DOCS 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "51d77f50958346c80f3f98e768381cba",
+                                                                                        "priority":  3,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "哔哩哔哩 市场定位 API 文档 接口 文档 能力 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 API_DOCS 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "40c6e2148703f0e6c00fcad3e3f8278b",
+                                                                                        "priority":  4,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "哔哩哔哩 市场定位 SDK 接入指南 接入指南 示例 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 SDK_GUIDE 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "ad3a86973524e648b05d216b9969eb35",
+                                                                                        "priority":  5,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "OPEN_WEB",
+                                                                                        "query":  "哔哩哔哩 市场定位 功能 能力 评测 实测 对比 教程 用户反馈 解读 行业分析",
+                                                                                        "reason":  "为字段 positioning（市场定位）补充第三方视角，避免官方来源成为排他门槛，路径 OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryFingerprint":  "4b46b3c64a54629effe45582b5db3c09",
+                                                                                        "priority":  6,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "哔哩哔哩 市场定位 第三方评测 功能 能力 评测 实测 对比",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "a59597884437d5b94e541d0e615543ba",
+                                                                                        "priority":  7,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "positioning",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "哔哩哔哩 市场定位 第三方评测 功能 能力 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 positioning 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "3bd65ed313a5645b77d55449660495a9",
+                                                                                        "priority":  8,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    }
+                                                                                ],
+                                                             "lastRepairState":  null,
+                                                             "recommendedNextAction":  "EXECUTE_FIELD_EVIDENCE_QUERIES"
+                                                         },
+                                                         {
+                                                             "fieldName":  "targetUsers",
+                                                             "status":  "NOT_STARTED",
+                                                             "minimumAttemptedPaths":  2,
+                                                             "minDistinctEvidenceCount":  2,
+                                                             "criticalForFirstReport":  true,
+                                                             "evidencePaths":  [
+                                                                                   {
+                                                                                       "pathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                       "sourceTypes":  [
+                                                                                                           "OFFICIAL",
+                                                                                                           "DOCS"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "OFFICIAL_DOCS",
+                                                                                                            "API_DOCS",
+                                                                                                            "SDK_GUIDE"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "FEATURE_BLOCK",
+                                                                                                               "PROFILE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  true,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "EVIDENCE_NOT_COVERING"
+                                                                                   },
+                                                                                   {
+                                                                                       "pathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                       "sourceTypes":  [
+                                                                                                           "REVIEW",
+                                                                                                           "NEWS",
+                                                                                                           "OPEN_WEB"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "THIRD_PARTY_REVIEW"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "FEATURE_BLOCK",
+                                                                                                               "PROFILE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  false,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "OPTIONAL_MISSING"
+                                                                                   }
+                                                                               ],
+                                                             "attemptedPaths":  [
+
+                                                                                ],
+                                                             "completedPaths":  [
+
+                                                                                ],
+                                                             "sourceUrls":  [
+
+                                                                            ],
+                                                             "plannedQueries":  [
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "哔哩哔哩 目标用户 OFFICIAL DOCS 功能 能力 特性 官方资料 官网",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 OFFICIAL_DOCS 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "08be232648212517cacf2d950f254316",
+                                                                                        "priority":  0,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "哔哩哔哩 目标用户 API 文档 接口 文档 能力 官方资料 官网",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 API_DOCS 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "5301b8fc597f9c49e195ddada1085509",
+                                                                                        "priority":  1,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "哔哩哔哩 目标用户 SDK 接入指南 接入指南 示例 官方资料 官网",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 SDK_GUIDE 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "b7c9e920725665ebd537482edcabac32",
+                                                                                        "priority":  2,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "哔哩哔哩 目标用户 OFFICIAL DOCS 功能 能力 特性 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 OFFICIAL_DOCS 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "9b84516622227bb79ae53a1d7e9209fe",
+                                                                                        "priority":  3,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "哔哩哔哩 目标用户 API 文档 接口 文档 能力 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 API_DOCS 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "da63e8942943bb3959011a87775c3560",
+                                                                                        "priority":  4,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "哔哩哔哩 目标用户 SDK 接入指南 接入指南 示例 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 OFFICIAL_PUBLIC_PROFILE、意图 SDK_GUIDE 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "1ed45e3028e72147baf879d79a7869c0",
+                                                                                        "priority":  5,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryIntent":  "OFFICIAL_DOCS",
+                                                                                        "sourceType":  "OPEN_WEB",
+                                                                                        "query":  "哔哩哔哩 目标用户 功能 能力 评测 实测 对比 教程 用户反馈 解读 行业分析",
+                                                                                        "reason":  "为字段 targetUsers（目标用户）补充第三方视角，避免官方来源成为排他门槛，路径 OFFICIAL_PUBLIC_PROFILE",
+                                                                                        "queryFingerprint":  "72e47927e62d438fba71cdaa5df1454a",
+                                                                                        "priority":  6,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "哔哩哔哩 目标用户 第三方评测 功能 能力 评测 实测 对比",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "92db004183b07992234d0777a1c48d48",
+                                                                                        "priority":  7,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "targetUsers",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "哔哩哔哩 目标用户 第三方评测 功能 能力 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 targetUsers 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "eb3cae8ba7a5b1cd3ef244494288427b",
+                                                                                        "priority":  8,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    }
+                                                                                ],
+                                                             "lastRepairState":  null,
+                                                             "recommendedNextAction":  "EXECUTE_FIELD_EVIDENCE_QUERIES"
+                                                         },
+                                                         {
+                                                             "fieldName":  "coreFeatures",
+                                                             "status":  "NOT_STARTED",
+                                                             "minimumAttemptedPaths":  2,
+                                                             "minDistinctEvidenceCount":  2,
+                                                             "criticalForFirstReport":  true,
+                                                             "evidencePaths":  [
+                                                                                   {
+                                                                                       "pathKey":  "DOCS_API_GUIDE",
+                                                                                       "sourceTypes":  [
+                                                                                                           "DOCS",
+                                                                                                           "OFFICIAL"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "API_DOCS",
+                                                                                                            "SDK_GUIDE"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "DEVELOPER_DOCS_BLOCK",
+                                                                                                               "FEATURE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  true,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "EVIDENCE_NOT_COVERING"
+                                                                                   },
+                                                                                   {
+                                                                                       "pathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                       "sourceTypes":  [
+                                                                                                           "REVIEW",
+                                                                                                           "NEWS",
+                                                                                                           "OPEN_WEB"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "THIRD_PARTY_REVIEW"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "FEATURE_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  false,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "OPTIONAL_MISSING"
+                                                                                   }
+                                                                               ],
+                                                             "attemptedPaths":  [
+
+                                                                                ],
+                                                             "completedPaths":  [
+
+                                                                                ],
+                                                             "sourceUrls":  [
+
+                                                                            ],
+                                                             "plannedQueries":  [
+                                                                                    {
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "evidencePathKey":  "DOCS_API_GUIDE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "哔哩哔哩 开放平台 核心功能 API 文档 接口 文档 能力 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 coreFeatures 语义、路径 DOCS_API_GUIDE、意图 API_DOCS 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "1081f104f780819948336331189db764",
+                                                                                        "priority":  0,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "evidencePathKey":  "DOCS_API_GUIDE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "DOCS",
+                                                                                        "query":  "哔哩哔哩 开放平台 核心功能 SDK 接入指南 接入指南 示例 官方文档 开发者文档",
+                                                                                        "reason":  "根据字段 coreFeatures 语义、路径 DOCS_API_GUIDE、意图 SDK_GUIDE 和来源类型 DOCS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "b42d1c70bea6fdf858dfc3aca9973b14",
+                                                                                        "priority":  1,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "evidencePathKey":  "DOCS_API_GUIDE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "哔哩哔哩 开放平台 核心功能 API 文档 接口 文档 能力 官方资料 官网",
+                                                                                        "reason":  "根据字段 coreFeatures 语义、路径 DOCS_API_GUIDE、意图 API_DOCS 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "e673779ed9f25dc795b27a9620a889a4",
+                                                                                        "priority":  2,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "evidencePathKey":  "DOCS_API_GUIDE",
+                                                                                        "queryIntent":  "SDK_GUIDE",
+                                                                                        "sourceType":  "OFFICIAL",
+                                                                                        "query":  "哔哩哔哩 开放平台 核心功能 SDK 接入指南 接入指南 示例 官方资料 官网",
+                                                                                        "reason":  "根据字段 coreFeatures 语义、路径 DOCS_API_GUIDE、意图 SDK_GUIDE 和来源类型 OFFICIAL 组合生成检索视角",
+                                                                                        "queryFingerprint":  "7289fc62211b7ec99a9e67fc3cc4bfa3",
+                                                                                        "priority":  3,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+                                                                                                               "www.bilibili.com",
+                                                                                                               "bilibili.com",
+                                                                                                               "member.bilibili.com",
+                                                                                                               "openhome.bilibili.com",
+                                                                                                               "open.bilibili.com",
+                                                                                                               "cm.bilibili.com",
+                                                                                                               "ad.bilibili.com"
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "evidencePathKey":  "DOCS_API_GUIDE",
+                                                                                        "queryIntent":  "API_DOCS",
+                                                                                        "sourceType":  "OPEN_WEB",
+                                                                                        "query":  "哔哩哔哩 开放平台 核心功能 开发者文档 API 评测 实测 对比 教程 用户反馈 解读 行业分析",
+                                                                                        "reason":  "为字段 coreFeatures（开放平台 核心功能）补充第三方视角，避免官方来源成为排他门槛，路径 DOCS_API_GUIDE",
+                                                                                        "queryFingerprint":  "230a3fbe1157787145d7c1678e1e8675",
+                                                                                        "priority":  4,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "哔哩哔哩 开放平台 核心功能 第三方评测 功能 能力 评测 实测 对比",
+                                                                                        "reason":  "根据字段 coreFeatures 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "b353612ae6417e343c01d401327846c2",
+                                                                                        "priority":  5,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "coreFeatures",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "哔哩哔哩 开放平台 核心功能 第三方评测 功能 能力 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 coreFeatures 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "e28706aed1e029772f7331fb204d702f",
+                                                                                        "priority":  6,
+                                                                                        "criticalForFirstReport":  true,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    }
+                                                                                ],
+                                                             "lastRepairState":  null,
+                                                             "recommendedNextAction":  "EXECUTE_FIELD_EVIDENCE_QUERIES"
+                                                         },
+                                                         {
+                                                             "fieldName":  "weaknesses",
+                                                             "status":  "NOT_STARTED",
+                                                             "minimumAttemptedPaths":  0,
+                                                             "minDistinctEvidenceCount":  0,
+                                                             "criticalForFirstReport":  false,
+                                                             "evidencePaths":  [
+                                                                                   {
+                                                                                       "pathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                       "sourceTypes":  [
+                                                                                                           "TERMS",
+                                                                                                           "POLICY",
+                                                                                                           "REVIEW",
+                                                                                                           "NEWS",
+                                                                                                           "OPEN_WEB"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "POLICY"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "LIMITATION_OR_POLICY_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  true,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "EVIDENCE_NOT_COVERING"
+                                                                                   },
+                                                                                   {
+                                                                                       "pathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                       "sourceTypes":  [
+                                                                                                           "REVIEW",
+                                                                                                           "NEWS"
+                                                                                                       ],
+                                                                                       "queryIntents":  [
+                                                                                                            "THIRD_PARTY_REVIEW",
+                                                                                                            "RISK"
+                                                                                                        ],
+                                                                                       "expectedSignals":  [
+                                                                                                               "PUBLIC_RISK_BLOCK"
+                                                                                                           ],
+                                                                                       "required":  true,
+                                                                                       "successCriteria":  "命中可追溯公开证据",
+                                                                                       "failureStatus":  "EVIDENCE_NOT_COVERING"
+                                                                                   }
+                                                                               ],
+                                                             "attemptedPaths":  [
+
+                                                                                ],
+                                                             "completedPaths":  [
+
+                                                                                ],
+                                                             "sourceUrls":  [
+
+                                                                            ],
+                                                             "plannedQueries":  [
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                        "queryIntent":  "POLICY",
+                                                                                        "sourceType":  "TERMS",
+                                                                                        "query":  "哔哩哔哩 短板 风险 规则 风险 限制 条款 协议 服务协议 条款",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 TERMS_OR_SERVICE_AGREEMENT、意图 POLICY 和来源类型 TERMS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "1854ad2f1195ff24742c9da6064e2934",
+                                                                                        "priority":  0,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                        "queryIntent":  "POLICY",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "哔哩哔哩 短板 风险 规则 风险 限制 条款 评测 实测 对比",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 TERMS_OR_SERVICE_AGREEMENT、意图 POLICY 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "c0d2101c1cdf7137270c417c1d88c208",
+                                                                                        "priority":  1,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                        "queryIntent":  "TERMS_BILLING",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "哔哩哔哩 短板 风险 服务协议 条款 协议 条款 规则 评测 实测 对比",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 TERMS_OR_SERVICE_AGREEMENT、意图 TERMS_BILLING 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "bda1b3d49e9f9cb11b531cebe124706f",
+                                                                                        "priority":  2,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                        "queryIntent":  "POLICY",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "哔哩哔哩 短板 风险 规则 风险 限制 条款 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 TERMS_OR_SERVICE_AGREEMENT、意图 POLICY 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "423e136ae5052a03c798814e043176ed",
+                                                                                        "priority":  3,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                        "queryIntent":  "TERMS_BILLING",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "哔哩哔哩 短板 风险 服务协议 条款 协议 条款 规则 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 TERMS_OR_SERVICE_AGREEMENT、意图 TERMS_BILLING 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "f1d04b63bb87b0c06494a260e2b3dabc",
+                                                                                        "priority":  4,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                        "queryIntent":  "POLICY",
+                                                                                        "sourceType":  "OPEN_WEB",
+                                                                                        "query":  "哔哩哔哩 短板 风险 规则 风险 限制 条款 教程 用户反馈 经验分享",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 TERMS_OR_SERVICE_AGREEMENT、意图 POLICY 和来源类型 OPEN_WEB 组合生成检索视角",
+                                                                                        "queryFingerprint":  "c5800849709fc6bdfcdc2dedc9ac6d25",
+                                                                                        "priority":  5,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "TERMS_OR_SERVICE_AGREEMENT",
+                                                                                        "queryIntent":  "TERMS_BILLING",
+                                                                                        "sourceType":  "OPEN_WEB",
+                                                                                        "query":  "哔哩哔哩 短板 风险 服务协议 条款 协议 条款 规则 教程 用户反馈 经验分享",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 TERMS_OR_SERVICE_AGREEMENT、意图 TERMS_BILLING 和来源类型 OPEN_WEB 组合生成检索视角",
+                                                                                        "queryFingerprint":  "735409aaf68f2285ba1f56cc71dc3501",
+                                                                                        "priority":  6,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "哔哩哔哩 短板 风险 第三方评测 用户反馈 媒体报道 评测 实测 对比",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "5f3810ed01f22bc9f4625259a2ec2cc0",
+                                                                                        "priority":  7,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "RISK",
+                                                                                        "sourceType":  "REVIEW",
+                                                                                        "query":  "哔哩哔哩 短板 风险 规则 风险 用户反馈 媒体报道 评测 实测 对比",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 RISK 和来源类型 REVIEW 组合生成检索视角",
+                                                                                        "queryFingerprint":  "d87788946eea22fbb514997801080e83",
+                                                                                        "priority":  8,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "THIRD_PARTY_REVIEW",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "哔哩哔哩 短板 风险 第三方评测 用户反馈 媒体报道 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 THIRD_PARTY_REVIEW 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "900c2e83f5aca8bed815a037727edb81",
+                                                                                        "priority":  9,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    },
+                                                                                    {
+                                                                                        "fieldName":  "weaknesses",
+                                                                                        "evidencePathKey":  "PUBLIC_REVIEW_OR_NEWS",
+                                                                                        "queryIntent":  "RISK",
+                                                                                        "sourceType":  "NEWS",
+                                                                                        "query":  "哔哩哔哩 短板 风险 规则 风险 用户反馈 媒体报道 行业分析 媒体报道 解读",
+                                                                                        "reason":  "根据字段 weaknesses 语义、路径 PUBLIC_REVIEW_OR_NEWS、意图 RISK 和来源类型 NEWS 组合生成检索视角",
+                                                                                        "queryFingerprint":  "577776ce3ae4452dc6e67a5af41620bc",
+                                                                                        "priority":  10,
+                                                                                        "criticalForFirstReport":  false,
+                                                                                        "includeDomains":  [
+
+                                                                                                           ]
+                                                                                    }
+                                                                                ],
+                                                             "lastRepairState":  null,
+                                                             "recommendedNextAction":  "EXECUTE_FIELD_EVIDENCE_QUERIES"
+                                                         }
+                                                     ]
+                              },
+    "fieldEvidenceClaimScope":  null,
+    "recoveryFieldName":  null,
+    "recoveryEvidencePathKey":  null,
+    "recoveryQueryIntents":  null,
+    "discoveryNotes":  "Documentation：保留 4 个候选来源，其中搜索补源 0 个，基于用户提供 URL 扩展并结合搜索式补源",
+    "sourceCandidates":  [
+                             {
+                                 "url":  "https://www.bilibili.com/docs",
+                                 "title":  "哔哩哔哩 - DOCS direct entry: https://www.bilibili.com/docs",
+                                 "sourceType":  "DOCS",
+                                 "discoveryMethod":  "FAMILY_TEMPLATE",
+                                 "reason":  "official family template candidate",
+                                 "domain":  "www.bilibili.com",
+                                 "publishedAt":  null,
+                                 "sourceFamilyKey":  "official",
+                                 "sourceFamilyRole":  "PRIMARY_VERTICAL",
+                                 "providerKey":  null,
+                                 "providerRole":  null,
+                                 "templateFallback":  true,
+                                 "fallbackReason":  "no_discovered_docs_candidate",
+                                 "sourceUrls":  [
+                                                    "https://www.bilibili.com/docs"
+                                                ],
+                                 "relevanceScore":  0.95,
+                                 "freshnessScore":  0.6,
+                                 "qualityScore":  0.92,
+                                 "totalScore":  0.86,
+                                 "trustTier":  "HIGH",
+                                 "trustTierLabel":  "高可信",
+                                 "qualitySignals":  [
+                                                        "DOCS_HIGH_VALUE_PATH",
+                                                        "DOCS_EXACT_PATH_HIT"
+                                                    ],
+                                 "rankingReasons":  [
+                                                        "来源可信度：高可信",
+                                                        "模板兜底候选仅在缺少真实发现入口时参与排序",
+                                                        "命中文档高价值路径，优先级高于泛官网首页",
+                                                        "命中明确文档路径，优先级高于开放平台根页"
+                                                    ],
+                                 "rankingSummary":  "来源可信度：高可信；模板兜底候选仅在缺少真实发现入口时参与排序；命中文档高价值路径，优先级高于泛官网首页；命中明确文档路径，优先级高于开放平台根页",
+                                 "fieldName":  null,
+                                 "evidencePathKey":  null,
+                                 "queryIntent":  null,
+                                 "fieldEvidenceQueryFingerprint":  null,
+                                 "fieldEvidenceQueryReason":  null,
+                                 "searchQuery":  null,
+                                 "searchEngine":  null,
+                                 "resultRank":  null,
+                                 "browserTraceId":  null,
+                                 "hasPrefetchedContent":  false,
+                                 "prefetchedContentRef":  null,
+                                 "prefetchedRawContentLength":  null,
+                                 "tavilyScore":  null,
+                                 "tavilyRequestId":  null,
+                                 "tavilyQuery":  null,
+                                 "tavilyQueryMode":  null,
+                                 "pageType":  null,
+                                 "qualityTier":  null,
+                                 "candidateDiscoveryUsable":  false,
+                                 "fastLaneUsable":  false,
+                                 "fastLaneRejectReason":  null,
+                                 "contentCompleteness":  null,
+                                 "skipNetworkVerification":  false,
+                                 "verified":  null,
+                                 "verificationReason":  null,
+                                 "matchedSignals":  null,
+                                 "selectionStage":  null,
+                                 "selectionReason":  null,
+                                 "selectionSummary":  null,
+                                 "selectionTier":  null,
+                                 "selectionRole":  null,
+                                 "selectionTierReason":  null
+                             },
+                             {
+                                 "url":  "https://www.bilibili.com/documentation",
+                                 "title":  "哔哩哔哩 - DOCS direct entry: https://www.bilibili.com/documentation",
+                                 "sourceType":  "DOCS",
+                                 "discoveryMethod":  "FAMILY_TEMPLATE",
+                                 "reason":  "official family template candidate",
+                                 "domain":  "www.bilibili.com",
+                                 "publishedAt":  null,
+                                 "sourceFamilyKey":  "official",
+                                 "sourceFamilyRole":  "PRIMARY_VERTICAL",
+                                 "providerKey":  null,
+                                 "providerRole":  null,
+                                 "templateFallback":  true,
+                                 "fallbackReason":  "no_discovered_docs_candidate",
+                                 "sourceUrls":  [
+                                                    "https://www.bilibili.com/documentation"
+                                                ],
+                                 "relevanceScore":  0.95,
+                                 "freshnessScore":  0.6,
+                                 "qualityScore":  0.92,
+                                 "totalScore":  0.86,
+                                 "trustTier":  "HIGH",
+                                 "trustTierLabel":  "高可信",
+                                 "qualitySignals":  [
+                                                        "DOCS_HIGH_VALUE_PATH",
+                                                        "DOCS_EXACT_PATH_HIT"
+                                                    ],
+                                 "rankingReasons":  [
+                                                        "来源可信度：高可信",
+                                                        "模板兜底候选仅在缺少真实发现入口时参与排序",
+                                                        "命中文档高价值路径，优先级高于泛官网首页",
+                                                        "命中明确文档路径，优先级高于开放平台根页"
+                                                    ],
+                                 "rankingSummary":  "来源可信度：高可信；模板兜底候选仅在缺少真实发现入口时参与排序；命中文档高价值路径，优先级高于泛官网首页；命中明确文档路径，优先级高于开放平台根页",
+                                 "fieldName":  null,
+                                 "evidencePathKey":  null,
+                                 "queryIntent":  null,
+                                 "fieldEvidenceQueryFingerprint":  null,
+                                 "fieldEvidenceQueryReason":  null,
+                                 "searchQuery":  null,
+                                 "searchEngine":  null,
+                                 "resultRank":  null,
+                                 "browserTraceId":  null,
+                                 "hasPrefetchedContent":  false,
+                                 "prefetchedContentRef":  null,
+                                 "prefetchedRawContentLength":  null,
+                                 "tavilyScore":  null,
+                                 "tavilyRequestId":  null,
+                                 "tavilyQuery":  null,
+                                 "tavilyQueryMode":  null,
+                                 "pageType":  null,
+                                 "qualityTier":  null,
+                                 "candidateDiscoveryUsable":  false,
+                                 "fastLaneUsable":  false,
+                                 "fastLaneRejectReason":  null,
+                                 "contentCompleteness":  null,
+                                 "skipNetworkVerification":  false,
+                                 "verified":  null,
+                                 "verificationReason":  null,
+                                 "matchedSignals":  null,
+                                 "selectionStage":  null,
+                                 "selectionReason":  null,
+                                 "selectionSummary":  null,
+                                 "selectionTier":  null,
+                                 "selectionRole":  null,
+                                 "selectionTierReason":  null
+                             },
+                             {
+                                 "url":  "https://www.bilibili.com/help",
+                                 "title":  "哔哩哔哩 - DOCS direct entry: https://www.bilibili.com/help",
+                                 "sourceType":  "DOCS",
+                                 "discoveryMethod":  "FAMILY_TEMPLATE",
+                                 "reason":  "official family template candidate",
+                                 "domain":  "www.bilibili.com",
+                                 "publishedAt":  null,
+                                 "sourceFamilyKey":  "official",
+                                 "sourceFamilyRole":  "PRIMARY_VERTICAL",
+                                 "providerKey":  null,
+                                 "providerRole":  null,
+                                 "templateFallback":  true,
+                                 "fallbackReason":  "no_discovered_docs_candidate",
+                                 "sourceUrls":  [
+                                                    "https://www.bilibili.com/help"
+                                                ],
+                                 "relevanceScore":  0.95,
+                                 "freshnessScore":  0.6,
+                                 "qualityScore":  0.92,
+                                 "totalScore":  0.731,
+                                 "trustTier":  "HIGH",
+                                 "trustTierLabel":  "高可信",
+                                 "qualitySignals":  [
+
+                                                    ],
+                                 "rankingReasons":  [
+                                                        "来源可信度：高可信",
+                                                        "模板兜底候选仅在缺少真实发现入口时参与排序"
+                                                    ],
+                                 "rankingSummary":  "来源可信度：高可信；模板兜底候选仅在缺少真实发现入口时参与排序",
+                                 "fieldName":  null,
+                                 "evidencePathKey":  null,
+                                 "queryIntent":  null,
+                                 "fieldEvidenceQueryFingerprint":  null,
+                                 "fieldEvidenceQueryReason":  null,
+                                 "searchQuery":  null,
+                                 "searchEngine":  null,
+                                 "resultRank":  null,
+                                 "browserTraceId":  null,
+                                 "hasPrefetchedContent":  false,
+                                 "prefetchedContentRef":  null,
+                                 "prefetchedRawContentLength":  null,
+                                 "tavilyScore":  null,
+                                 "tavilyRequestId":  null,
+                                 "tavilyQuery":  null,
+                                 "tavilyQueryMode":  null,
+                                 "pageType":  null,
+                                 "qualityTier":  null,
+                                 "candidateDiscoveryUsable":  false,
+                                 "fastLaneUsable":  false,
+                                 "fastLaneRejectReason":  null,
+                                 "contentCompleteness":  null,
+                                 "skipNetworkVerification":  false,
+                                 "verified":  null,
+                                 "verificationReason":  null,
+                                 "matchedSignals":  null,
+                                 "selectionStage":  null,
+                                 "selectionReason":  null,
+                                 "selectionSummary":  null,
+                                 "selectionTier":  null,
+                                 "selectionRole":  null,
+                                 "selectionTierReason":  null
+                             },
+                             {
+                                 "url":  "https://www.bilibili.com/guide",
+                                 "title":  "哔哩哔哩 - 文档入口（https://www.bilibili.com/guide）",
+                                 "sourceType":  "DOCS",
+                                 "discoveryMethod":  "HEURISTIC_TEMPLATE",
+                                 "reason":  "根据根域名自动拼接 DOCS 入口",
+                                 "domain":  "www.bilibili.com",
+                                 "publishedAt":  null,
+                                 "sourceFamilyKey":  "official",
+                                 "sourceFamilyRole":  "PRIMARY_VERTICAL",
+                                 "providerKey":  null,
+                                 "providerRole":  null,
+                                 "templateFallback":  true,
+                                 "fallbackReason":  "no_discovered_docs_candidate",
+                                 "sourceUrls":  [
+                                                    "https://www.bilibili.com/guide"
+                                                ],
+                                 "relevanceScore":  0.91,
+                                 "freshnessScore":  0.6,
+                                 "qualityScore":  0.9,
+                                 "totalScore":  0.705,
+                                 "trustTier":  "HIGH",
+                                 "trustTierLabel":  "高可信",
+                                 "qualitySignals":  [
+
+                                                    ],
+                                 "rankingReasons":  [
+                                                        "来源可信度：高可信",
+                                                        "模板兜底候选仅在缺少真实发现入口时参与排序"
+                                                    ],
+                                 "rankingSummary":  "来源可信度：高可信；模板兜底候选仅在缺少真实发现入口时参与排序",
+                                 "fieldName":  null,
+                                 "evidencePathKey":  null,
+                                 "queryIntent":  null,
+                                 "fieldEvidenceQueryFingerprint":  null,
+                                 "fieldEvidenceQueryReason":  null,
+                                 "searchQuery":  null,
+                                 "searchEngine":  null,
+                                 "resultRank":  null,
+                                 "browserTraceId":  null,
+                                 "hasPrefetchedContent":  null,
+                                 "prefetchedContentRef":  null,
+                                 "prefetchedRawContentLength":  null,
+                                 "tavilyScore":  null,
+                                 "tavilyRequestId":  null,
+                                 "tavilyQuery":  null,
+                                 "tavilyQueryMode":  null,
+                                 "pageType":  null,
+                                 "qualityTier":  null,
+                                 "candidateDiscoveryUsable":  null,
+                                 "fastLaneUsable":  null,
+                                 "fastLaneRejectReason":  null,
+                                 "contentCompleteness":  null,
+                                 "skipNetworkVerification":  null,
+                                 "verified":  null,
+                                 "verificationReason":  null,
+                                 "matchedSignals":  null,
+                                 "selectionStage":  null,
+                                 "selectionReason":  null,
+                                 "selectionSummary":  null,
+                                 "selectionTier":  null,
+                                 "selectionRole":  null,
+                                 "selectionTierReason":  null
+                             }
+                         ],
+    "searchMode":  "HYBRID",
+    "searchQueries":  [
+                          "哔哩哔哩 文档 API 开发指引",
+                          "哔哩哔哩 开发文档",
+                          "site:www.bilibili.com 哔哩哔哩 官方网站 产品介绍"
+                      ],
+    "thirdPartyFallbackQueries":  [
+                                      "哔哩哔哩 介绍 功能 文档 教程",
+                                      "哔哩哔哩 使用指南 评测 对比"
+                                  ],
+    "thirdPartyFallbackActive":  null,
+    "searchFallbackOrder":  [
+                                "PLANNED",
+                                "BROWSER",
+                                "HTTP"
+                            ],
+    "verifyCandidates":  true,
+    "verifyResultPage":  true,
+    "minVerifiedCandidates":  2,
+    "preferredSearchProvider":  null,
+    "tavilyQueryMode":  null,
+    "blockedDomains":  [
+
+                       ],
+    "browserSearchEnabled":  true,
+    "maxSearchResults":  4,
+    "searchTimeoutMillis":  18300,
+    "searchRuntimePolicy":  {
+                                "verifyResultPage":  true,
+                                "maxRetries":  2,
+                                "minIntervalMillis":  3000,
+                                "maxSearchesPerTask":  10,
+                                "pageTimeoutMillis":  30000,
+                                "maxOpenResultPages":  3,
+                                "resultPageTimeoutMillis":  8000,
+                                "maxContentLengthPerPage":  500,
+                                "stealthEnabled":  true,
+                                "locale":  "zh-CN",
+                                "timezoneId":  "Asia/Shanghai",
+                                "viewportWidth":  1440,
+                                "viewportHeight":  900,
+                                "shortBodyThreshold":  120,
+                                "minimumPrimaryResultCount":  1,
+                                "suspectBlockedBodyThreshold":  40,
+                                "bootstrapCandidateLimit":  null,
+                                "supplementCandidateLimit":  null,
+                                "maxCandidatePoolSize":  null,
+                                "maxCandidatesPerDomain":  null,
+                                "searchFirstEvidenceTargetFloor":  null,
+                                "searchFirstEvidenceTargetCeiling":  null,
+                                "preSelectionVerificationLimit":  null,
+                                "competitorCoverageSoftGapRatio":  null,
+                                "userAgents":  [
+                                                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                                                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                                                   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+                                                   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                                                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0"
+                                               ],
+                                "blockedSignals":  [
+                                                       "captcha",
+                                                       "unusual traffic",
+                                                       "verify you are human",
+                                                       "access denied",
+                                                       "robot check",
+                                                       "security check"
+                                                   ],
+                                "blockedUrlKeywords":  [
+                                                           "/login",
+                                                           "/signin",
+                                                           "/verify",
+                                                           "/captcha",
+                                                           "/challenge"
+                                                       ],
+                                "continueOnBrowserUnavailable":  null,
+                                "continueOnSearchTimeout":  null,
+                                "continueOnPageCollectFailure":  null,
+                                "recoverPartialContentOnTimeout":  null,
+                                "recoveryHint":  "如搜索中断，优先从 VERIFY_TOP_CANDIDATES 或 BROWSER_SUPPLEMENT_SEARCH 继续排查（展示语义：运行期补源）。"
+                            },
+    "searchExecutionPlan":  {
+                                "stage":  "COLLECTOR_SEARCH_AND_COLLECT",
+                                "searchQueries":  [
+                                                      "哔哩哔哩 文档 API 开发指引",
+                                                      "哔哩哔哩 开发文档",
+                                                      "site:www.bilibili.com 哔哩哔哩 官方网站 产品介绍"
+                                                  ],
+                                "fallbackOrder":  [
+                                                      "PLANNED",
+                                                      "BROWSER",
+                                                      "HTTP"
+                                                  ],
+                                "targetCount":  4,
+                                "minVerifiedCount":  2,
+                                "steps":  [
+                                              {
+                                                  "stepCode":  "LOAD_CANDIDATES",
+                                                  "goal":  "读取规划期候选来源",
+                                                  "expectedDurationMs":  500,
+                                                  "dependency":  "nodeConfig",
+                                                  "status":  "PENDING",
+                                                  "message":  null,
+                                                  "startedAt":  null,
+                                                  "completedAt":  null
+                                              },
+                                              {
+                                                  "stepCode":  "TAVILY_BOOTSTRAP_ENRICH",
+                                                  "goal":  "对弱规划期候选执行 Tavily Phase 1 候选增强",
+                                                  "expectedDurationMs":  4000,
+                                                  "dependency":  "tavily",
+                                                  "status":  "PENDING",
+                                                  "message":  null,
+                                                  "startedAt":  null,
+                                                  "completedAt":  null
+                                              },
+                                              {
+                                                  "stepCode":  "VERIFY_TOP_CANDIDATES",
+                                                  "goal":  "验证高优先级候选来源是否可用",
+                                                  "expectedDurationMs":  5000,
+                                                  "dependency":  "browser",
+                                                  "status":  "PENDING",
+                                                  "message":  null,
+                                                  "startedAt":  null,
+                                                  "completedAt":  null
+                                              },
+                                              {
+                                                  "stepCode":  "BROWSER_SUPPLEMENT_SEARCH",
+                                                  "goal":  "候选不足时执行运行期补源",
+                                                  "expectedDurationMs":  8000,
+                                                  "dependency":  "searchEngine",
+                                                  "status":  "PENDING",
+                                                  "message":  null,
+                                                  "startedAt":  null,
+                                                  "completedAt":  null
+                                              },
+                                              {
+                                                  "stepCode":  "SELECT_TARGETS",
+                                                  "goal":  "合并候选并选出最终采集目标",
+                                                  "expectedDurationMs":  1000,
+                                                  "dependency":  "ranker",
+                                                  "status":  "PENDING",
+                                                  "message":  null,
+                                                  "startedAt":  null,
+                                                  "completedAt":  null
+                                              },
+                                              {
+                                                  "stepCode":  "COLLECT_PAGES",
+                                                  "goal":  "抓取页面正文并持久化证据",
+                                                  "expectedDurationMs":  12000,
+                                                  "dependency":  "collector",
+                                                  "status":  "PENDING",
+                                                  "message":  null,
+                                                  "startedAt":  null,
+                                                  "completedAt":  null
+                                              }
+                                          ]
+                            },
+    "searchAuditCheckpoint":  null,
+    "collectionAuditCheckpoint":  null,
+    "includeDomains":  [
+                           "www.bilibili.com",
+                           "bilibili.com",
+                           "member.bilibili.com",
+                           "openhome.bilibili.com",
+                           "open.bilibili.com",
+                           "cm.bilibili.com",
+                           "ad.bilibili.com"
+                       ],
+    "preferredDomains":  [
+                             "www.bilibili.com",
+                             "bilibili.com",
+                             "member.bilibili.com",
+                             "openhome.bilibili.com",
+                             "open.bilibili.com",
+                             "cm.bilibili.com",
+                             "ad.bilibili.com"
+                         ],
+    "competitorUrls":  [
+                           "https://www.bilibili.com",
+                           "https://bilibili.com",
+                           "https://member.bilibili.com",
+                           "https://openhome.bilibili.com",
+                           "https://open.bilibili.com",
+                           "https://cm.bilibili.com",
+                           "https://ad.bilibili.com"
+                       ]
+}

@@ -1,0 +1,295 @@
+﻿[
+    {
+        "nodeName":  "collect_sources_01_01",
+        "displayName":  "抖音 - OFFICIAL采集",
+        "competitorName":  "抖音",
+        "sourceType":  "OFFICIAL",
+        "status":  "SUCCESS_DEGRADED",
+        "includeDomains":  [
+                               "www.douyin.com",
+                               "douyin.com",
+                               "open.douyin.com",
+                               "docs.open-douyin.com",
+                               "creator.douyin.com",
+                               "oceanengine.com"
+                           ],
+        "preferredDomains":  [
+                                 "www.douyin.com",
+                                 "douyin.com",
+                                 "open.douyin.com",
+                                 "docs.open-douyin.com",
+                                 "creator.douyin.com",
+                                 "oceanengine.com"
+                             ],
+        "nestedPlannedQueryIncludeDomains":  [
+                                                 "www.douyin.com"
+                                             ],
+        "totalCollected":  0,
+        "successCollected":  0,
+        "degraded":  true,
+        "degradationReasons":  [
+                                   "HARD_DEADLINE_REACHED"
+                               ],
+        "fieldEvidenceFinalStatus":  "EVIDENCE_PATH_COVERAGE_NOT_MET",
+        "evidenceCount":  0,
+        "documentCount":  0,
+        "selectedTargetCount":  1,
+        "sourceUrlCount":  6,
+        "sourceUrls":  [
+                           "https://www.douyin.com",
+                           "https://douyin.com",
+                           "https://open.douyin.com",
+                           "https://docs.open-douyin.com",
+                           "https://creator.douyin.com",
+                           "https://oceanengine.com"
+                       ]
+    },
+    {
+        "nodeName":  "collect_sources_01_02",
+        "displayName":  "抖音 - DOCS采集",
+        "competitorName":  "抖音",
+        "sourceType":  "DOCS",
+        "status":  "SUCCESS_DEGRADED",
+        "includeDomains":  [
+                               "www.douyin.com",
+                               "douyin.com",
+                               "open.douyin.com",
+                               "docs.open-douyin.com",
+                               "creator.douyin.com",
+                               "oceanengine.com"
+                           ],
+        "preferredDomains":  [
+                                 "www.douyin.com",
+                                 "douyin.com",
+                                 "open.douyin.com",
+                                 "docs.open-douyin.com",
+                                 "creator.douyin.com",
+                                 "oceanengine.com"
+                             ],
+        "nestedPlannedQueryIncludeDomains":  [
+                                                 "www.douyin.com"
+                                             ],
+        "totalCollected":  22,
+        "successCollected":  4,
+        "degraded":  true,
+        "degradationReasons":  [
+                                   "HARD_DEADLINE_REACHED"
+                               ],
+        "fieldEvidenceFinalStatus":  "EVIDENCE_PATH_COVERAGE_NOT_MET",
+        "evidenceCount":  4,
+        "documentCount":  22,
+        "selectedTargetCount":  6,
+        "sourceUrlCount":  23,
+        "sourceUrls":  [
+                           "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                           "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide",
+                           "https://developer.aliyun.com/article/1638911",
+                           "https://www.juhe.cn/news/index/id/7857",
+                           "https://juhe.cn/news/index/id/7857",
+                           "https://docs.open-douyin.com",
+                           "https://oceanengine.com/robots.txt",
+                           "https://www.oceanengine.com/sitemap.xml",
+                           "https://www.oceanengine.com/maps/main_sitemap.xml",
+                           "https://oceanengine.com/help",
+                           "https://oceanengine.com/help/630",
+                           "https://oceanengine.com/help/juliang-yinqing",
+                           "https://oceanengine.com/help/pinpaijiazhi",
+                           "https://oceanengine.com/help/yingxiaoziyuan",
+                           "https://oceanengine.com/help/guanggao-zhanxian",
+                           "https://oceanengine.com/help/chuanshanjia-guanggao",
+                           "https://oceanengine.com/help/xiaoyewu-tuiguang",
+                           "https://oceanengine.com/help/chuhai-yingxiao",
+                           "https://oceanengine.com/help/diyici-tuiguang-caozuo",
+                           "https://oceanengine.com/help/buneng-tuiguang-chanpin",
+                           "https://open.douyin.com/platform/resource/docs/ability/content-management/douyin-publish-solution",
+                           "https://www.douyin.com/docs",
+                           "https://douyin.com/docs"
+                       ]
+    },
+    {
+        "nodeName":  "collect_sources_01_03",
+        "displayName":  "抖音 - REVIEW采集",
+        "competitorName":  "抖音",
+        "sourceType":  "REVIEW",
+        "status":  "SUCCESS_DEGRADED",
+        "includeDomains":  [
+
+                           ],
+        "preferredDomains":  [
+                                 "www.g2.com",
+                                 "www.capterra.com",
+                                 "www.douyin.com"
+                             ],
+        "nestedPlannedQueryIncludeDomains":  [
+                                                 "www.douyin.com",
+                                                 "www.g2.com",
+                                                 "www.capterra.com"
+                                             ],
+        "totalCollected":  10,
+        "successCollected":  3,
+        "degraded":  true,
+        "degradationReasons":  [
+                                   "HARD_DEADLINE_REACHED"
+                               ],
+        "fieldEvidenceFinalStatus":  "EVIDENCE_PATH_COVERAGE_NOT_MET",
+        "evidenceCount":  3,
+        "documentCount":  10,
+        "selectedTargetCount":  5,
+        "sourceUrlCount":  7,
+        "sourceUrls":  [
+                           "https://sj.qq.com/appdetail/com.ss.android.ugc.aweme/review",
+                           "https://apps.apple.com/cn/app/%E6%8A%96%E9%9F%B3/id1142110895?see-all=reviews\u0026platform=iphone",
+                           "https://apps.apple.com/cn/app/抖音/id1142110895?see-all=reviews\u0026platform=iphone",
+                           "https://www.capa.run/keji_content?id=17",
+                           "https://capa.run/keji_content?id=17",
+                           "https://maimai.cn/article/detail?fid=867010042\u0026efid=LsutwUXZ78R7hpsmTDqLFg",
+                           "https://blog.wyan.vip/2023/05/tiktok_video_quality.html"
+                       ]
+    },
+    {
+        "nodeName":  "collect_sources_02_01",
+        "displayName":  "哔哩哔哩 - OFFICIAL采集",
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "OFFICIAL",
+        "status":  "SUCCESS_DEGRADED",
+        "includeDomains":  [
+                               "www.bilibili.com",
+                               "bilibili.com",
+                               "member.bilibili.com",
+                               "openhome.bilibili.com",
+                               "open.bilibili.com",
+                               "cm.bilibili.com",
+                               "ad.bilibili.com"
+                           ],
+        "preferredDomains":  [
+                                 "www.bilibili.com",
+                                 "bilibili.com",
+                                 "member.bilibili.com",
+                                 "openhome.bilibili.com",
+                                 "open.bilibili.com",
+                                 "cm.bilibili.com",
+                                 "ad.bilibili.com"
+                             ],
+        "nestedPlannedQueryIncludeDomains":  [
+                                                 "www.bilibili.com"
+                                             ],
+        "totalCollected":  0,
+        "successCollected":  0,
+        "degraded":  true,
+        "degradationReasons":  [
+                                   "HARD_DEADLINE_REACHED"
+                               ],
+        "fieldEvidenceFinalStatus":  "EVIDENCE_PATH_COVERAGE_NOT_MET",
+        "evidenceCount":  0,
+        "documentCount":  0,
+        "selectedTargetCount":  1,
+        "sourceUrlCount":  7,
+        "sourceUrls":  [
+                           "https://www.bilibili.com",
+                           "https://bilibili.com",
+                           "https://member.bilibili.com",
+                           "https://openhome.bilibili.com",
+                           "https://open.bilibili.com",
+                           "https://cm.bilibili.com",
+                           "https://ad.bilibili.com"
+                       ]
+    },
+    {
+        "nodeName":  "collect_sources_02_02",
+        "displayName":  "哔哩哔哩 - DOCS采集",
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "DOCS",
+        "status":  "SUCCESS_DEGRADED",
+        "includeDomains":  [
+                               "www.bilibili.com",
+                               "bilibili.com",
+                               "member.bilibili.com",
+                               "openhome.bilibili.com",
+                               "open.bilibili.com",
+                               "cm.bilibili.com",
+                               "ad.bilibili.com"
+                           ],
+        "preferredDomains":  [
+                                 "www.bilibili.com",
+                                 "bilibili.com",
+                                 "member.bilibili.com",
+                                 "openhome.bilibili.com",
+                                 "open.bilibili.com",
+                                 "cm.bilibili.com",
+                                 "ad.bilibili.com"
+                             ],
+        "nestedPlannedQueryIncludeDomains":  [
+                                                 "www.bilibili.com"
+                                             ],
+        "totalCollected":  14,
+        "successCollected":  5,
+        "degraded":  true,
+        "degradationReasons":  [
+                                   "HARD_DEADLINE_REACHED"
+                               ],
+        "fieldEvidenceFinalStatus":  "EVIDENCE_PATH_COVERAGE_NOT_MET",
+        "evidenceCount":  5,
+        "documentCount":  14,
+        "selectedTargetCount":  7,
+        "sourceUrlCount":  14,
+        "sourceUrls":  [
+                           "https://qinshixixing.gitbooks.io/bilibiliapi",
+                           "https://nemo2011.github.io/bilibili-api",
+                           "https://github.com/pskdje/bilibili-API-collect/blob/main/README.md",
+                           "https://pypi.org/project/bilibili-api-dev",
+                           "https://www.bilibili.com/read/cv21313074",
+                           "https://bilibili.com/read/cv21313074",
+                           "https://bilibili.com/v/documentary",
+                           "https://www.bilibili.com/v/documentary",
+                           "https://bilibili.com/sitemap.xml",
+                           "https://www.bilibili.com/sitemap/v.xml",
+                           "https://open.bilibili.com",
+                           "https://open.bilibili.com/",
+                           "https://www.bilibili.com/docs",
+                           "https://bilibili.com/docs"
+                       ]
+    },
+    {
+        "nodeName":  "collect_sources_02_03",
+        "displayName":  "哔哩哔哩 - REVIEW采集",
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "REVIEW",
+        "status":  "SUCCESS_DEGRADED",
+        "includeDomains":  [
+
+                           ],
+        "preferredDomains":  [
+                                 "www.g2.com",
+                                 "www.capterra.com",
+                                 "www.bilibili.com"
+                             ],
+        "nestedPlannedQueryIncludeDomains":  [
+                                                 "www.bilibili.com",
+                                                 "www.g2.com",
+                                                 "www.capterra.com"
+                                             ],
+        "totalCollected":  10,
+        "successCollected":  3,
+        "degraded":  true,
+        "degradationReasons":  [
+                                   "HARD_DEADLINE_REACHED"
+                               ],
+        "fieldEvidenceFinalStatus":  "EVIDENCE_PATH_COVERAGE_NOT_MET",
+        "evidenceCount":  3,
+        "documentCount":  10,
+        "selectedTargetCount":  5,
+        "sourceUrlCount":  10,
+        "sourceUrls":  [
+                           "https://m.bilibili.com/opus/176188045339958838",
+                           "https://play.google.com/store/apps/details?id=tv.danmaku.bili\u0026hl=zh",
+                           "https://www.woshipm.com/evaluating/5491984.html",
+                           "https://woshipm.com/evaluating/5491984.html",
+                           "https://www.g2.com/search?query=哔哩哔哩",
+                           "https://g2.com/search?query=哔哩哔哩",
+                           "https://www.capterra.com/search/?query=哔哩哔哩",
+                           "https://capterra.com/search?query=哔哩哔哩",
+                           "https://www.youtube.com/watch?v=YnfwM2EuDf0\u0026vl=zh-Hans",
+                           "https://youtube.com/watch?v=YnfwM2EuDf0\u0026vl=zh-Hans"
+                       ]
+    }
+]

@@ -368,4 +368,111 @@ class NodeExecutionRecoveryPolicyTest {
         assertFalse(resolution.isWaitingManualIntervention());
         assertNull(resolution.getErrorMessage());
     }
+
+    @Test
+    void shouldResolveDegradedSuccessWhenFinalReviewHasOnlyNonBlockingEvidenceGaps() {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(7L)
+                .status(AnalysisTaskStatus.RUNNING)
+                .build();
+
+        TaskNode writerNode = TaskNode.builder()
+                .taskId(7L)
+                .nodeName("write_report")
+                .displayName("write_report")
+                .agentType(AgentType.WRITER)
+                .required(true)
+                .status(TaskNodeStatus.SUCCESS)
+                .outputData("""
+                        {
+                          "content":"# Stage1 Report",
+                          "sourceUrls":[
+                            "https://juhe.cn/news/index/id/7857",
+                            "https://www.juhe.cn/news/index/id/7857",
+                            "https://qinshixixing.gitbooks.io/bilibiliapi",
+                            "https://nemo2011.github.io/bilibili-api"
+                          ]
+                        }
+                        """)
+                .build();
+        TaskNode initialReviewNode = TaskNode.builder()
+                .taskId(7L)
+                .nodeName("quality_check")
+                .displayName("quality_check")
+                .agentType(AgentType.REVIEWER)
+                .required(true)
+                .status(TaskNodeStatus.SUCCESS)
+                .outputData("""
+                        {
+                          "passed": false,
+                          "requiresHumanIntervention": false,
+                          "issues": [
+                            {
+                              "type":"coverage_gap",
+                              "section":"瀹氫环绛栫暐",
+                              "severity":"WARNING",
+                              "level":"MAJOR"
+                            }
+                          ]
+                        }
+                        """)
+                .build();
+        TaskNode rewriteNode = TaskNode.builder()
+                .taskId(7L)
+                .nodeName("rewrite_report")
+                .displayName("rewrite_report")
+                .agentType(AgentType.WRITER)
+                .required(true)
+                .status(TaskNodeStatus.SUCCESS)
+                .outputData(writerNode.getOutputData())
+                .build();
+        TaskNode finalReviewNode = TaskNode.builder()
+                .taskId(7L)
+                .nodeName("quality_check_final")
+                .displayName("quality_check_final")
+                .agentType(AgentType.REVIEWER)
+                .required(true)
+                .status(TaskNodeStatus.SUCCESS)
+                .outputData("""
+                        {
+                          "passed": false,
+                          "requiresHumanIntervention": true,
+                          "score": 56,
+                          "diagnoses": [
+                            {
+                              "type":"weak_evidence",
+                              "section":"功能对比",
+                              "severity":"WARNING",
+                              "level":"MAJOR",
+                              "sourceUrls":[
+                                "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                                "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide",
+                                "https://developer.aliyun.com/article/1638911",
+                                "https://juhe.cn/news/index/id/7857",
+                                "https://qinshixixing.gitbooks.io/bilibiliapi"
+                              ]
+                            },
+                            {
+                              "type":"coverage_gap",
+                              "section":"瀹氫环绛栫暐",
+                              "severity":"WARNING",
+                              "level":"MAJOR"
+                            }
+                          ]
+                        }
+                        """)
+                .build();
+
+        NodeExecutionRecoveryPolicy.TaskExecutionResolution resolution =
+                recoveryPolicy.resolveTaskExecution(task, List.of(
+                        writerNode,
+                        initialReviewNode,
+                        rewriteNode,
+                        finalReviewNode
+                ));
+
+        assertEquals(AnalysisTaskStatus.SUCCESS, resolution.getStatus());
+        assertFalse(resolution.isWaitingManualIntervention());
+        assertNull(resolution.getErrorMessage());
+    }
 }

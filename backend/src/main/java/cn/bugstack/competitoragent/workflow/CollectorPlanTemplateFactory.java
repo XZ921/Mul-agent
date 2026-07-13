@@ -55,6 +55,7 @@ public class CollectorPlanTemplateFactory {
         );
         int plannedUrlCount = sourcePlan == null || sourcePlan.getUrls() == null ? 0 : sourcePlan.getUrls().size();
         int minVerifiedCandidates = searchPolicyResolver.resolveMinVerifiedCandidates(null, plannedUrlCount, targetCount);
+        List<String> preferredDomains = buildPreferredDomains(sourcePlan == null ? List.of() : sourcePlan.getCandidates());
         SearchExecutionPlan executionPlan = buildDefaultSearchExecutionPlan(
                 searchQueries,
                 fallbackOrder,
@@ -86,7 +87,8 @@ public class CollectorPlanTemplateFactory {
                 .verifyCandidates(Boolean.TRUE)
                 .verifyResultPage(searchBrowserProperties.isVerifyResultPage())
                 .minVerifiedCandidates(minVerifiedCandidates)
-                .preferredDomains(buildPreferredDomains(sourcePlan == null ? List.of() : sourcePlan.getCandidates()))
+                .preferredDomains(preferredDomains)
+                .includeDomains(buildIncludeDomains(sourcePlan == null ? null : sourcePlan.getSourceType(), preferredDomains))
                 .blockedDomains(List.of())
                 .browserSearchEnabled(browserEnabled)
                 .maxSearchResults(targetCount)
@@ -218,5 +220,16 @@ public class CollectorPlanTemplateFactory {
             }
         }
         return new ArrayList<>(domains);
+    }
+
+    private List<String> buildIncludeDomains(String sourceType, List<String> preferredDomains) {
+        if (preferredDomains == null || preferredDomains.isEmpty()) {
+            return List.of();
+        }
+        String normalized = sourceType == null ? "" : sourceType.trim().toUpperCase(Locale.ROOT);
+        if (!"OFFICIAL".equals(normalized) && !"DOCS".equals(normalized) && !"PRICING".equals(normalized)) {
+            return List.of();
+        }
+        return new ArrayList<>(preferredDomains);
     }
 }

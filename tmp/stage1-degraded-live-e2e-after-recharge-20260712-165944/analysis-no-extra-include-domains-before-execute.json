@@ -1,0 +1,50 @@
+﻿[
+    {
+        "nodeName":  "collect_sources_01_01",
+        "sourceType":  "OFFICIAL",
+        "topIncludeCount":  1,
+        "topInclude":  "www.douyin.com",
+        "nestedIncludeGroups":  "www.douyin.com",
+        "preferred":  "www.douyin.com"
+    },
+    {
+        "nodeName":  "collect_sources_01_02",
+        "sourceType":  "DOCS",
+        "topIncludeCount":  1,
+        "topInclude":  "www.douyin.com",
+        "nestedIncludeGroups":  "www.douyin.com",
+        "preferred":  "www.douyin.com"
+    },
+    {
+        "nodeName":  "collect_sources_01_03",
+        "sourceType":  "REVIEW",
+        "topIncludeCount":  0,
+        "topInclude":  "",
+        "nestedIncludeGroups":  "www.douyin.com,www.g2.com,www.capterra.com",
+        "preferred":  "www.g2.com,www.capterra.com,www.douyin.com"
+    },
+    {
+        "nodeName":  "collect_sources_02_01",
+        "sourceType":  "OFFICIAL",
+        "topIncludeCount":  1,
+        "topInclude":  "www.bilibili.com",
+        "nestedIncludeGroups":  "www.bilibili.com",
+        "preferred":  "www.bilibili.com"
+    },
+    {
+        "nodeName":  "collect_sources_02_02",
+        "sourceType":  "DOCS",
+        "topIncludeCount":  1,
+        "topInclude":  "www.bilibili.com",
+        "nestedIncludeGroups":  "www.bilibili.com",
+        "preferred":  "www.bilibili.com"
+    },
+    {
+        "nodeName":  "collect_sources_02_03",
+        "sourceType":  "REVIEW",
+        "topIncludeCount":  0,
+        "topInclude":  "",
+        "nestedIncludeGroups":  "www.bilibili.com,www.g2.com,www.capterra.com",
+        "preferred":  "www.g2.com,www.capterra.com,www.bilibili.com"
+    }
+]

@@ -31,6 +31,16 @@ public class ThirdPartyFallbackProperties {
     private int minEvidenceThreshold = 1;
 
     /**
+     * 给第三方兜底预留的时间窗口。主搜索/主采集会提前收口，fallback 继续使用原始 hard deadline。
+     */
+    private long reserveMillis = 25_000L;
+
+    /**
+     * 启动第三方兜底前至少需要剩余的时间，避免只剩几秒时发起注定超时的外部搜索。
+     */
+    private long minStartMillis = 15_000L;
+
+    /**
      * 允许触发回退的 sourceType。默认只覆盖官网/文档这类强官网依赖节点。
      */
     private List<String> sourceTypes = List.of("OFFICIAL", "DOCS");

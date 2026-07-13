@@ -1,0 +1,54 @@
+﻿[
+    {
+        "Name":  "copy.ai",
+        "Count":  3
+    },
+    {
+        "Name":  "dev.to",
+        "Count":  3
+    },
+    {
+        "Name":  "zite.com",
+        "Count":  3
+    },
+    {
+        "Name":  "smartsuite.com",
+        "Count":  3
+    },
+    {
+        "Name":  "blog.kintone.com",
+        "Count":  3
+    },
+    {
+        "Name":  "apitracker.io",
+        "Count":  3
+    },
+    {
+        "Name":  "pyairtable.readthedocs.io",
+        "Count":  3
+    },
+    {
+        "Name":  "checkthat.ai",
+        "Count":  3
+    },
+    {
+        "Name":  "airtable.com",
+        "Count":  3
+    },
+    {
+        "Name":  "www.smartsuite.com",
+        "Count":  1
+    },
+    {
+        "Name":  "www.copy.ai",
+        "Count":  1
+    },
+    {
+        "Name":  "www.airtable.com",
+        "Count":  1
+    },
+    {
+        "Name":  "www.zite.com",
+        "Count":  1
+    }
+]

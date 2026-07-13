@@ -1,0 +1,170 @@
+﻿[
+    {
+        "nodeName":  "collect_sources_01_01",
+        "displayName":  "抖音 - OFFICIAL采集",
+        "competitorName":  "抖音",
+        "sourceType":  "OFFICIAL",
+        "includeDomains":  [
+                               "www.douyin.com",
+                               "douyin.com",
+                               "open.douyin.com",
+                               "docs.open-douyin.com",
+                               "creator.douyin.com",
+                               "oceanengine.com"
+                           ],
+        "preferredDomains":  [
+                                 "www.douyin.com",
+                                 "douyin.com",
+                                 "open.douyin.com",
+                                 "docs.open-douyin.com",
+                                 "creator.douyin.com",
+                                 "oceanengine.com"
+                             ],
+        "competitorUrls":  [
+                               "https://www.douyin.com",
+                               "https://douyin.com",
+                               "https://open.douyin.com",
+                               "https://docs.open-douyin.com",
+                               "https://creator.douyin.com",
+                               "https://oceanengine.com"
+                           ]
+    },
+    {
+        "nodeName":  "collect_sources_01_02",
+        "displayName":  "抖音 - DOCS采集",
+        "competitorName":  "抖音",
+        "sourceType":  "DOCS",
+        "includeDomains":  [
+                               "www.douyin.com",
+                               "douyin.com",
+                               "open.douyin.com",
+                               "docs.open-douyin.com",
+                               "creator.douyin.com",
+                               "oceanengine.com"
+                           ],
+        "preferredDomains":  [
+                                 "www.douyin.com",
+                                 "douyin.com",
+                                 "open.douyin.com",
+                                 "docs.open-douyin.com",
+                                 "creator.douyin.com",
+                                 "oceanengine.com"
+                             ],
+        "competitorUrls":  [
+                               "https://www.douyin.com",
+                               "https://douyin.com",
+                               "https://open.douyin.com",
+                               "https://docs.open-douyin.com",
+                               "https://creator.douyin.com",
+                               "https://oceanengine.com"
+                           ]
+    },
+    {
+        "nodeName":  "collect_sources_01_03",
+        "displayName":  "抖音 - REVIEW采集",
+        "competitorName":  "抖音",
+        "sourceType":  "REVIEW",
+        "includeDomains":  [
+
+                           ],
+        "preferredDomains":  [
+                                 "www.g2.com",
+                                 "www.capterra.com",
+                                 "www.douyin.com"
+                             ],
+        "competitorUrls":  [
+                               "https://www.g2.com/search?query=抖音",
+                               "https://www.capterra.com/search/?query=抖音",
+                               "https://www.douyin.com/case-studies",
+                               "https://www.douyin.com/compare",
+                               "https://www.douyin.com/customers"
+                           ]
+    },
+    {
+        "nodeName":  "collect_sources_02_01",
+        "displayName":  "哔哩哔哩 - OFFICIAL采集",
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "OFFICIAL",
+        "includeDomains":  [
+                               "www.bilibili.com",
+                               "bilibili.com",
+                               "member.bilibili.com",
+                               "openhome.bilibili.com",
+                               "open.bilibili.com",
+                               "cm.bilibili.com",
+                               "ad.bilibili.com"
+                           ],
+        "preferredDomains":  [
+                                 "www.bilibili.com",
+                                 "bilibili.com",
+                                 "member.bilibili.com",
+                                 "openhome.bilibili.com",
+                                 "open.bilibili.com",
+                                 "cm.bilibili.com",
+                                 "ad.bilibili.com"
+                             ],
+        "competitorUrls":  [
+                               "https://www.bilibili.com",
+                               "https://bilibili.com",
+                               "https://member.bilibili.com",
+                               "https://openhome.bilibili.com",
+                               "https://open.bilibili.com",
+                               "https://cm.bilibili.com",
+                               "https://ad.bilibili.com"
+                           ]
+    },
+    {
+        "nodeName":  "collect_sources_02_02",
+        "displayName":  "哔哩哔哩 - DOCS采集",
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "DOCS",
+        "includeDomains":  [
+                               "www.bilibili.com",
+                               "bilibili.com",
+                               "member.bilibili.com",
+                               "openhome.bilibili.com",
+                               "open.bilibili.com",
+                               "cm.bilibili.com",
+                               "ad.bilibili.com"
+                           ],
+        "preferredDomains":  [
+                                 "www.bilibili.com",
+                                 "bilibili.com",
+                                 "member.bilibili.com",
+                                 "openhome.bilibili.com",
+                                 "open.bilibili.com",
+                                 "cm.bilibili.com",
+                                 "ad.bilibili.com"
+                             ],
+        "competitorUrls":  [
+                               "https://www.bilibili.com",
+                               "https://bilibili.com",
+                               "https://member.bilibili.com",
+                               "https://openhome.bilibili.com",
+                               "https://open.bilibili.com",
+                               "https://cm.bilibili.com",
+                               "https://ad.bilibili.com"
+                           ]
+    },
+    {
+        "nodeName":  "collect_sources_02_03",
+        "displayName":  "哔哩哔哩 - REVIEW采集",
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "REVIEW",
+        "includeDomains":  [
+
+                           ],
+        "preferredDomains":  [
+                                 "www.g2.com",
+                                 "www.capterra.com",
+                                 "www.bilibili.com"
+                             ],
+        "competitorUrls":  [
+                               "https://www.g2.com/search?query=哔哩哔哩",
+                               "https://www.capterra.com/search/?query=哔哩哔哩",
+                               "https://www.bilibili.com/case-studies",
+                               "https://www.bilibili.com/compare",
+                               "https://www.bilibili.com/customers"
+                           ]
+    }
+]

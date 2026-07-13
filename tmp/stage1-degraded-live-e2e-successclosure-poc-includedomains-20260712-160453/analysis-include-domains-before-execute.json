@@ -1,0 +1,156 @@
+﻿[
+    {
+        "nodeName":  "collect_sources_01_01",
+        "competitorName":  "抖音",
+        "sourceType":  "OFFICIAL",
+        "includeDomains":  [
+                               "www.douyin.com",
+                               "douyin.com",
+                               "open.douyin.com",
+                               "docs.open-douyin.com",
+                               "creator.douyin.com",
+                               "oceanengine.com"
+                           ],
+        "preferredDomains":  [
+                                 "www.douyin.com",
+                                 "douyin.com",
+                                 "open.douyin.com",
+                                 "docs.open-douyin.com",
+                                 "creator.douyin.com",
+                                 "oceanengine.com"
+                             ],
+        "nestedIncludeDomains":  [
+                                     "www.douyin.com",
+                                     "douyin.com",
+                                     "open.douyin.com",
+                                     "docs.open-douyin.com",
+                                     "creator.douyin.com",
+                                     "oceanengine.com"
+                                 ]
+    },
+    {
+        "nodeName":  "collect_sources_01_02",
+        "competitorName":  "抖音",
+        "sourceType":  "DOCS",
+        "includeDomains":  [
+                               "www.douyin.com",
+                               "douyin.com",
+                               "open.douyin.com",
+                               "docs.open-douyin.com",
+                               "creator.douyin.com",
+                               "oceanengine.com"
+                           ],
+        "preferredDomains":  [
+                                 "www.douyin.com",
+                                 "douyin.com",
+                                 "open.douyin.com",
+                                 "docs.open-douyin.com",
+                                 "creator.douyin.com",
+                                 "oceanengine.com"
+                             ],
+        "nestedIncludeDomains":  [
+                                     "www.douyin.com",
+                                     "douyin.com",
+                                     "open.douyin.com",
+                                     "docs.open-douyin.com",
+                                     "creator.douyin.com",
+                                     "oceanengine.com"
+                                 ]
+    },
+    {
+        "nodeName":  "collect_sources_01_03",
+        "competitorName":  "抖音",
+        "sourceType":  "REVIEW",
+        "includeDomains":  [
+
+                           ],
+        "preferredDomains":  [
+                                 "www.g2.com",
+                                 "www.capterra.com",
+                                 "www.douyin.com"
+                             ],
+        "nestedIncludeDomains":  [
+
+                                 ]
+    },
+    {
+        "nodeName":  "collect_sources_02_01",
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "OFFICIAL",
+        "includeDomains":  [
+                               "www.bilibili.com",
+                               "bilibili.com",
+                               "member.bilibili.com",
+                               "openhome.bilibili.com",
+                               "open.bilibili.com",
+                               "cm.bilibili.com",
+                               "ad.bilibili.com"
+                           ],
+        "preferredDomains":  [
+                                 "www.bilibili.com",
+                                 "bilibili.com",
+                                 "member.bilibili.com",
+                                 "openhome.bilibili.com",
+                                 "open.bilibili.com",
+                                 "cm.bilibili.com",
+                                 "ad.bilibili.com"
+                             ],
+        "nestedIncludeDomains":  [
+                                     "www.bilibili.com",
+                                     "bilibili.com",
+                                     "member.bilibili.com",
+                                     "openhome.bilibili.com",
+                                     "open.bilibili.com",
+                                     "cm.bilibili.com",
+                                     "ad.bilibili.com"
+                                 ]
+    },
+    {
+        "nodeName":  "collect_sources_02_02",
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "DOCS",
+        "includeDomains":  [
+                               "www.bilibili.com",
+                               "bilibili.com",
+                               "member.bilibili.com",
+                               "openhome.bilibili.com",
+                               "open.bilibili.com",
+                               "cm.bilibili.com",
+                               "ad.bilibili.com"
+                           ],
+        "preferredDomains":  [
+                                 "www.bilibili.com",
+                                 "bilibili.com",
+                                 "member.bilibili.com",
+                                 "openhome.bilibili.com",
+                                 "open.bilibili.com",
+                                 "cm.bilibili.com",
+                                 "ad.bilibili.com"
+                             ],
+        "nestedIncludeDomains":  [
+                                     "www.bilibili.com",
+                                     "bilibili.com",
+                                     "member.bilibili.com",
+                                     "openhome.bilibili.com",
+                                     "open.bilibili.com",
+                                     "cm.bilibili.com",
+                                     "ad.bilibili.com"
+                                 ]
+    },
+    {
+        "nodeName":  "collect_sources_02_03",
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "REVIEW",
+        "includeDomains":  [
+
+                           ],
+        "preferredDomains":  [
+                                 "www.g2.com",
+                                 "www.capterra.com",
+                                 "www.bilibili.com"
+                             ],
+        "nestedIncludeDomains":  [
+
+                                 ]
+    }
+]

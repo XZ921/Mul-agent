@@ -1,0 +1,56 @@
+﻿[
+    {
+        "nodeName":  "collect_sources_01_01",
+        "displayName":  "Notion - OFFICIAL采集",
+        "sourceType":  "OFFICIAL",
+        "preferredDomains":  "www.notion.so",
+        "includeDomains":  "www.notion.so",
+        "tavilyQueryMode":  null,
+        "thirdPartyFallbackQueries":  2
+    },
+    {
+        "nodeName":  "collect_sources_01_02",
+        "displayName":  "Notion - DOCS采集",
+        "sourceType":  "DOCS",
+        "preferredDomains":  "www.notion.so",
+        "includeDomains":  "www.notion.so",
+        "tavilyQueryMode":  null,
+        "thirdPartyFallbackQueries":  2
+    },
+    {
+        "nodeName":  "collect_sources_01_03",
+        "displayName":  "Notion - REVIEW采集",
+        "sourceType":  "REVIEW",
+        "preferredDomains":  "www.g2.com,www.capterra.com,www.notion.so",
+        "includeDomains":  "",
+        "tavilyQueryMode":  null,
+        "thirdPartyFallbackQueries":  0
+    },
+    {
+        "nodeName":  "collect_sources_02_01",
+        "displayName":  "Airtable - OFFICIAL采集",
+        "sourceType":  "OFFICIAL",
+        "preferredDomains":  "www.airtable.com",
+        "includeDomains":  "www.airtable.com",
+        "tavilyQueryMode":  null,
+        "thirdPartyFallbackQueries":  2
+    },
+    {
+        "nodeName":  "collect_sources_02_02",
+        "displayName":  "Airtable - DOCS采集",
+        "sourceType":  "DOCS",
+        "preferredDomains":  "www.airtable.com",
+        "includeDomains":  "www.airtable.com",
+        "tavilyQueryMode":  null,
+        "thirdPartyFallbackQueries":  2
+    },
+    {
+        "nodeName":  "collect_sources_02_03",
+        "displayName":  "Airtable - REVIEW采集",
+        "sourceType":  "REVIEW",
+        "preferredDomains":  "www.g2.com,www.capterra.com,www.airtable.com",
+        "includeDomains":  "",
+        "tavilyQueryMode":  null,
+        "thirdPartyFallbackQueries":  0
+    }
+]

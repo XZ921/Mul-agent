@@ -16,6 +16,7 @@ import cn.bugstack.competitoragent.collection.CollectionTaskPackage;
 import cn.bugstack.competitoragent.collection.CollectionTaskPackageBuilder;
 import cn.bugstack.competitoragent.collection.WebPageCollectionExecutor;
 import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
+import cn.bugstack.competitoragent.config.ThirdPartyFallbackProperties;
 import cn.bugstack.competitoragent.model.dto.CollectionAuditSummary;
 import cn.bugstack.competitoragent.collection.quality.EvidenceQualityGate;
 import cn.bugstack.competitoragent.collection.quality.EvidenceQualityGateProperties;
@@ -45,6 +46,7 @@ import cn.bugstack.competitoragent.search.SearchExecutionCoordinator;
 import cn.bugstack.competitoragent.search.SearchExecutionResult;
 import cn.bugstack.competitoragent.search.SearchExecutionStep;
 import cn.bugstack.competitoragent.search.SearchExecutionTrace;
+import cn.bugstack.competitoragent.search.SearchExecutionUpdate;
 import cn.bugstack.competitoragent.source.SearchSourceProvider;
 import cn.bugstack.competitoragent.source.SourceCandidate;
 import cn.bugstack.competitoragent.source.SourceCandidateRanker;
@@ -60,6 +62,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -433,6 +436,307 @@ class CollectorAgentTest {
                 "Notion tutorial documentation review"
         ), fallbackConfig.getSearchQueries());
         assertEquals(Boolean.TRUE, fallbackConfig.getThirdPartyFallbackActive());
+    }
+
+    @Test
+    void shouldReserveFallbackWindowForOfficialSearchAndCollectionDeadline() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent deadlineAwareCollector = newFallbackDeadlineAwareCollector(
+                searchCoordinator,
+                collectionCoordinator,
+                80_000L);
+        SearchCollectionTarget selectedTarget = SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://www.notion.so/help")
+                        .title("Notion Help")
+                        .sourceType("DOCS")
+                        .discoveryMethod("DIRECT_LOCATOR")
+                        .providerKey("planned")
+                        .domain("www.notion.so")
+                        .sourceUrls(List.of("https://www.notion.so/help"))
+                        .selectionStage("SELECTED")
+                        .selectionReason("planned official candidate")
+                        .build())
+                .build();
+        when(searchCoordinator.execute(any(), any(), any(), any(), any(CollectionDeadlineContext.class)))
+                .thenReturn(buildSearchExecutionResult(selectedTarget));
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any(), any(CollectionDeadlineContext.class)))
+                .thenReturn(buildCollectionReport(List.of(buildSuccessfulCollectionResult(
+                        "collect_sources_notion_docs#001",
+                        1,
+                        "https://www.notion.so/help",
+                        "Notion Help"))));
+        when(collectionCoordinator.summarize(any()))
+                .thenAnswer(invocation -> buildCollectionReport(invocation.getArgument(0)));
+
+        long beforeExecute = System.currentTimeMillis();
+        AgentResult result = deadlineAwareCollector.execute(buildThirdPartyFallbackContext());
+
+        assertEquals("SUCCESS", result.getStatus().name(), result.getErrorMessage());
+        ArgumentCaptor<CollectionDeadlineContext> searchDeadlineCaptor =
+                ArgumentCaptor.forClass(CollectionDeadlineContext.class);
+        ArgumentCaptor<CollectionDeadlineContext> collectionDeadlineCaptor =
+                ArgumentCaptor.forClass(CollectionDeadlineContext.class);
+        verify(searchCoordinator).execute(any(), any(), any(), any(), searchDeadlineCaptor.capture());
+        verify(collectionCoordinator).execute(any(), any(), any(), any(), any(), any(), collectionDeadlineCaptor.capture());
+        long searchDeadlineEpoch = searchDeadlineCaptor.getValue().hardDeadlineEpochMillis();
+        long collectionDeadlineEpoch = collectionDeadlineCaptor.getValue().hardDeadlineEpochMillis();
+        assertTrue(searchDeadlineEpoch - beforeExecute <= 60_000L,
+                "OFFICIAL/DOCS 主搜索应给第三方兜底预留约 25s，而不是吃满 80s");
+        assertTrue(searchDeadlineEpoch - beforeExecute >= 45_000L,
+                "预留窗口不能把主搜索压缩到无法完成一次正常请求");
+        assertEquals(searchDeadlineEpoch, collectionDeadlineEpoch,
+                "主搜索和主采集必须使用同一份缩短 deadline，避免采集吃掉兜底窗口");
+    }
+
+    @Test
+    void shouldNotReserveFallbackWindowWhenTotalDeadlineIsTooShort() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent deadlineAwareCollector = newFallbackDeadlineAwareCollector(
+                searchCoordinator,
+                collectionCoordinator,
+                30_000L);
+        SearchCollectionTarget selectedTarget = SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://www.notion.so/help")
+                        .title("Notion Help")
+                        .sourceType("DOCS")
+                        .discoveryMethod("DIRECT_LOCATOR")
+                        .providerKey("planned")
+                        .domain("www.notion.so")
+                        .sourceUrls(List.of("https://www.notion.so/help"))
+                        .selectionStage("SELECTED")
+                        .selectionReason("planned official candidate")
+                        .build())
+                .build();
+        when(searchCoordinator.execute(any(), any(), any(), any(), any(CollectionDeadlineContext.class)))
+                .thenReturn(buildSearchExecutionResult(selectedTarget));
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any(), any(CollectionDeadlineContext.class)))
+                .thenReturn(buildCollectionReport(List.of(buildSuccessfulCollectionResult(
+                        "collect_sources_notion_docs#001",
+                        1,
+                        "https://www.notion.so/help",
+                        "Notion Help"))));
+        when(collectionCoordinator.summarize(any()))
+                .thenAnswer(invocation -> buildCollectionReport(invocation.getArgument(0)));
+
+        long beforeExecute = System.currentTimeMillis();
+        AgentResult result = deadlineAwareCollector.execute(buildThirdPartyFallbackContext());
+
+        assertEquals("SUCCESS", result.getStatus().name(), result.getErrorMessage());
+        ArgumentCaptor<CollectionDeadlineContext> searchDeadlineCaptor =
+                ArgumentCaptor.forClass(CollectionDeadlineContext.class);
+        ArgumentCaptor<CollectionDeadlineContext> collectionDeadlineCaptor =
+                ArgumentCaptor.forClass(CollectionDeadlineContext.class);
+        verify(searchCoordinator).execute(any(), any(), any(), any(), searchDeadlineCaptor.capture());
+        verify(collectionCoordinator).execute(any(), any(), any(), any(), any(), any(), collectionDeadlineCaptor.capture());
+        long searchDeadlineEpoch = searchDeadlineCaptor.getValue().hardDeadlineEpochMillis();
+        long collectionDeadlineEpoch = collectionDeadlineCaptor.getValue().hardDeadlineEpochMillis();
+        assertTrue(searchDeadlineEpoch - beforeExecute >= 20_000L,
+                "总 deadline 过短时不应预留 25s，否则主路径只剩 5s 会被预留反杀");
+        assertTrue(searchDeadlineEpoch - beforeExecute <= 35_000L);
+        assertEquals(searchDeadlineEpoch, collectionDeadlineEpoch);
+    }
+
+    @Test
+    void shouldSkipThirdPartyFallbackWhenRemainingDeadlineIsBelowMinStartMillis() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent deadlineAwareCollector = newFallbackDeadlineAwareCollector(
+                searchCoordinator,
+                collectionCoordinator,
+                10_000L);
+        when(searchCoordinator.execute(any(), any(), any(), any(), any(CollectionDeadlineContext.class)))
+                .thenReturn(buildSearchExecutionResult());
+        when(collectionCoordinator.summarize(any()))
+                .thenAnswer(invocation -> buildCollectionReport(invocation.getArgument(0)));
+
+        AgentResult result = deadlineAwareCollector.execute(buildThirdPartyFallbackContext());
+
+        assertEquals("FAILED", result.getStatus().name());
+        verify(searchCoordinator, times(1)).execute(any(), any(), any(), any(), any(CollectionDeadlineContext.class));
+        verify(collectionCoordinator, never()).execute(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void shouldFallbackWhenOfficialSearchHitsReservedPrimaryDeadline() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent deadlineAwareCollector = newFallbackDeadlineAwareCollector(
+                searchCoordinator,
+                collectionCoordinator,
+                200L,
+                80L,
+                20L,
+                30_000L);
+        SearchExecutionResult fallbackSearchResult = buildSearchExecutionResult(SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://www.getapp.com/collaboration-software/a/notion/reviews/")
+                        .title("Notion third-party review")
+                        .sourceType("DOCS")
+                        .discoveryMethod("HTTP")
+                        .providerKey("tavily")
+                        .domain("www.getapp.com")
+                        .sourceUrls(List.of("https://www.getapp.com/collaboration-software/a/notion/reviews/"))
+                        .selectionStage("SELECTED")
+                        .selectionReason("third-party evidence")
+                        .build())
+                .build());
+        when(searchCoordinator.execute(any(), any(), any(), any(), any(CollectionDeadlineContext.class)))
+                .thenAnswer(invocation -> {
+                    Thread.sleep(250L);
+                    return buildSearchExecutionResult(SearchCollectionTarget.builder()
+                            .candidate(buildSourceCandidate("https://www.notion.so/help"))
+                            .build());
+                })
+                .thenReturn(fallbackSearchResult);
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any(), any(CollectionDeadlineContext.class)))
+                .thenReturn(buildCollectionReport(List.of(buildSuccessfulCollectionResult(
+                        "collect_sources_notion_docs#001",
+                        1,
+                        "https://www.getapp.com/collaboration-software/a/notion/reviews/",
+                        "Notion third-party review"))));
+        when(collectionCoordinator.summarize(any()))
+                .thenAnswer(invocation -> buildCollectionReport(invocation.getArgument(0)));
+
+        AgentResult result = deadlineAwareCollector.execute(buildThirdPartyFallbackContext());
+
+        assertEquals("SUCCESS_DEGRADED", result.getStatus().name(), result.getErrorMessage());
+        verify(searchCoordinator, times(2)).execute(any(), any(), any(), any(), any(CollectionDeadlineContext.class));
+        verify(collectionCoordinator, times(1)).execute(any(), any(), any(), any(), any(), any(),
+                any(CollectionDeadlineContext.class));
+    }
+
+    @Test
+    void shouldFallbackWhenOfficialCollectionHitsReservedPrimaryDeadline() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent deadlineAwareCollector = newFallbackDeadlineAwareCollector(
+                searchCoordinator,
+                collectionCoordinator,
+                200L,
+                80L,
+                20L,
+                30_000L);
+        SearchExecutionResult officialSearchResult = buildSearchExecutionResult(SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://www.notion.so/help")
+                        .title("Notion Help")
+                        .sourceType("DOCS")
+                        .discoveryMethod("DIRECT_LOCATOR")
+                        .providerKey("planned")
+                        .domain("www.notion.so")
+                        .sourceUrls(List.of("https://www.notion.so/help"))
+                        .selectionStage("SELECTED")
+                        .selectionReason("planned official candidate")
+                        .build())
+                .build());
+        SearchExecutionResult fallbackSearchResult = buildSearchExecutionResult(SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://www.getapp.com/collaboration-software/a/notion/reviews/")
+                        .title("Notion third-party review")
+                        .sourceType("DOCS")
+                        .discoveryMethod("HTTP")
+                        .providerKey("tavily")
+                        .domain("www.getapp.com")
+                        .sourceUrls(List.of("https://www.getapp.com/collaboration-software/a/notion/reviews/"))
+                        .selectionStage("SELECTED")
+                        .selectionReason("third-party evidence")
+                        .build())
+                .build());
+        when(searchCoordinator.execute(any(), any(), any(), any(), any(CollectionDeadlineContext.class)))
+                .thenReturn(officialSearchResult, fallbackSearchResult);
+        when(collectionCoordinator.execute(any(), any(), any(), any(), any(), any(), any(CollectionDeadlineContext.class)))
+                .thenAnswer(invocation -> {
+                    Thread.sleep(250L);
+                    return buildCollectionReport(List.of());
+                })
+                .thenReturn(buildCollectionReport(List.of(buildSuccessfulCollectionResult(
+                        "collect_sources_notion_docs#001",
+                        1,
+                        "https://www.getapp.com/collaboration-software/a/notion/reviews/",
+                        "Notion third-party review"))));
+        when(collectionCoordinator.summarize(any()))
+                .thenAnswer(invocation -> buildCollectionReport(invocation.getArgument(0)));
+
+        AgentResult result = deadlineAwareCollector.execute(buildThirdPartyFallbackContext());
+
+        assertEquals("SUCCESS_DEGRADED", result.getStatus().name(), result.getErrorMessage());
+        verify(searchCoordinator, times(2)).execute(any(), any(), any(), any(), any(CollectionDeadlineContext.class));
+        verify(collectionCoordinator, times(2)).execute(any(), any(), any(), any(), any(), any(),
+                any(CollectionDeadlineContext.class));
+    }
+
+    @Test
+    void shouldKeepPrefetchedOfficialEvidenceWhenPrimarySearchDeadlineIsReached() throws Exception {
+        SearchExecutionCoordinator searchCoordinator = mock(SearchExecutionCoordinator.class);
+        CollectionExecutionCoordinator collectionCoordinator = mock(CollectionExecutionCoordinator.class);
+        CollectorAgent deadlineAwareCollector = newFallbackDeadlineAwareCollector(
+                searchCoordinator,
+                collectionCoordinator,
+                200L,
+                80L,
+                20L,
+                30_000L);
+        SearchCollectionTarget prefetchedOfficialTarget = SearchCollectionTarget.builder()
+                .candidate(SourceCandidate.builder()
+                        .url("https://www.notion.so/help")
+                        .title("Notion Help")
+                        .sourceType("DOCS")
+                        .discoveryMethod("DIRECT_LOCATOR")
+                        .providerKey("planned")
+                        .domain("www.notion.so")
+                        .sourceUrls(List.of("https://www.notion.so/help"))
+                        .selectionStage("SELECTED")
+                        .selectionReason("planned official candidate")
+                        .build())
+                .collectedPage(SourceCollector.CollectedPage.builder()
+                        .url("https://www.notion.so/help")
+                        .title("Notion Help")
+                        .content("useful official Notion docs content collected before primary deadline")
+                        .snippet("Notion official docs")
+                        .competitorName("Notion")
+                        .sourceType("DOCS")
+                        .success(true)
+                        .build())
+                .build();
+        when(searchCoordinator.execute(any(), any(), any(), any(), any(CollectionDeadlineContext.class)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    Consumer<SearchExecutionUpdate> listener = invocation.getArgument(3);
+                    listener.accept(SearchExecutionUpdate.builder()
+                            .executionPlan(SearchExecutionPlan.builder()
+                                    .stage("COLLECT")
+                                    .steps(List.of())
+                                    .build())
+                            .selectedTargets(List.of(prefetchedOfficialTarget))
+                            .sourceCandidates(List.of(prefetchedOfficialTarget.getCandidate()))
+                            .executionTrace(SearchExecutionTrace.builder()
+                                    .searchMode("HTTP_ONLY")
+                                    .selectedUrls(List.of("https://www.notion.so/help"))
+                                    .build())
+                            .build());
+                    Thread.sleep(250L);
+                    return buildSearchExecutionResult(prefetchedOfficialTarget);
+                })
+                .thenReturn(buildSearchExecutionResult(SearchCollectionTarget.builder()
+                        .candidate(buildSourceCandidate("https://www.getapp.com/collaboration-software/a/notion/reviews/"))
+                        .build()));
+        when(collectionCoordinator.summarize(any()))
+                .thenAnswer(invocation -> buildCollectionReport(invocation.getArgument(0)));
+
+        AgentResult result = deadlineAwareCollector.execute(buildThirdPartyFallbackContext());
+        JsonNode output = objectMapper.readTree(result.getOutputData());
+
+        assertEquals("SUCCESS_DEGRADED", result.getStatus().name(), result.getErrorMessage());
+        assertEquals(1, output.path("successCollected").asInt());
+        assertEquals("https://www.notion.so/help",
+                output.path("documents").get(0).path("sourceUrls").get(0).asText());
+        verify(searchCoordinator, times(1)).execute(any(), any(), any(), any(), any(CollectionDeadlineContext.class));
+        verify(collectionCoordinator, never()).execute(any(), any(), any(), any(), any(), any(),
+                any(CollectionDeadlineContext.class));
     }
 
     @Test
@@ -1810,6 +2114,58 @@ class CollectorAgentTest {
                         "\\s*\"thirdPartyFallbackQueries\"\\s*:\\s*\\[\"Notion third-party docs evidence\"\\],\\R?",
                         ""))
                 .build();
+    }
+
+    private CollectorAgent newFallbackDeadlineAwareCollector(SearchExecutionCoordinator searchCoordinator,
+                                                             CollectionExecutionCoordinator collectionCoordinator,
+                                                             long hardDeadlineMillis) {
+        return newFallbackDeadlineAwareCollector(searchCoordinator, collectionCoordinator,
+                hardDeadlineMillis, 25_000L, 15_000L);
+    }
+
+    private CollectorAgent newFallbackDeadlineAwareCollector(SearchExecutionCoordinator searchCoordinator,
+                                                             CollectionExecutionCoordinator collectionCoordinator,
+                                                             long hardDeadlineMillis,
+                                                             long reserveMillis,
+                                                             long minStartMillis) {
+        return newFallbackDeadlineAwareCollector(searchCoordinator, collectionCoordinator,
+                hardDeadlineMillis, reserveMillis, minStartMillis, 0L);
+    }
+
+    private CollectorAgent newFallbackDeadlineAwareCollector(SearchExecutionCoordinator searchCoordinator,
+                                                             CollectionExecutionCoordinator collectionCoordinator,
+                                                             long hardDeadlineMillis,
+                                                             long reserveMillis,
+                                                             long minStartMillis,
+                                                             long drainGraceMillis) {
+        CollectorAgent agent = new CollectorAgent(
+                logRepository,
+                sourceCollector,
+                evidenceRepository,
+                nodeRepository,
+                agentContextAssembler,
+                searchCoordinator,
+                collectionCoordinator,
+                taskRetrievalIndexService,
+                objectMapper,
+                new DownstreamEvidenceViewAssembler(objectMapper),
+                new EvidenceQualityGate(new EvidenceQualityGateProperties()),
+                new EvidenceSourceSanitizer(),
+                null
+        ) {
+            long resolveCollectorHardDeadlineMillis(CollectorNodeConfig config, String sourceType) {
+                return hardDeadlineMillis;
+            }
+
+            long resolveCollectorDeadlineDrainGraceMillis(CollectorNodeConfig config, String sourceType) {
+                return drainGraceMillis;
+            }
+        };
+        ThirdPartyFallbackProperties properties = new ThirdPartyFallbackProperties();
+        properties.setReserveMillis(reserveMillis);
+        properties.setMinStartMillis(minStartMillis);
+        agent.setThirdPartyFallbackProperties(properties);
+        return agent;
     }
 
     private SearchExecutionResult buildSearchExecutionResult(SearchCollectionTarget... targets) {

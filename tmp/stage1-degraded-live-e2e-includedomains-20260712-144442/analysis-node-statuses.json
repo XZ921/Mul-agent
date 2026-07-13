@@ -1,0 +1,156 @@
+﻿[
+    {
+        "nodeName":  "collect_sources_01_01",
+        "displayName":  "Notion - OFFICIAL采集",
+        "agentType":  "COLLECTOR",
+        "status":  "SUCCESS_DEGRADED",
+        "statusSummary":  "节点降级成功",
+        "errorMessage":  null,
+        "executionOrder":  0,
+        "canRerun":  true,
+        "canUpdateConfigAndRerun":  true
+    },
+    {
+        "nodeName":  "collect_sources_01_02",
+        "displayName":  "Notion - DOCS采集",
+        "agentType":  "COLLECTOR",
+        "status":  "SUCCESS_DEGRADED",
+        "statusSummary":  "节点降级成功",
+        "errorMessage":  null,
+        "executionOrder":  1,
+        "canRerun":  true,
+        "canUpdateConfigAndRerun":  true
+    },
+    {
+        "nodeName":  "collect_sources_01_03",
+        "displayName":  "Notion - REVIEW采集",
+        "agentType":  "COLLECTOR",
+        "status":  "SUCCESS_DEGRADED",
+        "statusSummary":  "节点降级成功",
+        "errorMessage":  null,
+        "executionOrder":  2,
+        "canRerun":  true,
+        "canUpdateConfigAndRerun":  true
+    },
+    {
+        "nodeName":  "collect_sources_02_01",
+        "displayName":  "Airtable - OFFICIAL采集",
+        "agentType":  "COLLECTOR",
+        "status":  "SUCCESS_DEGRADED",
+        "statusSummary":  "节点降级成功",
+        "errorMessage":  null,
+        "executionOrder":  3,
+        "canRerun":  true,
+        "canUpdateConfigAndRerun":  true
+    },
+    {
+        "nodeName":  "collect_sources_02_02",
+        "displayName":  "Airtable - DOCS采集",
+        "agentType":  "COLLECTOR",
+        "status":  "SUCCESS_DEGRADED",
+        "statusSummary":  "节点降级成功",
+        "errorMessage":  null,
+        "executionOrder":  4,
+        "canRerun":  true,
+        "canUpdateConfigAndRerun":  true
+    },
+    {
+        "nodeName":  "collect_sources_02_03",
+        "displayName":  "Airtable - REVIEW采集",
+        "agentType":  "COLLECTOR",
+        "status":  "SUCCESS_DEGRADED",
+        "statusSummary":  "节点降级成功",
+        "errorMessage":  null,
+        "executionOrder":  5,
+        "canRerun":  true,
+        "canUpdateConfigAndRerun":  true
+    },
+    {
+        "nodeName":  "extract_schema",
+        "displayName":  "竞品结构化提取",
+        "agentType":  "EXTRACTOR",
+        "status":  "SUCCESS",
+        "statusSummary":  "节点执行成功",
+        "errorMessage":  null,
+        "executionOrder":  6,
+        "canRerun":  true,
+        "canUpdateConfigAndRerun":  true
+    },
+    {
+        "nodeName":  "analyze_competitors",
+        "displayName":  "竞品综合分析",
+        "agentType":  "ANALYZER",
+        "status":  "SUCCESS",
+        "statusSummary":  "节点执行成功",
+        "errorMessage":  null,
+        "executionOrder":  7,
+        "canRerun":  true,
+        "canUpdateConfigAndRerun":  true
+    },
+    {
+        "nodeName":  "write_report",
+        "displayName":  "生成分析报告",
+        "agentType":  "WRITER",
+        "status":  "SUCCESS",
+        "statusSummary":  "节点执行成功",
+        "errorMessage":  null,
+        "executionOrder":  8,
+        "canRerun":  true,
+        "canUpdateConfigAndRerun":  true
+    },
+    {
+        "nodeName":  "citation_check",
+        "displayName":  "报告引用核查",
+        "agentType":  "CITATION",
+        "status":  "SUCCESS",
+        "statusSummary":  "节点执行成功",
+        "errorMessage":  null,
+        "executionOrder":  9,
+        "canRerun":  true,
+        "canUpdateConfigAndRerun":  true
+    },
+    {
+        "nodeName":  "quality_check",
+        "displayName":  "报告质量初审",
+        "agentType":  "REVIEWER",
+        "status":  "SUCCESS",
+        "statusSummary":  "节点执行成功",
+        "errorMessage":  null,
+        "executionOrder":  10,
+        "canRerun":  true,
+        "canUpdateConfigAndRerun":  true
+    },
+    {
+        "nodeName":  "rewrite_report",
+        "displayName":  "根据评审改写报告",
+        "agentType":  "WRITER",
+        "status":  "SUCCESS",
+        "statusSummary":  "节点执行成功",
+        "errorMessage":  null,
+        "executionOrder":  11,
+        "canRerun":  true,
+        "canUpdateConfigAndRerun":  true
+    },
+    {
+        "nodeName":  "citation_check_revision",
+        "displayName":  "修订报告引用复核",
+        "agentType":  "CITATION",
+        "status":  "SUCCESS",
+        "statusSummary":  "节点执行成功",
+        "errorMessage":  null,
+        "executionOrder":  12,
+        "canRerun":  true,
+        "canUpdateConfigAndRerun":  true
+    },
+    {
+        "nodeName":  "quality_check_final",
+        "displayName":  "报告终审复核",
+        "agentType":  "REVIEWER",
+        "status":  "SUCCESS",
+        "statusSummary":  "节点执行成功",
+        "errorMessage":  null,
+        "executionOrder":  13,
+        "canRerun":  true,
+        "canUpdateConfigAndRerun":  true
+    }
+]

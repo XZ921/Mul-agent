@@ -1,0 +1,172 @@
+﻿[
+    {
+        "count":  2,
+        "competitorName":  "抖音",
+        "sourceType":  "DOCS",
+        "sourceDomain":  "developer.open-douyin.com",
+        "evidenceIds":  [
+                            "T0108-COLLECT_SOURCES_01_02-001",
+                            "T0108-COLLECT_SOURCES_01_02-002"
+                        ],
+        "urls":  [
+                     "https://developer.open-douyin.com/docs/resource/zh-CN/mini-app/introduction/usage-guide",
+                     "https://developer.open-douyin.com/docs/resource/zh-CN/local-life/introduction/usage-guide"
+                 ]
+    },
+    {
+        "count":  1,
+        "competitorName":  "抖音",
+        "sourceType":  "DOCS",
+        "sourceDomain":  "developer.aliyun.com",
+        "evidenceIds":  [
+                            "T0108-COLLECT_SOURCES_01_02-003"
+                        ],
+        "urls":  [
+                     "https://developer.aliyun.com/article/1638911"
+                 ]
+    },
+    {
+        "count":  1,
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "REVIEW",
+        "sourceDomain":  "play.google.com",
+        "evidenceIds":  [
+                            "T0108-COLLECT_SOURCES_02_03-002"
+                        ],
+        "urls":  [
+                     "https://play.google.com/store/apps/details?id=tv.danmaku.bili\u0026hl=zh"
+                 ]
+    },
+    {
+        "count":  1,
+        "competitorName":  "抖音",
+        "sourceType":  "REVIEW",
+        "sourceDomain":  "sj.qq.com",
+        "evidenceIds":  [
+                            "T0108-COLLECT_SOURCES_01_03-001"
+                        ],
+        "urls":  [
+                     "https://sj.qq.com/appdetail/com.ss.android.ugc.aweme/review"
+                 ]
+    },
+    {
+        "count":  1,
+        "competitorName":  "抖音",
+        "sourceType":  "REVIEW",
+        "sourceDomain":  "blog.wyan.vip",
+        "evidenceIds":  [
+                            "T0108-COLLECT_SOURCES_01_03-005"
+                        ],
+        "urls":  [
+                     "https://blog.wyan.vip/2023/05/tiktok_video_quality.html"
+                 ]
+    },
+    {
+        "count":  1,
+        "competitorName":  "抖音",
+        "sourceType":  "DOCS",
+        "sourceDomain":  "juhe.cn",
+        "evidenceIds":  [
+                            "T0108-COLLECT_SOURCES_01_02-004"
+                        ],
+        "urls":  [
+                     "https://juhe.cn/news/index/id/7857"
+                 ]
+    },
+    {
+        "count":  1,
+        "competitorName":  "抖音",
+        "sourceType":  "REVIEW",
+        "sourceDomain":  "apps.apple.com",
+        "evidenceIds":  [
+                            "T0108-COLLECT_SOURCES_01_03-002"
+                        ],
+        "urls":  [
+                     "https://apps.apple.com/cn/app/抖音/id1142110895?see-all=reviews\u0026platform=iphone"
+                 ]
+    },
+    {
+        "count":  1,
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "DOCS",
+        "sourceDomain":  "github.com",
+        "evidenceIds":  [
+                            "T0108-COLLECT_SOURCES_02_02-003"
+                        ],
+        "urls":  [
+                     "https://github.com/pskdje/bilibili-API-collect/blob/main/README.md"
+                 ]
+    },
+    {
+        "count":  1,
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "DOCS",
+        "sourceDomain":  "nemo2011.github.io",
+        "evidenceIds":  [
+                            "T0108-COLLECT_SOURCES_02_02-002"
+                        ],
+        "urls":  [
+                     "https://nemo2011.github.io/bilibili-api"
+                 ]
+    },
+    {
+        "count":  1,
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "DOCS",
+        "sourceDomain":  "qinshixixing.gitbooks.io",
+        "evidenceIds":  [
+                            "T0108-COLLECT_SOURCES_02_02-001"
+                        ],
+        "urls":  [
+                     "https://qinshixixing.gitbooks.io/bilibiliapi"
+                 ]
+    },
+    {
+        "count":  1,
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "DOCS",
+        "sourceDomain":  "pypi.org",
+        "evidenceIds":  [
+                            "T0108-COLLECT_SOURCES_02_02-004"
+                        ],
+        "urls":  [
+                     "https://pypi.org/project/bilibili-api-dev"
+                 ]
+    },
+    {
+        "count":  1,
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "REVIEW",
+        "sourceDomain":  "m.bilibili.com",
+        "evidenceIds":  [
+                            "T0108-COLLECT_SOURCES_02_03-001"
+                        ],
+        "urls":  [
+                     "https://m.bilibili.com/opus/176188045339958838"
+                 ]
+    },
+    {
+        "count":  1,
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "DOCS",
+        "sourceDomain":  "bilibili.com",
+        "evidenceIds":  [
+                            "T0108-COLLECT_SOURCES_02_02-005"
+                        ],
+        "urls":  [
+                     "https://bilibili.com/read/cv21313074"
+                 ]
+    },
+    {
+        "count":  1,
+        "competitorName":  "哔哩哔哩",
+        "sourceType":  "REVIEW",
+        "sourceDomain":  "capterra.com",
+        "evidenceIds":  [
+                            "T0108-COLLECT_SOURCES_02_03-005"
+                        ],
+        "urls":  [
+                     "https://capterra.com/search?query=哔哩哔哩"
+                 ]
+    }
+]

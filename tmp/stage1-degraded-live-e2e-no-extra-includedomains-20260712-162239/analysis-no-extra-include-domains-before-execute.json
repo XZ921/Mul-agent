@@ -1,0 +1,68 @@
+﻿[
+    {
+        "nodeName":  "collect_sources_01_01",
+        "competitor":  "æé³",
+        "sourceType":  "OFFICIAL",
+        "topIncludeCount":  1,
+        "topInclude":  "www.douyin.com",
+        "uniqueNestedInclude":  "www.douyin.com",
+        "nestedIncludeGroupCount":  1,
+        "preferred":  "www.douyin.com",
+        "competitorUrls":  "https://www.douyin.com"
+    },
+    {
+        "nodeName":  "collect_sources_01_02",
+        "competitor":  "æé³",
+        "sourceType":  "DOCS",
+        "topIncludeCount":  1,
+        "topInclude":  "www.douyin.com",
+        "uniqueNestedInclude":  "www.douyin.com",
+        "nestedIncludeGroupCount":  1,
+        "preferred":  "www.douyin.com",
+        "competitorUrls":  "https://www.douyin.com/docs,https://www.douyin.com/documentation,https://www.douyin.com/help,https://www.douyin.com/guide"
+    },
+    {
+        "nodeName":  "collect_sources_01_03",
+        "competitor":  "æé³",
+        "sourceType":  "REVIEW",
+        "topIncludeCount":  0,
+        "topInclude":  "",
+        "uniqueNestedInclude":  "www.douyin.com,www.g2.com,www.capterra.com",
+        "nestedIncludeGroupCount":  1,
+        "preferred":  "www.g2.com,www.capterra.com,www.douyin.com",
+        "competitorUrls":  "https://www.g2.com/search?query=æé³,https://www.capterra.com/search/?query=æé³,https://www.douyin.com/case-studies,https://www.douyin.com/compare,https://www.douyin.com/customers"
+    },
+    {
+        "nodeName":  "collect_sources_02_01",
+        "competitor":  "åå©åå©",
+        "sourceType":  "OFFICIAL",
+        "topIncludeCount":  1,
+        "topInclude":  "www.bilibili.com",
+        "uniqueNestedInclude":  "www.bilibili.com",
+        "nestedIncludeGroupCount":  1,
+        "preferred":  "www.bilibili.com",
+        "competitorUrls":  "https://www.bilibili.com"
+    },
+    {
+        "nodeName":  "collect_sources_02_02",
+        "competitor":  "åå©åå©",
+        "sourceType":  "DOCS",
+        "topIncludeCount":  1,
+        "topInclude":  "www.bilibili.com",
+        "uniqueNestedInclude":  "www.bilibili.com",
+        "nestedIncludeGroupCount":  1,
+        "preferred":  "www.bilibili.com",
+        "competitorUrls":  "https://www.bilibili.com/docs,https://www.bilibili.com/documentation,https://www.bilibili.com/help,https://www.bilibili.com/guide"
+    },
+    {
+        "nodeName":  "collect_sources_02_03",
+        "competitor":  "åå©åå©",
+        "sourceType":  "REVIEW",
+        "topIncludeCount":  0,
+        "topInclude":  "",
+        "uniqueNestedInclude":  "www.bilibili.com,www.g2.com,www.capterra.com",
+        "nestedIncludeGroupCount":  1,
+        "preferred":  "www.g2.com,www.capterra.com,www.bilibili.com",
+        "competitorUrls":  "https://www.g2.com/search?query=åå©åå©,https://www.capterra.com/search/?query=åå©åå©,https://www.bilibili.com/case-studies,https://www.bilibili.com/compare,https://www.bilibili.com/customers"
+    }
+]

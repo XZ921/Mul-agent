@@ -1,0 +1,76 @@
+﻿{
+    "code":  200,
+    "message":  "æä½æå",
+    "data":  {
+                 "id":  111,
+                 "taskName":  "stage1-poc-douyin-bilibili-after-recharge-e2e-20260712-165944",
+                 "subjectProduct":  "ç­è§é¢å\u0085å®¹å¹³å°æ¨èç®æ³ä¸å\u0085å®¹ååæºå¶",
+                 "competitorNames":  "[\"æé³\",\"åå©åå©\"]",
+                 "competitorUrls":  "[\"https://www.douyin.com\",\"https://www.bilibili.com\"]",
+                 "analysisDimensions":  "[\"æ¨èç®æ³/å\u0085å®¹ååæºå¶\",\"åä½è\u0085è§å/æµéè§å\",\"å¼æ¾å¹³å°/APIææ¡£\"]",
+                 "sourceScope":  "[\"å®ç½\",\"äº§åææ¡£\",\"å\u0085¬å¼æµè¯\"]",
+                 "status":  "SUCCESS",
+                 "errorMessage":  null,
+                 "statusSummary":  "é¶æ®µ1éçº§å¯äº¤ä»ï¼å»ºè®®äººå·¥å¤æ ¸åä½¿ç¨",
+                 "currentPlanVersionId":  81,
+                 "currentPlanVersion":  1,
+                 "totalNodes":  14,
+                 "completedNodes":  14,
+                 "waitingRetryNodeCount":  0,
+                 "waitingInterventionNodeCount":  0,
+                 "compensatedNodeCount":  0,
+                 "createdAt":  [
+                                   2026,
+                                   7,
+                                   12,
+                                   16,
+                                   59,
+                                   56,
+                                   243185000
+                               ],
+                 "updatedAt":  [
+                                   2026,
+                                   7,
+                                   12,
+                                   17,
+                                   12,
+                                   56,
+                                   152200000
+                               ],
+                 "completedAt":  [
+                                     2026,
+                                     7,
+                                     12,
+                                     17,
+                                     12,
+                                     56,
+                                     147115000
+                                 ],
+                 "canExecute":  false,
+                 "canResume":  false,
+                 "canRetry":  false,
+                 "canStop":  false,
+                 "canViewReport":  true,
+                 "canViewDraftReport":  true,
+                 "interventionSummary":  "å½åæ¥åå·²æé¶æ®µ1éçº§å£å¾å¯æ¥çï¼å»ºè®®äººå·¥å¤æ ¸åä½¿ç¨ãå¦éè¡¥é½å¢å¼ºå­æ®µæèªå¨ç»è®ºï¼å¯ä»å¯¹åºèç¹åèµ·å±é¨éè·ã",
+                 "resumeAdvice":  null,
+                 "retryAdvice":  null,
+                 "replayEntrySummary":  null,
+                 "currentStage":  "é¶æ®µ1éçº§å¯äº¤ä»ï¼å»ºè®®äººå·¥å¤æ ¸",
+                 "activeNodeNames":  [
+
+                                     ],
+                 "snapshotUpdatedAt":  [
+                                           2026,
+                                           7,
+                                           12,
+                                           17,
+                                           12,
+                                           56,
+                                           212851900
+                                       ],
+                 "eventStreamPath":  "/api/task/111/events"
+             },
+    "timestamp":  "2026-07-12T17:13:09.025190400",
+    "traceId":  "599315717c4147e9b3b51583f528aadc"
+}
