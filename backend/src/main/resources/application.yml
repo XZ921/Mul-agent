@@ -105,11 +105,17 @@ ai:
 
 orchestration:
   decision:
+    mode: RULE_ONLY
+    fallback-to-rule: true
     model-temperature: 0.0
     llm-timeout-ms: 4000
     max-parse-retries: 1
     executor-threads: 2
     executor-queue-capacity: 16
+    shadow:
+      enabled: false
+      isolated-budget-key: ORCHESTRATOR_SHADOW
+      require-active-quota: true
 
 knife4j:
   enable: true

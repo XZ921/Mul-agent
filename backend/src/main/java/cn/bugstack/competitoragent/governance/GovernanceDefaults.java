@@ -17,6 +17,7 @@ public final class GovernanceDefaults {
 
     public static final String TASK_CONCURRENCY_KEY = "TASK_CONCURRENCY";
     public static final String MODEL_DAILY_BUDGET_KEY = "MODEL_DAILY_BUDGET";
+    public static final String ORCHESTRATOR_SHADOW_BUDGET_KEY = "ORCHESTRATOR_SHADOW";
     public static final String KNOWLEDGE_INGESTION_KEY = "KNOWLEDGE_INGESTION";
     public static final String EXPORT_PACKAGE_KEY = "EXPORT_PACKAGE";
 

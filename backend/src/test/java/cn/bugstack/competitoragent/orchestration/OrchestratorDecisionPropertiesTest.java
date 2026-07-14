@@ -14,11 +14,16 @@ class OrchestratorDecisionPropertiesTest {
 
         properties.validate();
 
+        assertThat(properties.getMode()).isEqualTo(OrchestratorDecisionMode.RULE_ONLY);
+        assertThat(properties.isFallbackToRule()).isTrue();
         assertThat(properties.getModelTemperature()).isZero();
         assertThat(properties.getLlmTimeoutMs()).isEqualTo(4000L);
         assertThat(properties.getMaxParseRetries()).isEqualTo(1);
         assertThat(properties.getExecutorThreads()).isEqualTo(2);
         assertThat(properties.getExecutorQueueCapacity()).isEqualTo(16);
+        assertThat(properties.getShadow().isEnabled()).isFalse();
+        assertThat(properties.getShadow().getIsolatedBudgetKey()).isEqualTo("ORCHESTRATOR_SHADOW");
+        assertThat(properties.getShadow().isRequireActiveQuota()).isTrue();
     }
 
     @Test
@@ -53,6 +58,13 @@ class OrchestratorDecisionPropertiesTest {
         assertInvalid(properties -> properties.setMaxParseRetries(2), "maxParseRetries");
         assertInvalid(properties -> properties.setExecutorThreads(0), "executorThreads");
         assertInvalid(properties -> properties.setExecutorQueueCapacity(0), "executorQueueCapacity");
+    }
+
+    @Test
+    void shouldRejectMissingModeShadowAndBudgetKey() {
+        assertInvalid(properties -> properties.setMode(null), "mode");
+        assertInvalid(properties -> properties.setShadow(null), "shadow");
+        assertInvalid(properties -> properties.getShadow().setIsolatedBudgetKey("  "), "isolatedBudgetKey");
     }
 
     private void assertInvalid(java.util.function.Consumer<OrchestratorDecisionProperties> mutation,

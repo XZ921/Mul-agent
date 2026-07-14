@@ -14,11 +14,16 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class ModelGatewayTest {
@@ -342,6 +347,75 @@ class ModelGatewayTest {
         assertEquals("BLOCKED_QUOTA_EXCEEDED", readAccessor(decision, "decisionCode"));
         assertEquals("MODEL_DAILY_BUDGET", readAccessor(decision, "quotaKey"));
         verify(modelProvider, never()).chat(any());
+    }
+
+    @Test
+    void shouldUseStrictShadowQuotaKeyForDirectGatewayDefensePath() throws Exception {
+        AiProviderProperties properties = buildProperties();
+        when(modelProvider.getAdapterType()).thenReturn("openai-compatible");
+        when(budgetGuard.check(any())).thenReturn(BudgetGuard.BudgetCheckResult.allow(
+                23, 0.01d, "ALLOWED", "allowed"));
+        when(organizationQuotaPolicy.checkAndReserve(
+                anyString(), anyString(), anyString(), anyInt(), anyList(), eq(true)))
+                .thenReturn(QuotaDecision.allow(
+                        "ALLOWED_RESERVED",
+                        "reserved",
+                        "default-organization",
+                        "MODEL",
+                        "ORCHESTRATOR_SHADOW",
+                        23,
+                        77,
+                        null,
+                        List.of()));
+        when(modelProvider.chat(any())).thenReturn(ProviderInvocationResult.<String>builder()
+                .providerKey("deepseek")
+                .modelName("deepseek-chat")
+                .payload("ok")
+                .build());
+        ModelGateway modelGateway = instantiateModelGatewayWithOptionalGovernance(properties);
+
+        String result = ModelInvocationContextHolder.withContext(
+                701L,
+                "quality_check_final",
+                "trace-shadow",
+                ModelInvocationPurpose.ORCHESTRATOR_SHADOW,
+                "ORCHESTRATOR_SHADOW",
+                true,
+                false,
+                () -> modelGateway.chat("system", "user"));
+
+        assertEquals("ok", result);
+        verify(organizationQuotaPolicy).checkAndReserve(
+                "default-organization", "MODEL", "ORCHESTRATOR_SHADOW", 23, List.of(), true);
+        verify(modelProvider).chat(any());
+    }
+
+    @Test
+    void shouldNotReserveOrganizationQuotaTwiceWhenShadowGateAlreadyReserved() throws Exception {
+        AiProviderProperties properties = buildProperties();
+        when(modelProvider.getAdapterType()).thenReturn("openai-compatible");
+        when(budgetGuard.check(any())).thenReturn(BudgetGuard.BudgetCheckResult.allow(
+                23, 0.01d, "ALLOWED", "allowed"));
+        when(modelProvider.chat(any())).thenReturn(ProviderInvocationResult.<String>builder()
+                .providerKey("deepseek")
+                .modelName("deepseek-chat")
+                .payload("ok")
+                .build());
+        ModelGateway modelGateway = instantiateModelGatewayWithOptionalGovernance(properties);
+
+        String result = ModelInvocationContextHolder.withContext(
+                702L,
+                "quality_check_final",
+                "trace-shadow-reserved",
+                ModelInvocationPurpose.ORCHESTRATOR_SHADOW,
+                "ORCHESTRATOR_SHADOW",
+                true,
+                true,
+                () -> modelGateway.chat("system", "user"));
+
+        assertEquals("ok", result);
+        verifyNoInteractions(organizationQuotaPolicy);
+        verify(modelProvider).chat(any());
     }
 
     private AiProviderProperties buildProperties() {

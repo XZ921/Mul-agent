@@ -1,5 +1,7 @@
 package cn.bugstack.competitoragent.orchestration;
 
+import cn.bugstack.competitoragent.governance.GovernanceBlockException;
+import cn.bugstack.competitoragent.governance.QuotaDecision;
 import cn.bugstack.competitoragent.llm.LlmException;
 import cn.bugstack.competitoragent.llm.ModelChatOptions;
 import cn.bugstack.competitoragent.llm.ModelGateway;
@@ -24,6 +26,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class OrchestrationDecisionModelInvokerTest {
@@ -213,6 +218,179 @@ class OrchestrationDecisionModelInvokerTest {
                 prompt(), context(), new ModelChatOptions(0.0d, 120L), TimeUnit.SECONDS.toNanos(1L));
         assertThat(recovered.rawResponse()).isEqualTo("{\"decisions\":[]}");
         assertThat(invocationCount.get()).isEqualTo(2);
+    }
+
+    @Test
+    void shouldDenyShadowBeforeSubmittingFutureOrUsingExecutor() {
+        ModelGateway gateway = mock(ModelGateway.class);
+        OrchestrationShadowBudgetGate gate = mock(OrchestrationShadowBudgetGate.class);
+        when(gate.checkAndReserve(any(), any())).thenReturn(
+                new OrchestrationShadowBudgetAdmission(
+                        false, "BLOCKED_QUOTA_EXCEEDED", 0, java.util.List.of()));
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1));
+        invoker = new OrchestrationDecisionModelInvoker(gateway, properties(1, 1), gate, executor);
+        ModelInvocationContextHolder.set(
+                7L,
+                "reviewer",
+                "trace-shadow",
+                cn.bugstack.competitoragent.llm.ModelInvocationPurpose.ORCHESTRATOR_SHADOW,
+                "ORCHESTRATOR_SHADOW",
+                true,
+                false);
+
+        assertTimeoutPreemptively(Duration.ofMillis(500), () ->
+                assertThatThrownBy(() -> invoker.invoke(
+                        prompt(), context(), new ModelChatOptions(0.0d, 4000L), TimeUnit.SECONDS.toNanos(4)))
+                        .isInstanceOfSatisfying(
+                                OrchestrationDecisionModelInvoker.ModelInvocationException.class,
+                                exception -> {
+                                    assertThat(exception.providerErrorCode())
+                                            .isEqualTo("SHADOW_BUDGET_EXHAUSTED");
+                                    assertThat(exception.invocationSubmitted()).isFalse();
+                                }));
+
+        assertThat(executor.getActiveCount()).isZero();
+        assertThat(executor.getQueue()).isEmpty();
+        verifyNoInteractions(gateway);
+    }
+
+    @Test
+    void shouldPropagateReservedShadowMarkerAndAvoidEarlyReleaseAfterWorkerStarts() {
+        ModelGateway gateway = mock(ModelGateway.class);
+        OrchestrationShadowBudgetGate gate = mock(OrchestrationShadowBudgetGate.class);
+        AtomicReference<ModelInvocationContextHolder.ModelInvocationContext> workerContext = new AtomicReference<>();
+        when(gate.checkAndReserve(any(), any())).thenReturn(
+                new OrchestrationShadowBudgetAdmission(
+                        true, "ALLOWED_RESERVED", 12, java.util.List.of()));
+        when(gateway.chatForJson(anyString(), anyString(), anyString(), any(ModelChatOptions.class)))
+                .thenAnswer(invocation -> {
+                    workerContext.set(ModelInvocationContextHolder.get());
+                    return "{}";
+                });
+        when(gateway.getModelName()).thenReturn("deepseek-chat");
+        invoker = new OrchestrationDecisionModelInvoker(
+                gateway, properties(1, 1), gate,
+                new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1)));
+        ModelInvocationContextHolder.set(
+                7L,
+                "reviewer",
+                "trace-shadow",
+                cn.bugstack.competitoragent.llm.ModelInvocationPurpose.ORCHESTRATOR_SHADOW,
+                "ORCHESTRATOR_SHADOW",
+                true,
+                false);
+
+        invoker.invoke(prompt(), context(), new ModelChatOptions(0.0d, 4000L), TimeUnit.SECONDS.toNanos(1));
+
+        assertThat(workerContext.get().organizationQuotaReserved()).isTrue();
+        assertThat(workerContext.get().quotaKey()).isEqualTo("ORCHESTRATOR_SHADOW");
+        verify(gate, never()).release(any());
+    }
+
+    @Test
+    void shouldReleaseReservationOnceWhenExecutorRejectsSubmission() {
+        ModelGateway gateway = mock(ModelGateway.class);
+        OrchestrationShadowBudgetGate gate = mock(OrchestrationShadowBudgetGate.class);
+        OrchestrationShadowBudgetAdmission admission = new OrchestrationShadowBudgetAdmission(
+                true, "ALLOWED_RESERVED", 12, java.util.List.of());
+        when(gate.checkAndReserve(any(), any())).thenReturn(admission);
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1));
+        executor.shutdownNow();
+        invoker = new OrchestrationDecisionModelInvoker(gateway, properties(1, 1), gate, executor);
+
+        assertThatThrownBy(() -> invoker.invoke(
+                prompt(), context(), new ModelChatOptions(0.0d, 4000L), TimeUnit.SECONDS.toNanos(1)))
+                .isInstanceOf(OrchestrationDecisionModelInvoker.ModelInvocationException.class);
+
+        verify(gate, times(1)).release(admission);
+        verifyNoInteractions(gateway);
+    }
+
+    @Test
+    void shouldReleaseQueuedReservationOnceWhenCallerTimesOutBeforeWorkerStarts() throws Exception {
+        ModelGateway gateway = mock(ModelGateway.class);
+        OrchestrationShadowBudgetGate gate = mock(OrchestrationShadowBudgetGate.class);
+        OrchestrationShadowBudgetAdmission admission = new OrchestrationShadowBudgetAdmission(
+                true, "ALLOWED_RESERVED", 12, java.util.List.of());
+        when(gate.checkAndReserve(any(), any())).thenReturn(admission);
+        CountDownLatch blockerStarted = new CountDownLatch(1);
+        CountDownLatch releaseBlocker = new CountDownLatch(1);
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1));
+        executor.execute(() -> {
+            blockerStarted.countDown();
+            try {
+                releaseBlocker.await(1, TimeUnit.SECONDS);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        assertThat(blockerStarted.await(1, TimeUnit.SECONDS)).isTrue();
+        invoker = new OrchestrationDecisionModelInvoker(gateway, properties(1, 1), gate, executor);
+
+        try {
+            assertThatThrownBy(() -> invoker.invoke(
+                    prompt(), context(), new ModelChatOptions(0.0d, 4000L), TimeUnit.MILLISECONDS.toNanos(30)))
+                    .isInstanceOf(OrchestrationDecisionModelInvoker.ModelInvocationTimeoutException.class);
+            verify(gate, times(1)).release(admission);
+            verifyNoInteractions(gateway);
+        } finally {
+            releaseBlocker.countDown();
+        }
+    }
+
+    @Test
+    void shouldPreserveTypedGovernanceDecisionCodeFromWorker() {
+        ModelGateway gateway = mock(ModelGateway.class);
+        when(gateway.chatForJson(anyString(), anyString(), anyString(), any(ModelChatOptions.class)))
+                .thenThrow(new GovernanceBlockException(QuotaDecision.deny(
+                        "BLOCKED_QUOTA_EXCEEDED",
+                        "sensitive governance summary",
+                        "default-organization",
+                        "MODEL",
+                        "ORCHESTRATOR_SHADOW",
+                        12,
+                        0,
+                        null,
+                        java.util.List.of())));
+        invoker = new OrchestrationDecisionModelInvoker(gateway, properties(1, 1));
+
+        assertThatThrownBy(() -> invoker.invoke(
+                prompt(), context(), new ModelChatOptions(0.0d, 4000L), TimeUnit.SECONDS.toNanos(1)))
+                .isInstanceOfSatisfying(
+                        OrchestrationDecisionModelInvoker.ModelInvocationException.class,
+                        exception -> {
+                            assertThat(exception.providerErrorCode()).isEqualTo("BLOCKED_QUOTA_EXCEEDED");
+                            assertThat(exception.getMessage()).doesNotContain("sensitive governance summary");
+                        });
+    }
+
+    @Test
+    void shouldKeepExecutorErrorWhenReservationReleaseAlsoFails() {
+        ModelGateway gateway = mock(ModelGateway.class);
+        OrchestrationShadowBudgetGate gate = mock(OrchestrationShadowBudgetGate.class);
+        OrchestrationShadowBudgetAdmission admission = new OrchestrationShadowBudgetAdmission(
+                true, "ALLOWED_RESERVED", 12, java.util.List.of());
+        when(gate.checkAndReserve(any(), any())).thenReturn(admission);
+        org.mockito.Mockito.doThrow(new IllegalStateException("release failed"))
+                .when(gate).release(admission);
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1));
+        executor.shutdownNow();
+        invoker = new OrchestrationDecisionModelInvoker(gateway, properties(1, 1), gate, executor);
+
+        assertThatThrownBy(() -> invoker.invoke(
+                prompt(), context(), new ModelChatOptions(0.0d, 4000L), TimeUnit.SECONDS.toNanos(1)))
+                .isInstanceOfSatisfying(
+                        OrchestrationDecisionModelInvoker.ModelInvocationException.class,
+                        exception -> {
+                            assertThat(exception.providerErrorCode()).isEqualTo("ORCHESTRATOR_EXECUTOR_SHUTDOWN");
+                            assertThat(exception.getCause().getSuppressed())
+                                    .extracting(Throwable::getMessage)
+                                    .containsExactly("release failed");
+                        });
     }
 
     private void awaitQueueSize(ThreadPoolExecutor executor, int expectedSize) throws InterruptedException {

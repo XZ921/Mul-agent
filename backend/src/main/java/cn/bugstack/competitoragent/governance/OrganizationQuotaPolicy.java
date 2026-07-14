@@ -34,6 +34,25 @@ public class OrganizationQuotaPolicy {
                                          String quotaKey,
                                          int requestedUnits,
                                          List<String> sourceUrls) {
+        return checkAndReserve(
+                organizationKey,
+                quotaScope,
+                quotaKey,
+                requestedUnits,
+                sourceUrls,
+                false);
+    }
+
+    /**
+     * 严格准入只供明确要求活动配额的链路使用。旧入口继续在缺少快照时放行，
+     * shadow 则通过 requireActiveQuota=true 把“未配置预算”视为前置阻断。
+     */
+    public QuotaDecision checkAndReserve(String organizationKey,
+                                         String quotaScope,
+                                         String quotaKey,
+                                         int requestedUnits,
+                                         List<String> sourceUrls,
+                                         boolean requireActiveQuota) {
         int normalizedRequestedUnits = Math.max(requestedUnits, 0);
         Optional<OrganizationQuotaSnapshot> optionalSnapshot =
                 organizationQuotaSnapshotRepository
@@ -45,6 +64,19 @@ public class OrganizationQuotaPolicy {
                         );
 
         if (optionalSnapshot.isEmpty()) {
+            if (requireActiveQuota) {
+                return QuotaDecision.deny(
+                        "BLOCKED_QUOTA_NOT_CONFIGURED",
+                        "当前组织未配置活动配额快照，严格准入拒绝本次请求",
+                        organizationKey,
+                        quotaScope,
+                        quotaKey,
+                        normalizedRequestedUnits,
+                        0,
+                        null,
+                        normalizeSourceUrls(sourceUrls)
+                );
+            }
             return QuotaDecision.allow(
                     "NO_ACTIVE_QUOTA",
                     "当前组织未配置活动配额快照，先按放行处理",

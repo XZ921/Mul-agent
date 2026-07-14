@@ -158,7 +158,9 @@ public class ModelGateway implements LlmClient, EmbeddingClient, RerankClient {
         }
 
         RuntimeException lastException = null;
-        boolean organizationQuotaChecked = false;
+        // Pre-submit shadow gate 已经预留过组织额度时，网关只复用标记，禁止重复扣减。
+        boolean organizationQuotaChecked = invocationContext != null
+                && invocationContext.organizationQuotaReserved();
         int providerIndex = 0;
         for (String providerKey : routingDecision.candidateProviders()) {
             providerIndex++;
@@ -259,13 +261,30 @@ public class ModelGateway implements LlmClient, EmbeddingClient, RerankClient {
         if (organizationQuotaPolicy == null) {
             return;
         }
-        QuotaDecision decision = organizationQuotaPolicy.checkAndReserve(
-                GovernanceDefaults.DEFAULT_ORGANIZATION_KEY,
-                GovernanceDefaults.MODEL_SCOPE,
-                GovernanceDefaults.MODEL_DAILY_BUDGET_KEY,
-                Math.max(1, resolveEstimatedInputTokens(budgetCheckResult)),
-                List.of()
-        );
+        String quotaKey = invocationContext == null
+                ? GovernanceDefaults.MODEL_DAILY_BUDGET_KEY
+                : invocationContext.quotaKey();
+        boolean requireActiveQuota = invocationContext != null
+                && invocationContext.requireActiveQuota();
+        int requestedUnits = Math.max(1, resolveEstimatedInputTokens(budgetCheckResult));
+        QuotaDecision decision;
+        if (GovernanceDefaults.MODEL_DAILY_BUDGET_KEY.equals(quotaKey) && !requireActiveQuota) {
+            // DEFAULT/PRIMARY 保留旧五参数入口，确保“无快照先放行”的既有治理语义不变。
+            decision = organizationQuotaPolicy.checkAndReserve(
+                    GovernanceDefaults.DEFAULT_ORGANIZATION_KEY,
+                    GovernanceDefaults.MODEL_SCOPE,
+                    quotaKey,
+                    requestedUnits,
+                    List.of());
+        } else {
+            decision = organizationQuotaPolicy.checkAndReserve(
+                    GovernanceDefaults.DEFAULT_ORGANIZATION_KEY,
+                    GovernanceDefaults.MODEL_SCOPE,
+                    quotaKey,
+                    requestedUnits,
+                    List.of(),
+                    requireActiveQuota);
+        }
         if (decision == null || decision.isAllowed()) {
             return;
         }

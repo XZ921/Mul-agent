@@ -90,6 +90,27 @@ class OrganizationQuotaPolicyTest {
     }
 
     @Test
+    void shouldDenyMissingSnapshotOnlyForStrictQuotaAdmission() {
+        OrganizationQuotaPolicy policy = new OrganizationQuotaPolicy(organizationQuotaSnapshotRepository);
+
+        QuotaDecision legacy = policy.checkAndReserve(
+                "org-acme", "MODEL", "MODEL_DAILY_BUDGET", 10, List.of());
+        QuotaDecision strict = policy.checkAndReserve(
+                "org-acme",
+                "MODEL",
+                "ORCHESTRATOR_SHADOW",
+                10,
+                List.of("https://ops.example.com/shadow-quota"),
+                true);
+
+        assertTrue(legacy.isAllowed());
+        assertEquals("NO_ACTIVE_QUOTA", legacy.getDecisionCode());
+        assertFalse(strict.isAllowed());
+        assertEquals("BLOCKED_QUOTA_NOT_CONFIGURED", strict.getDecisionCode());
+        assertEquals(List.of("https://ops.example.com/shadow-quota"), strict.getSourceUrls());
+    }
+
+    @Test
     void shouldAllocateConnectorRuntimeLeaseThroughUnifiedRegistry() throws Exception {
         // 连接器治理不能继续散落在各业务链路里各自判断，
         // 注册表至少要能给出“已成功占位”或“当前被谁占用”的统一结果。

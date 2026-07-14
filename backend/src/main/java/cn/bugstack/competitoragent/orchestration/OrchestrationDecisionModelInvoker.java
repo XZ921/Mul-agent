@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.orchestration;
 
+import cn.bugstack.competitoragent.governance.GovernanceBlockException;
 import cn.bugstack.competitoragent.llm.LlmException;
 import cn.bugstack.competitoragent.llm.ModelChatOptions;
 import cn.bugstack.competitoragent.llm.ModelGateway;
@@ -10,13 +11,14 @@ import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 在专用有界执行器中调用同步 ModelGateway。
@@ -32,12 +34,20 @@ public class OrchestrationDecisionModelInvoker {
     private static final String THREAD_NAME_PREFIX = "orchestrator-llm-";
 
     private final ModelGateway modelGateway;
+    private final OrchestrationShadowBudgetGate shadowBudgetGate;
     private final ThreadPoolExecutor executor;
 
     @Autowired
     public OrchestrationDecisionModelInvoker(ModelGateway modelGateway,
+                                              OrchestratorDecisionProperties properties,
+                                              OrchestrationShadowBudgetGate shadowBudgetGate) {
+        this(modelGateway, properties, shadowBudgetGate, createExecutor(properties));
+    }
+
+    /** Task 05 兼容构造器固定使用 no-op gate，不改变既有单元测试与手工装配语义。 */
+    public OrchestrationDecisionModelInvoker(ModelGateway modelGateway,
                                               OrchestratorDecisionProperties properties) {
-        this(modelGateway, properties, createExecutor(properties));
+        this(modelGateway, properties, OrchestrationShadowBudgetGate.noop(), createExecutor(properties));
     }
 
     /**
@@ -45,6 +55,14 @@ public class OrchestrationDecisionModelInvoker {
      */
     OrchestrationDecisionModelInvoker(ModelGateway modelGateway,
                                       OrchestratorDecisionProperties properties,
+                                      ThreadPoolExecutor executor) {
+        this(modelGateway, properties, OrchestrationShadowBudgetGate.noop(), executor);
+    }
+
+    /** 测试可同时注入可观测 gate 与有界执行器，验证预算拒绝发生在提交之前。 */
+    OrchestrationDecisionModelInvoker(ModelGateway modelGateway,
+                                      OrchestratorDecisionProperties properties,
+                                      OrchestrationShadowBudgetGate shadowBudgetGate,
                                       ThreadPoolExecutor executor) {
         if (modelGateway == null) {
             throw new IllegalArgumentException("modelGateway 不能为空");
@@ -56,7 +74,11 @@ public class OrchestrationDecisionModelInvoker {
         if (executor == null) {
             throw new IllegalArgumentException("executor 不能为空");
         }
+        if (shadowBudgetGate == null) {
+            throw new IllegalArgumentException("shadowBudgetGate 不能为空");
+        }
         this.modelGateway = modelGateway;
+        this.shadowBudgetGate = shadowBudgetGate;
         this.executor = executor;
     }
 
@@ -74,15 +96,41 @@ public class OrchestrationDecisionModelInvoker {
         }
 
         ModelInvocationContextHolder.ModelInvocationContext callerContext = ModelInvocationContextHolder.get();
-        String traceId = callerContext == null ? null : callerContext.traceId();
-        Future<ModelResponse> future;
+        ModelInvocationContextHolder.ModelInvocationContext effectiveCallerContext = callerContext == null
+                ? new ModelInvocationContextHolder.ModelInvocationContext(
+                normalizedContext.getTaskId(), normalizedContext.getTriggerNodeName(), null)
+                : callerContext;
+
+        // Shadow 配额在 caller thread 同步判定。拒绝时不会创建 Future，也不会占用 executor worker/queue。
+        OrchestrationShadowBudgetAdmission admission = shadowBudgetGate.checkAndReserve(prompt, effectiveCallerContext);
+        if (!admission.allowed()) {
+            throw new ModelInvocationException(
+                    normalizeShadowBudgetErrorCode(admission.decisionCode()),
+                    false,
+                    null);
+        }
+
+        ModelInvocationContextHolder.ModelInvocationContext workerContext =
+                new ModelInvocationContextHolder.ModelInvocationContext(
+                        normalizedContext.getTaskId(),
+                        normalizedContext.getTriggerNodeName(),
+                        effectiveCallerContext.traceId(),
+                        effectiveCallerContext.purpose(),
+                        effectiveCallerContext.quotaKey(),
+                        effectiveCallerContext.requireActiveQuota(),
+                        effectiveCallerContext.organizationQuotaReserved() || admission.reserved());
+        ReservationAwareFutureTask future = new ReservationAwareFutureTask(
+                () -> ModelInvocationContextHolder.withContext(
+                        workerContext,
+                        () -> invokeGateway(prompt, options)),
+                admission,
+                shadowBudgetGate);
         try {
-            future = executor.submit(() -> ModelInvocationContextHolder.withContext(
-                    normalizedContext.getTaskId(),
-                    normalizedContext.getTriggerNodeName(),
-                    traceId,
-                    () -> invokeGateway(prompt, options)));
+            executor.execute(future);
         } catch (RejectedExecutionException exception) {
+            // execute 拒绝时 FutureTask.done 不会运行，必须在 caller thread 精确补偿一次预留。
+            future.releaseBeforeWorkerStart();
+            future.attachReleaseFailure(exception);
             String errorCode = executor.isShutdown() ? EXECUTOR_SHUTDOWN : EXECUTOR_SATURATED;
             throw new ModelInvocationException(errorCode, false, exception);
         }
@@ -92,13 +140,27 @@ public class OrchestrationDecisionModelInvoker {
         } catch (TimeoutException exception) {
             // cancel(true) 只是尽力中断 worker；底层 HTTP 最终存活上限仍由 Provider hard timeout 保证。
             future.cancel(true);
-            throw new ModelInvocationTimeoutException();
+            ModelInvocationTimeoutException timeoutException = new ModelInvocationTimeoutException();
+            future.attachReleaseFailure(timeoutException);
+            throw timeoutException;
         } catch (InterruptedException exception) {
             future.cancel(true);
             Thread.currentThread().interrupt();
-            throw new ModelInvocationException(CALLER_INTERRUPTED, true, exception);
+            ModelInvocationException interruptedException =
+                    new ModelInvocationException(CALLER_INTERRUPTED, true, exception);
+            future.attachReleaseFailure(interruptedException);
+            throw interruptedException;
         } catch (ExecutionException exception) {
             Throwable cause = exception.getCause();
+            if (cause instanceof GovernanceBlockException governanceBlockException) {
+                String decisionCode = governanceBlockException.getDecision() == null
+                        ? null
+                        : governanceBlockException.getDecision().getDecisionCode();
+                throw new ModelInvocationException(
+                        normalizeProviderErrorCode(decisionCode),
+                        true,
+                        governanceBlockException);
+            }
             if (cause instanceof LlmException llmException) {
                 throw new ModelInvocationException(
                         normalizeProviderErrorCode(llmException.getProviderErrorCode()),
@@ -153,6 +215,16 @@ public class OrchestrationDecisionModelInvoker {
                 : providerErrorCode.trim();
     }
 
+    private String normalizeShadowBudgetErrorCode(String decisionCode) {
+        if ("BLOCKED_QUOTA_NOT_CONFIGURED".equals(decisionCode)) {
+            return "SHADOW_BUDGET_NOT_CONFIGURED";
+        }
+        if ("BLOCKED_QUOTA_EXCEEDED".equals(decisionCode)) {
+            return "SHADOW_BUDGET_EXHAUSTED";
+        }
+        return normalizeProviderErrorCode(decisionCode);
+    }
+
     private static ThreadPoolExecutor createExecutor(OrchestratorDecisionProperties properties) {
         if (properties == null) {
             throw new IllegalArgumentException("properties 不能为空");
@@ -181,6 +253,59 @@ public class OrchestrationDecisionModelInvoker {
     }
 
     public record ModelResponse(String rawResponse, String modelName) {
+    }
+
+    /**
+     * 只有 Future 在 worker 启动前被取消或提交被拒绝时才释放预留。
+     * AtomicBoolean 同时覆盖 timeout、interrupt 与 executor rejection 的竞态，防止双重 release。
+     */
+    private static final class ReservationAwareFutureTask extends FutureTask<ModelResponse> {
+
+        private final OrchestrationShadowBudgetAdmission admission;
+        private final OrchestrationShadowBudgetGate shadowBudgetGate;
+        private final AtomicBoolean workerStarted = new AtomicBoolean(false);
+        private final AtomicBoolean reservationReleased = new AtomicBoolean(false);
+        private final java.util.concurrent.atomic.AtomicReference<RuntimeException> releaseFailure =
+                new java.util.concurrent.atomic.AtomicReference<>();
+
+        private ReservationAwareFutureTask(java.util.concurrent.Callable<ModelResponse> callable,
+                                           OrchestrationShadowBudgetAdmission admission,
+                                           OrchestrationShadowBudgetGate shadowBudgetGate) {
+            super(callable);
+            this.admission = admission;
+            this.shadowBudgetGate = shadowBudgetGate;
+        }
+
+        @Override
+        public void run() {
+            workerStarted.set(true);
+            super.run();
+        }
+
+        @Override
+        protected void done() {
+            if (isCancelled() && !workerStarted.get()) {
+                releaseBeforeWorkerStart();
+            }
+        }
+
+        private void releaseBeforeWorkerStart() {
+            if (admission.reserved() && reservationReleased.compareAndSet(false, true)) {
+                try {
+                    shadowBudgetGate.release(admission);
+                } catch (RuntimeException exception) {
+                    // 补偿失败不能遮蔽 executor rejection、timeout 或 caller interrupt 的主错误。
+                    releaseFailure.compareAndSet(null, exception);
+                }
+            }
+        }
+
+        private void attachReleaseFailure(RuntimeException primaryException) {
+            RuntimeException failure = releaseFailure.get();
+            if (failure != null) {
+                primaryException.addSuppressed(failure);
+            }
+        }
     }
 
     static final class ModelInvocationTimeoutException extends RuntimeException {
