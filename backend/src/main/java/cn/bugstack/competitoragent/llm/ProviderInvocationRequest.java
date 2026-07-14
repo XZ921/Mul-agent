@@ -13,7 +13,7 @@ import java.util.List;
  * 避免不同适配器重复拼装调用上下文。
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 public class ProviderInvocationRequest {
 
     private String providerKey;
@@ -23,6 +23,10 @@ public class ProviderInvocationRequest {
     private String systemPrompt;
     private String userPrompt;
     private String responseSchema;
+    /** 单次请求温度覆盖；null 时由 Provider adapter 使用全局配置。 */
+    private Double temperature;
+    /** 单次 Provider HTTP 硬超时覆盖；null 时由 Provider adapter 使用全局配置。 */
+    private Long timeoutMillis;
     private String text;
     private String query;
     private List<String> documents;

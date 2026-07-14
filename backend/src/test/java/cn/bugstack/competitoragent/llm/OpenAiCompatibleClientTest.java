@@ -48,6 +48,45 @@ class OpenAiCompatibleClientTest {
     }
 
     @Test
+    void shouldApplyRequestScopedTemperatureHardTimeoutAndDisableSdkRetries() throws Exception {
+        OpenAiCompatibleClient client = new OpenAiCompatibleClient(aiProviderProperties());
+        Method resolveChatModel = OpenAiCompatibleClient.class
+                .getDeclaredMethod("resolveChatModel", ProviderInvocationRequest.class);
+        resolveChatModel.setAccessible(true);
+        ProviderInvocationRequest orchestratorRequest = ProviderInvocationRequest.builder()
+                .providerKey("deepseek")
+                .providerConfig(providerConfig())
+                .capability(AiCapability.CHAT)
+                .temperature(0.0d)
+                .timeoutMillis(4000L)
+                .systemPrompt("system")
+                .userPrompt("user")
+                .build();
+
+        Object orchestratorModel = resolveChatModel.invoke(client, orchestratorRequest);
+        Object defaultModel = resolveChatModel.invoke(client, orchestratorRequest.toBuilder()
+                .temperature(null)
+                .timeoutMillis(null)
+                .build());
+
+        assertThat(orchestratorModel).isNotSameAs(defaultModel);
+        assertThat(readField(orchestratorModel, "temperature")).isEqualTo(0.0d);
+        assertThat(readField(orchestratorModel, "maxRetries")).isEqualTo(0);
+
+        Object openAiClient = readField(orchestratorModel, "client");
+        OkHttpClient okHttpClient = (OkHttpClient) readField(openAiClient, "okHttpClient");
+        assertThat(okHttpClient.callTimeoutMillis()).isEqualTo(4000);
+        assertThat(okHttpClient.connectTimeoutMillis()).isEqualTo(4000);
+        assertThat(okHttpClient.readTimeoutMillis()).isEqualTo(4000);
+        assertThat(okHttpClient.writeTimeoutMillis()).isEqualTo(4000);
+
+        assertThat(readField(defaultModel, "temperature")).isEqualTo(0.1d);
+        Object defaultClient = readField(defaultModel, "client");
+        OkHttpClient defaultHttpClient = (OkHttpClient) readField(defaultClient, "okHttpClient");
+        assertThat(defaultHttpClient.callTimeoutMillis()).isEqualTo(30000);
+    }
+
+    @Test
     void shouldFailFastWhenEmbeddingHttpFutureNeverCompletes() {
         NeverCompletingHttpClient httpClient = new NeverCompletingHttpClient();
         AiProviderProperties properties = aiProviderProperties();
@@ -78,6 +117,12 @@ class OpenAiCompatibleClientTest {
         properties.setTimeoutSeconds(30);
         properties.setProviders(Map.of("deepseek", providerConfig()));
         return properties;
+    }
+
+    private Object readField(Object target, String fieldName) throws Exception {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return field.get(target);
     }
 
     private AiProviderProperties.ProviderConfig providerConfig() {

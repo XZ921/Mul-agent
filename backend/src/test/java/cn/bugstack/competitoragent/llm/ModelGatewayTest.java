@@ -29,6 +29,68 @@ class ModelGatewayTest {
     private final OrganizationQuotaPolicy organizationQuotaPolicy = mock(OrganizationQuotaPolicy.class);
 
     @Test
+    void shouldForwardRequestScopedJsonOptionsThroughGovernedGateway() {
+        AiProviderProperties properties = buildProperties();
+        when(modelProvider.getAdapterType()).thenReturn("openai-compatible");
+        when(budgetGuard.check(any())).thenReturn(BudgetGuard.BudgetCheckResult.allow());
+        when(modelProvider.chat(any())).thenReturn(ProviderInvocationResult.<String>builder()
+                .providerKey("deepseek")
+                .modelName("deepseek-chat")
+                .tokenUsage(new TokenUsage(3, 4, 7))
+                .payload("{\"decisions\":[]}")
+                .build());
+        ModelGateway modelGateway = new ModelGateway(
+                new ProviderRegistry(properties, List.of(modelProvider)),
+                new RoutingPolicy(properties),
+                new CircuitBreakerPolicy(properties),
+                budgetGuard,
+                aiAuditLogger
+        );
+
+        String result = modelGateway.chatForJson(
+                "system",
+                "user",
+                "{\"type\":\"object\"}",
+                new ModelChatOptions(0.0d, 4000L));
+
+        assertEquals("{\"decisions\":[]}", result);
+        verify(modelProvider).chat(argThat(request -> request != null
+                && Double.valueOf(0.0d).equals(request.getTemperature())
+                && Long.valueOf(4000L).equals(request.getTimeoutMillis())
+                && request.getSystemPrompt().contains("只输出 JSON")
+                && request.getSystemPrompt().contains("{\"type\":\"object\"}")));
+        verify(budgetGuard).check(any());
+        verify(aiAuditLogger).record(any());
+    }
+
+    @Test
+    void shouldKeepLegacyJsonCallOnGlobalProviderDefaults() {
+        AiProviderProperties properties = buildProperties();
+        when(modelProvider.getAdapterType()).thenReturn("openai-compatible");
+        when(budgetGuard.check(any())).thenReturn(BudgetGuard.BudgetCheckResult.allow());
+        when(modelProvider.chat(any())).thenReturn(ProviderInvocationResult.<String>builder()
+                .providerKey("deepseek")
+                .modelName("deepseek-chat")
+                .payload("{\"decisions\":[]}")
+                .build());
+        ModelGateway modelGateway = new ModelGateway(
+                new ProviderRegistry(properties, List.of(modelProvider)),
+                new RoutingPolicy(properties),
+                new CircuitBreakerPolicy(properties),
+                budgetGuard,
+                aiAuditLogger
+        );
+
+        modelGateway.chatForJson("system", "user", "{\"type\":\"object\"}");
+
+        verify(modelProvider).chat(argThat(request -> request != null
+                && request.getTemperature() == null
+                && request.getTimeoutMillis() == null));
+        verify(budgetGuard).check(any());
+        verify(aiAuditLogger).record(any());
+    }
+
+    @Test
     void shouldRouteChatEmbeddingAndRerankThroughUnifiedGateway() {
         // Task 5.1.a 的最小闭环要求是：业务层不再直接持有 Provider，
         // 而是统一通过 ModelGateway 收口三类能力调用。
@@ -102,6 +164,34 @@ class ModelGatewayTest {
         assertEquals("备用供应商结果", modelGateway.chat("system", "user"));
         verify(modelProvider, times(2)).chat(argThat(request -> request != null && "deepseek".equals(request.getProviderKey())));
         verify(modelProvider, times(1)).chat(argThat(request -> request != null && "siliconflow".equals(request.getProviderKey())));
+    }
+
+    @Test
+    void shouldStopGatewayRetryAndFallbackWhenWorkerWasCancelled() {
+        AiProviderProperties properties = buildPropertiesWithFallback();
+        when(modelProvider.getAdapterType()).thenReturn("openai-compatible");
+        when(budgetGuard.check(any())).thenReturn(BudgetGuard.BudgetCheckResult.allow());
+        when(modelProvider.chat(argThat(request -> request != null && "deepseek".equals(request.getProviderKey()))))
+                .thenThrow(new LlmException("cancelled provider call", "HTTP_INTERRUPTED"));
+        ModelGateway modelGateway = new ModelGateway(
+                new ProviderRegistry(properties, List.of(modelProvider)),
+                new RoutingPolicy(properties),
+                new CircuitBreakerPolicy(properties),
+                budgetGuard,
+                aiAuditLogger
+        );
+        Thread.currentThread().interrupt();
+
+        try {
+            assertThrows(LlmException.class, () -> modelGateway.chat("system", "user"));
+        } finally {
+            Thread.interrupted();
+        }
+
+        verify(modelProvider, times(1)).chat(argThat(request -> request != null
+                && "deepseek".equals(request.getProviderKey())));
+        verify(modelProvider, never()).chat(argThat(request -> request != null
+                && "siliconflow".equals(request.getProviderKey())));
     }
 
     @Test

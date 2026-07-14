@@ -103,6 +103,14 @@ ai:
         chat: /v1/chat/completions
         embedding: /v1/embeddings
 
+orchestration:
+  decision:
+    model-temperature: 0.0
+    llm-timeout-ms: 4000
+    max-parse-retries: 1
+    executor-threads: 2
+    executor-queue-capacity: 16
+
 knife4j:
   enable: true
   setting:

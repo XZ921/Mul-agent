@@ -224,18 +224,26 @@ public class OpenAiCompatibleClient implements ModelProvider {
     }
 
     /**
-     * 聊天模型缓存按 provider + modelName 维度复用，
-     * 避免网关收口后每次调用都重新构建底层 SDK 客户端。
+     * 聊天模型缓存必须同时区分 provider/model/temperature/timeout，
+     * 防止 Orchestrator 的 0 温度短超时模型与其他 Agent 的全局模型配置交叉复用。
      */
     private ChatLanguageModel resolveChatModel(ProviderInvocationRequest request) {
-        String cacheKey = request.getProviderKey() + "::" + resolveModelName(request);
+        double temperature = resolveTemperature(request);
+        Duration timeout = resolveChatTimeout(request);
+        String cacheKey = request.getProviderKey()
+                + "::" + resolveModelName(request)
+                + "::" + temperature
+                + "::" + timeout.toMillis();
         return chatModelCache.computeIfAbsent(cacheKey, key -> OpenAiChatModel.builder()
                 .baseUrl(resolveBaseUrl(request))
                 .apiKey(resolveApiKey(request))
                 .modelName(resolveModelName(request))
                 .maxTokens(aiProps.getMaxTokens())
-                .temperature(aiProps.getTemperature())
-                .timeout(Duration.ofSeconds(aiProps.getTimeoutSeconds()))
+                .temperature(temperature)
+                .timeout(timeout)
+                // Provider retry 的唯一 owner 是 ModelGateway。关闭 SDK 默认的 3 attempts，
+                // 避免单个网关 attempt 再次放大成多次 HTTP 调用。
+                .maxRetries(0)
                 // LangChain4j 的响应日志会通过 peekBody() 复制完整响应体。
                 // 对 DeepSeek 这类长 JSON / HTTP2 响应，thread dump 已证明这里可能卡在
                 // ResponseLoggingInterceptor，进而把 extractor 主链路拖成长期 RUNNING。
@@ -243,6 +251,18 @@ public class OpenAiCompatibleClient implements ModelProvider {
                 .logRequests(false)
                 .logResponses(false)
                 .build());
+    }
+
+    private double resolveTemperature(ProviderInvocationRequest request) {
+        return request != null && request.getTemperature() != null
+                ? request.getTemperature()
+                : aiProps.getTemperature();
+    }
+
+    private Duration resolveChatTimeout(ProviderInvocationRequest request) {
+        return request != null && request.getTimeoutMillis() != null
+                ? Duration.ofMillis(request.getTimeoutMillis())
+                : Duration.ofSeconds(aiProps.getTimeoutSeconds());
     }
 
     /**

@@ -57,6 +57,13 @@ public class ModelGateway implements LlmClient, EmbeddingClient, RerankClient {
 
     @Override
     public String chat(String systemPrompt, String userPrompt) {
+        return chat(systemPrompt, userPrompt, null);
+    }
+
+    /**
+     * 发送带请求级模型参数的聊天调用，同时继续复用统一路由、预算、熔断、配额和审计链路。
+     */
+    public String chat(String systemPrompt, String userPrompt, ModelChatOptions options) {
         ProviderInvocationResult<String> result = execute(
                 AiCapability.CHAT,
                 systemPrompt + "\n" + userPrompt,
@@ -67,6 +74,8 @@ public class ModelGateway implements LlmClient, EmbeddingClient, RerankClient {
                         .modelName(null)
                         .systemPrompt(systemPrompt)
                         .userPrompt(userPrompt)
+                        .temperature(options == null ? null : options.temperature())
+                        .timeoutMillis(options == null ? null : options.timeoutMillis())
                         .build())
         );
         return result.getPayload();
@@ -74,10 +83,20 @@ public class ModelGateway implements LlmClient, EmbeddingClient, RerankClient {
 
     @Override
     public String chatForJson(String systemPrompt, String userPrompt, String responseSchema) {
+        return chatForJson(systemPrompt, userPrompt, responseSchema, null);
+    }
+
+    /**
+     * JSON 调用的请求级参数入口。Schema 仍由网关追加到 system prompt，业务层不能绕过统一治理。
+     */
+    public String chatForJson(String systemPrompt,
+                              String userPrompt,
+                              String responseSchema,
+                              ModelChatOptions options) {
         String enhancedSystemPrompt = systemPrompt
                 + "\n\n【重要】请只输出 JSON，不要包含 markdown 代码块标记或其他解释文字。\n"
                 + "期望的 JSON 结构: " + responseSchema;
-        return chat(enhancedSystemPrompt, userPrompt);
+        return chat(enhancedSystemPrompt, userPrompt, options);
     }
 
     @Override
@@ -216,6 +235,11 @@ public class ModelGateway implements LlmClient, EmbeddingClient, RerankClient {
                             .degradationCount(calculateDegradationCount(providerIndex, attempt))
                             .summary(buildFailureSummary(providerIndex, attempt, routingDecision.maxRetries(), e))
                             .build());
+                    // Orchestrator wall-clock timeout 会 cancel worker。当前 Provider 返回后必须立即停止
+                    // 网关下一次 attempt/备用 Provider，避免已超时调用继续占用有界执行器。
+                    if (Thread.currentThread().isInterrupted()) {
+                        throw e;
+                    }
                 }
             }
         }
