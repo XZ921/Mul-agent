@@ -19,8 +19,17 @@ import cn.bugstack.competitoragent.orchestration.DecisionPolicyService;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionActionMatrix;
 import cn.bugstack.competitoragent.orchestration.AnalyzerSuggestionAssembler;
 import cn.bugstack.competitoragent.orchestration.ExtractorSuggestionAssembler;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecision;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionAdapter;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionOutcome;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionOrigin;
+import cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecision;
+import cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionBatch;
+import cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeState;
+import cn.bugstack.competitoragent.orchestration.OrchestrationShadowExecution;
+import cn.bugstack.competitoragent.orchestration.OrchestratorDecisionMode;
 import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
 import cn.bugstack.competitoragent.orchestration.RuleBasedOrchestratorDecisionBrain;
 import cn.bugstack.competitoragent.orchestration.WriterSuggestionAssembler;
@@ -67,6 +76,7 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class DagExecutorTest {
@@ -925,11 +935,10 @@ class DagExecutorTest {
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
                         new ObjectMapper().findAndRegisterModules(),
-                        mock(OrchestrationDecisionService.class),
-                        mock(DecisionPolicyService.class),
-                        mock(DecisionExecutorAdapter.class),
+                        mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService.class),
                         mock(OrchestrationTraceService.class)),
-                mock(TaskQuotaCoordinator.class)
+                mock(TaskQuotaCoordinator.class),
+                mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService.class)
         );
 
         executor.execute(taskId, AgentContext.builder()
@@ -1266,11 +1275,10 @@ class DagExecutorTest {
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
                         new ObjectMapper().findAndRegisterModules(),
-                        mock(OrchestrationDecisionService.class),
-                        mock(DecisionPolicyService.class),
-                        mock(DecisionExecutorAdapter.class),
+                        mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService.class),
                         mock(OrchestrationTraceService.class)),
-                mock(TaskQuotaCoordinator.class)
+                mock(TaskQuotaCoordinator.class),
+                mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService.class)
         );
 
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("event-fallback-test").build());
@@ -1353,11 +1361,10 @@ class DagExecutorTest {
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
                         new ObjectMapper().findAndRegisterModules(),
-                        mock(OrchestrationDecisionService.class),
-                        mock(DecisionPolicyService.class),
-                        mock(DecisionExecutorAdapter.class),
+                        mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService.class),
                         mock(OrchestrationTraceService.class)),
-                mock(TaskQuotaCoordinator.class)
+                mock(TaskQuotaCoordinator.class),
+                mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService.class)
         );
 
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("retry-dlq-test").build());
@@ -1539,6 +1546,30 @@ class DagExecutorTest {
                 taskPlanRepository,
                 new TaskPlanVersioner(mapper),
                 new CompensationGraphAssembler(mapper));
+        cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeStateService runtimeStateService =
+                mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeStateService.class);
+        when(runtimeStateService.load(taskId)).thenReturn(
+                new cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeState(
+                        0,
+                        Map.of(),
+                        1L,
+                        2,
+                        cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeState
+                                .CheckpointStateStatus.ABSENT,
+                        List.of()));
+        cn.bugstack.competitoragent.orchestration.DecisionPolicyRuleSet runtimeRuleSet =
+                cn.bugstack.competitoragent.orchestration.DecisionPolicyRuleSet.builder()
+                        .build()
+                        .normalized();
+        cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService runtimeDecisionService =
+                new cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService(
+                        new OrchestrationDecisionService(
+                                new RuleBasedOrchestratorDecisionBrain(
+                                        new OrchestrationDecisionAdapter())),
+                        new DecisionPolicyService(new OrchestrationDecisionActionMatrix()),
+                        new DecisionExecutorAdapter(mapper),
+                        runtimeRuleSet,
+                        runtimeStateService);
 
         DagExecutor executor = new DagExecutor(
                 nodeRepository,
@@ -1565,13 +1596,10 @@ class DagExecutorTest {
                         dynamicTaskGraphService,
                         taskPlanRepository,
                         mapper,
-                        new OrchestrationDecisionService(
-                                new RuleBasedOrchestratorDecisionBrain(
-                                        new OrchestrationDecisionAdapter())),
-                        new DecisionPolicyService(new OrchestrationDecisionActionMatrix()),
-                        new DecisionExecutorAdapter(mapper),
+                        runtimeDecisionService,
                         mock(OrchestrationTraceService.class)),
-                mock(TaskQuotaCoordinator.class)
+                mock(TaskQuotaCoordinator.class),
+                runtimeDecisionService
         );
 
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("dynamic-graph-test").build());
@@ -2003,7 +2031,187 @@ class DagExecutorTest {
                                 "WAIT_FOR_HUMAN".equals(decision.getDecisionType())
                                         && "analyze_competitors".equals(decision.getTriggerNodeName())
                                         && decision.getInputRefs().containsKey("agentSuggestionIds")),
-                        isNull(), isNull());
+                        argThat(policy -> policy.isAllowed()
+                                && "LEGACY_RULE_SET".equals(policy.getDecisionContract())),
+                        argThat(mutation -> "MARK_WAITING_INTERVENTION".equals(mutation.getMutationType())
+                                && "AWAIT_CONFIRMATION".equals(mutation.getRuntimeCommand())));
+    }
+
+    @Test
+    void shouldKeepSuccessfulAnalyzerWhenRejectedLlmWaitFallsBackToNoAction() {
+        Long taskId = 1014L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .build();
+        TaskNode analyzer = TaskNode.builder()
+                .id(1401L)
+                .taskId(taskId)
+                .nodeName("analyze_competitors")
+                .agentType(AgentType.ANALYZER)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        OrchestrationRuntimeDecisionService runtimeDecisionService = mock(OrchestrationRuntimeDecisionService.class);
+        OrchestrationTraceService traceService = mock(OrchestrationTraceService.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(analyzer));
+        when(nodeRepository.findById(1401L)).thenReturn(Optional.of(analyzer));
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrchestrationDecision rejectedDecision = OrchestrationDecision.builder()
+                .decisionId("od-agent-llm-rejected")
+                .taskId(taskId)
+                .triggerNodeName("analyze_competitors")
+                .decisionType("WAIT_FOR_HUMAN")
+                .actionType("MANUAL_REVIEW")
+                .decisionOrigin(OrchestrationDecisionOrigin.LLM_PRIMARY)
+                .reason("LLM 建议暂停但未通过 Policy")
+                .sourceUrls(List.of())
+                .evidenceState(cn.bugstack.competitoragent.orchestration.EvidenceState.MISSING_SOURCE)
+                .build();
+        cn.bugstack.competitoragent.orchestration.DecisionPolicyResult rejectedPolicy =
+                cn.bugstack.competitoragent.orchestration.DecisionPolicyResult.builder()
+                        .decisionId("od-agent-llm-rejected")
+                        .decisionOrigin(OrchestrationDecisionOrigin.LLM_PRIMARY)
+                        .allowed(false)
+                        .normalizedAction("MANUAL_ONLY")
+                        .sourceUrls(List.of())
+                        .build();
+        cn.bugstack.competitoragent.orchestration.DynamicPlanMutation rejectedMutation =
+                cn.bugstack.competitoragent.orchestration.DynamicPlanMutation.builder()
+                        .mutationId("dpm-agent-llm-rejected")
+                        .decisionId("od-agent-llm-rejected")
+                        .mutationType("NO_MUTATION")
+                        .sourceUrls(List.of())
+                        .build();
+        OrchestrationRuntimeDecision rejectedAttempt = new OrchestrationRuntimeDecision(
+                rejectedDecision,
+                rejectedPolicy,
+                rejectedMutation,
+                false,
+                OrchestrationRuntimeDecision.POLICY_REJECTED,
+                List.of());
+
+        OrchestrationDecision fallbackDecision = rejectedDecision.toBuilder()
+                .decisionId("od-agent-rule-no-action")
+                .decisionType("NO_ACTION")
+                .actionType("NO_ACTION")
+                .decisionOrigin(OrchestrationDecisionOrigin.RULE_FALLBACK)
+                .reason("规则回退保持节点成功")
+                .build();
+        cn.bugstack.competitoragent.orchestration.DecisionPolicyResult fallbackPolicy =
+                cn.bugstack.competitoragent.orchestration.DecisionPolicyResult.builder()
+                        .decisionId("od-agent-rule-no-action")
+                        .decisionOrigin(OrchestrationDecisionOrigin.RULE_FALLBACK)
+                        .allowed(true)
+                        .normalizedAction("NO_ACTION")
+                        .sourceUrls(List.of())
+                        .build();
+        cn.bugstack.competitoragent.orchestration.DynamicPlanMutation fallbackMutation =
+                cn.bugstack.competitoragent.orchestration.DynamicPlanMutation.builder()
+                        .mutationId("dpm-agent-rule-no-action")
+                        .decisionId("od-agent-rule-no-action")
+                        .mutationType("NO_MUTATION")
+                        .sourceUrls(List.of())
+                        .build();
+        OrchestrationRuntimeDecision fallbackAttempt = new OrchestrationRuntimeDecision(
+                fallbackDecision,
+                fallbackPolicy,
+                fallbackMutation,
+                true,
+                OrchestrationRuntimeDecision.NO_MUTATION,
+                List.of());
+        OrchestrationDecisionOutcome outcome = new OrchestrationDecisionOutcome(
+                OrchestratorDecisionMode.LLM_PRIMARY,
+                List.of(rejectedDecision),
+                List.of(),
+                OrchestrationShadowExecution.notRequested(List.of()),
+                null,
+                List.of());
+        OrchestrationRuntimeDecisionBatch batch = new OrchestrationRuntimeDecisionBatch(
+                outcome,
+                new OrchestrationRuntimeState(
+                        0, Map.of(), null, 1,
+                        OrchestrationRuntimeState.CheckpointStateStatus.ABSENT,
+                        List.of()),
+                List.of(rejectedAttempt, fallbackAttempt),
+                List.of(fallbackAttempt),
+                true,
+                List.of());
+        when(runtimeDecisionService.decide(any(), any(), any())).thenReturn(batch);
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new AnalyzerAnalysisGapAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService(),
+                List.of(),
+                traceService,
+                runtimeDecisionService);
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("agent-fallback-test").build());
+
+        assertEquals(TaskNodeStatus.SUCCESS, analyzer.getStatus());
+        assertNull(analyzer.getFailureCategory());
+        verify(runtimeDecisionService).decide(
+                argThat(context -> !context.getAgentSuggestions().isEmpty()),
+                eq(AnalysisTaskStatus.RUNNING.name()),
+                eq(TaskNodeStatus.SUCCESS.name()));
+        verify(traceService).recordDecision(
+                eq(taskId), eq(analyzer),
+                argThat(decision -> "od-agent-llm-rejected".equals(decision.getDecisionId())),
+                any(), any());
+        verify(traceService).recordDecision(
+                eq(taskId), eq(analyzer),
+                argThat(decision -> "od-agent-rule-no-action".equals(decision.getDecisionId())),
+                any(), any());
+    }
+
+    @Test
+    void shouldNotCallRuntimeServiceWhenAgentProducesNoSuggestion() {
+        Long taskId = 1015L;
+        AnalysisTask task = AnalysisTask.builder().id(taskId).status(AnalysisTaskStatus.PENDING).build();
+        TaskNode collector = TaskNode.builder()
+                .id(1501L)
+                .taskId(taskId)
+                .nodeName("collect_sources")
+                .agentType(AgentType.COLLECTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .build();
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        OrchestrationRuntimeDecisionService runtimeDecisionService = mock(OrchestrationRuntimeDecisionService.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of(collector));
+        when(nodeRepository.findById(1501L)).thenReturn(Optional.of(collector));
+        when(nodeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new AlwaysSuccessCollectorAgent()),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService(),
+                List.of(),
+                mock(OrchestrationTraceService.class),
+                runtimeDecisionService);
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("no-suggestion-test").build());
+
+        assertEquals(TaskNodeStatus.SUCCESS, collector.getStatus());
+        verifyNoInteractions(runtimeDecisionService);
     }
 
     @Test
@@ -2080,7 +2288,10 @@ class DagExecutorTest {
                                 "WAIT_FOR_HUMAN".equals(decision.getDecisionType())
                                         && "write_report".equals(decision.getTriggerNodeName())
                                         && decision.getInputRefs().containsKey("agentSuggestionIds")),
-                        isNull(), isNull());
+                        argThat(policy -> policy.isAllowed()
+                                && "LEGACY_RULE_SET".equals(policy.getDecisionContract())),
+                        argThat(mutation -> "MARK_WAITING_INTERVENTION".equals(mutation.getMutationType())
+                                && "AWAIT_CONFIRMATION".equals(mutation.getRuntimeCommand())));
     }
 
     @Test
@@ -2156,7 +2367,10 @@ class DagExecutorTest {
                                 "WAIT_FOR_HUMAN".equals(decision.getDecisionType())
                                         && "citation_check".equals(decision.getTriggerNodeName())
                                         && decision.getInputRefs().containsKey("agentSuggestionIds")),
-                        isNull(), isNull());
+                        argThat(policy -> policy.isAllowed()
+                                && "LEGACY_RULE_SET".equals(policy.getDecisionContract())),
+                        argThat(mutation -> "MARK_WAITING_INTERVENTION".equals(mutation.getMutationType())
+                                && "AWAIT_CONFIRMATION".equals(mutation.getRuntimeCommand())));
     }
 
     @Test
@@ -2324,6 +2538,26 @@ class DagExecutorTest {
                                               TaskExecutionLockService lockService,
                                               List<SharedNodeOutputProjector> sharedNodeOutputProjectors,
                                               OrchestrationTraceService orchestrationTraceService) {
+        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+        return newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                agents,
+                snapshotCacheService,
+                lockService,
+                sharedNodeOutputProjectors,
+                orchestrationTraceService,
+                newRuntimeDecisionService(objectMapper));
+    }
+
+    private static DagExecutor newDagExecutor(TaskNodeRepository nodeRepository,
+                                              AnalysisTaskRepository taskRepository,
+                                              List<Agent> agents,
+                                              TaskSnapshotCacheService snapshotCacheService,
+                                              TaskExecutionLockService lockService,
+                                              List<SharedNodeOutputProjector> sharedNodeOutputProjectors,
+                                              OrchestrationTraceService orchestrationTraceService,
+                                              OrchestrationRuntimeDecisionService runtimeDecisionService) {
         TaskEventPublisher taskEventPublisher = mock(TaskEventPublisher.class);
         AgentLogService agentLogService = mock(AgentLogService.class);
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
@@ -2347,20 +2581,41 @@ class DagExecutorTest {
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
                         objectMapper,
-                        mock(OrchestrationDecisionService.class),
-                        mock(DecisionPolicyService.class),
-                        mock(DecisionExecutorAdapter.class),
+                        mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService.class),
                         mock(OrchestrationTraceService.class)),
                 mock(TaskQuotaCoordinator.class),
                 new ExtractorSuggestionAssembler(objectMapper),
                 new AnalyzerSuggestionAssembler(objectMapper),
                 new WriterSuggestionAssembler(objectMapper),
-                new OrchestrationDecisionService(
-                        new RuleBasedOrchestratorDecisionBrain(
-                                new OrchestrationDecisionAdapter())),
+                runtimeDecisionService,
                 orchestrationTraceService,
                 sharedNodeOutputProjectors
         );
+    }
+
+    private static cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService
+    newRuntimeDecisionService(ObjectMapper objectMapper) {
+        cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeStateService stateService =
+                mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeStateService.class);
+        when(stateService.load(any())).thenReturn(
+                new cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeState(
+                        0,
+                        Map.of(),
+                        null,
+                        1,
+                        cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeState
+                                .CheckpointStateStatus.ABSENT,
+                        List.of()));
+        return new cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService(
+                new OrchestrationDecisionService(
+                        new RuleBasedOrchestratorDecisionBrain(
+                                new OrchestrationDecisionAdapter())),
+                new DecisionPolicyService(new OrchestrationDecisionActionMatrix()),
+                new DecisionExecutorAdapter(objectMapper),
+                cn.bugstack.competitoragent.orchestration.DecisionPolicyRuleSet.builder()
+                        .build()
+                        .normalized(),
+                stateService);
     }
 
     /**

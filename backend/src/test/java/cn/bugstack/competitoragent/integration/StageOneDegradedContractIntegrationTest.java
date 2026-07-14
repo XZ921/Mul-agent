@@ -817,20 +817,35 @@ class StageOneDegradedContractIntegrationTest {
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
                         objectMapper,
-                        mock(OrchestrationDecisionService.class),
-                        mock(DecisionPolicyService.class),
-                        mock(DecisionExecutorAdapter.class),
+                        mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService.class),
                         mock(OrchestrationTraceService.class)),
                 mock(TaskQuotaCoordinator.class),
                 new ExtractorSuggestionAssembler(objectMapper),
                 new AnalyzerSuggestionAssembler(objectMapper),
                 new WriterSuggestionAssembler(objectMapper),
-                new OrchestrationDecisionService(
-                        new RuleBasedOrchestratorDecisionBrain(
-                                new OrchestrationDecisionAdapter())),
+                newRuntimeDecisionService(objectMapper),
                 mock(OrchestrationTraceService.class),
                 List.<SharedNodeOutputProjector>of()
         );
+    }
+
+    private cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService
+    newRuntimeDecisionService(ObjectMapper objectMapper) {
+        cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeStateService stateService =
+                mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeStateService.class);
+        when(stateService.load(any())).thenReturn(
+                new cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeState(
+                        0, java.util.Map.of(), null, 1,
+                        cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeState
+                                .CheckpointStateStatus.ABSENT,
+                        List.of()));
+        return new cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService(
+                new OrchestrationDecisionService(
+                        new RuleBasedOrchestratorDecisionBrain(new OrchestrationDecisionAdapter())),
+                new DecisionPolicyService(new cn.bugstack.competitoragent.orchestration.OrchestrationDecisionActionMatrix()),
+                new DecisionExecutorAdapter(objectMapper),
+                cn.bugstack.competitoragent.orchestration.DecisionPolicyRuleSet.builder().build().normalized(),
+                stateService);
     }
 
     private AgentCapabilityRegistry registryOf(List<Agent> agents) {

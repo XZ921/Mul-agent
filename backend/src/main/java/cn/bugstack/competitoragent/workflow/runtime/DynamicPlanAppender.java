@@ -5,15 +5,13 @@ import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.entity.TaskPlan;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
-import cn.bugstack.competitoragent.orchestration.DecisionExecutorAdapter;
-import cn.bugstack.competitoragent.orchestration.DecisionPolicyResult;
-import cn.bugstack.competitoragent.orchestration.DecisionPolicyRuleSet;
-import cn.bugstack.competitoragent.orchestration.DecisionPolicyService;
 import cn.bugstack.competitoragent.orchestration.DynamicPlanMutation;
 import cn.bugstack.competitoragent.orchestration.EvidenceState;
 import cn.bugstack.competitoragent.orchestration.OrchestrationContext;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecision;
-import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecision;
+import cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionBatch;
+import cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService;
 import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
@@ -49,9 +47,7 @@ public class DynamicPlanAppender {
     private final DynamicTaskGraphService dynamicTaskGraphService;
     private final TaskPlanRepository taskPlanRepository;
     private final ObjectMapper objectMapper;
-    private final OrchestrationDecisionService orchestrationDecisionService;
-    private final DecisionPolicyService decisionPolicyService;
-    private final DecisionExecutorAdapter decisionExecutorAdapter;
+    private final OrchestrationRuntimeDecisionService runtimeDecisionService;
     private final OrchestrationTraceService orchestrationTraceService;
 
     /**
@@ -101,27 +97,43 @@ public class DynamicPlanAppender {
             return false;
         }
 
-        OrchestrationContext orchestrationContext = buildOrchestrationContext(taskId, completedNode, reviewOutput, directives);
-        List<OrchestrationDecision> decisions = orchestrationDecisionService.decide(orchestrationContext);
-        if (decisions.isEmpty()) {
-            return false;
-        }
+        String taskStatus = task.getStatus() == null ? null : task.getStatus().name();
+        String nodeStatus = completedNode.getStatus() == null ? null : completedNode.getStatus().name();
+        OrchestrationContext orchestrationContext = buildOrchestrationContext(
+                taskId, completedNode, reviewOutput, directives, taskStatus);
+        OrchestrationRuntimeDecisionBatch batch = runtimeDecisionService.decide(
+                orchestrationContext,
+                taskStatus,
+                nodeStatus);
 
-        DecisionPolicyRuleSet ruleSet = DecisionPolicyRuleSet.builder().build();
-        for (OrchestrationDecision decision : decisions) {
-            DecisionPolicyResult policyResult = decisionPolicyService.evaluate(
-                    decision,
-                    ruleSet,
-                    orchestrationContext.getCurrentDecisionCount(),
-                    task.getStatus() == null ? null : task.getStatus().name(),
-                    completedNode.getStatus() == null ? null : completedNode.getStatus().name());
-            DynamicPlanMutation mutation = decisionExecutorAdapter.toMutation(
-                    decision,
-                    policyResult,
-                    parentPlan.getId(),
-                    parentPlan.getPlanVersion() + 1);
-            orchestrationTraceService.recordDecision(taskId, completedNode, decision, policyResult, mutation);
-            if (!policyResult.isAllowed() || !"APPEND_NODES".equals(mutation.getMutationType())) {
+        // attempts 包含原 LLM rejection 与 fallback 事实，必须全部留痕；执行侧只能查看 finalDecisions。
+        for (OrchestrationRuntimeDecision attempt : batch.attempts()) {
+            orchestrationTraceService.recordDecision(
+                    taskId,
+                    completedNode,
+                    attempt.decision(),
+                    attempt.policyResult(),
+                    attempt.mutation());
+        }
+        for (OrchestrationRuntimeDecision finalDecision : batch.finalDecisions()) {
+            OrchestrationDecision decision = finalDecision.decision();
+            DynamicPlanMutation mutation = finalDecision.mutation();
+            if (!finalDecision.policyResult().isAllowed()) {
+                continue;
+            }
+            if ("MARK_WAITING_INTERVENTION".equals(mutation.getMutationType())) {
+                // confirmation/manual mutation 只暂停当前终审节点，不创建动态计划，也不污染 failureCategory。
+                completedNode.setStatus(TaskNodeStatus.WAITING_INTERVENTION);
+                completedNode.setInterventionReason(decision.getReason());
+                nodeRepository.save(completedNode);
+                return false;
+            }
+            if (!"APPEND_NODES".equals(mutation.getMutationType())) {
+                continue;
+            }
+            // 模型与 Policy 评估期间 task 可能已经切换计划；执行 mutation 前必须再次验证父版本仍为当前版本。
+            if (task.getCurrentPlanVersionId() == null
+                    || !task.getCurrentPlanVersionId().equals(parentPlan.getId())) {
                 continue;
             }
             TaskPlan derivedPlan = dynamicTaskGraphService.createDynamicPlan(parentPlan, completedNode, mutation, baseWorkflowPlan);
@@ -141,7 +153,7 @@ public class DynamicPlanAppender {
             task.setCurrentPlanVersion(derivedPlan.getPlanVersion());
             task.setErrorMessage(null);
             taskRepository.save(task);
-            orchestrationTraceService.recordCheckpoint(taskId, completedNode, derivedPlan, decision, mutation, ruleSet);
+            orchestrationTraceService.recordCheckpoint(taskId, completedNode, derivedPlan, decision, mutation);
             log.info("dynamic backflow plan attached through orchestration decision, taskId={}, triggerNode={}, planVersion={}, dynamicNodeCount={}",
                     taskId, completedNode.getNodeName(), derivedPlan.getPlanVersion(), dynamicNodes.size());
             return true;
@@ -194,7 +206,8 @@ public class DynamicPlanAppender {
     private OrchestrationContext buildOrchestrationContext(Long taskId,
                                                            TaskNode completedNode,
                                                            JsonNode reviewOutput,
-                                                           List<RevisionDirective> directives) {
+                                                           List<RevisionDirective> directives,
+                                                           String taskStatus) {
         List<String> sourceUrls = readSourceUrls(reviewOutput);
         return OrchestrationContext.builder()
                 .taskId(taskId)
@@ -202,6 +215,7 @@ public class DynamicPlanAppender {
                 .branchKey(completedNode.getBranchKey())
                 .triggerNodeName(completedNode.getNodeName())
                 .reviewStage(reviewOutput.path("reviewStage").asText(""))
+                .taskStatus(taskStatus)
                 .passed(reviewOutput.path("passed").asBoolean(false))
                 .requiresHumanIntervention(reviewOutput.path("requiresHumanIntervention").asBoolean(false))
                 .diagnoses(readDiagnoses(reviewOutput))

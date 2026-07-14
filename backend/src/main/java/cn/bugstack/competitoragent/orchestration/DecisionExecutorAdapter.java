@@ -40,6 +40,22 @@ public class DecisionExecutorAdapter {
         if (decision == null || policyResult == null || !policyResult.isAllowed()) {
             return noMutation(decision, policyResult);
         }
+        // confirmation 是 mutation 前的真实暂停门。即使 Policy 已把动作归一为自动补图，
+        // 未确认前也只能生成等待人工的命令，绝不能先创建 APPEND_NODES。
+        if (policyResult.isRequiresConfirmation()) {
+            return DynamicPlanMutation.builder()
+                    .mutationId("dpm-" + decision.getDecisionId())
+                    .decisionId(decision.getDecisionId())
+                    .mutationType("MARK_WAITING_INTERVENTION")
+                    .targetPlanVersionId(targetPlanVersionId)
+                    .branchReason("POLICY_CONFIRMATION_REQUIRED")
+                    .dynamicAction("MANUAL_ONLY")
+                    .runtimeCommand("AWAIT_CONFIRMATION")
+                    .sourceUrls(policyResult.getSourceUrls())
+                    .evidenceState(policyResult.getEvidenceState())
+                    .build()
+                    .normalized();
+        }
         String normalizedAction = policyResult.getNormalizedAction();
         if ("CREATE_SUPPLEMENT_BRANCH".equals(normalizedAction)) {
             String expectedNodeName = "collect_revision_evidence_v" + nextPlanVersion + "_1";
@@ -91,6 +107,7 @@ public class DecisionExecutorAdapter {
                     .targetPlanVersionId(targetPlanVersionId)
                     .branchReason("ORCHESTRATOR_DECISION")
                     .dynamicAction(normalizedAction)
+                    .runtimeCommand("MANUAL_REVIEW")
                     .sourceUrls(policyResult.getSourceUrls())
                     .evidenceState(policyResult.getEvidenceState())
                     .build()
@@ -183,12 +200,23 @@ public class DecisionExecutorAdapter {
     }
 
     private DynamicPlanMutation noMutation(OrchestrationDecision decision, DecisionPolicyResult policyResult) {
+        return toNoMutation(decision, policyResult, "POLICY_BLOCKED_OR_NO_ACTION");
+    }
+
+    /**
+     * 为 runtime guard 提供统一的 NO_MUTATION 构造入口，确保来源和证据归一化仍由 Adapter 单一负责。
+     */
+    public DynamicPlanMutation toNoMutation(OrchestrationDecision rawDecision,
+                                            DecisionPolicyResult rawPolicyResult,
+                                            String branchReason) {
+        OrchestrationDecision decision = rawDecision == null ? null : rawDecision.normalized();
+        DecisionPolicyResult policyResult = rawPolicyResult == null ? null : rawPolicyResult.normalized();
         String decisionId = decision == null ? "unknown" : decision.getDecisionId();
         return DynamicPlanMutation.builder()
                 .mutationId("dpm-" + decisionId)
                 .decisionId(decisionId)
                 .mutationType("NO_MUTATION")
-                .branchReason("POLICY_BLOCKED_OR_NO_ACTION")
+                .branchReason(branchReason)
                 .sourceUrls(policyResult == null ? List.of() : policyResult.getSourceUrls())
                 .evidenceState(policyResult == null ? EvidenceState.NOT_APPLICABLE : policyResult.getEvidenceState())
                 .build()

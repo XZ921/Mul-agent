@@ -7,6 +7,7 @@ import cn.bugstack.competitoragent.llm.AiCapability;
 import cn.bugstack.competitoragent.llm.BudgetGuard;
 import cn.bugstack.competitoragent.llm.ModelInvocationContextHolder;
 import cn.bugstack.competitoragent.llm.ModelInvocationPurpose;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -26,6 +27,7 @@ public class OrchestrationShadowBudgetGate {
     private final OrchestratorDecisionProperties properties;
     private final boolean enabled;
 
+    @Autowired
     public OrchestrationShadowBudgetGate(BudgetGuard budgetGuard,
                                          OrganizationQuotaPolicy organizationQuotaPolicy,
                                          OrchestratorDecisionProperties properties) {

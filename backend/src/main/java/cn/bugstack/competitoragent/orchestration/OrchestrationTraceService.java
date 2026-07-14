@@ -2,12 +2,8 @@ package cn.bugstack.competitoragent.orchestration;
 
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.entity.TaskPlan;
-import cn.bugstack.competitoragent.model.entity.TaskWorkflowEvent;
-import cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventType;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -24,8 +20,8 @@ import java.util.Map;
 public class OrchestrationTraceService {
 
     private final WorkflowEventPublisher workflowEventPublisher;
-    private final TaskWorkflowEventRepository taskWorkflowEventRepository;
-    private final ObjectMapper objectMapper;
+    private final OrchestrationRuntimeStateService runtimeStateService;
+    private final DecisionPolicyRuleSet ruleSet;
 
     /**
      * 记录一次编排决策、策略结果与计划变更。
@@ -71,8 +67,12 @@ public class OrchestrationTraceService {
                                  TaskNode completedNode,
                                  TaskPlan derivedPlan,
                                  OrchestrationDecision decision,
-                                 DynamicPlanMutation mutation,
-                                 DecisionPolicyRuleSet ruleSet) {
+                                 DynamicPlanMutation mutation) {
+        // 只有动态计划已经成功落库后调用该入口，因此计数递增统一委托给 Runtime State owner。
+        // Trace 不再自行解析事件 JSON，避免损坏 checkpoint 被错误当成 count=0 重新开放额度。
+        OrchestrationRuntimeState nextState = runtimeStateService.afterSuccessfulBranch(
+                runtimeStateService.load(taskId),
+                decision);
         OrchestratorCheckpoint checkpoint = OrchestratorCheckpoint.builder()
                 .checkpointId("oc-" + (decision == null ? "unknown" : decision.getDecisionId()))
                 .taskId(taskId)
@@ -81,8 +81,9 @@ public class OrchestrationTraceService {
                 .lastDecisionId(decision == null ? null : decision.getDecisionId())
                 .lastMutationId(mutation == null ? null : mutation.getMutationId())
                 .pendingActions(List.of("WAITING_FOR_SUPPLEMENT_RESULT"))
-                .decisionCount(resolveNextDecisionCount(taskId))
-                .maxAutoDecisions(ruleSet == null ? 2 : ruleSet.getMaxAutoDecisions())
+                .decisionCount(nextState.currentDecisionCount())
+                .maxAutoDecisions(ruleSet.getMaxAutoDecisions())
+                .dynamicBranchCountsBySection(nextState.dynamicBranchCountsBySection())
                 .resumeAfterNodeName(mutation == null ? null : mutation.getExpectedResumeNodeName())
                 .resumeReason("动态补图节点完成后需要继续复核质量诊断是否收敛。")
                 .sourceUrls(decision == null ? List.of() : decision.getSourceUrls())
@@ -100,35 +101,5 @@ public class OrchestrationTraceService {
                 WorkflowEventType.ORCHESTRATION_CHECKPOINT_UPDATED,
                 payload,
                 checkpoint.getSourceUrls());
-    }
-
-    private int resolveNextDecisionCount(Long taskId) {
-        if (taskId == null) {
-            return 1;
-        }
-        return taskWorkflowEventRepository
-                .findFirstByTaskIdAndEventTypeOrderByCreatedAtDesc(
-                        taskId,
-                        WorkflowEventType.ORCHESTRATION_CHECKPOINT_UPDATED)
-                .map(this::extractDecisionCount)
-                .orElse(0) + 1;
-    }
-
-    /**
-     * checkpoint 当前复用事件 payload 持久化，读取失败时按 0 处理，
-     * 避免历史脏事件阻断新的 trace 写入。
-     */
-    private int extractDecisionCount(TaskWorkflowEvent event) {
-        if (event == null || event.getPayload() == null || event.getPayload().isBlank()) {
-            return 0;
-        }
-        try {
-            JsonNode countNode = objectMapper.readTree(event.getPayload())
-                    .path("checkpoint")
-                    .path("decisionCount");
-            return Math.max(0, countNode.asInt(0));
-        } catch (Exception ignored) {
-            return 0;
-        }
     }
 }

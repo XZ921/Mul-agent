@@ -6,15 +6,21 @@ import cn.bugstack.competitoragent.model.entity.TaskPlan;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
-import cn.bugstack.competitoragent.orchestration.DecisionExecutorAdapter;
 import cn.bugstack.competitoragent.orchestration.DecisionPolicyResult;
 import cn.bugstack.competitoragent.orchestration.DecisionPolicyService;
+import cn.bugstack.competitoragent.orchestration.DecisionExecutorAdapter;
 import cn.bugstack.competitoragent.orchestration.DynamicPlanMutation;
 import cn.bugstack.competitoragent.orchestration.EvidenceState;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecision;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionActionMatrix;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionOutcome;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionOrigin;
-import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecision;
+import cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionBatch;
+import cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeState;
+import cn.bugstack.competitoragent.orchestration.OrchestrationShadowExecution;
+import cn.bugstack.competitoragent.orchestration.OrchestratorDecisionMode;
 import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
@@ -46,9 +52,8 @@ class DynamicPlanAppenderTest {
     private final TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
     private final DynamicTaskGraphService dynamicTaskGraphService = mock(DynamicTaskGraphService.class);
     private final TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
-    private final OrchestrationDecisionService orchestrationDecisionService = mock(OrchestrationDecisionService.class);
-    private final DecisionPolicyService decisionPolicyService = mock(DecisionPolicyService.class);
-    private final DecisionExecutorAdapter decisionExecutorAdapter = mock(DecisionExecutorAdapter.class);
+    private final OrchestrationRuntimeDecisionService runtimeDecisionService =
+            mock(OrchestrationRuntimeDecisionService.class);
     private final OrchestrationTraceService orchestrationTraceService = mock(OrchestrationTraceService.class);
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
@@ -58,9 +63,7 @@ class DynamicPlanAppenderTest {
             dynamicTaskGraphService,
             taskPlanRepository,
             objectMapper,
-            orchestrationDecisionService,
-            decisionPolicyService,
-            decisionExecutorAdapter,
+            runtimeDecisionService,
             orchestrationTraceService
     );
 
@@ -113,22 +116,21 @@ class DynamicPlanAppenderTest {
                 .sourceUrls(List.of("https://example.com/evidence"))
                 .evidenceState(EvidenceState.FULL_SOURCE)
                 .build();
-        DynamicPlanAppender guardedAppender = new DynamicPlanAppender(
-                taskRepository,
-                nodeRepository,
-                dynamicTaskGraphService,
-                taskPlanRepository,
-                objectMapper,
-                orchestrationDecisionService,
-                new DecisionPolicyService(new OrchestrationDecisionActionMatrix()),
-                new DecisionExecutorAdapter(objectMapper),
-                orchestrationTraceService);
-
         when(taskRepository.findById(51L)).thenReturn(Optional.of(task));
         when(taskPlanRepository.findById(10L)).thenReturn(Optional.of(parentPlan));
-        when(orchestrationDecisionService.decide(any())).thenReturn(List.of(decision));
+        DecisionPolicyResult policy = new DecisionPolicyService(new OrchestrationDecisionActionMatrix())
+                .evaluate(decision, cn.bugstack.competitoragent.orchestration.DecisionPolicyRuleSet.builder().build(),
+                        0, AnalysisTaskStatus.STOPPED.name(), TaskNodeStatus.SUCCESS.name());
+        DynamicPlanMutation mutation = new DecisionExecutorAdapter(objectMapper)
+                .toMutation(decision, policy, 10L, 2);
+        OrchestrationRuntimeDecision rejected = new OrchestrationRuntimeDecision(
+                decision, policy, mutation, false,
+                OrchestrationRuntimeDecision.POLICY_REJECTED, List.of());
+        when(runtimeDecisionService.decide(any(), eq(AnalysisTaskStatus.STOPPED.name()),
+                eq(TaskNodeStatus.SUCCESS.name())))
+                .thenReturn(batch(List.of(rejected), List.of(rejected), 10L, 2));
 
-        boolean appended = guardedAppender.maybeAppendDynamicPlan(
+        boolean appended = appender.maybeAppendDynamicPlan(
                 51L,
                 new ArrayList<>(List.of(completedNode)),
                 new LinkedHashMap<>(Map.of(completedNode.getNodeName(), completedNode)),
@@ -138,11 +140,12 @@ class DynamicPlanAppenderTest {
         verify(orchestrationTraceService).recordDecision(
                 eq(51L),
                 eq(completedNode),
-                eq(decision),
-                argThat(policy -> !policy.isAllowed()
-                        && policy.getBlockedReasons().contains(
-                        "INVALID_DECISION_ACTION_PAIR: REWRITE_ONLY 不允许搭配 SUPPLEMENT_EVIDENCE")),
-                argThat(mutation -> "NO_MUTATION".equals(mutation.getMutationType())));
+                argThat(recordedDecision -> "od-invalid-llm-appender".equals(recordedDecision.getDecisionId())
+                        && recordedDecision.getDecisionOrigin() == OrchestrationDecisionOrigin.LLM_PRIMARY),
+                argThat(recordedPolicy -> !recordedPolicy.isAllowed()
+                        && recordedPolicy.getBlockedReasons().contains(
+                                "INVALID_DECISION_ACTION_PAIR: REWRITE_ONLY 不允许搭配 SUPPLEMENT_EVIDENCE")),
+                argThat(recordedMutation -> "NO_MUTATION".equals(recordedMutation.getMutationType())));
         verify(dynamicTaskGraphService, never()).createDynamicPlan(
                 any(), any(), any(DynamicPlanMutation.class), any());
         verify(nodeRepository, never()).saveAll(any());
@@ -213,6 +216,7 @@ class DynamicPlanAppenderTest {
                 .affectedScope("CURRENT_SECTION_ONLY")
                 .priority("HIGH")
                 .confidence(0.92d)
+                .decisionOrigin(OrchestrationDecisionOrigin.RULE_FALLBACK)
                 .inputRefs(Map.of("qualityDiagnosisIds", List.of("qd-quality_check_final-1")))
                 .suggestedQueries(List.of("Notion AI pricing official"))
                 .sourceUrls(List.of("https://www.notion.so/pricing"))
@@ -284,10 +288,33 @@ class DynamicPlanAppenderTest {
         when(taskRepository.findById(50L)).thenReturn(Optional.of(task));
         when(taskRepository.save(any(AnalysisTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(taskPlanRepository.findById(8L)).thenReturn(Optional.of(parentPlan));
-        when(orchestrationDecisionService.decide(any())).thenReturn(List.of(decision));
-        when(decisionPolicyService.evaluate(eq(decision), any(), eq(0), eq(AnalysisTaskStatus.STOPPED.name()), eq(TaskNodeStatus.SUCCESS.name())))
-                .thenReturn(policyResult);
-        when(decisionExecutorAdapter.toMutation(decision, policyResult, 8L, 2)).thenReturn(mutation);
+        OrchestrationRuntimeDecision ready = new OrchestrationRuntimeDecision(
+                decision, policyResult, mutation, true, OrchestrationRuntimeDecision.READY, List.of());
+        OrchestrationDecision primaryDecision = decision.toBuilder()
+                .decisionId("od-primary-not-final")
+                .decisionOrigin(OrchestrationDecisionOrigin.LLM_PRIMARY)
+                .build()
+                .normalized();
+        DecisionPolicyResult primaryPolicy = policyResult.toBuilder()
+                .decisionId("od-primary-not-final")
+                .decisionOrigin(OrchestrationDecisionOrigin.LLM_PRIMARY)
+                .build()
+                .normalized();
+        DynamicPlanMutation primaryMutation = mutation.toBuilder()
+                .mutationId("dpm-od-primary-not-final")
+                .decisionId("od-primary-not-final")
+                .build()
+                .normalized();
+        OrchestrationRuntimeDecision primaryAttempt = new OrchestrationRuntimeDecision(
+                primaryDecision,
+                primaryPolicy,
+                primaryMutation,
+                false,
+                OrchestrationRuntimeDecision.READY,
+                List.of());
+        when(runtimeDecisionService.decide(any(), eq(AnalysisTaskStatus.STOPPED.name()),
+                eq(TaskNodeStatus.SUCCESS.name())))
+                .thenReturn(batch(List.of(primaryAttempt, ready), List.of(ready), 8L, 2));
         when(dynamicTaskGraphService.createDynamicPlan(eq(parentPlan), eq(completedNode), eq(mutation), any()))
                 .thenReturn(derivedPlan);
         when(nodeRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -299,17 +326,39 @@ class DynamicPlanAppenderTest {
         boolean appended = appender.maybeAppendDynamicPlan(50L, nodes, nodeMap, completedNode);
 
         assertThat(appended).isTrue();
-        verify(orchestrationDecisionService).decide(any());
-        verify(decisionPolicyService).evaluate(eq(decision), any(), eq(0), eq(AnalysisTaskStatus.STOPPED.name()), eq(TaskNodeStatus.SUCCESS.name()));
-        verify(decisionExecutorAdapter).toMutation(decision, policyResult, 8L, 2);
-        verify(orchestrationTraceService).recordDecision(50L, completedNode, decision, policyResult, mutation);
+        ArgumentCaptor<cn.bugstack.competitoragent.orchestration.OrchestrationContext> contextCaptor =
+                ArgumentCaptor.forClass(cn.bugstack.competitoragent.orchestration.OrchestrationContext.class);
+        verify(runtimeDecisionService).decide(
+                contextCaptor.capture(),
+                eq(AnalysisTaskStatus.STOPPED.name()),
+                eq(TaskNodeStatus.SUCCESS.name()));
+        assertThat(contextCaptor.getValue().getTaskStatus()).isEqualTo(AnalysisTaskStatus.STOPPED.name());
+        assertThat(contextCaptor.getValue().getSourceUrls())
+                .containsExactly("https://www.notion.so/pricing");
+        verify(orchestrationTraceService).recordDecision(
+                eq(50L),
+                eq(completedNode),
+                argThat(recordedDecision -> "od-001".equals(recordedDecision.getDecisionId())),
+                argThat(recordedPolicy -> recordedPolicy.isAllowed()
+                        && "CREATE_SUPPLEMENT_BRANCH".equals(recordedPolicy.getNormalizedAction())),
+                argThat(recordedMutation -> "APPEND_NODES".equals(recordedMutation.getMutationType())));
+        verify(orchestrationTraceService).recordDecision(
+                eq(50L),
+                eq(completedNode),
+                argThat(recordedDecision -> "od-primary-not-final".equals(recordedDecision.getDecisionId())),
+                argThat(DecisionPolicyResult::isAllowed),
+                argThat(recordedMutation -> "dpm-od-primary-not-final".equals(recordedMutation.getMutationId())));
+        verify(dynamicTaskGraphService, never()).createDynamicPlan(
+                eq(parentPlan),
+                eq(completedNode),
+                eq(primaryMutation),
+                any());
         verify(orchestrationTraceService).recordCheckpoint(
                 eq(50L),
                 eq(completedNode),
                 eq(derivedPlan),
-                eq(decision),
-                eq(mutation),
-                any());
+                argThat(recordedDecision -> "od-001".equals(recordedDecision.getDecisionId())),
+                argThat(recordedMutation -> "dpm-od-001".equals(recordedMutation.getMutationId())));
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<TaskNode>> savedNodesCaptor = ArgumentCaptor.forClass(List.class);
@@ -320,5 +369,123 @@ class DynamicPlanAppenderTest {
         assertThat(task.getCurrentPlanVersionId()).isEqualTo(9L);
         assertThat(task.getCurrentPlanVersion()).isEqualTo(2);
         assertThat(nodeMap).containsKeys("collect_revision_evidence_v2_1", "rewrite_revision_patch_v2", "quality_check_revision_patch_v2");
+    }
+
+    @Test
+    void shouldMarkReviewerWaitingWhenFinalMutationRequiresConfirmation() throws Exception {
+        AnalysisTask task = AnalysisTask.builder()
+                .id(52L)
+                .status(AnalysisTaskStatus.RUNNING)
+                .currentPlanVersionId(12L)
+                .currentPlanVersion(1)
+                .build();
+        TaskNode completedNode = TaskNode.builder()
+                .taskId(52L)
+                .nodeName("quality_check_final")
+                .agentType(AgentType.REVIEWER)
+                .status(TaskNodeStatus.SUCCESS)
+                .planVersionId(12L)
+                .branchKey("root")
+                .outputData("""
+                        {"reviewStage":"final","passed":false,
+                        "requiresHumanIntervention":false,"summary":"需要确认补图"}
+                        """)
+                .build();
+        TaskPlan parentPlan = TaskPlan.builder()
+                .id(12L)
+                .taskId(52L)
+                .planVersion(1)
+                .branchKey("root")
+                .active(true)
+                .planSnapshot(objectMapper.writeValueAsString(WorkflowPlan.builder()
+                        .planVersionId(12L)
+                        .planVersion(1)
+                        .branchKey("root")
+                        .nodes(List.of())
+                        .build()))
+                .build();
+        OrchestrationDecision decision = OrchestrationDecision.builder()
+                .decisionId("od-confirm-appender")
+                .taskId(52L)
+                .triggerNodeName("quality_check_final")
+                .decisionType("APPEND_DYNAMIC_BRANCH")
+                .actionType("SUPPLEMENT_EVIDENCE")
+                .decisionOrigin(OrchestrationDecisionOrigin.RULE_ONLY)
+                .reason("策略要求人工确认")
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .sourceUrls(List.of())
+                .build();
+        DecisionPolicyResult policy = DecisionPolicyResult.builder()
+                .decisionId("od-confirm-appender")
+                .decisionOrigin(OrchestrationDecisionOrigin.RULE_ONLY)
+                .allowed(true)
+                .requiresConfirmation(true)
+                .normalizedAction("CREATE_SUPPLEMENT_BRANCH")
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build();
+        DynamicPlanMutation mutation = DynamicPlanMutation.builder()
+                .mutationId("dpm-od-confirm-appender")
+                .decisionId("od-confirm-appender")
+                .mutationType("MARK_WAITING_INTERVENTION")
+                .branchReason("POLICY_CONFIRMATION_REQUIRED")
+                .dynamicAction("MANUAL_ONLY")
+                .runtimeCommand("AWAIT_CONFIRMATION")
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build();
+        OrchestrationRuntimeDecision confirmation = new OrchestrationRuntimeDecision(
+                decision,
+                policy,
+                mutation,
+                false,
+                OrchestrationRuntimeDecision.CONFIRMATION_REQUIRED,
+                List.of());
+        when(taskRepository.findById(52L)).thenReturn(Optional.of(task));
+        when(taskPlanRepository.findById(12L)).thenReturn(Optional.of(parentPlan));
+        when(runtimeDecisionService.decide(any(), eq(AnalysisTaskStatus.RUNNING.name()),
+                eq(TaskNodeStatus.SUCCESS.name())))
+                .thenReturn(batch(List.of(confirmation), List.of(confirmation), 12L, 2));
+        when(nodeRepository.save(any(TaskNode.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        boolean appended = appender.maybeAppendDynamicPlan(
+                52L,
+                new ArrayList<>(List.of(completedNode)),
+                new LinkedHashMap<>(Map.of(completedNode.getNodeName(), completedNode)),
+                completedNode);
+
+        assertThat(appended).isFalse();
+        assertThat(completedNode.getStatus()).isEqualTo(TaskNodeStatus.WAITING_INTERVENTION);
+        assertThat(completedNode.getInterventionReason()).isEqualTo("策略要求人工确认");
+        verify(nodeRepository).save(completedNode);
+        verify(dynamicTaskGraphService, never()).createDynamicPlan(
+                any(), any(), any(DynamicPlanMutation.class), any());
+        verify(orchestrationTraceService, never()).recordCheckpoint(any(), any(), any(), any(), any());
+    }
+
+    private OrchestrationRuntimeDecisionBatch batch(List<OrchestrationRuntimeDecision> attempts,
+                                                    List<OrchestrationRuntimeDecision> finalDecisions,
+                                                    Long planVersionId,
+                                                    int nextPlanVersion) {
+        List<OrchestrationDecision> decisions = attempts.stream()
+                .map(OrchestrationRuntimeDecision::decision)
+                .filter(decision -> decision.getDecisionOrigin() != OrchestrationDecisionOrigin.RULE_FALLBACK)
+                .toList();
+        OrchestrationDecisionOutcome outcome = new OrchestrationDecisionOutcome(
+                OrchestratorDecisionMode.LLM_PRIMARY,
+                decisions,
+                List.of(),
+                OrchestrationShadowExecution.notRequested(List.of()),
+                null,
+                List.of());
+        OrchestrationRuntimeState state = new OrchestrationRuntimeState(
+                0,
+                Map.of(),
+                planVersionId,
+                nextPlanVersion,
+                OrchestrationRuntimeState.CheckpointStateStatus.ABSENT,
+                List.of());
+        return new OrchestrationRuntimeDecisionBatch(
+                outcome, state, attempts, finalDecisions, !attempts.equals(finalDecisions), List.of());
     }
 }

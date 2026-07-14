@@ -22,10 +22,11 @@ import cn.bugstack.competitoragent.orchestration.EvidenceState;
 import cn.bugstack.competitoragent.orchestration.ExtractorSuggestionAssembler;
 import cn.bugstack.competitoragent.orchestration.OrchestrationContext;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecision;
-import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionAdapter;
-import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionService;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionOrigin;
+import cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecision;
+import cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionBatch;
+import cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService;
 import cn.bugstack.competitoragent.orchestration.OrchestrationTraceService;
-import cn.bugstack.competitoragent.orchestration.RuleBasedOrchestratorDecisionBrain;
 import cn.bugstack.competitoragent.orchestration.WriterSuggestionAssembler;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
@@ -101,7 +102,7 @@ public class DagExecutor {
     private final AnalyzerSuggestionAssembler analyzerSuggestionAssembler;
     private final WriterSuggestionAssembler writerSuggestionAssembler;
     private final CitationSuggestionAssembler citationSuggestionAssembler;
-    private final OrchestrationDecisionService orchestrationDecisionService;
+    private final OrchestrationRuntimeDecisionService orchestrationRuntimeDecisionService;
     private final OrchestrationTraceService orchestrationTraceService;
     private final List<SharedNodeOutputProjector> sharedNodeOutputProjectors;
     private final CollectorEvidenceReadinessPolicy collectorEvidenceReadinessPolicy;
@@ -127,7 +128,7 @@ public class DagExecutor {
                        AnalyzerSuggestionAssembler analyzerSuggestionAssembler,
                        WriterSuggestionAssembler writerSuggestionAssembler,
                        CitationSuggestionAssembler citationSuggestionAssembler,
-                       OrchestrationDecisionService orchestrationDecisionService,
+                       OrchestrationRuntimeDecisionService orchestrationRuntimeDecisionService,
                        OrchestrationTraceService orchestrationTraceService,
                        List<SharedNodeOutputProjector> sharedNodeOutputProjectors) {
         this.nodeRepository = nodeRepository;
@@ -152,7 +153,7 @@ public class DagExecutor {
         this.analyzerSuggestionAssembler = analyzerSuggestionAssembler;
         this.writerSuggestionAssembler = writerSuggestionAssembler;
         this.citationSuggestionAssembler = citationSuggestionAssembler;
-        this.orchestrationDecisionService = orchestrationDecisionService;
+        this.orchestrationRuntimeDecisionService = orchestrationRuntimeDecisionService;
         this.orchestrationTraceService = orchestrationTraceService;
         this.sharedNodeOutputProjectors = sharedNodeOutputProjectors == null ? List.of() : List.copyOf(sharedNodeOutputProjectors);
         this.collectorEvidenceReadinessPolicy = new CollectorEvidenceReadinessPolicy(objectMapper);
@@ -176,7 +177,7 @@ public class DagExecutor {
                        ExtractorSuggestionAssembler extractorSuggestionAssembler,
                        AnalyzerSuggestionAssembler analyzerSuggestionAssembler,
                        WriterSuggestionAssembler writerSuggestionAssembler,
-                       OrchestrationDecisionService orchestrationDecisionService,
+                       OrchestrationRuntimeDecisionService orchestrationRuntimeDecisionService,
                        OrchestrationTraceService orchestrationTraceService,
                        List<SharedNodeOutputProjector> sharedNodeOutputProjectors) {
         this(nodeRepository,
@@ -199,7 +200,7 @@ public class DagExecutor {
                 analyzerSuggestionAssembler,
                 writerSuggestionAssembler,
                 new CitationSuggestionAssembler(objectMapper),
-                orchestrationDecisionService,
+                orchestrationRuntimeDecisionService,
                 orchestrationTraceService,
                 sharedNodeOutputProjectors);
     }
@@ -220,7 +221,7 @@ public class DagExecutor {
                        DynamicPlanAppender dynamicPlanAppender,
                        TaskQuotaCoordinator taskQuotaCoordinator,
                        ExtractorSuggestionAssembler extractorSuggestionAssembler,
-                       OrchestrationDecisionService orchestrationDecisionService,
+                       OrchestrationRuntimeDecisionService orchestrationRuntimeDecisionService,
                        OrchestrationTraceService orchestrationTraceService,
                        List<SharedNodeOutputProjector> sharedNodeOutputProjectors) {
         this(nodeRepository,
@@ -243,7 +244,7 @@ public class DagExecutor {
                 new AnalyzerSuggestionAssembler(objectMapper),
                 new WriterSuggestionAssembler(objectMapper),
                 new CitationSuggestionAssembler(objectMapper),
-                orchestrationDecisionService,
+                orchestrationRuntimeDecisionService,
                 orchestrationTraceService,
                 sharedNodeOutputProjectors);
     }
@@ -263,6 +264,7 @@ public class DagExecutor {
                        RuntimeEventEmitter runtimeEventEmitter,
                        DynamicPlanAppender dynamicPlanAppender,
                        TaskQuotaCoordinator taskQuotaCoordinator,
+                       OrchestrationRuntimeDecisionService orchestrationRuntimeDecisionService,
                        List<SharedNodeOutputProjector> sharedNodeOutputProjectors) {
         this(nodeRepository,
                 taskRepository,
@@ -284,9 +286,7 @@ public class DagExecutor {
                 new AnalyzerSuggestionAssembler(objectMapper),
                 new WriterSuggestionAssembler(objectMapper),
                 new CitationSuggestionAssembler(objectMapper),
-                new OrchestrationDecisionService(
-                        new RuleBasedOrchestratorDecisionBrain(
-                                new OrchestrationDecisionAdapter())),
+                orchestrationRuntimeDecisionService,
                 null,
                 sharedNodeOutputProjectors);
     }
@@ -305,7 +305,8 @@ public class DagExecutor {
                        RuntimeStateRefresher runtimeStateRefresher,
                        RuntimeEventEmitter runtimeEventEmitter,
                        DynamicPlanAppender dynamicPlanAppender,
-                       TaskQuotaCoordinator taskQuotaCoordinator) {
+                       TaskQuotaCoordinator taskQuotaCoordinator,
+                       OrchestrationRuntimeDecisionService orchestrationRuntimeDecisionService) {
         this(nodeRepository,
                 taskRepository,
                 agentCapabilityRegistry,
@@ -321,6 +322,7 @@ public class DagExecutor {
                 runtimeEventEmitter,
                 dynamicPlanAppender,
                 taskQuotaCoordinator,
+                orchestrationRuntimeDecisionService,
                 List.of());
     }
 
@@ -647,6 +649,7 @@ public class DagExecutor {
                 .planVersionId(completedNode.getPlanVersionId())
                 .branchKey(completedNode.getBranchKey())
                 .triggerNodeName(completedNode.getNodeName())
+                .taskStatus(resolveTaskStatus(taskId))
                 .passed(false)
                 .agentSuggestions(suggestions)
                 .sourceUrls(sourceUrls)
@@ -654,14 +657,21 @@ public class DagExecutor {
                 .inputSummary(completedNode.getNodeName() + " 输出后发现 AgentSuggestion，进入 Orchestrator 决策。")
                 .build()
                 .normalized();
-        List<OrchestrationDecision> decisions = orchestrationDecisionService.decide(orchestrationContext);
-        for (OrchestrationDecision decision : decisions) {
-            recordAgentDecisionTrace(taskId, completedNode, decision);
+        String taskStatus = orchestrationContext.getTaskStatus();
+        String triggerNodeStatus = completedNode.getStatus() == null ? null : completedNode.getStatus().name();
+        OrchestrationRuntimeDecisionBatch batch = orchestrationRuntimeDecisionService.decide(
+                orchestrationContext,
+                taskStatus,
+                triggerNodeStatus);
+        for (OrchestrationRuntimeDecision attempt : batch.attempts()) {
+            recordAgentDecisionTrace(taskId, completedNode, attempt);
         }
-        return decisions.stream()
-                .filter(decision -> "WAIT_FOR_HUMAN".equals(decision.getDecisionType()))
+        return batch.finalDecisions().stream()
+                .filter(this::isExecutableManualMutation)
                 .findFirst()
-                .map(decision -> markNodeWaitingForIntervention(completedNode, decision))
+                .map(runtimeDecision -> markNodeWaitingForIntervention(
+                        completedNode,
+                        runtimeDecision.decision()))
                 .orElse(completedNode);
     }
 
@@ -701,11 +711,42 @@ public class DagExecutor {
         return List.of();
     }
 
-    private void recordAgentDecisionTrace(Long taskId, TaskNode completedNode, OrchestrationDecision decision) {
-        if (orchestrationTraceService == null || decision == null) {
+    private void recordAgentDecisionTrace(Long taskId,
+                                          TaskNode completedNode,
+                                          OrchestrationRuntimeDecision runtimeDecision) {
+        if (orchestrationTraceService == null || runtimeDecision == null) {
             return;
         }
-        orchestrationTraceService.recordDecision(taskId, completedNode, decision, null, null);
+        orchestrationTraceService.recordDecision(
+                taskId,
+                completedNode,
+                runtimeDecision.decision(),
+                runtimeDecision.policyResult(),
+                runtimeDecision.mutation());
+    }
+
+    /**
+     * AgentSuggestion gate 只拥有暂停当前节点的权限。APPEND_NODES 由 DynamicPlanAppender 执行，
+     * NO_MUTATION 保持成功状态；任何 shadow 防御性输入都必须忽略，不能驱动节点状态。
+     */
+    private boolean isExecutableManualMutation(OrchestrationRuntimeDecision runtimeDecision) {
+        if (runtimeDecision == null || runtimeDecision.decision() == null) {
+            return false;
+        }
+        if (runtimeDecision.decision().getDecisionOrigin() == OrchestrationDecisionOrigin.LLM_SHADOW) {
+            log.warn("ignore unexpected shadow runtime decision in AgentSuggestion gate, decisionId={}",
+                    runtimeDecision.decision().getDecisionId());
+            return false;
+        }
+        return runtimeDecision.policyResult().isAllowed()
+                && "MARK_WAITING_INTERVENTION".equals(runtimeDecision.mutation().getMutationType());
+    }
+
+    private String resolveTaskStatus(Long taskId) {
+        return taskRepository.findById(taskId)
+                .map(AnalysisTask::getStatus)
+                .map(Enum::name)
+                .orElse(null);
     }
 
     private TaskNode markNodeWaitingForIntervention(TaskNode completedNode, OrchestrationDecision decision) {

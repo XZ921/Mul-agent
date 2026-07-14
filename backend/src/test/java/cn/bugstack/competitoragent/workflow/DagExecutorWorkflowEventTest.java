@@ -96,11 +96,10 @@ class DagExecutorWorkflowEventTest {
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
                         new ObjectMapper(),
-                        mock(OrchestrationDecisionService.class),
-                        mock(DecisionPolicyService.class),
-                        mock(DecisionExecutorAdapter.class),
+                        mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService.class),
                         mock(OrchestrationTraceService.class)),
-                mock(TaskQuotaCoordinator.class)
+                mock(TaskQuotaCoordinator.class),
+                mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService.class)
         );
 
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("workflow-event-test").build());

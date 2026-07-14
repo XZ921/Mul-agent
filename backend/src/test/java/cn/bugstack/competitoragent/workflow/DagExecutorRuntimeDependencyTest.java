@@ -40,8 +40,11 @@ class DagExecutorRuntimeDependencyTest {
                 .collect(Collectors.toSet());
 
         assertTrueContains(fieldNames, "agentCapabilityRegistry");
+        assertTrueContains(fieldNames, "orchestrationRuntimeDecisionService");
         assertFalse(fieldNames.contains("agents"),
                 "DagExecutor 不应回退为直接持有 List<Agent>");
+        assertFalse(fieldNames.contains("orchestrationDecisionService"),
+                "DagExecutor 不应再直接依赖兼容 Decision service");
     }
 
     @Test
@@ -73,11 +76,10 @@ class DagExecutorRuntimeDependencyTest {
                         mock(DynamicTaskGraphService.class),
                         mock(TaskPlanRepository.class),
                         new ObjectMapper(),
-                        mock(OrchestrationDecisionService.class),
-                        mock(DecisionPolicyService.class),
-                        mock(DecisionExecutorAdapter.class),
+                        mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService.class),
                         mock(OrchestrationTraceService.class)),
-                mock(TaskQuotaCoordinator.class)
+                mock(TaskQuotaCoordinator.class),
+                mock(cn.bugstack.competitoragent.orchestration.OrchestrationRuntimeDecisionService.class)
         );
 
         // 只要构造成功，就说明 DagExecutor 的运行时依赖已经稳定在 capability registry 上。

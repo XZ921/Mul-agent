@@ -321,6 +321,63 @@ class DecisionPolicyServiceTest {
     }
 
     @Test
+    void shouldBlockLlmRewriteWhenAutoDecisionLimitIsReached() {
+        OrchestrationDecision decision = OrchestrationDecision.builder()
+                .decisionId("od-llm-rewrite-limit")
+                .decisionOrigin(OrchestrationDecisionOrigin.LLM_PRIMARY)
+                .triggerNodeName("quality_check_final")
+                .decisionType("REWRITE_ONLY")
+                .actionType("REWRITE_CLAIM")
+                .targetNode("rewrite_report")
+                .affectedScope("CURRENT_NODE_ONLY")
+                .sourceUrls(List.of("https://example.com/evidence"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build();
+
+        DecisionPolicyResult result = service.evaluate(
+                decision,
+                DecisionPolicyRuleSet.builder().maxAutoDecisions(1).build(),
+                1,
+                "RUNNING",
+                "SUCCESS");
+
+        assertThat(result.getNormalizedAction()).isEqualTo("CREATE_REWRITE_BRANCH");
+        assertThat(result.isAllowed()).isFalse();
+        assertThat(result.getBlockedReasons()).contains("自动编排次数已达到上限：1/1");
+    }
+
+    @Test
+    void shouldAllowNoActionAndManualOnlyAfterAutoDecisionLimit() {
+        OrchestrationDecision noAction = OrchestrationDecision.builder()
+                .decisionId("od-limit-stop")
+                .decisionOrigin(OrchestrationDecisionOrigin.LLM_PRIMARY)
+                .triggerNodeName("quality_check_final")
+                .decisionType("NO_ACTION")
+                .actionType("NO_ACTION")
+                .targetNode("quality_check_final")
+                .affectedScope("CURRENT_NODE_ONLY")
+                .sourceUrls(List.of("https://example.com/evidence"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build();
+        OrchestrationDecision manual = noAction.toBuilder()
+                .decisionId("od-limit-manual")
+                .decisionType("WAIT_FOR_HUMAN")
+                .actionType("MANUAL_REVIEW")
+                .build();
+        DecisionPolicyRuleSet rules = DecisionPolicyRuleSet.builder().maxAutoDecisions(1).build();
+
+        DecisionPolicyResult noActionResult = service.evaluate(noAction, rules, 1, "RUNNING", "SUCCESS");
+        DecisionPolicyResult manualResult = service.evaluate(manual, rules, 1, "RUNNING", "SUCCESS");
+
+        assertThat(noActionResult.getNormalizedAction()).isEqualTo("NO_ACTION");
+        assertThat(noActionResult.isAllowed()).isTrue();
+        assertThat(manualResult.getNormalizedAction()).isEqualTo("MANUAL_ONLY");
+        assertThat(manualResult.isAllowed()).isTrue();
+        assertThat(noActionResult.getBlockedReasons()).noneMatch(reason -> reason.startsWith("自动编排次数已达到上限"));
+        assertThat(manualResult.getBlockedReasons()).noneMatch(reason -> reason.startsWith("自动编排次数已达到上限"));
+    }
+
+    @Test
     void shouldElevateRewriteOnlyDecisionWhenSourceIsMissing() {
         OrchestrationDecision decision = OrchestrationDecision.builder()
                 .decisionId("od-005")

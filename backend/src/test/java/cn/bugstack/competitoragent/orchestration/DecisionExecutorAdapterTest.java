@@ -170,4 +170,59 @@ class DecisionExecutorAdapterTest {
                 .contains("\"preferredDomains\":[\"open.douyin.com\"]")
                 .contains("\"includeDomains\":[\"open.douyin.com\"]");
     }
+
+    @Test
+    void shouldTurnConfirmationIntoRealWaitingMutationBeforeAutomaticAction() {
+        OrchestrationDecision decision = OrchestrationDecision.builder()
+                .decisionId("od-confirm")
+                .triggerNodeName("quality_check_final")
+                .decisionType("APPEND_DYNAMIC_BRANCH")
+                .actionType("SUPPLEMENT_EVIDENCE")
+                .sourceUrls(List.of("https://example.com/evidence"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build();
+        DecisionPolicyResult policy = DecisionPolicyResult.builder()
+                .decisionId("od-confirm")
+                .allowed(true)
+                .requiresConfirmation(true)
+                .normalizedAction("CREATE_SUPPLEMENT_BRANCH")
+                .sourceUrls(List.of("https://example.com/evidence"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build();
+
+        DynamicPlanMutation mutation = adapter.toMutation(decision, policy, 8L, 2);
+
+        assertThat(mutation.getMutationType()).isEqualTo("MARK_WAITING_INTERVENTION");
+        assertThat(mutation.getRuntimeCommand()).isEqualTo("AWAIT_CONFIRMATION");
+        assertThat(mutation.getBranchReason()).isEqualTo("POLICY_CONFIRMATION_REQUIRED");
+        assertThat(mutation.getDynamicAction()).isEqualTo("MANUAL_ONLY");
+        assertThat(mutation.getNodeTemplates()).isEmpty();
+        assertThat(mutation.getSourceUrls()).containsExactly("https://example.com/evidence");
+        assertThat(mutation.getEvidenceState()).isEqualTo(EvidenceState.FULL_SOURCE);
+    }
+
+    @Test
+    void shouldKeepOrdinaryManualReviewDistinctFromPolicyConfirmation() {
+        OrchestrationDecision decision = OrchestrationDecision.builder()
+                .decisionId("od-manual")
+                .decisionType("WAIT_FOR_HUMAN")
+                .actionType("MANUAL_REVIEW")
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build();
+        DecisionPolicyResult policy = DecisionPolicyResult.builder()
+                .decisionId("od-manual")
+                .allowed(true)
+                .requiresConfirmation(false)
+                .normalizedAction("MANUAL_ONLY")
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build();
+
+        DynamicPlanMutation mutation = adapter.toMutation(decision, policy, 8L, 2);
+
+        assertThat(mutation.getMutationType()).isEqualTo("MARK_WAITING_INTERVENTION");
+        assertThat(mutation.getRuntimeCommand()).isEqualTo("MANUAL_REVIEW");
+        assertThat(mutation.getBranchReason()).isEqualTo("ORCHESTRATOR_DECISION");
+    }
 }

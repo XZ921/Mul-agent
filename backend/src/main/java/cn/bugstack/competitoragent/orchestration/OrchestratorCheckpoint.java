@@ -9,6 +9,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Orchestrator 运行期恢复游标。
@@ -30,6 +32,8 @@ public class OrchestratorCheckpoint {
     private List<String> pendingActions = List.of();
     private int decisionCount;
     private int maxAutoDecisions;
+    @Builder.Default
+    private Map<String, Integer> dynamicBranchCountsBySection = Map.of();
     private String resumeAfterNodeName;
     private String resumeReason;
     @Builder.Default
@@ -47,6 +51,7 @@ public class OrchestratorCheckpoint {
                 .pendingActions(normalizeDistinctList(pendingActions))
                 .decisionCount(Math.max(0, decisionCount))
                 .maxAutoDecisions(Math.max(0, maxAutoDecisions))
+                .dynamicBranchCountsBySection(normalizeSectionCounts(dynamicBranchCountsBySection))
                 .sourceUrls(normalizeDistinctList(sourceUrls))
                 .evidenceState(resolveEvidenceState())
                 .createdAt(createdAt == null ? now : createdAt)
@@ -74,6 +79,22 @@ public class OrchestratorCheckpoint {
             }
         }
         return new ArrayList<>(normalized);
+    }
+
+    /**
+     * checkpoint section 计数使用与 Runtime State 相同的稳定键，并保存不可变副本。
+     * 历史 payload 缺少该字段时按空 map 兼容，负数只在 DTO 内归零，读取服务仍会标记原始 payload 不可读。
+     */
+    private Map<String, Integer> normalizeSectionCounts(Map<String, Integer> values) {
+        Map<String, Integer> normalized = new LinkedHashMap<>();
+        if (values != null) {
+            for (Map.Entry<String, Integer> entry : values.entrySet()) {
+                String key = OrchestrationRuntimeState.normalizeSectionKey(entry.getKey());
+                int count = Math.max(0, entry.getValue() == null ? 0 : entry.getValue());
+                normalized.merge(key, count, Math::max);
+            }
+        }
+        return Map.copyOf(normalized);
     }
 
     private String blankToNull(String value) {

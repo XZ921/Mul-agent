@@ -2,18 +2,14 @@ package cn.bugstack.competitoragent.orchestration;
 
 import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.entity.TaskPlan;
-import cn.bugstack.competitoragent.model.entity.TaskWorkflowEvent;
 import cn.bugstack.competitoragent.model.enums.AgentType;
-import cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventPublisher;
 import cn.bugstack.competitoragent.workflow.event.WorkflowEventType;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,11 +23,11 @@ class OrchestrationTraceServiceTest {
     @Test
     void shouldTraceOriginalInvalidLlmPairAndStablePolicyReason() {
         WorkflowEventPublisher publisher = mock(WorkflowEventPublisher.class);
-        TaskWorkflowEventRepository repository = mock(TaskWorkflowEventRepository.class);
+        OrchestrationRuntimeStateService runtimeStateService = mock(OrchestrationRuntimeStateService.class);
         OrchestrationTraceService service = new OrchestrationTraceService(
                 publisher,
-                repository,
-                new ObjectMapper().findAndRegisterModules());
+                runtimeStateService,
+                DecisionPolicyRuleSet.builder().build().normalized());
         TaskNode triggerNode = TaskNode.builder()
                 .taskId(60L)
                 .nodeName("quality_check_final")
@@ -84,9 +80,11 @@ class OrchestrationTraceServiceTest {
     @Test
     void shouldRecordDecisionAndCheckpointWithIncrementalDecisionCount() {
         WorkflowEventPublisher publisher = mock(WorkflowEventPublisher.class);
-        TaskWorkflowEventRepository repository = mock(TaskWorkflowEventRepository.class);
-        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
-        OrchestrationTraceService service = new OrchestrationTraceService(publisher, repository, objectMapper);
+        OrchestrationRuntimeStateService runtimeStateService = mock(OrchestrationRuntimeStateService.class);
+        OrchestrationTraceService service = new OrchestrationTraceService(
+                publisher,
+                runtimeStateService,
+                DecisionPolicyRuleSet.builder().maxAutoDecisions(2).build().normalized());
         TaskNode triggerNode = TaskNode.builder()
                 .taskId(50L)
                 .nodeName("quality_check_final")
@@ -124,17 +122,14 @@ class OrchestrationTraceServiceTest {
                 .sourceUrls(List.of())
                 .evidenceState(EvidenceState.MISSING_SOURCE)
                 .build();
-        TaskWorkflowEvent previousCheckpointEvent = TaskWorkflowEvent.builder()
-                .taskId(50L)
-                .branchKey("root/review-2")
-                .eventType(WorkflowEventType.ORCHESTRATION_CHECKPOINT_UPDATED)
-                .payload("{\"checkpoint\":{\"decisionCount\":1}}")
-                .sourceUrls("[]")
-                .build();
-        when(repository.findFirstByTaskIdAndEventTypeOrderByCreatedAtDesc(
-                50L,
-                WorkflowEventType.ORCHESTRATION_CHECKPOINT_UPDATED))
-                .thenReturn(Optional.of(previousCheckpointEvent));
+        OrchestrationRuntimeState currentState = new OrchestrationRuntimeState(
+                1, Map.of(), 8L, 2,
+                OrchestrationRuntimeState.CheckpointStateStatus.RESTORED, List.of());
+        OrchestrationRuntimeState nextState = new OrchestrationRuntimeState(
+                2, Map.of(OrchestrationRuntimeState.UNSCOPED_SECTION, 1), 8L, 2,
+                OrchestrationRuntimeState.CheckpointStateStatus.RESTORED, List.of());
+        when(runtimeStateService.load(50L)).thenReturn(currentState);
+        when(runtimeStateService.afterSuccessfulBranch(currentState, decision)).thenReturn(nextState);
 
         service.recordDecision(50L, triggerNode, decision, policyResult, mutation);
         service.recordCheckpoint(
@@ -142,8 +137,7 @@ class OrchestrationTraceServiceTest {
                 triggerNode,
                 TaskPlan.builder().id(9L).planVersion(2).branchKey("root/review-2").build(),
                 decision,
-                mutation,
-                DecisionPolicyRuleSet.builder().maxAutoDecisions(2).build());
+                mutation);
 
         ArgumentCaptor<Map<String, Object>> decisionPayloadCaptor = ArgumentCaptor.forClass(Map.class);
         verify(publisher).publishOrchestrationEvent(
@@ -179,6 +173,8 @@ class OrchestrationTraceServiceTest {
         OrchestratorCheckpoint checkpoint = (OrchestratorCheckpoint) checkpointPayloadCaptor.getValue().get("checkpoint");
         assertThat(checkpoint.getDecisionCount()).isEqualTo(2);
         assertThat(checkpoint.getMaxAutoDecisions()).isEqualTo(2);
+        assertThat(checkpoint.getDynamicBranchCountsBySection())
+                .containsEntry(OrchestrationRuntimeState.UNSCOPED_SECTION, 1);
         assertThat(checkpoint.getPendingActions()).containsExactly("WAITING_FOR_SUPPLEMENT_RESULT");
         assertThat(checkpoint.getResumeAfterNodeName()).isEqualTo("collect_revision_evidence_v2_1");
     }

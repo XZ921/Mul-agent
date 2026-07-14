@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * 编排决策策略服务。
@@ -14,6 +15,11 @@ import java.util.Locale;
  */
 @Service
 public class DecisionPolicyService {
+
+    private static final Set<String> AUTOMATIC_MUTATION_ACTIONS = Set.of(
+            "CREATE_SUPPLEMENT_BRANCH",
+            "CREATE_RERUN_BRANCH",
+            "CREATE_REWRITE_BRANCH");
 
     private final OrchestrationDecisionActionMatrix actionMatrix;
 
@@ -91,7 +97,10 @@ public class DecisionPolicyService {
         } else {
             ruleRefs.add("maxSearchQueriesPerDecision");
         }
-        if (currentDecisionCount >= rules.getMaxAutoDecisions()) {
+        // 总次数额度只约束会改变计划图的自动动作。NO_ACTION 与 MANUAL_ONLY 是安全停止路径，
+        // 即使额度已耗尽也必须允许，否则模型既不能停止，也不能把控制权交还人工。
+        if (AUTOMATIC_MUTATION_ACTIONS.contains(normalizedAction)
+                && currentDecisionCount >= rules.getMaxAutoDecisions()) {
             blockedReasons.add("自动编排次数已达到上限：" + currentDecisionCount + "/" + rules.getMaxAutoDecisions());
         }
         if (rules.getBlockedTaskStatuses().contains(normalizeStatus(taskStatus))) {
