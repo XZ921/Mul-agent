@@ -52,6 +52,21 @@ import static org.mockito.Mockito.when;
  */
 class TaskReplayProjectionServiceTest {
 
+    /** 冻结 fixture 同时服务写侧、report 和 replay，避免消费方各自手构一套看似相同的 V2 JSON。 */
+    private JsonNode v2FixturePayload(String caseId) throws Exception {
+        try (var input = getClass().getResourceAsStream(
+                "/orchestration/orchestration-trace-v2-fixtures.json")) {
+            assertThat(input).as("V2 trace fixture must exist").isNotNull();
+            JsonNode root = new ObjectMapper().readTree(input);
+            for (JsonNode fixtureCase : root.path("cases")) {
+                if (caseId.equals(fixtureCase.path("caseId").asText())) {
+                    return fixtureCase.path("payload");
+                }
+            }
+        }
+        throw new IllegalArgumentException("unknown V2 trace fixture case: " + caseId);
+    }
+
     @Test
     void shouldExposeOrchestrationDecisionEventsInReplayTimeline() {
         TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
@@ -298,7 +313,7 @@ class TaskReplayProjectionServiceTest {
     }
 
     @Test
-    void shouldProjectStructuredOrchestrationDecisionIntoReplayMainPath() {
+    void shouldProjectStructuredOrchestrationDecisionIntoReplayMainPath() throws Exception {
         TaskPlanRepository taskPlanRepository = mock(TaskPlanRepository.class);
         TaskWorkflowEventRepository taskWorkflowEventRepository = mock(TaskWorkflowEventRepository.class);
         TaskNodeRepository taskNodeRepository = mock(TaskNodeRepository.class);
@@ -308,40 +323,32 @@ class TaskReplayProjectionServiceTest {
         RecoveryCheckpointService recoveryCheckpointService = mock(RecoveryCheckpointService.class);
         TaskRecoveryService taskRecoveryService = mock(TaskRecoveryService.class);
 
+        JsonNode primaryPayload = v2FixturePayload("llm-policy-rejected-rule-fallback");
         TaskWorkflowEvent decisionEvent = TaskWorkflowEvent.builder()
                 .id(3301L)
                 .eventId("evt-review-3301")
                 .taskId(120L)
                 .nodeName("quality_check_final")
                 .eventType(WorkflowEventType.ORCHESTRATION_DECISION_RECORDED)
-                .payload("""
-                        {
-                          "decision": {
-                            "decisionId": "od-120-review",
-                            "triggerNodeName": "quality_check_final",
-                            "decisionOrigin": "RULE_FALLBACK",
-                            "decisionMetadata": {
-                              "fallbackUsed": true,
-                              "fallbackReason": "LLM_TIMEOUT"
-                            },
-                            "decisionType": "WAIT_FOR_HUMAN",
-                            "actionType": "MANUAL_REVIEW",
-                            "reason": "终审阻塞，等待人工补证",
-                            "evidenceState": "MISSING_SOURCE",
-                            "sourceUrls": ["https://docs.example.com/replay-gap"]
-                          },
-                          "policyResult": {
-                            "decisionContract": "LEGACY_RULE_SET"
-                          }
-                        }
-                        """)
-                .sourceUrls("[\"https://docs.example.com/replay-gap\"]")
+                .payload(primaryPayload.toString())
+                .sourceUrls(primaryPayload.path("sourceUrls").toString())
                 .createdAt(LocalDateTime.of(2026, 6, 26, 18, 0))
+                .build();
+        JsonNode shadowPayload = v2FixturePayload("shadow-budget-skipped-without-decision");
+        TaskWorkflowEvent shadowEvent = TaskWorkflowEvent.builder()
+                .id(3302L)
+                .eventId("evt-shadow-3302")
+                .taskId(120L)
+                .nodeName("quality_check_final")
+                .eventType(WorkflowEventType.ORCHESTRATION_DECISION_RECORDED)
+                .payload(shadowPayload.toString())
+                .sourceUrls(shadowPayload.path("sourceUrls").toString())
+                .createdAt(LocalDateTime.of(2026, 6, 26, 18, 1))
                 .build();
 
         when(taskPlanRepository.findByTaskIdOrderByPlanVersionAsc(120L)).thenReturn(List.of());
         when(taskPlanRepository.findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(120L)).thenReturn(Optional.empty());
-        when(taskWorkflowEventRepository.findAll()).thenReturn(List.of(decisionEvent));
+        when(taskWorkflowEventRepository.findAll()).thenReturn(List.of(decisionEvent, shadowEvent));
         when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(120L)).thenReturn(List.of());
         when(taskNodeExecutionAttemptRepository.findAll()).thenReturn(List.of());
         when(memorySnapshotRepository.findByTaskIdOrderByIdDesc(120L)).thenReturn(List.of());
@@ -367,9 +374,22 @@ class TaskReplayProjectionServiceTest {
         assertThat(payload.at("/latestOrchestrationDecision/decisionType").asText()).isEqualTo("WAIT_FOR_HUMAN");
         assertThat(payload.at("/latestOrchestrationDecision/decisionOrigin").asText()).isEqualTo("RULE_FALLBACK");
         assertThat(payload.at("/latestOrchestrationDecision/decisionContract").asText()).isEqualTo("LEGACY_RULE_SET");
-        assertThat(payload.at("/latestOrchestrationDecision/fallbackReason").asText()).isEqualTo("LLM_TIMEOUT");
-        assertThat(payload.at("/latestOrchestrationDecision/evidenceState").asText()).isEqualTo("MISSING_SOURCE");
-        assertThat(payload.at("/timeline/0/orchestrationDecision/decisionId").asText()).isEqualTo("od-120-review");
+        assertThat(payload.at("/latestOrchestrationDecision/fallbackReason").asText())
+                .isEqualTo("PARSE_ERROR:INVALID_DECISION_ACTION_PAIR");
+        assertThat(payload.at("/latestOrchestrationDecision/evidenceState").asText()).isEqualTo("PARTIAL_SOURCE");
+        assertThat(payload.at("/timeline/0/orchestrationDecision/decisionId").asText())
+                .isEqualTo("od-801-rule-fallback");
+        assertThat(payload.at("/timeline/0/orchestrationDecisionAudit/attempts")).hasSize(2);
+        assertThat(payload.at("/timeline/1/orchestrationDecision").isNull()).isTrue();
+        assertThat(payload.at("/timeline/1/orchestrationDecisionAudit/mode").asText()).isEqualTo("LLM_SHADOW");
+        assertThat(payload.at("/latestOrchestrationDecisionAudit/mode").asText()).isEqualTo("LLM_SHADOW");
+        assertThat(payload.at("/latestOrchestrationDecisionAudit/shadowExecution/skippedReason").asText())
+                .isEqualTo("SHADOW_BUDGET_EXHAUSTED");
+        assertThat(payload.at("/sourceUrls").toString())
+                .contains("https://docs.example.com/review-gap")
+                .contains("https://docs.example.com/checkpoint")
+                .contains("https://docs.example.com/shadow-context")
+                .doesNotContain("https://untrusted.example.net/outside");
         assertThat(payload.at("/timeline/0/summary").asText()).contains("WAIT_FOR_HUMAN");
     }
 

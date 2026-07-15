@@ -46,6 +46,18 @@ public class OrchestrationDecisionSummary {
     private String reason;
     private boolean requiresHumanIntervention;
     private Boolean requiresConfirmation;
+    private Boolean policyAllowed;
+    @Builder.Default
+    private List<String> policyBlockedReasons = List.of();
+    private String normalizedAction;
+    private String riskLevel;
+    private String policyVersion;
+    private String runtimeStatus;
+    private boolean fallbackAttempt;
+    private String mutationType;
+    private String mutationBranchReason;
+    private String mutationDynamicAction;
+    private String expectedResumeNodeName;
     private String evidenceState;
     @Builder.Default
     private List<String> sourceUrls = List.of();
@@ -98,6 +110,18 @@ public class OrchestrationDecisionSummary {
                 .reason(blankToDefault(reason, "当前协作决策缺少明确原因说明。"))
                 .requiresHumanIntervention(requiresHumanIntervention || "WAIT_FOR_HUMAN".equals(normalizedDecisionType))
                 .requiresConfirmation(normalizedRequiresConfirmation)
+                // 历史事件缺少 Policy/runtime 字段时必须保留 unknown，不能默认成 rejected 或 READY。
+                .policyAllowed(policyAllowed)
+                .policyBlockedReasons(normalizeDistinct(policyBlockedReasons))
+                .normalizedAction(upperOrNull(normalizedAction))
+                .riskLevel(upperOrNull(riskLevel))
+                .policyVersion(blankToNull(policyVersion))
+                .runtimeStatus(upperOrNull(runtimeStatus))
+                .fallbackAttempt(fallbackAttempt)
+                .mutationType(upperOrNull(mutationType))
+                .mutationBranchReason(upperOrNull(mutationBranchReason))
+                .mutationDynamicAction(upperOrNull(mutationDynamicAction))
+                .expectedResumeNodeName(blankToNull(expectedResumeNodeName))
                 .evidenceState(normalizedEvidenceState)
                 .sourceUrls(normalizedSourceUrls)
                 .build();
@@ -119,6 +143,11 @@ public class OrchestrationDecisionSummary {
     private String upperOrDefault(String value, String fallback) {
         String normalized = blankToNull(value);
         return normalized == null ? fallback : normalized.toUpperCase(Locale.ROOT);
+    }
+
+    private String upperOrNull(String value) {
+        String normalized = blankToNull(value);
+        return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
     }
 
     private String blankToDefault(String value, String fallback) {

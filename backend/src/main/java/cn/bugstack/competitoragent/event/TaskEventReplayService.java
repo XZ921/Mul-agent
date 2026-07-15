@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.event;
 
+import cn.bugstack.competitoragent.model.dto.OrchestrationDecisionAuditSummary;
 import cn.bugstack.competitoragent.model.dto.OrchestrationDecisionSummary;
 import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionSummaryProjector;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
@@ -49,6 +50,8 @@ public class TaskEventReplayService {
         TaskStreamEvent snapshotEvent = snapshotOptional.map(this::toSnapshotEvent).orElse(null);
         List<TaskStreamEvent> recentEvents = taskSseHub.getRecentEvents(taskId);
         List<TaskStreamEvent> replayEvents = resolveReplayEvents(recentEvents, taskId, lastCursor);
+        OrchestrationReplayProjection orchestrationProjection =
+                resolveLatestOrchestrationProjection(recentEvents);
         String resumeCursor = TaskEventCursor.parse(lastCursor)
                 .filter(cursor -> cursor.taskId().equals(taskId))
                 .map(cursor -> lastCursor)
@@ -58,7 +61,8 @@ public class TaskEventReplayService {
                 .resumeCursor(resumeCursor)
                 .snapshotEvent(snapshotEvent)
                 .replayEvents(replayEvents)
-                .latestOrchestrationDecision(resolveLatestOrchestrationDecision(recentEvents))
+                .latestOrchestrationDecision(orchestrationProjection.representativeDecision())
+                .latestOrchestrationDecisionAudit(orchestrationProjection.auditSummary())
                 .build();
     }
 
@@ -80,15 +84,20 @@ public class TaskEventReplayService {
      * SSE replay 当前不重建完整的编排 runtime 语义，
      * 只从最近事件里提取“最后一条可解释的协作决策摘要”，供前端恢复后快速说明当前阻塞点。
      */
-    private OrchestrationDecisionSummary resolveLatestOrchestrationDecision(List<TaskStreamEvent> replayEvents) {
+    private OrchestrationReplayProjection resolveLatestOrchestrationProjection(List<TaskStreamEvent> replayEvents) {
         OrchestrationDecisionSummary latestDecision = null;
+        OrchestrationDecisionAuditSummary latestAudit = null;
         for (TaskStreamEvent replayEvent : replayEvents) {
-            OrchestrationDecisionSummary decision = extractDecisionSummary(replayEvent);
-            if (decision != null) {
-                latestDecision = decision;
+            OrchestrationDecisionAuditSummary audit = extractDecisionAudit(replayEvent);
+            if (audit != null) {
+                // audit 始终跟随最新周期；代表决策仅在主路径真实存在时更新，绝不提升 shadow candidate。
+                latestAudit = audit;
+                if (audit.getRepresentativeDecision() != null) {
+                    latestDecision = audit.getRepresentativeDecision();
+                }
             }
         }
-        return latestDecision;
+        return new OrchestrationReplayProjection(latestDecision, latestAudit);
     }
 
     /**
@@ -96,17 +105,23 @@ public class TaskEventReplayService {
      * 如果事件明确带有 decisionType / actionType / evidenceState，就把它投影为稳定只读摘要；
      * 否则保持为空，避免把普通诊断事件误判成协作决策。
      */
-    private OrchestrationDecisionSummary extractDecisionSummary(TaskStreamEvent replayEvent) {
+    private OrchestrationDecisionAuditSummary extractDecisionAudit(TaskStreamEvent replayEvent) {
         if (replayEvent == null || replayEvent.getPayload() == null || replayEvent.getPayload().isEmpty()) {
             return null;
         }
-        return OrchestrationDecisionSummaryProjector.fromEventPayload(
+        return OrchestrationDecisionSummaryProjector.auditFromEventPayload(
                         replayEvent.getPayload(),
                         replayEvent.getTaskId(),
                         replayEvent.getNodeName(),
                         List.of(),
                         objectMapper)
                 .orElse(null);
+    }
+
+    /** SSE Map payload 对应的最近周期组合投影。 */
+    private record OrchestrationReplayProjection(
+            OrchestrationDecisionSummary representativeDecision,
+            OrchestrationDecisionAuditSummary auditSummary) {
     }
 
     /**
@@ -138,5 +153,6 @@ public class TaskEventReplayService {
         private TaskStreamEvent snapshotEvent;
         private List<TaskStreamEvent> replayEvents;
         private OrchestrationDecisionSummary latestOrchestrationDecision;
+        private OrchestrationDecisionAuditSummary latestOrchestrationDecisionAudit;
     }
 }

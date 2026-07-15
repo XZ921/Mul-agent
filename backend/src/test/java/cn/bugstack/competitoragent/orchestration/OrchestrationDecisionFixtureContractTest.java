@@ -19,7 +19,10 @@ class OrchestrationDecisionFixtureContractTest {
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private final OrchestrationDecisionActionMatrix actionMatrix = new OrchestrationDecisionActionMatrix();
     private final OrchestrationDecisionResponseParser parser =
-            new OrchestrationDecisionResponseParser(objectMapper, actionMatrix);
+            new OrchestrationDecisionResponseParser(
+                    objectMapper,
+                    actionMatrix,
+                    DecisionPolicyRuleSet.builder().build().normalized());
     private final OrchestrationDecisionPromptBuilder promptBuilder = new OrchestrationDecisionPromptBuilder(
             new PromptTemplateService(objectMapper), objectMapper, actionMatrix);
 

@@ -117,6 +117,10 @@ class OrchestrationDecisionSummaryProjectorTest {
 
         assertThat(summary.getDecisionOrigin()).isEqualTo("LEGACY_ADAPTER");
         assertThat(summary.getDecisionContract()).isEqualTo("LEGACY_RULE_SET");
+        assertThat(summary.getPolicyAllowed()).isNull();
+        assertThat(summary.getRuntimeStatus()).isNull();
+        assertThat(summary.getMutationType()).isNull();
+        assertThat(summary.getPolicyBlockedReasons()).isEmpty();
     }
 
     @Test

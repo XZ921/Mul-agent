@@ -43,6 +43,9 @@ public class DecisionPolicyRuleSet {
     /** 稳定演示版使用更保守的默认值 2，低于规格长期目标 5。 */
     @Builder.Default
     private int maxAutoDecisions = 2;
+    /** 单个决策周期最多接收 2 条候选，独立于跨周期自动执行额度。 */
+    @Builder.Default
+    private int maxDecisionsPerCycle = 2;
     /** 稳定演示版默认每个 section 只允许 1 条动态分支，避免演示任务发散。 */
     @Builder.Default
     private int maxDynamicBranchesPerSection = 1;
@@ -87,6 +90,8 @@ public class DecisionPolicyRuleSet {
                 .allowedDecisionTypes(normalizeUpperDistinctList(allowedDecisionTypes))
                 .allowedDynamicActions(normalizeUpperDistinctList(allowedDynamicActions))
                 .maxAutoDecisions(Math.max(0, maxAutoDecisions))
+                // 即使自动执行额度为 0，仍需允许模型返回一条 NO_ACTION 或人工决策，因此最小值固定为 1。
+                .maxDecisionsPerCycle(Math.max(1, maxDecisionsPerCycle))
                 .maxDynamicBranchesPerSection(Math.max(0, maxDynamicBranchesPerSection))
                 .maxSearchQueriesPerDecision(Math.max(0, maxSearchQueriesPerDecision))
                 .confirmationRequiredDecisionTypes(normalizeUpperDistinctList(confirmationRequiredDecisionTypes))

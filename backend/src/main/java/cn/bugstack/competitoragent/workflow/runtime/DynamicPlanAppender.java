@@ -106,15 +106,8 @@ public class DynamicPlanAppender {
                 taskStatus,
                 nodeStatus);
 
-        // attempts 包含原 LLM rejection 与 fallback 事实，必须全部留痕；执行侧只能查看 finalDecisions。
-        for (OrchestrationRuntimeDecision attempt : batch.attempts()) {
-            orchestrationTraceService.recordDecision(
-                    taskId,
-                    completedNode,
-                    attempt.decision(),
-                    attempt.policyResult(),
-                    attempt.mutation());
-        }
+        // 一个 batch 对应一个不可拆分的决策周期；原 LLM rejection、fallback、shadow 与 failure 必须原子留痕。
+        orchestrationTraceService.recordDecisionBatch(taskId, completedNode, batch);
         for (OrchestrationRuntimeDecision finalDecision : batch.finalDecisions()) {
             OrchestrationDecision decision = finalDecision.decision();
             DynamicPlanMutation mutation = finalDecision.mutation();

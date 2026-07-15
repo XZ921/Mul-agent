@@ -30,6 +30,7 @@ public class OrchestrationDecisionResponseParser {
     public static final String MISSING_REQUIRED_FIELD = "MISSING_REQUIRED_FIELD";
     public static final String INVALID_FIELD_TYPE = "INVALID_FIELD_TYPE";
     public static final String EMPTY_DECISIONS = "EMPTY_DECISIONS";
+    public static final String TOO_MANY_DECISIONS = "TOO_MANY_DECISIONS";
     public static final String UNKNOWN_DECISION_TYPE = "UNKNOWN_DECISION_TYPE";
     public static final String UNKNOWN_ACTION_TYPE = "UNKNOWN_ACTION_TYPE";
     public static final String INVALID_PRIORITY = "INVALID_PRIORITY";
@@ -70,15 +71,21 @@ public class OrchestrationDecisionResponseParser {
 
     private final ObjectMapper strictObjectMapper;
     private final OrchestrationDecisionActionMatrix actionMatrix;
+    private final DecisionPolicyRuleSet ruleSet;
     private final Set<String> allowedDecisionTypes;
     private final Set<String> allowedActionTypes;
 
     public OrchestrationDecisionResponseParser(ObjectMapper objectMapper,
-                                               OrchestrationDecisionActionMatrix actionMatrix) {
+                                               OrchestrationDecisionActionMatrix actionMatrix,
+                                               DecisionPolicyRuleSet ruleSet) {
         this.strictObjectMapper = objectMapper.copy()
                 .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
                 .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
         this.actionMatrix = actionMatrix;
+        if (ruleSet == null) {
+            throw new IllegalArgumentException("ruleSet 不能为空");
+        }
+        this.ruleSet = ruleSet;
         this.allowedDecisionTypes = collectDecisionTypes(actionMatrix.rules());
         this.allowedActionTypes = collectActionTypes(actionMatrix.rules());
     }
@@ -228,6 +235,11 @@ public class OrchestrationDecisionResponseParser {
         }
         if (decisions.isEmpty()) {
             issues.add(issue(null, EMPTY_DECISIONS, "decisions"));
+            return issues;
+        }
+        // 在反序列化和候选构造前整批拒绝超限数组，既不产生部分 success，也不让审计 payload 无界增长。
+        if (decisions.size() > ruleSet.getMaxDecisionsPerCycle()) {
+            issues.add(issue(null, TOO_MANY_DECISIONS, "decisions"));
             return issues;
         }
         for (int index = 0; index < decisions.size(); index++) {

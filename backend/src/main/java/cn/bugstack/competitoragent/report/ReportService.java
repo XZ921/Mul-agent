@@ -4,6 +4,7 @@ import cn.bugstack.competitoragent.common.BusinessException;
 import cn.bugstack.competitoragent.common.ResultCode;
 import cn.bugstack.competitoragent.context.TaskRagContextSummaryFormatter;
 import cn.bugstack.competitoragent.knowledge.TaskKnowledgeSnapshotResolver;
+import cn.bugstack.competitoragent.model.dto.OrchestrationDecisionAuditSummary;
 import cn.bugstack.competitoragent.model.dto.OrchestrationDecisionSummary;
 import cn.bugstack.competitoragent.model.dto.ReportResponse;
 import cn.bugstack.competitoragent.model.dto.ReportResponse.CollectorSearchAudit;
@@ -155,7 +156,10 @@ public class ReportService {
                 searchAuditOverview,
                 taskRagAudits
         );
-        OrchestrationDecisionSummary orchestrationDecision = resolveLatestOrchestrationDecision(taskId);
+        OrchestrationDecisionReportProjection orchestrationProjection =
+                resolveLatestOrchestrationDecisionProjection(taskId);
+        OrchestrationDecisionSummary orchestrationDecision = orchestrationProjection.representativeDecision();
+        OrchestrationDecisionAuditSummary orchestrationDecisionAudit = orchestrationProjection.auditSummary();
         ReportResponse.WriterEvidenceSummaryInfo writerEvidenceSummary =
                 resolveWriterEvidenceSummary(report, nodes);
 
@@ -184,9 +188,11 @@ public class ReportService {
                         evidenceEntryPoint,
                         auditSummary,
                         orchestrationDecision,
+                        orchestrationDecisionAudit,
                         writerEvidenceSummary))
                 .writerEvidenceSummary(writerEvidenceSummary)
                 .orchestrationDecision(orchestrationDecision)
+                .orchestrationDecisionAudit(orchestrationDecisionAudit)
                 .searchAuditOverview(searchAuditOverview)
                 .taskRagAudits(taskRagAudits)
                 .evidenceCoverageOverview(evidenceCoverageOverview)
@@ -505,6 +511,7 @@ public class ReportService {
                                                  ReportResponse.EvidenceEntryPointInfo evidenceEntryPoint,
                                                  ReportResponse.AuditSummaryInfo auditSummary,
                                                  OrchestrationDecisionSummary orchestrationDecision,
+                                                 OrchestrationDecisionAuditSummary orchestrationDecisionAudit,
                                                  ReportResponse.WriterEvidenceSummaryInfo writerEvidenceSummary) {
         LinkedHashSet<String> sourceUrls = new LinkedHashSet<>();
         for (ReportResponse.EvidenceInfo evidenceInfo : evidenceInfos == null ? List.<ReportResponse.EvidenceInfo>of() : evidenceInfos) {
@@ -527,6 +534,10 @@ public class ReportService {
         }
         if (orchestrationDecision != null) {
             appendSourceUrls(sourceUrls, orchestrationDecision.getSourceUrls());
+        }
+        // audit.sourceUrls 已由投影器只汇总可信来源；丢弃的模型 URL 仅保留在告警明细中，不能进入交付证据集合。
+        if (orchestrationDecisionAudit != null) {
+            appendSourceUrls(sourceUrls, orchestrationDecisionAudit.getSourceUrls());
         }
         if (writerEvidenceSummary != null) {
             appendSourceUrls(sourceUrls, writerEvidenceSummary.getSourceUrls());
@@ -669,13 +680,27 @@ public class ReportService {
      * delivery / export 主路径只需要“最近一次可解释的协作决策摘要”，
      * 因此这里显式读取最近一次编排决策事件并投影成稳定 DTO，不重算任何编排规则。
      */
-    private OrchestrationDecisionSummary resolveLatestOrchestrationDecision(Long taskId) {
+    private OrchestrationDecisionReportProjection resolveLatestOrchestrationDecisionProjection(Long taskId) {
         if (taskId == null || taskWorkflowEventRepository == null) {
-            return null;
+            return OrchestrationDecisionReportProjection.empty();
         }
         return taskWorkflowEventRepository.findLatestOrchestrationDecisionEvent(taskId)
-                .flatMap(event -> OrchestrationDecisionSummaryProjector.fromWorkflowEvent(event, objectMapper))
-                .orElse(null);
+                .flatMap(event -> OrchestrationDecisionSummaryProjector.auditFromWorkflowEvent(event, objectMapper))
+                // 完整 audit 与代表决策必须来自同一个持久化事件，避免两次查询跨越新事件后产生撕裂读。
+                .map(audit -> new OrchestrationDecisionReportProjection(
+                        audit.getRepresentativeDecision(),
+                        audit))
+                .orElseGet(OrchestrationDecisionReportProjection::empty);
+    }
+
+    /** 报告主路径对同一条编排事件的原子只读投影。 */
+    private record OrchestrationDecisionReportProjection(
+            OrchestrationDecisionSummary representativeDecision,
+            OrchestrationDecisionAuditSummary auditSummary) {
+
+        private static OrchestrationDecisionReportProjection empty() {
+            return new OrchestrationDecisionReportProjection(null, null);
+        }
     }
 
     private void appendSourceUrls(LinkedHashSet<String> sourceUrls, List<String> values) {

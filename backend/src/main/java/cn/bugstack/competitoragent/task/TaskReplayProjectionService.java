@@ -4,6 +4,7 @@ import cn.bugstack.competitoragent.collection.CollectionAuditSnapshot;
 import cn.bugstack.competitoragent.collection.CollectionReplayTimelineItem;
 import cn.bugstack.competitoragent.model.dto.CollectionAuditSummary;
 import cn.bugstack.competitoragent.model.dto.CollectionReplaySnapshotResponse;
+import cn.bugstack.competitoragent.model.dto.OrchestrationDecisionAuditSummary;
 import cn.bugstack.competitoragent.model.dto.OrchestrationDecisionSummary;
 import cn.bugstack.competitoragent.model.dto.RecoveryCheckpointResponse;
 import cn.bugstack.competitoragent.model.dto.CollectorSelectedTargetSummary;
@@ -140,6 +141,8 @@ public class TaskReplayProjectionService {
         List<SearchReplaySnapshotResponse> searchReplays = buildSearchReplays(taskNodes, taskPlanMap);
         List<CollectionReplaySnapshotResponse> collectionReplays = buildCollectionReplays(taskNodes, taskPlanMap);
         OrchestrationDecisionSummary latestOrchestrationDecision = resolveLatestOrchestrationDecision(timeline);
+        OrchestrationDecisionAuditSummary latestOrchestrationDecisionAudit =
+                resolveLatestOrchestrationDecisionAudit(timeline);
         List<String> aggregatedSourceUrls = aggregateReplaySourceUrls(
                 timeline,
                 nodeSummaries,
@@ -159,6 +162,7 @@ public class TaskReplayProjectionService {
                 .searchReplays(searchReplays)
                 .collectionReplays(collectionReplays)
                 .latestOrchestrationDecision(latestOrchestrationDecision)
+                .latestOrchestrationDecisionAudit(latestOrchestrationDecisionAudit)
                 .integrationEntryPoints(buildIntegrationEntryPoints(aggregatedSourceUrls))
                 .sourceUrls(aggregatedSourceUrls)
                 .build();
@@ -175,7 +179,12 @@ public class TaskReplayProjectionService {
                                                     Map<Long, TaskPlan> taskPlanMap) {
         List<ReplayTimelineEvent> timeline = new ArrayList<>();
         for (TaskWorkflowEvent workflowEvent : workflowEvents) {
-            OrchestrationDecisionSummary orchestrationDecision = extractOrchestrationDecisionSummary(workflowEvent);
+            OrchestrationReplayProjection orchestrationProjection =
+                    extractOrchestrationDecisionProjection(workflowEvent);
+            OrchestrationDecisionSummary orchestrationDecision =
+                    orchestrationProjection.representativeDecision();
+            OrchestrationDecisionAuditSummary orchestrationDecisionAudit =
+                    orchestrationProjection.auditSummary();
             timeline.add(ReplayTimelineEvent.builder()
                     .eventId(workflowEvent.getEventId())
                     .taskId(workflowEvent.getTaskId())
@@ -185,11 +194,14 @@ public class TaskReplayProjectionService {
                     .nodeName(workflowEvent.getNodeName())
                     .eventType(workflowEvent.getEventType() == null ? "WORKFLOW_EVENT" : workflowEvent.getEventType().name())
                     .summary(orchestrationDecision == null
-                            ? resolveWorkflowEventSummary(workflowEvent)
+                            ? resolveWorkflowEventSummary(workflowEvent, orchestrationDecisionAudit)
                             : OrchestrationDecisionSummaryProjector.toReplaySummary(orchestrationDecision))
                     .orchestrationDecision(orchestrationDecision)
+                    .orchestrationDecisionAudit(orchestrationDecisionAudit)
                     .occurredAt(workflowEvent.getCreatedAt())
-                    .sourceUrls(parseJsonStringList(workflowEvent.getSourceUrls()))
+                    .sourceUrls(mergeOrchestrationSourceUrls(
+                            parseJsonStringList(workflowEvent.getSourceUrls()),
+                            orchestrationDecisionAudit))
                     .build());
         }
         for (TaskNodeExecutionAttempt executionAttempt : executionAttempts) {
@@ -237,12 +249,14 @@ public class TaskReplayProjectionService {
      * replay 主路径只读取事件里已经落盘的决策事实；
      * 如果当前事件不是编排决策事件，就保持为空，避免把其他 workflow 事件误解释成协作动作。
      */
-    private OrchestrationDecisionSummary extractOrchestrationDecisionSummary(TaskWorkflowEvent workflowEvent) {
+    private OrchestrationReplayProjection extractOrchestrationDecisionProjection(TaskWorkflowEvent workflowEvent) {
         if (workflowEvent == null
                 || workflowEvent.getEventType() != cn.bugstack.competitoragent.workflow.event.WorkflowEventType.ORCHESTRATION_DECISION_RECORDED) {
-            return null;
+            return OrchestrationReplayProjection.empty();
         }
-        return OrchestrationDecisionSummaryProjector.fromWorkflowEvent(workflowEvent, objectMapper).orElse(null);
+        return OrchestrationDecisionSummaryProjector.auditFromWorkflowEvent(workflowEvent, objectMapper)
+                .map(audit -> new OrchestrationReplayProjection(audit.getRepresentativeDecision(), audit))
+                .orElseGet(OrchestrationReplayProjection::empty);
     }
 
     /**
@@ -357,6 +371,41 @@ public class TaskReplayProjectionService {
             }
         }
         return latest;
+    }
+
+    /** 最新 audit 不以 representative 是否存在为条件，避免 shadow-only 周期被旧主决策掩盖。 */
+    private OrchestrationDecisionAuditSummary resolveLatestOrchestrationDecisionAudit(
+            List<ReplayTimelineEvent> timeline) {
+        OrchestrationDecisionAuditSummary latest = null;
+        for (ReplayTimelineEvent timelineEvent : timeline == null ? List.<ReplayTimelineEvent>of() : timeline) {
+            if (timelineEvent != null && timelineEvent.getOrchestrationDecisionAudit() != null) {
+                latest = timelineEvent.getOrchestrationDecisionAudit();
+            }
+        }
+        return latest;
+    }
+
+    /**
+     * timeline item 保留事件列来源，并补齐完整 audit 已确认的来源。
+     * discardedSourceUrls 只存在于失败告警明细，不属于 audit 根 sourceUrls，因此不会被聚合为证据。
+     */
+    private List<String> mergeOrchestrationSourceUrls(
+            List<String> eventSourceUrls,
+            OrchestrationDecisionAuditSummary audit) {
+        LinkedHashSet<String> merged = new LinkedHashSet<>(normalizeSourceUrls(eventSourceUrls));
+        if (audit != null) {
+            merged.addAll(normalizeSourceUrls(audit.getSourceUrls()));
+        }
+        return new ArrayList<>(merged);
+    }
+
+    private record OrchestrationReplayProjection(
+            OrchestrationDecisionSummary representativeDecision,
+            OrchestrationDecisionAuditSummary auditSummary) {
+
+        private static OrchestrationReplayProjection empty() {
+            return new OrchestrationReplayProjection(null, null);
+        }
     }
 
     private boolean shouldBackfillTaskLevelSourceUrls(TaskNode taskNode) {
@@ -743,9 +792,17 @@ public class TaskReplayProjectionService {
      * 工作流事件 payload 可能是结构化 JSON，也可能只是历史文本。
      * 因此这里先尝试提取 summary，再退化到 tag / topic，保证回放接口始终有可读摘要。
      */
-    private String resolveWorkflowEventSummary(TaskWorkflowEvent workflowEvent) {
+    private String resolveWorkflowEventSummary(TaskWorkflowEvent workflowEvent,
+                                               OrchestrationDecisionAuditSummary orchestrationAudit) {
         if (workflowEvent == null) {
             return "未知工作流事件";
+        }
+        if (orchestrationAudit != null && orchestrationAudit.getRepresentativeDecision() == null) {
+            String skippedReason = orchestrationAudit.getShadowExecution() == null
+                    ? null : orchestrationAudit.getShadowExecution().getSkippedReason();
+            return "Orchestrator %s 周期未产生代表决策，shadow 状态：%s".formatted(
+                    orchestrationAudit.getMode(),
+                    skippedReason == null ? "无跳过原因" : skippedReason);
         }
         if (workflowEvent.getPayload() != null && !workflowEvent.getPayload().isBlank()) {
             try {

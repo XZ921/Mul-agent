@@ -12,13 +12,107 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class OrchestrationTraceServiceTest {
+
+    @Test
+    void shouldRecordWholeRuntimeBatchAsSingleV2Event() {
+        WorkflowEventPublisher publisher = mock(WorkflowEventPublisher.class);
+        OrchestrationTraceService service = new OrchestrationTraceService(
+                publisher,
+                mock(OrchestrationRuntimeStateService.class),
+                DecisionPolicyRuleSet.builder().build().normalized());
+        TaskNode triggerNode = TaskNode.builder()
+                .taskId(801L)
+                .nodeName("quality_check_final")
+                .agentType(AgentType.REVIEWER)
+                .planVersionId(31L)
+                .branchKey("root/review")
+                .build();
+        OrchestrationRuntimeDecisionBatch batch = OrchestrationDecisionAuditTestFixtures.fallbackBatch();
+
+        service.recordDecisionBatch(801L, triggerNode, batch);
+
+        ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(publisher).publishOrchestrationEvent(
+                eq(801L),
+                eq("quality_check_final"),
+                eq(31L),
+                eq("root/review"),
+                eq(WorkflowEventType.ORCHESTRATION_DECISION_RECORDED),
+                payloadCaptor.capture(),
+                eq(batch.sourceUrls()));
+        Map<String, Object> payload = payloadCaptor.getValue();
+        assertThat(payload).containsEntry("traceSchemaVersion", "ORCHESTRATION_TRACE_V2");
+        assertThat(payload.get("decision")).isInstanceOf(OrchestrationDecision.class);
+        assertThat(((OrchestrationDecision) payload.get("decision")).getDecisionId())
+                .isEqualTo("od-801-rule-fallback");
+        assertThat(payload.get("runtimeStatus"))
+                .isEqualTo(OrchestrationRuntimeDecision.CONFIRMATION_REQUIRED);
+        assertThat(payload.get("fallbackAttempt")).isEqualTo(true);
+        assertThat(payload.get("mutation")).isInstanceOf(OrchestrationMutationTrace.class);
+        assertThat(payload.get("audit")).isInstanceOf(OrchestrationDecisionAuditTrace.class);
+        assertThat(((OrchestrationDecisionAuditTrace) payload.get("audit")).attempts()).hasSize(2);
+    }
+
+    @Test
+    void shouldRecordShadowSkippedBatchWithoutRepresentativeDecision() {
+        WorkflowEventPublisher publisher = mock(WorkflowEventPublisher.class);
+        OrchestrationTraceService service = new OrchestrationTraceService(
+                publisher,
+                mock(OrchestrationRuntimeStateService.class),
+                DecisionPolicyRuleSet.builder().build().normalized());
+        TaskNode triggerNode = TaskNode.builder()
+                .taskId(801L)
+                .nodeName("quality_check_final")
+                .planVersionId(32L)
+                .branchKey("root")
+                .build();
+
+        service.recordDecisionBatch(
+                801L,
+                triggerNode,
+                OrchestrationDecisionAuditTestFixtures.shadowSkippedBatch());
+
+        ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(publisher).publishOrchestrationEvent(
+                eq(801L),
+                eq("quality_check_final"),
+                eq(32L),
+                eq("root"),
+                eq(WorkflowEventType.ORCHESTRATION_DECISION_RECORDED),
+                payloadCaptor.capture(),
+                eq(List.of(OrchestrationDecisionAuditTestFixtures.SHADOW_URL)));
+        assertThat(payloadCaptor.getValue())
+                .containsEntry("decision", null)
+                .containsEntry("policyResult", null)
+                .containsEntry("mutation", null)
+                .containsEntry("runtimeStatus", null);
+        OrchestrationDecisionAuditTrace audit =
+                (OrchestrationDecisionAuditTrace) payloadCaptor.getValue().get("audit");
+        assertThat(audit.shadowExecution().skippedReason())
+                .isEqualTo("SHADOW_BUDGET_EXHAUSTED");
+    }
+
+    @Test
+    void shouldRejectNullBatchWithoutPublishingEvent() {
+        WorkflowEventPublisher publisher = mock(WorkflowEventPublisher.class);
+        OrchestrationTraceService service = new OrchestrationTraceService(
+                publisher,
+                mock(OrchestrationRuntimeStateService.class),
+                DecisionPolicyRuleSet.builder().build().normalized());
+
+        assertThatThrownBy(() -> service.recordDecisionBatch(801L, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(publisher);
+    }
 
     @Test
     void shouldTraceOriginalInvalidLlmPairAndStablePolicyReason() {

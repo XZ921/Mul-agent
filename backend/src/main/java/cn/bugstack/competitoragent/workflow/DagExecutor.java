@@ -663,9 +663,7 @@ public class DagExecutor {
                 orchestrationContext,
                 taskStatus,
                 triggerNodeStatus);
-        for (OrchestrationRuntimeDecision attempt : batch.attempts()) {
-            recordAgentDecisionTrace(taskId, completedNode, attempt);
-        }
+        recordAgentDecisionBatchTrace(taskId, completedNode, batch);
         return batch.finalDecisions().stream()
                 .filter(this::isExecutableManualMutation)
                 .findFirst()
@@ -711,18 +709,14 @@ public class DagExecutor {
         return List.of();
     }
 
-    private void recordAgentDecisionTrace(Long taskId,
-                                          TaskNode completedNode,
-                                          OrchestrationRuntimeDecision runtimeDecision) {
-        if (orchestrationTraceService == null || runtimeDecision == null) {
+    private void recordAgentDecisionBatchTrace(Long taskId,
+                                               TaskNode completedNode,
+                                               OrchestrationRuntimeDecisionBatch batch) {
+        // 部分历史单测通过兼容构造器省略 TraceService；迁移到 batch 后仍需保留原有 null 防御。
+        if (orchestrationTraceService == null || batch == null) {
             return;
         }
-        orchestrationTraceService.recordDecision(
-                taskId,
-                completedNode,
-                runtimeDecision.decision(),
-                runtimeDecision.policyResult(),
-                runtimeDecision.mutation());
+        orchestrationTraceService.recordDecisionBatch(taskId, completedNode, batch);
     }
 
     /**

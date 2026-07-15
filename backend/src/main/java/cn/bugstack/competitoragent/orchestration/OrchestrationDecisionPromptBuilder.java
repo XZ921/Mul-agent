@@ -68,7 +68,10 @@ public class OrchestrationDecisionPromptBuilder {
                 + BEGIN_UNTRUSTED_CONTEXT + "\n"
                 + untrustedContext + "\n"
                 + END_UNTRUSTED_CONTEXT;
-        return new OrchestrationDecisionPrompt(systemPrompt, userPrompt, buildResponseSchema());
+        return new OrchestrationDecisionPrompt(
+                systemPrompt,
+                userPrompt,
+                buildResponseSchema(normalizedRuleSet));
     }
 
     private void requirePromptInput(OrchestrationContext context, DecisionPolicyRuleSet ruleSet) {
@@ -93,6 +96,7 @@ public class OrchestrationDecisionPromptBuilder {
         policy.put("policyVersion", ruleSet.getPolicyVersion());
         policy.put("currentDecisionCount", context.getCurrentDecisionCount());
         policy.put("maxAutoDecisions", ruleSet.getMaxAutoDecisions());
+        policy.put("maxDecisionsPerCycle", ruleSet.getMaxDecisionsPerCycle());
         policy.put("remainingAutoDecisions",
                 Math.max(0, ruleSet.getMaxAutoDecisions() - context.getCurrentDecisionCount()));
         policy.put("maxSearchQueriesPerDecision", ruleSet.getMaxSearchQueriesPerDecision());
@@ -211,7 +215,7 @@ public class OrchestrationDecisionPromptBuilder {
         return values;
     }
 
-    private String buildResponseSchema() {
+    private String buildResponseSchema(DecisionPolicyRuleSet ruleSet) {
         ObjectNode root = objectMapper.createObjectNode();
         root.put("type", "object");
         root.put("additionalProperties", false);
@@ -220,6 +224,8 @@ public class OrchestrationDecisionPromptBuilder {
         ObjectNode decisions = root.putObject("properties").putObject("decisions");
         decisions.put("type", "array");
         decisions.put("minItems", 1);
+        // JSON schema 与 Parser 使用同一 normalized ruleSet，避免 Prompt 声明和服务端硬校验出现数量漂移。
+        decisions.put("maxItems", ruleSet.getMaxDecisionsPerCycle());
         ObjectNode candidate = decisions.putObject("items");
         candidate.put("type", "object");
         candidate.put("additionalProperties", false);

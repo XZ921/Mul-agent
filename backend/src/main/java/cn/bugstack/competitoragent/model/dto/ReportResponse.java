@@ -79,6 +79,13 @@ public class ReportResponse {
     @Schema(description = "Latest orchestration decision summary projected for delivery and audit")
     private OrchestrationDecisionSummary orchestrationDecision;
 
+    /**
+     * 最近一次 Orchestrator 周期的完整只读审计。
+     * 代表决策可能为空，例如 shadow 预算耗尽时仍必须保留本字段，证明该周期确实执行并被安全跳过。
+     */
+    @Schema(description = "Latest complete orchestration decision cycle audit projected from persisted workflow event")
+    private OrchestrationDecisionAuditSummary orchestrationDecisionAudit;
+
     @Schema(description = "Search audit overview aggregated from collector nodes")
     private SearchAuditOverview searchAuditOverview;
 

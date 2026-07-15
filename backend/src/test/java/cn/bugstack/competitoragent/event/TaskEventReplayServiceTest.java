@@ -4,6 +4,7 @@ import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.task.TaskProgressSnapshot;
 import cn.bugstack.competitoragent.task.TaskRecoveryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -123,6 +124,31 @@ class TaskEventReplayServiceTest {
         assertEquals("WAIT_FOR_HUMAN", frame.getLatestOrchestrationDecision().getDecisionType());
         assertEquals("MISSING_SOURCE", frame.getLatestOrchestrationDecision().getEvidenceState());
         assertEquals("quality_check_final", frame.getLatestOrchestrationDecision().getTriggerNodeName());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldProjectLatestV2AuditFromStructuredSsePayloadWithoutPromotingShadowDecision() throws Exception {
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        JsonNode fixture = mapper.readTree(getClass().getResourceAsStream(
+                "/orchestration/orchestration-trace-v2-fixtures.json"));
+        Map<String, Object> primaryPayload = mapper.convertValue(
+                fixture.at("/cases/0/payload"), Map.class);
+        Map<String, Object> shadowPayload = mapper.convertValue(
+                fixture.at("/cases/1/payload"), Map.class);
+        TaskEventPublisher publisher = new TaskEventPublisher(taskSseHub);
+        publisher.publishDiagnosisEvent(24L, "quality_check_final", primaryPayload);
+        publisher.publishDiagnosisEvent(24L, "quality_check_final", shadowPayload);
+        when(taskRecoveryService.getTaskSnapshotOrRebuild(24L)).thenReturn(Optional.empty());
+
+        JsonNode frame = mapper.valueToTree(replayService.planReplay(24L, null));
+
+        assertEquals("od-801-rule-fallback",
+                frame.at("/latestOrchestrationDecision/decisionId").asText());
+        assertEquals("LLM_SHADOW", frame.at("/latestOrchestrationDecisionAudit/mode").asText());
+        assertEquals("SHADOW_BUDGET_EXHAUSTED",
+                frame.at("/latestOrchestrationDecisionAudit/shadowExecution/skippedReason").asText());
+        assertTrue(frame.at("/latestOrchestrationDecisionAudit/representativeDecision").isNull());
     }
 
     @Test

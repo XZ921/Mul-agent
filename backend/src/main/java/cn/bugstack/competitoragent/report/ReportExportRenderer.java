@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.report;
 
+import cn.bugstack.competitoragent.model.dto.OrchestrationDecisionAuditSummary;
 import cn.bugstack.competitoragent.model.dto.OrchestrationDecisionSummary;
 import cn.bugstack.competitoragent.model.dto.ReportExportResponse;
 import cn.bugstack.competitoragent.model.dto.ReportResponse;
@@ -150,32 +151,37 @@ final class MarkdownReportExportRenderer implements ReportExportRenderer {
      * 这样离线阅读时可以直接看到“为什么当前报告被拦住、下一步应做什么”。
      */
     private String buildMarkdownOrchestrationDecisionSummary(ReportResponse report) {
-        if (!ReportExportRenderSupport.hasOrchestrationDecision(report)) {
+        if (!ReportExportRenderSupport.hasOrchestrationDecision(report)
+                && !ReportExportRenderSupport.hasOrchestrationDecisionAudit(report)) {
             return "当前暂无协作决策记录。";
         }
-        return """
-                - 决策 ID：%s
-                - 决策类型：%s
-                - 动作类型：%s
-                - 触发节点：%s
-                - 目标节点：%s
-                - 证据状态：%s
-                - 需要人工介入：%s
-                - 需要确认：%s
-                - 决策原因：%s
-                - 来源链接：%s
-                """.formatted(
-                ReportExportRenderSupport.decisionId(report),
-                ReportExportRenderSupport.decisionType(report),
-                ReportExportRenderSupport.actionType(report),
-                ReportExportRenderSupport.triggerNodeName(report),
-                ReportExportRenderSupport.targetNode(report),
-                ReportExportRenderSupport.decisionEvidenceState(report),
-                ReportExportRenderSupport.requiresHumanInterventionText(report),
-                ReportExportRenderSupport.requiresConfirmationText(report),
-                ReportExportRenderSupport.decisionReason(report),
-                ReportExportRenderSupport.decisionSourceUrlsText(report)
-        ).trim();
+        List<String> lines = new ArrayList<>();
+        if (ReportExportRenderSupport.hasOrchestrationDecision(report)) {
+            OrchestrationDecisionSummary decision = ReportExportRenderSupport.normalizedDecisionSummary(report);
+            lines.add("决策 ID：" + ReportExportRenderSupport.decisionId(report));
+            lines.add("决策类型：" + ReportExportRenderSupport.decisionType(report));
+            lines.add("动作类型：" + ReportExportRenderSupport.actionType(report));
+            lines.add("决策来源：" + ReportExportRenderSupport.safeText(decision.getDecisionOrigin()));
+            lines.add("决策契约：" + ReportExportRenderSupport.safeText(decision.getDecisionContract()));
+            lines.add("触发节点：" + ReportExportRenderSupport.triggerNodeName(report));
+            lines.add("目标节点：" + ReportExportRenderSupport.targetNode(report));
+            lines.add("证据状态：" + ReportExportRenderSupport.decisionEvidenceState(report));
+            lines.add("Policy 允许：" + ReportExportRenderSupport.booleanText(decision.getPolicyAllowed()));
+            lines.add("Policy 拒绝原因：" + ReportExportRenderSupport.joinTexts(decision.getPolicyBlockedReasons()));
+            lines.add("运行状态：" + ReportExportRenderSupport.safeText(decision.getRuntimeStatus()));
+            lines.add("计划变更：" + ReportExportRenderSupport.safeText(decision.getMutationType()));
+            lines.add("分支原因：" + ReportExportRenderSupport.safeText(decision.getMutationBranchReason()));
+            lines.add("Fallback：" + (decision.isFallbackUsed() ? "已使用" : "未使用"));
+            lines.add("Fallback 原因：" + ReportExportRenderSupport.safeText(decision.getFallbackReason()));
+            lines.add("需要人工介入：" + ReportExportRenderSupport.requiresHumanInterventionText(report));
+            lines.add("需要确认：" + ReportExportRenderSupport.requiresConfirmationText(report));
+            lines.add("决策原因：" + ReportExportRenderSupport.decisionReason(report));
+            lines.add("来源链接：" + ReportExportRenderSupport.decisionSourceUrlsText(report));
+        } else {
+            lines.add("当前周期没有产生代表决策。");
+        }
+        lines.addAll(ReportExportRenderSupport.buildOrchestrationAuditLines(report));
+        return lines.stream().map(line -> "- " + line).collect(java.util.stream.Collectors.joining("\n"));
     }
 
     /**
@@ -360,22 +366,38 @@ final class HtmlReportExportRenderer implements ReportExportRenderer {
      * 因此这里把协作决策整理成可读列表，避免用户还要回到原始事件流里找原因。
      */
     private String buildHtmlOrchestrationDecisionSummary(ReportResponse report) {
-        if (!ReportExportRenderSupport.hasOrchestrationDecision(report)) {
+        if (!ReportExportRenderSupport.hasOrchestrationDecision(report)
+                && !ReportExportRenderSupport.hasOrchestrationDecisionAudit(report)) {
             return "<p>当前暂无协作决策记录。</p>";
         }
-        List<String> lines = List.of(
-                "决策 ID：" + escapeHtml(ReportExportRenderSupport.decisionId(report)),
-                "决策类型：" + escapeHtml(ReportExportRenderSupport.decisionType(report)),
-                "动作类型：" + escapeHtml(ReportExportRenderSupport.actionType(report)),
-                "触发节点：" + escapeHtml(ReportExportRenderSupport.triggerNodeName(report)),
-                "目标节点：" + escapeHtml(ReportExportRenderSupport.targetNode(report)),
-                "证据状态：" + escapeHtml(ReportExportRenderSupport.decisionEvidenceState(report)),
-                "需要人工介入：" + escapeHtml(ReportExportRenderSupport.requiresHumanInterventionText(report)),
-                "需要确认：" + escapeHtml(ReportExportRenderSupport.requiresConfirmationText(report)),
-                "决策原因：" + escapeHtml(ReportExportRenderSupport.decisionReason(report)),
-                "来源链接：" + escapeHtml(ReportExportRenderSupport.decisionSourceUrlsText(report))
-        );
-        return "<ul><li>%s</li></ul>".formatted(String.join("</li><li>", lines));
+        List<String> lines = new ArrayList<>();
+        if (ReportExportRenderSupport.hasOrchestrationDecision(report)) {
+            OrchestrationDecisionSummary decision = ReportExportRenderSupport.normalizedDecisionSummary(report);
+            lines.add("决策 ID：" + ReportExportRenderSupport.decisionId(report));
+            lines.add("决策类型：" + ReportExportRenderSupport.decisionType(report));
+            lines.add("动作类型：" + ReportExportRenderSupport.actionType(report));
+            lines.add("决策来源：" + ReportExportRenderSupport.safeText(decision.getDecisionOrigin()));
+            lines.add("决策契约：" + ReportExportRenderSupport.safeText(decision.getDecisionContract()));
+            lines.add("触发节点：" + ReportExportRenderSupport.triggerNodeName(report));
+            lines.add("目标节点：" + ReportExportRenderSupport.targetNode(report));
+            lines.add("证据状态：" + ReportExportRenderSupport.decisionEvidenceState(report));
+            lines.add("Policy 允许：" + ReportExportRenderSupport.booleanText(decision.getPolicyAllowed()));
+            lines.add("Policy 拒绝原因：" + ReportExportRenderSupport.joinTexts(decision.getPolicyBlockedReasons()));
+            lines.add("运行状态：" + ReportExportRenderSupport.safeText(decision.getRuntimeStatus()));
+            lines.add("计划变更：" + ReportExportRenderSupport.safeText(decision.getMutationType()));
+            lines.add("分支原因：" + ReportExportRenderSupport.safeText(decision.getMutationBranchReason()));
+            lines.add("Fallback：" + (decision.isFallbackUsed() ? "已使用" : "未使用"));
+            lines.add("Fallback 原因：" + ReportExportRenderSupport.safeText(decision.getFallbackReason()));
+            lines.add("需要人工介入：" + ReportExportRenderSupport.requiresHumanInterventionText(report));
+            lines.add("需要确认：" + ReportExportRenderSupport.requiresConfirmationText(report));
+            lines.add("决策原因：" + ReportExportRenderSupport.decisionReason(report));
+            lines.add("来源链接：" + ReportExportRenderSupport.decisionSourceUrlsText(report));
+        } else {
+            lines.add("当前周期没有产生代表决策。");
+        }
+        lines.addAll(ReportExportRenderSupport.buildOrchestrationAuditLines(report));
+        List<String> escapedLines = lines.stream().map(this::escapeHtml).toList();
+        return "<ul><li>%s</li></ul>".formatted(String.join("</li><li>", escapedLines));
     }
 
     /**
@@ -474,6 +496,7 @@ final class JsonEvidencePackageExportRenderer implements ReportExportRenderer {
                 "sourceType", ReportExportRenderSupport.evidenceEntrySourceType(report)
         ));
         payload.put("orchestrationDecision", ReportExportRenderSupport.buildOrchestrationDecisionPayload(report));
+        payload.put("orchestrationDecisionAudit", ReportExportRenderSupport.buildOrchestrationDecisionAuditPayload(report));
         payload.put("writerEvidenceSummary", ReportExportRenderSupport.buildWriterEvidencePayload(report));
         payload.put("evidences", report.getEvidences() == null ? List.of() : report.getEvidences());
         payload.put("sourceUrls", record.getSourceUrls() == null ? List.of() : record.getSourceUrls());
@@ -524,6 +547,8 @@ final class ReportExportRenderSupport {
         appendSourceUrls(merged, report == null || report.getAuditSummary() == null ? null : report.getAuditSummary().getSourceUrls());
         appendSourceUrls(merged, report == null || report.getEvidenceEntryPoint() == null ? null : report.getEvidenceEntryPoint().getSourceUrls());
         appendSourceUrls(merged, decisionSourceUrls(report));
+        appendSourceUrls(merged, report == null || report.getOrchestrationDecisionAudit() == null
+                ? null : report.getOrchestrationDecisionAudit().getSourceUrls());
         appendWriterEvidenceSourceUrls(merged, report == null ? null : report.getWriterEvidenceSummary());
         if (report != null && report.getEvidences() != null) {
             for (EvidenceInfo evidence : report.getEvidences()) {
@@ -767,14 +792,93 @@ final class ReportExportRenderSupport {
         payload.put("triggerNodeName", safeText(decision.getTriggerNodeName()));
         payload.put("decisionType", safeText(decision.getDecisionType()));
         payload.put("actionType", safeText(decision.getActionType()));
+        payload.put("decisionOrigin", safeText(decision.getDecisionOrigin()));
+        payload.put("decisionContract", safeText(decision.getDecisionContract()));
+        payload.put("fallbackReason", safeText(decision.getFallbackReason()));
+        payload.put("modelName", safeText(decision.getModelName()));
+        payload.put("temperature", decision.getTemperature());
+        payload.put("promptHash", safeText(decision.getPromptHash()));
+        payload.put("llmResponseHash", safeText(decision.getLlmResponseHash()));
+        payload.put("parseRetryCount", decision.getParseRetryCount());
+        payload.put("fallbackUsed", decision.isFallbackUsed());
+        payload.put("shadowExecuted", decision.getShadowExecuted());
+        payload.put("shadowSkippedReason", safeText(decision.getShadowSkippedReason()));
         payload.put("targetNode", safeText(decision.getTargetNode()));
         payload.put("affectedScope", safeText(decision.getAffectedScope()));
         payload.put("reason", safeText(decision.getReason()));
         payload.put("requiresHumanIntervention", decision.isRequiresHumanIntervention());
         payload.put("requiresConfirmation", Boolean.TRUE.equals(decision.getRequiresConfirmation()));
+        payload.put("policyAllowed", decision.getPolicyAllowed());
+        payload.put("policyBlockedReasons", normalizeTexts(decision.getPolicyBlockedReasons()));
+        payload.put("normalizedAction", safeText(decision.getNormalizedAction()));
+        payload.put("riskLevel", safeText(decision.getRiskLevel()));
+        payload.put("policyVersion", safeText(decision.getPolicyVersion()));
+        payload.put("runtimeStatus", safeText(decision.getRuntimeStatus()));
+        payload.put("fallbackAttempt", decision.isFallbackAttempt());
+        payload.put("mutationType", safeText(decision.getMutationType()));
+        payload.put("mutationBranchReason", safeText(decision.getMutationBranchReason()));
+        payload.put("mutationDynamicAction", safeText(decision.getMutationDynamicAction()));
+        payload.put("expectedResumeNodeName", safeText(decision.getExpectedResumeNodeName()));
         payload.put("evidenceState", safeText(decision.getEvidenceState()));
         payload.put("sourceUrls", decisionSourceUrls(report));
         return payload;
+    }
+
+    /**
+     * 完整周期只从稳定 audit DTO 导出，不重新解析 workflow event，也不接触 runtime command、原始 Prompt 或模型原文。
+     * 这样 JSON 可以保留 replay/audit 所需事实，同时天然排除写侧明确禁止持久化的敏感字段。
+     */
+    static OrchestrationDecisionAuditSummary buildOrchestrationDecisionAuditPayload(ReportResponse report) {
+        return normalizedAudit(report);
+    }
+
+    /**
+     * Markdown 与 HTML 共享同一组完整周期事实，防止三种导出格式在 Policy、runtime、shadow 上逐渐漂移。
+     * attempts 只作为一个周期内的审计明细展示，不展开成伪 workflow event。
+     */
+    static List<String> buildOrchestrationAuditLines(ReportResponse report) {
+        OrchestrationDecisionAuditSummary audit = normalizedAudit(report);
+        if (audit == null) {
+            return List.of();
+        }
+        List<String> lines = new ArrayList<>();
+        lines.add("周期模式：" + safeText(audit.getMode()));
+        lines.add("Policy fallback：" + (audit.isPolicyFallbackUsed() ? "已使用" : "未使用"));
+        if (audit.getRuntimeState() != null) {
+            OrchestrationDecisionAuditSummary.RuntimeStateSummary runtime = audit.getRuntimeState();
+            lines.add("运行时状态：decisionCount=%s，planVersion=%s，checkpoint=%s".formatted(
+                    runtime.getCurrentDecisionCount(),
+                    runtime.getCurrentPlanVersionId(),
+                    safeText(runtime.getCheckpointStateStatus())));
+        }
+        if (audit.getShadowExecution() != null) {
+            OrchestrationDecisionAuditSummary.ShadowExecutionSummary shadow = audit.getShadowExecution();
+            lines.add("Shadow 状态：requested=%s，executed=%s，skippedReason=%s".formatted(
+                    shadow.isRequested(),
+                    shadow.isExecuted(),
+                    safeText(shadow.getSkippedReason())));
+        }
+        if (audit.getLlmFailure() != null) {
+            lines.add("LLM 失败：type=%s，parseRetryCount=%s".formatted(
+                    safeText(audit.getLlmFailure().getType()),
+                    audit.getLlmFailure().getParseRetryCount()));
+        }
+        for (int index = 0; index < audit.getAttempts().size(); index++) {
+            OrchestrationDecisionSummary attempt = audit.getAttempts().get(index);
+            lines.add("Attempt %d：decisionId=%s，origin=%s，contract=%s，Policy=%s，blocked=%s，runtime=%s，mutation=%s，branch=%s"
+                    .formatted(
+                            index + 1,
+                            safeText(attempt.getDecisionId()),
+                            safeText(attempt.getDecisionOrigin()),
+                            safeText(attempt.getDecisionContract()),
+                            booleanText(attempt.getPolicyAllowed()),
+                            joinTexts(attempt.getPolicyBlockedReasons()),
+                            safeText(attempt.getRuntimeStatus()),
+                            safeText(attempt.getMutationType()),
+                            safeText(attempt.getMutationBranchReason())));
+        }
+        lines.add("周期可信来源：" + joinTexts(audit.getSourceUrls()));
+        return List.copyOf(lines);
     }
 
     /**
@@ -841,11 +945,30 @@ final class ReportExportRenderSupport {
         return report.getEvidences().get(0);
     }
 
+    static OrchestrationDecisionSummary normalizedDecisionSummary(ReportResponse report) {
+        return normalizedDecision(report);
+    }
+
+    static boolean hasOrchestrationDecisionAudit(ReportResponse report) {
+        return normalizedAudit(report) != null;
+    }
+
+    static String booleanText(Boolean value) {
+        return value == null ? "UNKNOWN" : (value ? "ALLOWED" : "BLOCKED");
+    }
+
     private static OrchestrationDecisionSummary normalizedDecision(ReportResponse report) {
         if (report == null || report.getOrchestrationDecision() == null) {
             return null;
         }
         return report.getOrchestrationDecision().normalized();
+    }
+
+    private static OrchestrationDecisionAuditSummary normalizedAudit(ReportResponse report) {
+        if (report == null || report.getOrchestrationDecisionAudit() == null) {
+            return null;
+        }
+        return report.getOrchestrationDecisionAudit().normalized();
     }
 
     private static void appendSourceUrls(LinkedHashSet<String> target, List<String> sourceUrls) {

@@ -28,6 +28,7 @@ class OrchestrationDecisionPromptBuilderTest {
                 context().normalized(),
                 DecisionPolicyRuleSet.builder()
                         .maxAutoDecisions(3)
+                        .maxDecisionsPerCycle(2)
                         .maxSearchQueriesPerDecision(4)
                         .build()
                         .normalized());
@@ -47,12 +48,14 @@ class OrchestrationDecisionPromptBuilderTest {
         assertThat(trusted.path("policyConstraints").path("maxAutoDecisions").asInt()).isEqualTo(3);
         assertThat(trusted.path("policyConstraints").path("currentDecisionCount").asInt()).isEqualTo(1);
         assertThat(trusted.path("policyConstraints").path("remainingAutoDecisions").asInt()).isEqualTo(2);
+        assertThat(trusted.path("policyConstraints").path("maxDecisionsPerCycle").asInt()).isEqualTo(2);
         assertThat(trusted.path("policyConstraints").path("maxSearchQueriesPerDecision").asInt()).isEqualTo(4);
 
         JsonNode schema = objectMapper.readTree(prompt.responseSchema());
         assertThat(schema.path("type").asText()).isEqualTo("object");
         assertThat(schema.path("additionalProperties").asBoolean()).isFalse();
         assertThat(schema.path("required")).extracting(JsonNode::asText).containsExactly("decisions");
+        assertThat(schema.path("properties").path("decisions").path("maxItems").asInt()).isEqualTo(2);
         JsonNode decisionSchema = schema.path("properties").path("decisions").path("items");
         assertThat(decisionSchema.path("additionalProperties").asBoolean()).isFalse();
         assertThat(decisionSchema.path("required"))

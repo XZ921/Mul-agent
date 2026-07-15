@@ -179,6 +179,29 @@ class OrchestrationRuntimeFeedbackSmokeTest {
 
         TaskWorkflowEvent decisionEvent = latestEvent(taskId, WorkflowEventType.ORCHESTRATION_DECISION_RECORDED);
         JsonNode decisionPayload = objectMapper.readTree(decisionEvent.getPayload());
+        // 本用例从真实 API/DAG 进入生产 RuntimeDecisionService，因此这里必须锁定其 batch 经 TraceService
+        // 落成的 V2 audit 结构，不能只验证为兼容旧读链保留的顶层 decision/policy/mutation 别名。
+        assertThat(decisionPayload.path("traceSchemaVersion").asText())
+                .isEqualTo("ORCHESTRATION_TRACE_V2");
+        assertThat(decisionPayload.at("/audit/mode").asText()).isEqualTo("RULE_ONLY");
+        assertThat(decisionPayload.at("/audit/coordinatorDecisions")).hasSize(1);
+        // RULE_ONLY 表示 Coordinator 选择规则模式；本场景的修订指令经 legacy adapter 转换，
+        // 因而 decision origin 必须保留 LEGACY_ADAPTER，不能把 mode 错写成单条 decision 的来源。
+        assertThat(decisionPayload.at("/audit/coordinatorDecisions/0/decisionOrigin").asText())
+                .isEqualTo("LEGACY_ADAPTER");
+        assertThat(decisionPayload.at("/audit/attempts")).hasSize(1);
+        assertThat(decisionPayload.at("/audit/attempts/0/decision/decisionId").asText())
+                .isEqualTo(decisionPayload.at("/decision/decisionId").asText());
+        assertThat(decisionPayload.at("/audit/attempts/0/policyResult/allowed").asBoolean()).isTrue();
+        assertThat(decisionPayload.at("/audit/attempts/0/runtimeStatus").asText()).isEqualTo("READY");
+        assertThat(decisionPayload.at("/audit/attempts/0/mutationSummary/mutationType").asText())
+                .isEqualTo("APPEND_NODES");
+        assertThat(decisionPayload.at("/audit/finalDecisionIds/0").asText())
+                .isEqualTo(decisionPayload.at("/decision/decisionId").asText());
+        assertThat(decisionPayload.at("/audit/policyFallbackUsed").asBoolean()).isFalse();
+        assertThat(decisionPayload.at("/audit/shadowExecution/requested").asBoolean()).isFalse();
+        assertThat(decisionPayload.at("/audit/shadowDecisions")).isEmpty();
+        assertThat(decisionPayload.at("/audit/llmFailure").isNull()).isTrue();
         assertThat(decisionPayload.path("policyResult").path("allowed").asBoolean()).isTrue();
         assertThat(decisionPayload.path("mutation").path("mutationType").asText()).isEqualTo("APPEND_NODES");
         assertThat(decisionPayload.path("decision").path("sourceUrls").get(0).asText())
@@ -192,8 +215,13 @@ class OrchestrationRuntimeFeedbackSmokeTest {
 
         JsonNode replay = getReplay(taskId);
         assertThat(replay.path("data").path("timeline"))
-                .anySatisfy(event -> assertThat(event.path("eventType").asText())
-                        .isEqualTo("ORCHESTRATION_DECISION_RECORDED"))
+                .anySatisfy(event -> {
+                    assertThat(event.path("eventType").asText())
+                            .isEqualTo("ORCHESTRATION_DECISION_RECORDED");
+                    assertThat(event.at("/orchestrationDecisionAudit/mode").asText())
+                            .isEqualTo("RULE_ONLY");
+                    assertThat(event.at("/orchestrationDecisionAudit/attempts")).hasSize(1);
+                })
                 .anySatisfy(event -> assertThat(event.path("eventType").asText())
                         .isEqualTo("ORCHESTRATION_CHECKPOINT_UPDATED"));
         assertThat(replay.path("data").path("sourceUrls").toString())

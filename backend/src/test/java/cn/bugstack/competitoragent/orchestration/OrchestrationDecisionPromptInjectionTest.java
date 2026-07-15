@@ -20,7 +20,10 @@ class OrchestrationDecisionPromptInjectionTest {
     private final OrchestrationDecisionPromptBuilder promptBuilder = new OrchestrationDecisionPromptBuilder(
             new PromptTemplateService(objectMapper), objectMapper, actionMatrix);
     private final OrchestrationDecisionResponseParser parser =
-            new OrchestrationDecisionResponseParser(objectMapper, actionMatrix);
+            new OrchestrationDecisionResponseParser(
+                    objectMapper,
+                    actionMatrix,
+                    DecisionPolicyRuleSet.builder().build().normalized());
 
     @Test
     void shouldKeepMaliciousSuggestionAndDiagnosisInsideJsonDataBoundary() throws Exception {

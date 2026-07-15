@@ -22,6 +22,47 @@ public class OrchestrationTraceService {
     private final WorkflowEventPublisher workflowEventPublisher;
     private final OrchestrationRuntimeStateService runtimeStateService;
     private final DecisionPolicyRuleSet ruleSet;
+    private final OrchestrationDecisionAuditAssembler auditAssembler =
+            new OrchestrationDecisionAuditAssembler();
+
+    /**
+     * 将一个完整 runtime decision cycle 收口为单条 V2 workflow event。
+     * 顶层字段只用于兼容旧读模型，完整 attempts、shadow、failure 与 runtime state 统一位于 audit。
+     */
+    public void recordDecisionBatch(Long taskId,
+                                    TaskNode completedNode,
+                                    OrchestrationRuntimeDecisionBatch batch) {
+        if (taskId == null || batch == null) {
+            throw new IllegalArgumentException("taskId 与 batch 不能为空");
+        }
+        validateBatchTaskId(taskId, batch);
+        OrchestrationDecisionAuditTrace audit = auditAssembler.assemble(batch);
+        OrchestrationRuntimeDecisionTrace representative = auditAssembler
+                .selectRepresentativeAttempt(batch)
+                .orElse(null);
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("summary", "Orchestrator 已记录完整运行期决策周期");
+        payload.put("traceSchemaVersion", OrchestrationDecisionAuditTrace.SCHEMA_VERSION);
+        payload.put("decision", representative == null ? null : representative.decision());
+        payload.put("policyResult", representative == null ? null : representative.policyResult());
+        payload.put("mutation", representative == null ? null : representative.mutationSummary());
+        payload.put("runtimeStatus", representative == null ? null : representative.runtimeStatus());
+        payload.put("fallbackAttempt", representative != null && representative.fallbackAttempt());
+        payload.put("audit", audit);
+        payload.put("evidenceState", representative == null
+                ? null
+                : representative.decision().getEvidenceState());
+        payload.put("sourceUrls", audit.sourceUrls());
+        workflowEventPublisher.publishOrchestrationEvent(
+                taskId,
+                completedNode == null ? null : completedNode.getNodeName(),
+                completedNode == null ? null : completedNode.getPlanVersionId(),
+                completedNode == null ? null : completedNode.getBranchKey(),
+                WorkflowEventType.ORCHESTRATION_DECISION_RECORDED,
+                payload,
+                audit.sourceUrls());
+    }
 
     /**
      * 记录一次编排决策、策略结果与计划变更。
@@ -101,5 +142,20 @@ public class OrchestrationTraceService {
                 WorkflowEventType.ORCHESTRATION_CHECKPOINT_UPDATED,
                 payload,
                 checkpoint.getSourceUrls());
+    }
+
+    /**
+     * batch 内所有主/影子/attempt decision 都必须属于事件 task，防止错误调用把跨任务事实写进同一审计事件。
+     */
+    private void validateBatchTaskId(Long taskId, OrchestrationRuntimeDecisionBatch batch) {
+        List<OrchestrationDecision> decisions = new java.util.ArrayList<>();
+        decisions.addAll(batch.coordinatorOutcome().decisions());
+        decisions.addAll(batch.coordinatorOutcome().shadowDecisions());
+        batch.attempts().forEach(item -> decisions.add(item.decision()));
+        for (OrchestrationDecision decision : decisions) {
+            if (decision.getTaskId() != null && !taskId.equals(decision.getTaskId())) {
+                throw new IllegalArgumentException("batch decision taskId 与事件 taskId 不一致");
+            }
+        }
     }
 }

@@ -35,12 +35,14 @@ class TaskReplayContractPresenceTest {
         assertFieldPresent(replayResponseClass, "recoveryCheckpoints", softly);
         assertFieldPresent(replayResponseClass, "planVersions", softly);
         assertFieldPresent(replayResponseClass, "collectionReplays", softly);
+        assertFieldPresent(replayResponseClass, "latestOrchestrationDecisionAudit", softly);
         assertFieldPresent(replayResponseClass, "sourceUrls", softly);
 
         Class<?> timelineEventClass = assertClassPresent(
                 "cn.bugstack.competitoragent.model.dto.ReplayTimelineEvent",
                 softly);
         assertFieldPresent(timelineEventClass, "planVersionId", softly);
+        assertFieldPresent(timelineEventClass, "orchestrationDecisionAudit", softly);
         assertFieldPresent(timelineEventClass, "sourceUrls", softly);
 
         Class<?> checkpointServiceClass = assertClassPresent(

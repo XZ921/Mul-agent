@@ -55,6 +55,7 @@ public class OrchestrationRuntimeDecisionService {
                 .normalized();
 
         OrchestrationDecisionOutcome outcome = decisionService.decideWithOutcome(context);
+        requireWithinDecisionLimit(outcome, "primary");
         List<OrchestrationRuntimeDecision> primaryAttempts = evaluate(
                 outcome.decisions(),
                 context,
@@ -71,6 +72,7 @@ public class OrchestrationRuntimeDecisionService {
         OrchestrationDecisionOutcome fallbackOutcome = decisionService.fallbackAfterPolicyRejection(
                 context,
                 rejectedLlm.decision());
+        requireWithinDecisionLimit(fallbackOutcome, "fallback");
         List<OrchestrationRuntimeDecision> fallbackAttempts = evaluate(
                 fallbackOutcome.decisions(),
                 context,
@@ -181,6 +183,21 @@ public class OrchestrationRuntimeDecisionService {
 
     private int incrementSafely(int value) {
         return value >= Integer.MAX_VALUE ? Integer.MAX_VALUE : Math.max(0, value) + 1;
+    }
+
+    /**
+     * Parser 只约束 LLM 输出；Rule、legacy 和测试适配器仍可能直接构造 outcome。
+     * Runtime 必须在 Policy/Executor 前执行同一数量护栏，避免非模型路径绕过单周期上限。
+     */
+    private void requireWithinDecisionLimit(OrchestrationDecisionOutcome outcome, String stage) {
+        if (outcome == null) {
+            throw new IllegalArgumentException(stage + " outcome 不能为空");
+        }
+        int limit = ruleSet.getMaxDecisionsPerCycle();
+        if (outcome.decisions().size() > limit || outcome.shadowDecisions().size() > limit) {
+            throw new IllegalArgumentException(
+                    stage + " outcome 超过 maxDecisionsPerCycle=" + limit);
+        }
     }
 
     private <T> T requireDependency(T dependency, String name) {

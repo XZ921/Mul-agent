@@ -53,6 +53,12 @@ public class TaskReplayResponse {
     @Schema(description = "最近一次协作决策摘要")
     private OrchestrationDecisionSummary latestOrchestrationDecision;
 
+    /**
+     * 最近一次编排周期审计按时间线事件顺序选择，即使 shadow-only 周期没有代表决策也必须保留。
+     */
+    @Schema(description = "最近一次完整协作决策周期审计")
+    private OrchestrationDecisionAuditSummary latestOrchestrationDecisionAudit;
+
     @Schema(description = "回放整体证据 / 追溯来源地址")
     private List<String> sourceUrls;
 }

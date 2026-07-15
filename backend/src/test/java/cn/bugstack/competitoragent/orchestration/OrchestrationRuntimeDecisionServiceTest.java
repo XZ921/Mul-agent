@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -104,6 +105,23 @@ class OrchestrationRuntimeDecisionServiceTest {
     }
 
     @Test
+    void shouldRejectOutcomeBeyondPerCycleLimitBeforePolicyOrExecutor() {
+        OrchestrationDecision first = decision("od-limit-1", OrchestrationDecisionOrigin.RULE_ONLY);
+        OrchestrationDecision second = decision("od-limit-2", OrchestrationDecisionOrigin.RULE_ONLY);
+        OrchestrationDecision third = decision("od-limit-3", OrchestrationDecisionOrigin.RULE_ONLY);
+        when(decisionService.decideWithOutcome(any())).thenReturn(outcome(
+                OrchestratorDecisionMode.RULE_ONLY,
+                List.of(first, second, third),
+                List.of(),
+                null));
+
+        assertThatThrownBy(() -> service.decide(context(), "RUNNING", "SUCCESS"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxDecisionsPerCycle");
+        verifyNoInteractions(policyService, executorAdapter);
+    }
+
+    @Test
     void shouldUseFailClosedEffectiveCountForUnreadableCheckpoint() {
         OrchestrationRuntimeState unreadable = new OrchestrationRuntimeState(
                 0, Map.of(), 10L, 2,
@@ -131,25 +149,20 @@ class OrchestrationRuntimeDecisionServiceTest {
     void shouldFallbackExactlyOnceAndReplaceAllPrimaryFinalDecisions() {
         OrchestrationDecision firstAllowed = decision("od-allowed", OrchestrationDecisionOrigin.LLM_PRIMARY);
         OrchestrationDecision firstRejected = decision("od-rejected-1", OrchestrationDecisionOrigin.LLM_PRIMARY);
-        OrchestrationDecision secondRejected = decision("od-rejected-2", OrchestrationDecisionOrigin.LLM_PRIMARY);
         OrchestrationDecision fallback = decision("od-fallback", OrchestrationDecisionOrigin.RULE_FALLBACK);
         when(decisionService.decideWithOutcome(any())).thenReturn(outcome(
                 OrchestratorDecisionMode.LLM_PRIMARY,
-                List.of(firstAllowed, firstRejected, secondRejected),
+                List.of(firstAllowed, firstRejected),
                 List.of(),
                 null));
         when(policyService.evaluate(eq(firstAllowed), eq(ruleSet), eq(1), anyString(), anyString()))
                 .thenReturn(policy(firstAllowed, true));
         when(policyService.evaluate(eq(firstRejected), eq(ruleSet), eq(1), anyString(), anyString()))
                 .thenReturn(policy(firstRejected, false));
-        when(policyService.evaluate(eq(secondRejected), eq(ruleSet), eq(1), anyString(), anyString()))
-                .thenReturn(policy(secondRejected, false));
         when(executorAdapter.toMutation(eq(firstAllowed), any(), any(), anyInt()))
                 .thenReturn(mutation(firstAllowed, "APPEND_NODES"));
         when(executorAdapter.toMutation(eq(firstRejected), any(), any(), anyInt()))
                 .thenReturn(mutation(firstRejected, "NO_MUTATION"));
-        when(executorAdapter.toMutation(eq(secondRejected), any(), any(), anyInt()))
-                .thenReturn(mutation(secondRejected, "NO_MUTATION"));
         when(decisionService.fallbackAfterPolicyRejection(any(), eq(firstRejected)))
                 .thenReturn(outcome(OrchestratorDecisionMode.LLM_PRIMARY, List.of(fallback), List.of(), null));
         DecisionPolicyResult fallbackPolicy = policy(fallback, true);
@@ -161,7 +174,7 @@ class OrchestrationRuntimeDecisionServiceTest {
         OrchestrationRuntimeDecisionBatch batch = service.decide(context(), "RUNNING", "SUCCESS");
 
         assertThat(batch.attempts()).extracting(result -> result.decision().getDecisionId())
-                .containsExactly("od-allowed", "od-rejected-1", "od-rejected-2", "od-fallback");
+                .containsExactly("od-allowed", "od-rejected-1", "od-fallback");
         assertThat(batch.finalDecisions()).extracting(result -> result.decision().getDecisionId())
                 .containsExactly("od-fallback");
         assertThat(batch.policyFallbackUsed()).isTrue();

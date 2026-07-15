@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -491,6 +492,57 @@ class ReportServiceTest {
         assertEquals("MISSING_SOURCE", payload.at("/orchestrationDecision/evidenceState").asText());
         assertEquals("quality_check_final", payload.at("/orchestrationDecision/triggerNodeName").asText());
         assertTrue(payload.at("/sourceUrls").toString().contains("https://docs.example.com/review-gap"));
+    }
+
+    @Test
+    void shouldExposeRepresentativeAndCompleteAuditFromSamePersistedV2Event() throws Exception {
+        Report report = minimalReport(801L, "V2 编排审计报告");
+        TaskWorkflowEvent decisionEvent = persistedV2Event(
+                801L,
+                "quality_check_final",
+                "llm-policy-rejected-rule-fallback"
+        );
+        stubReportMainPath(report);
+        when(taskWorkflowEventRepository.findLatestOrchestrationDecisionEvent(801L))
+                .thenReturn(Optional.of(decisionEvent));
+        injectTaskWorkflowEventRepositoryIfPresent(reportService);
+
+        JsonNode payload = new ObjectMapper().valueToTree(reportService.getReport(801L));
+
+        assertEquals("od-801-rule-fallback", payload.at("/orchestrationDecision/decisionId").asText());
+        assertEquals("LLM_PRIMARY", payload.at("/orchestrationDecisionAudit/mode").asText());
+        assertEquals(2, payload.at("/orchestrationDecisionAudit/attempts").size());
+        assertEquals("POLICY_REJECTED",
+                payload.at("/orchestrationDecisionAudit/attempts/0/runtimeStatus").asText());
+        assertEquals("PARSE_ERROR", payload.at("/orchestrationDecisionAudit/llmFailure/type").asText());
+        assertTrue(payload.at("/sourceUrls").toString().contains("https://docs.example.com/checkpoint"));
+        assertFalse(payload.at("/sourceUrls").toString().contains("https://untrusted.example.net/outside"));
+        verify(taskWorkflowEventRepository).findLatestOrchestrationDecisionEvent(801L);
+    }
+
+    @Test
+    void shouldKeepShadowOnlyAuditWhenPersistedV2EventHasNoRepresentativeDecision() throws Exception {
+        Report report = minimalReport(802L, "Shadow 编排审计报告");
+        TaskWorkflowEvent decisionEvent = persistedV2Event(
+                802L,
+                "quality_check_final",
+                "shadow-budget-skipped-without-decision"
+        );
+        stubReportMainPath(report);
+        when(taskWorkflowEventRepository.findLatestOrchestrationDecisionEvent(802L))
+                .thenReturn(Optional.of(decisionEvent));
+        injectTaskWorkflowEventRepositoryIfPresent(reportService);
+
+        JsonNode payload = new ObjectMapper().valueToTree(reportService.getReport(802L));
+
+        assertTrue(payload.at("/orchestrationDecision").isNull());
+        assertEquals("LLM_SHADOW", payload.at("/orchestrationDecisionAudit/mode").asText());
+        assertTrue(payload.at("/orchestrationDecisionAudit/shadowExecution/requested").asBoolean());
+        assertFalse(payload.at("/orchestrationDecisionAudit/shadowExecution/executed").asBoolean());
+        assertEquals("SHADOW_BUDGET_EXHAUSTED",
+                payload.at("/orchestrationDecisionAudit/shadowExecution/skippedReason").asText());
+        assertTrue(payload.at("/sourceUrls").toString().contains("https://docs.example.com/shadow-context"));
+        verify(taskWorkflowEventRepository).findLatestOrchestrationDecisionEvent(802L);
     }
 
     @Test
@@ -1443,6 +1495,55 @@ class ReportServiceTest {
         } catch (NoSuchFieldException ignored) {
             // Red 阶段允许字段尚未落地；断言会通过缺失投影继续失败。
         }
+    }
+
+    /**
+     * Task 08 的报告契约必须消费数据库中真实保存的事件 JSON，不能重新手构一份简化 mock。
+     * 这里从冻结的 V2 fixture 中按 caseId 取出 payload，确保写侧 schema 变化会直接让报告测试变红。
+     */
+    private TaskWorkflowEvent persistedV2Event(Long taskId,
+                                               String nodeName,
+                                               String caseId) throws Exception {
+        byte[] fixtureBytes;
+        try (var input = getClass().getResourceAsStream(
+                "/orchestration/orchestration-trace-v2-fixtures.json")) {
+            assertNotNull(input, "V2 trace fixture must exist");
+            fixtureBytes = input.readAllBytes();
+        }
+        JsonNode root = new ObjectMapper().readTree(fixtureBytes);
+        for (JsonNode fixtureCase : root.path("cases")) {
+            if (caseId.equals(fixtureCase.path("caseId").asText())) {
+                JsonNode payload = fixtureCase.path("payload");
+                return TaskWorkflowEvent.builder()
+                        .taskId(taskId)
+                        .nodeName(nodeName)
+                        .eventType(WorkflowEventType.ORCHESTRATION_DECISION_RECORDED)
+                        .payload(payload.toString())
+                        .sourceUrls(payload.path("sourceUrls").toString())
+                        .build();
+            }
+        }
+        throw new IllegalArgumentException("unknown V2 trace fixture case: " + caseId);
+    }
+
+    private Report minimalReport(Long taskId, String title) {
+        return Report.builder()
+                .id(taskId)
+                .taskId(taskId)
+                .title(title)
+                .content("# Report")
+                .summary("summary")
+                .qualityPassed(false)
+                .evidenceCount(0)
+                .build();
+    }
+
+    private void stubReportMainPath(Report report) {
+        Long taskId = report.getTaskId();
+        when(reportRepository.findByTaskId(taskId)).thenReturn(Optional.of(report));
+        when(evidenceQueryService.listTaskEvidence(taskId)).thenReturn(List.of());
+        when(knowledgeRepository.findByTaskIdOrderByIdAsc(taskId)).thenReturn(List.of());
+        when(taskNodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenReturn(List.of());
     }
 
     /**

@@ -1,0 +1,241 @@
+{
+  "schemaVersion": "ORCHESTRATION_TRACE_V2",
+  "cases": [
+    {
+      "caseId": "llm-policy-rejected-rule-fallback",
+      "payload": {
+        "summary": "Orchestrator 已记录完整运行期决策周期",
+        "traceSchemaVersion": "ORCHESTRATION_TRACE_V2",
+        "decision": {
+          "decisionId": "od-801-rule-fallback",
+          "taskId": 801,
+          "triggerNodeName": "quality_check_final",
+          "decisionOrigin": "RULE_FALLBACK",
+          "decisionMetadata": {
+            "modelName": "deepseek-chat",
+            "temperature": 0.0,
+            "promptHash": "sha256:prompt-2",
+            "llmResponseHash": "sha256:response-2",
+            "parseRetryCount": 1,
+            "fallbackUsed": true,
+            "fallbackReason": "PARSE_ERROR:INVALID_DECISION_ACTION_PAIR",
+            "shadowExecuted": false,
+            "shadowSkippedReason": null
+          },
+          "decisionType": "WAIT_FOR_HUMAN",
+          "actionType": "MANUAL_REVIEW",
+          "reason": "LLM 候选被策略拒绝后转人工确认。",
+          "requiresHumanIntervention": true,
+          "requiresConfirmation": true,
+          "sourceUrls": ["https://docs.example.com/review-gap"],
+          "evidenceState": "PARTIAL_SOURCE"
+        },
+        "policyResult": {
+          "decisionId": "od-801-rule-fallback",
+          "decisionOrigin": "RULE_FALLBACK",
+          "decisionContract": "LEGACY_RULE_SET",
+          "allowed": true,
+          "requiresConfirmation": true,
+          "blockedReasons": [],
+          "normalizedAction": "MANUAL_ONLY",
+          "sourceUrls": ["https://docs.example.com/review-gap"],
+          "evidenceState": "PARTIAL_SOURCE"
+        },
+        "mutation": {
+          "mutationId": "dpm-od-801-rule-fallback",
+          "decisionId": "od-801-rule-fallback",
+          "mutationType": "MARK_WAITING_INTERVENTION",
+          "branchReason": "ORCHESTRATOR_DECISION",
+          "dynamicAction": "MANUAL_ONLY",
+          "expectedResumeNodeName": null,
+          "sourceUrls": ["https://docs.example.com/review-gap"],
+          "evidenceState": "PARTIAL_SOURCE"
+        },
+        "runtimeStatus": "CONFIRMATION_REQUIRED",
+        "fallbackAttempt": true,
+        "audit": {
+          "traceSchemaVersion": "ORCHESTRATION_TRACE_V2",
+          "mode": "LLM_PRIMARY",
+          "coordinatorDecisions": [
+            {
+              "decisionId": "od-801-llm-primary",
+              "taskId": 801,
+              "triggerNodeName": "quality_check_final",
+              "decisionOrigin": "LLM_PRIMARY",
+              "decisionType": "REWRITE_ONLY",
+              "actionType": "SUPPLEMENT_EVIDENCE",
+              "reason": "补充来源后改写。",
+              "sourceUrls": ["https://docs.example.com/review-gap"],
+              "evidenceState": "PARTIAL_SOURCE"
+            }
+          ],
+          "attempts": [
+            {
+              "decision": {
+                "decisionId": "od-801-llm-primary",
+                "taskId": 801,
+                "triggerNodeName": "quality_check_final",
+                "decisionOrigin": "LLM_PRIMARY",
+                "decisionType": "REWRITE_ONLY",
+                "actionType": "SUPPLEMENT_EVIDENCE",
+                "reason": "补充来源后改写。",
+                "sourceUrls": ["https://docs.example.com/review-gap"],
+                "evidenceState": "PARTIAL_SOURCE"
+              },
+              "policyResult": {
+                "decisionId": "od-801-llm-primary",
+                "decisionOrigin": "LLM_PRIMARY",
+                "decisionContract": "LLM_ACTION_MATRIX",
+                "allowed": false,
+                "requiresConfirmation": false,
+                "blockedReasons": ["INVALID_DECISION_ACTION_PAIR"],
+                "normalizedAction": "MANUAL_ONLY",
+                "sourceUrls": ["https://docs.example.com/review-gap"],
+                "evidenceState": "PARTIAL_SOURCE"
+              },
+              "mutationSummary": {
+                "mutationId": "dpm-od-801-llm-primary",
+                "decisionId": "od-801-llm-primary",
+                "mutationType": "NO_MUTATION",
+                "branchReason": "POLICY_REJECTED",
+                "dynamicAction": "NO_ACTION",
+                "expectedResumeNodeName": null,
+                "sourceUrls": ["https://docs.example.com/review-gap"],
+                "evidenceState": "PARTIAL_SOURCE"
+              },
+              "fallbackAttempt": false,
+              "runtimeStatus": "POLICY_REJECTED",
+              "sourceUrls": ["https://docs.example.com/review-gap"]
+            },
+            {
+              "decision": {
+                "decisionId": "od-801-rule-fallback",
+                "taskId": 801,
+                "triggerNodeName": "quality_check_final",
+                "decisionOrigin": "RULE_FALLBACK",
+                "decisionType": "WAIT_FOR_HUMAN",
+                "actionType": "MANUAL_REVIEW",
+                "reason": "LLM 候选被策略拒绝后转人工确认。",
+                "sourceUrls": ["https://docs.example.com/review-gap"],
+                "evidenceState": "PARTIAL_SOURCE"
+              },
+              "policyResult": {
+                "decisionId": "od-801-rule-fallback",
+                "decisionOrigin": "RULE_FALLBACK",
+                "decisionContract": "LEGACY_RULE_SET",
+                "allowed": true,
+                "requiresConfirmation": true,
+                "blockedReasons": [],
+                "normalizedAction": "MANUAL_ONLY",
+                "sourceUrls": ["https://docs.example.com/review-gap"],
+                "evidenceState": "PARTIAL_SOURCE"
+              },
+              "mutationSummary": {
+                "mutationId": "dpm-od-801-rule-fallback",
+                "decisionId": "od-801-rule-fallback",
+                "mutationType": "MARK_WAITING_INTERVENTION",
+                "branchReason": "ORCHESTRATOR_DECISION",
+                "dynamicAction": "MANUAL_ONLY",
+                "expectedResumeNodeName": null,
+                "sourceUrls": ["https://docs.example.com/review-gap"],
+                "evidenceState": "PARTIAL_SOURCE"
+              },
+              "fallbackAttempt": true,
+              "runtimeStatus": "CONFIRMATION_REQUIRED",
+              "sourceUrls": ["https://docs.example.com/review-gap"]
+            }
+          ],
+          "finalDecisionIds": ["od-801-rule-fallback"],
+          "policyFallbackUsed": true,
+          "runtimeState": {
+            "currentDecisionCount": 1,
+            "dynamicBranchCountsBySection": {"pricing": 1},
+            "currentPlanVersionId": 31,
+            "nextPlanVersion": 3,
+            "checkpointStateStatus": "RESTORED",
+            "sourceUrls": ["https://docs.example.com/checkpoint"]
+          },
+          "shadowExecution": {
+            "requested": false,
+            "executed": false,
+            "skippedReason": null,
+            "failure": null,
+            "sourceUrls": ["https://docs.example.com/review-gap"]
+          },
+          "shadowDecisions": [],
+          "llmFailure": {
+            "type": "PARSE_ERROR",
+            "providerErrorCode": null,
+            "parseRetryCount": 1,
+            "attempts": [
+              {
+                "attemptNumber": 1,
+                "promptHash": "sha256:prompt-1",
+                "llmResponseHash": "sha256:response-1",
+                "issues": [{"decisionIndex": 0, "code": "INVALID_DECISION_ACTION_PAIR", "fieldName": "decisionType/actionType"}],
+                "discardedSourceUrls": [{"decisionIndex": 0, "sourceUrl": "https://untrusted.example.net/outside", "code": "SOURCE_URL_OUTSIDE_CONTEXT"}]
+              },
+              {
+                "attemptNumber": 2,
+                "promptHash": "sha256:prompt-2",
+                "llmResponseHash": "sha256:response-2",
+                "issues": [{"decisionIndex": 0, "code": "INVALID_DECISION_ACTION_PAIR", "fieldName": "decisionType/actionType"}],
+                "discardedSourceUrls": []
+              }
+            ],
+            "sourceUrls": ["https://docs.example.com/review-gap"]
+          },
+          "sourceUrls": [
+            "https://docs.example.com/review-gap",
+            "https://docs.example.com/checkpoint"
+          ]
+        },
+        "evidenceState": "PARTIAL_SOURCE",
+        "sourceUrls": [
+          "https://docs.example.com/review-gap",
+          "https://docs.example.com/checkpoint"
+        ]
+      }
+    },
+    {
+      "caseId": "shadow-budget-skipped-without-decision",
+      "payload": {
+        "summary": "Orchestrator 已记录完整运行期决策周期",
+        "traceSchemaVersion": "ORCHESTRATION_TRACE_V2",
+        "decision": null,
+        "policyResult": null,
+        "mutation": null,
+        "runtimeStatus": null,
+        "fallbackAttempt": false,
+        "audit": {
+          "traceSchemaVersion": "ORCHESTRATION_TRACE_V2",
+          "mode": "LLM_SHADOW",
+          "coordinatorDecisions": [],
+          "attempts": [],
+          "finalDecisionIds": [],
+          "policyFallbackUsed": false,
+          "runtimeState": {
+            "currentDecisionCount": 0,
+            "dynamicBranchCountsBySection": {},
+            "currentPlanVersionId": 32,
+            "nextPlanVersion": 2,
+            "checkpointStateStatus": "ABSENT",
+            "sourceUrls": ["https://docs.example.com/shadow-context"]
+          },
+          "shadowExecution": {
+            "requested": true,
+            "executed": false,
+            "skippedReason": "SHADOW_BUDGET_EXHAUSTED",
+            "failure": null,
+            "sourceUrls": ["https://docs.example.com/shadow-context"]
+          },
+          "shadowDecisions": [],
+          "llmFailure": null,
+          "sourceUrls": ["https://docs.example.com/shadow-context"]
+        },
+        "evidenceState": "FULL_SOURCE",
+        "sourceUrls": ["https://docs.example.com/shadow-context"]
+      }
+    }
+  ]
+}

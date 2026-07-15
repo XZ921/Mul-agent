@@ -20,8 +20,29 @@ class OrchestrationDecisionResponseParserTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private final OrchestrationDecisionActionMatrix actionMatrix = new OrchestrationDecisionActionMatrix();
+    private final DecisionPolicyRuleSet ruleSet = DecisionPolicyRuleSet.builder()
+            .maxDecisionsPerCycle(2)
+            .build()
+            .normalized();
     private final OrchestrationDecisionResponseParser parser =
-            new OrchestrationDecisionResponseParser(objectMapper, actionMatrix);
+            new OrchestrationDecisionResponseParser(objectMapper, actionMatrix, ruleSet);
+
+    @Test
+    void shouldRejectDecisionArrayBeyondPerCycleLimitWithoutPartialSuccess() throws Exception {
+        String response = response(
+                validCandidate("NO_ACTION", "NO_ACTION", List.of()),
+                validCandidate("NO_ACTION", "NO_ACTION", List.of()),
+                validCandidate("NO_ACTION", "NO_ACTION", List.of()));
+
+        OrchestrationDecisionParseResult result = parse(response, baseContext());
+
+        assertThat(result.successful()).isFalse();
+        assertThat(result.decisions()).isEmpty();
+        assertThat(result.issues()).containsExactly(issue(
+                null,
+                OrchestrationDecisionResponseParser.TOO_MANY_DECISIONS,
+                "decisions"));
+    }
 
     @Test
     void shouldRejectNullOrBlankResponseWithStableIssue() {
@@ -234,8 +255,10 @@ class OrchestrationDecisionResponseParserTest {
                 "rewrite_only", "rewrite_claim", List.of(FULL_URL));
         ObjectNode manual = validCandidate("wait_for_human", "manual_review", List.of());
 
-        OrchestrationDecisionParseResult result = parse(
-                response(noAction, supplement, rewriteSection, rewriteClaim, manual), baseContext());
+        OrchestrationDecisionParseResult result = parserWithLimit(5).parse(
+                response(noAction, supplement, rewriteSection, rewriteClaim, manual),
+                baseContext(),
+                OrchestrationDecisionOrigin.LLM_PRIMARY);
 
         assertThat(result.successful()).isTrue();
         assertThat(result.decisions()).hasSize(5);
@@ -284,7 +307,10 @@ class OrchestrationDecisionResponseParserTest {
         ObjectNode crossed = validCandidate("REWRITE_ONLY", "SUPPLEMENT_EVIDENCE", List.of(FULL_URL));
         ObjectNode legacy = validCandidate("RERUN_NODE", "RERUN_NODE", List.of(FULL_URL));
 
-        OrchestrationDecisionParseResult result = parse(response(unknown, crossed, legacy), baseContext());
+        OrchestrationDecisionParseResult result = parserWithLimit(3).parse(
+                response(unknown, crossed, legacy),
+                baseContext(),
+                OrchestrationDecisionOrigin.LLM_PRIMARY);
 
         assertThat(result.successful()).isFalse();
         assertThat(result.decisions()).isEmpty();
@@ -476,5 +502,16 @@ class OrchestrationDecisionResponseParserTest {
 
     private OrchestrationDecisionParseResult.ParseIssue issue(Integer index, String code, String field) {
         return new OrchestrationDecisionParseResult.ParseIssue(index, code, field);
+    }
+
+    /**
+     * 少数协议测试需要一次覆盖全部矩阵或错误顺序，显式放宽局部 fixture 上限；
+     * 生产默认 Parser 和 cardinality 测试仍使用 maxDecisionsPerCycle=2。
+     */
+    private OrchestrationDecisionResponseParser parserWithLimit(int limit) {
+        return new OrchestrationDecisionResponseParser(
+                objectMapper,
+                actionMatrix,
+                DecisionPolicyRuleSet.builder().maxDecisionsPerCycle(limit).build().normalized());
     }
 }

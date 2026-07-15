@@ -3,6 +3,7 @@ package cn.bugstack.competitoragent.conversation;
 import cn.bugstack.competitoragent.model.entity.TaskWorkflowEvent;
 import cn.bugstack.competitoragent.repository.TaskWorkflowEventRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -82,5 +83,53 @@ class ConversationOrchestrationDecisionQueryServiceTest {
         assertThat(view.getSourceUrls()).containsExactly(
                 "https://docs.example.com/analyze",
                 "https://docs.example.com/replay");
+    }
+
+    @Test
+    void shouldReadV2RepresentativeDecisionWithoutReturningShadowCandidate() throws Exception {
+        TaskWorkflowEventRepository repository = mock(TaskWorkflowEventRepository.class);
+        TaskWorkflowEvent event = v2Event(88L, "llm-policy-rejected-rule-fallback");
+        when(repository.findLatestOrchestrationDecisionEvent(88L)).thenReturn(Optional.of(event));
+        ConversationOrchestrationDecisionQueryService service =
+                new ConversationOrchestrationDecisionQueryService(repository, new ObjectMapper());
+
+        Optional<ConversationOrchestrationDecisionView> result = service.findLatestDecision(88L);
+
+        assertThat(result).isPresent();
+        assertThat(result.orElseThrow().getDecisionId()).isEqualTo("od-801-rule-fallback");
+        assertThat(result.orElseThrow().getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(result.orElseThrow().getSourceUrls())
+                .contains("https://docs.example.com/review-gap")
+                .doesNotContain("https://untrusted.example.net/outside");
+    }
+
+    @Test
+    void shouldReturnEmptyForLatestShadowOnlyV2Event() throws Exception {
+        TaskWorkflowEventRepository repository = mock(TaskWorkflowEventRepository.class);
+        TaskWorkflowEvent event = v2Event(88L, "shadow-budget-skipped-without-decision");
+        when(repository.findLatestOrchestrationDecisionEvent(88L)).thenReturn(Optional.of(event));
+        ConversationOrchestrationDecisionQueryService service =
+                new ConversationOrchestrationDecisionQueryService(repository, new ObjectMapper());
+
+        assertThat(service.findLatestDecision(88L)).isEmpty();
+    }
+
+    /** Conversation 也必须直接消费冻结的持久化事件，不能为 shadow 另造可执行 decision。 */
+    private TaskWorkflowEvent v2Event(Long taskId, String caseId) throws Exception {
+        JsonNode root = new ObjectMapper().readTree(getClass().getResourceAsStream(
+                "/orchestration/orchestration-trace-v2-fixtures.json"));
+        for (JsonNode fixtureCase : root.path("cases")) {
+            if (caseId.equals(fixtureCase.path("caseId").asText())) {
+                JsonNode payload = fixtureCase.path("payload");
+                return TaskWorkflowEvent.builder()
+                        .taskId(taskId)
+                        .nodeName("quality_check_final")
+                        .payload(payload.toString())
+                        .sourceUrls(payload.path("sourceUrls").toString())
+                        .createdAt(LocalDateTime.now())
+                        .build();
+            }
+        }
+        throw new IllegalArgumentException("unknown V2 trace fixture case: " + caseId);
     }
 }

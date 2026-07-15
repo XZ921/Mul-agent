@@ -50,6 +50,10 @@ public class ReplayTimelineEvent {
     @Schema(description = "协作决策摘要，仅在编排决策事件上存在")
     private OrchestrationDecisionSummary orchestrationDecision;
 
+    /** 一个 V2 batch 事件对应一个完整周期，attempts 只作为本字段明细，不拆成额外时间线项。 */
+    @Schema(description = "完整协作决策周期审计，仅在编排决策事件上存在")
+    private OrchestrationDecisionAuditSummary orchestrationDecisionAudit;
+
     @Schema(description = "发生时间")
     private LocalDateTime occurredAt;
 

@@ -82,6 +82,31 @@ import static org.mockito.Mockito.when;
 class DagExecutorTest {
 
     @Test
+    void shouldKeepBatchTraceNullGuardForCompatibilityConstructors() throws Exception {
+        DagExecutor executor = newDagExecutor(
+                mock(TaskNodeRepository.class),
+                mock(AnalysisTaskRepository.class),
+                List.of(),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService(),
+                List.of(),
+                null,
+                mock(OrchestrationRuntimeDecisionService.class));
+        java.lang.reflect.Method traceMethod = DagExecutor.class.getDeclaredMethod(
+                "recordAgentDecisionBatchTrace",
+                Long.class,
+                TaskNode.class,
+                OrchestrationRuntimeDecisionBatch.class);
+        traceMethod.setAccessible(true);
+
+        assertDoesNotThrow(() -> traceMethod.invoke(
+                executor,
+                1L,
+                TaskNode.builder().taskId(1L).nodeName("analyze_competitors").build(),
+                mock(OrchestrationRuntimeDecisionBatch.class)));
+    }
+
+    @Test
     void shouldContinueExecutingIndependentNodeAfterPeerFailure() {
         Long taskId = 101L;
         AnalysisTask task = AnalysisTask.builder()
@@ -2027,14 +2052,17 @@ class DagExecutorTest {
         assertEquals(TaskNodeStatus.PENDING, writer.getStatus());
         assertTrue(analyzer.getInterventionReason().contains("Analyzer"));
         verify(orchestrationTraceService, atLeastOnce())
-                .recordDecision(eq(taskId), eq(analyzer), argThat(decision ->
-                                "WAIT_FOR_HUMAN".equals(decision.getDecisionType())
-                                        && "analyze_competitors".equals(decision.getTriggerNodeName())
-                                        && decision.getInputRefs().containsKey("agentSuggestionIds")),
-                        argThat(policy -> policy.isAllowed()
-                                && "LEGACY_RULE_SET".equals(policy.getDecisionContract())),
-                        argThat(mutation -> "MARK_WAITING_INTERVENTION".equals(mutation.getMutationType())
-                                && "AWAIT_CONFIRMATION".equals(mutation.getRuntimeCommand())));
+                .recordDecisionBatch(eq(taskId), eq(analyzer), argThat(batch ->
+                        batch.attempts().stream().anyMatch(attempt ->
+                                "WAIT_FOR_HUMAN".equals(attempt.decision().getDecisionType())
+                                        && "analyze_competitors".equals(
+                                        attempt.decision().getTriggerNodeName())
+                                        && attempt.decision().getInputRefs().containsKey("agentSuggestionIds")
+                                        && attempt.policyResult().isAllowed()
+                                        && "LEGACY_RULE_SET".equals(
+                                        attempt.policyResult().getDecisionContract())
+                                        && "MARK_WAITING_INTERVENTION".equals(
+                                        attempt.mutation().getMutationType()))));
     }
 
     @Test
@@ -2165,14 +2193,8 @@ class DagExecutorTest {
                 argThat(context -> !context.getAgentSuggestions().isEmpty()),
                 eq(AnalysisTaskStatus.RUNNING.name()),
                 eq(TaskNodeStatus.SUCCESS.name()));
-        verify(traceService).recordDecision(
-                eq(taskId), eq(analyzer),
-                argThat(decision -> "od-agent-llm-rejected".equals(decision.getDecisionId())),
-                any(), any());
-        verify(traceService).recordDecision(
-                eq(taskId), eq(analyzer),
-                argThat(decision -> "od-agent-rule-no-action".equals(decision.getDecisionId())),
-                any(), any());
+        verify(traceService).recordDecisionBatch(eq(taskId), eq(analyzer), eq(batch));
+        verify(traceService, never()).recordDecision(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -2284,14 +2306,16 @@ class DagExecutorTest {
         assertEquals(TaskNodeStatus.PENDING, reviewer.getStatus());
         assertTrue(writer.getInterventionReason().contains("Writer"));
         verify(orchestrationTraceService, atLeastOnce())
-                .recordDecision(eq(taskId), eq(writer), argThat(decision ->
-                                "WAIT_FOR_HUMAN".equals(decision.getDecisionType())
-                                        && "write_report".equals(decision.getTriggerNodeName())
-                                        && decision.getInputRefs().containsKey("agentSuggestionIds")),
-                        argThat(policy -> policy.isAllowed()
-                                && "LEGACY_RULE_SET".equals(policy.getDecisionContract())),
-                        argThat(mutation -> "MARK_WAITING_INTERVENTION".equals(mutation.getMutationType())
-                                && "AWAIT_CONFIRMATION".equals(mutation.getRuntimeCommand())));
+                .recordDecisionBatch(eq(taskId), eq(writer), argThat(batch ->
+                        batch.attempts().stream().anyMatch(attempt ->
+                                "WAIT_FOR_HUMAN".equals(attempt.decision().getDecisionType())
+                                        && "write_report".equals(attempt.decision().getTriggerNodeName())
+                                        && attempt.decision().getInputRefs().containsKey("agentSuggestionIds")
+                                        && attempt.policyResult().isAllowed()
+                                        && "LEGACY_RULE_SET".equals(
+                                        attempt.policyResult().getDecisionContract())
+                                        && "MARK_WAITING_INTERVENTION".equals(
+                                        attempt.mutation().getMutationType()))));
     }
 
     @Test
@@ -2363,14 +2387,16 @@ class DagExecutorTest {
         assertEquals(TaskNodeStatus.WAITING_INTERVENTION, citation.getStatus());
         assertEquals(TaskNodeStatus.PENDING, reviewer.getStatus());
         verify(orchestrationTraceService, atLeastOnce())
-                .recordDecision(eq(taskId), eq(citation), argThat(decision ->
-                                "WAIT_FOR_HUMAN".equals(decision.getDecisionType())
-                                        && "citation_check".equals(decision.getTriggerNodeName())
-                                        && decision.getInputRefs().containsKey("agentSuggestionIds")),
-                        argThat(policy -> policy.isAllowed()
-                                && "LEGACY_RULE_SET".equals(policy.getDecisionContract())),
-                        argThat(mutation -> "MARK_WAITING_INTERVENTION".equals(mutation.getMutationType())
-                                && "AWAIT_CONFIRMATION".equals(mutation.getRuntimeCommand())));
+                .recordDecisionBatch(eq(taskId), eq(citation), argThat(batch ->
+                        batch.attempts().stream().anyMatch(attempt ->
+                                "WAIT_FOR_HUMAN".equals(attempt.decision().getDecisionType())
+                                        && "citation_check".equals(attempt.decision().getTriggerNodeName())
+                                        && attempt.decision().getInputRefs().containsKey("agentSuggestionIds")
+                                        && attempt.policyResult().isAllowed()
+                                        && "LEGACY_RULE_SET".equals(
+                                        attempt.policyResult().getDecisionContract())
+                                        && "MARK_WAITING_INTERVENTION".equals(
+                                        attempt.mutation().getMutationType()))));
     }
 
     @Test

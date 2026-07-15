@@ -137,15 +137,16 @@ class DynamicPlanAppenderTest {
                 completedNode);
 
         assertThat(appended).isFalse();
-        verify(orchestrationTraceService).recordDecision(
+        verify(orchestrationTraceService).recordDecisionBatch(
                 eq(51L),
                 eq(completedNode),
-                argThat(recordedDecision -> "od-invalid-llm-appender".equals(recordedDecision.getDecisionId())
-                        && recordedDecision.getDecisionOrigin() == OrchestrationDecisionOrigin.LLM_PRIMARY),
-                argThat(recordedPolicy -> !recordedPolicy.isAllowed()
-                        && recordedPolicy.getBlockedReasons().contains(
-                                "INVALID_DECISION_ACTION_PAIR: REWRITE_ONLY 不允许搭配 SUPPLEMENT_EVIDENCE")),
-                argThat(recordedMutation -> "NO_MUTATION".equals(recordedMutation.getMutationType())));
+                argThat(recordedBatch -> recordedBatch.attempts().size() == 1
+                        && "od-invalid-llm-appender".equals(
+                        recordedBatch.attempts().get(0).decision().getDecisionId())
+                        && !recordedBatch.attempts().get(0).policyResult().isAllowed()
+                        && "NO_MUTATION".equals(
+                        recordedBatch.attempts().get(0).mutation().getMutationType())));
+        verify(orchestrationTraceService, never()).recordDecision(any(), any(), any(), any(), any());
         verify(dynamicTaskGraphService, never()).createDynamicPlan(
                 any(), any(), any(DynamicPlanMutation.class), any());
         verify(nodeRepository, never()).saveAll(any());
@@ -335,19 +336,16 @@ class DynamicPlanAppenderTest {
         assertThat(contextCaptor.getValue().getTaskStatus()).isEqualTo(AnalysisTaskStatus.STOPPED.name());
         assertThat(contextCaptor.getValue().getSourceUrls())
                 .containsExactly("https://www.notion.so/pricing");
-        verify(orchestrationTraceService).recordDecision(
+        verify(orchestrationTraceService).recordDecisionBatch(
                 eq(50L),
                 eq(completedNode),
-                argThat(recordedDecision -> "od-001".equals(recordedDecision.getDecisionId())),
-                argThat(recordedPolicy -> recordedPolicy.isAllowed()
-                        && "CREATE_SUPPLEMENT_BRANCH".equals(recordedPolicy.getNormalizedAction())),
-                argThat(recordedMutation -> "APPEND_NODES".equals(recordedMutation.getMutationType())));
-        verify(orchestrationTraceService).recordDecision(
-                eq(50L),
-                eq(completedNode),
-                argThat(recordedDecision -> "od-primary-not-final".equals(recordedDecision.getDecisionId())),
-                argThat(DecisionPolicyResult::isAllowed),
-                argThat(recordedMutation -> "dpm-od-primary-not-final".equals(recordedMutation.getMutationId())));
+                argThat(recordedBatch -> recordedBatch.attempts().stream()
+                        .map(item -> item.decision().getDecisionId())
+                        .toList()
+                        .equals(List.of("od-primary-not-final", "od-001"))
+                        && recordedBatch.finalDecisions().size() == 1
+                        && "od-001".equals(recordedBatch.finalDecisions().get(0).decision().getDecisionId())));
+        verify(orchestrationTraceService, never()).recordDecision(any(), any(), any(), any(), any());
         verify(dynamicTaskGraphService, never()).createDynamicPlan(
                 eq(parentPlan),
                 eq(completedNode),
