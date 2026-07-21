@@ -12,33 +12,48 @@ class DecisionPolicyServiceTest {
             new OrchestrationDecisionActionMatrix());
 
     @Test
-    void shouldAllowSupplementEvidenceWhenSourceGapIsExplicit() {
-        OrchestrationDecision decision = OrchestrationDecision.builder()
-                .decisionId("od-001")
-                .decisionType("APPEND_DYNAMIC_BRANCH")
-                .actionType("SUPPLEMENT_EVIDENCE")
-                .targetNode("collect_sources")
-                .affectedScope("CURRENT_NODE_AND_DOWNSTREAM")
-                .priority("HIGH")
-                .sourceUrls(List.of())
-                .evidenceState(EvidenceState.MISSING_SOURCE)
-                .suggestedQueries(List.of("Notion AI pricing official"))
-                .build()
-                .normalized();
+    void shouldBlockEveryAutomaticMutationWhenTrustedSourceIsMissing() {
+        List<OrchestrationDecision> decisions = List.of(
+                OrchestrationDecision.builder()
+                        .decisionId("od-missing-supplement")
+                        .decisionType("APPEND_DYNAMIC_BRANCH")
+                        .actionType("SUPPLEMENT_EVIDENCE")
+                        .build(),
+                OrchestrationDecision.builder()
+                        .decisionId("od-missing-rerun")
+                        .decisionType("RERUN_NODE")
+                        .actionType("RERUN_NODE")
+                        .build(),
+                OrchestrationDecision.builder()
+                        .decisionId("od-missing-rewrite")
+                        .decisionType("REWRITE_ONLY")
+                        .actionType("REWRITE_SECTION")
+                        .build());
 
-        DecisionPolicyResult result = service.evaluate(
-                decision,
-                DecisionPolicyRuleSet.builder().maxAutoDecisions(2).build(),
-                0,
-                "RUNNING",
-                "SUCCESS");
+        List<DecisionPolicyResult> results = decisions.stream()
+                .map(decision -> service.evaluate(
+                        decision.toBuilder()
+                                .sourceUrls(List.of())
+                                .evidenceState(EvidenceState.MISSING_SOURCE)
+                                .build()
+                                .normalized(),
+                        DecisionPolicyRuleSet.builder().maxAutoDecisions(2).build(),
+                        0,
+                        "RUNNING",
+                        "SUCCESS"))
+                .toList();
 
-        assertThat(result.isAllowed()).isTrue();
-        assertThat(result.getNormalizedAction()).isEqualTo("CREATE_SUPPLEMENT_BRANCH");
-        assertThat(result.getPolicyRuleRefs()).contains(
-                "allowedDecisionTypes",
-                "requireSourceUrlsOrEvidenceGap",
-                "maxSearchQueriesPerDecision");
+        assertThat(results)
+                .extracting(DecisionPolicyResult::getNormalizedAction)
+                .containsExactly(
+                        "CREATE_SUPPLEMENT_BRANCH",
+                        "CREATE_RERUN_BRANCH",
+                        "CREATE_REWRITE_BRANCH");
+        assertThat(results).allSatisfy(result -> {
+            assertThat(result.isAllowed()).isFalse();
+            assertThat(result.getBlockedReasons()).contains(
+                    DecisionPolicyService.MISSING_SOURCE_FOR_AUTOMATIC_MUTATION);
+        });
     }
 
     @Test
@@ -132,8 +147,8 @@ class DecisionPolicyServiceTest {
                 .affectedScope("CURRENT_NODE_AND_DOWNSTREAM")
                 .reason("补充定价来源")
                 .suggestedQueries(List.of("Notion pricing official"))
-                .sourceUrls(List.of())
-                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .sourceUrls(List.of("https://example.com/pricing"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
                 .build();
 
         DecisionPolicyResult result = evaluate(decision, DecisionPolicyRuleSet.builder().build());
@@ -141,6 +156,8 @@ class DecisionPolicyServiceTest {
         assertThat(result.isAllowed()).isTrue();
         assertThat(result.getNormalizedAction()).isEqualTo("CREATE_SUPPLEMENT_BRANCH");
         assertThat(result.getPolicyRuleRefs()).contains("llmDecisionActionMatrix", "LLM_SUPPLEMENT_EVIDENCE");
+        assertThat(result.getBlockedReasons())
+                .noneMatch(reason -> reason.startsWith("MISSING_SOURCE_FOR_AUTOMATIC_MUTATION"));
         assertThat(result.getTavilyQueryMode()).isEqualTo("EVIDENCE_REPAIR");
     }
 
@@ -378,7 +395,7 @@ class DecisionPolicyServiceTest {
     }
 
     @Test
-    void shouldElevateRewriteOnlyDecisionWhenSourceIsMissing() {
+    void shouldBlockAndElevateRewriteOnlyDecisionWhenSourceIsMissing() {
         OrchestrationDecision decision = OrchestrationDecision.builder()
                 .decisionId("od-005")
                 .decisionType("REWRITE_ONLY")
@@ -397,9 +414,11 @@ class DecisionPolicyServiceTest {
                 "RUNNING",
                 "SUCCESS");
 
-        assertThat(result.isAllowed()).isTrue();
+        assertThat(result.isAllowed()).isFalse();
         assertThat(result.isRequiresConfirmation()).isTrue();
         assertThat(result.getRiskLevel()).isEqualTo("HIGH");
+        assertThat(result.getBlockedReasons()).contains(
+                DecisionPolicyService.MISSING_SOURCE_FOR_AUTOMATIC_MUTATION);
         assertThat(result.getPolicyRuleRefs()).contains("missing_source_requires_supplement");
     }
 

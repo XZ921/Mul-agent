@@ -31,7 +31,7 @@ class Task66CoverageContractRegressionTest {
     }
 
     @Test
-    void standardReportShouldStillBlockOnPricingAndWeaknesses() {
+    void standardReportShouldKeepPricingAndWeaknessesAsNonBlockingEnhancements() {
         CoverageContract contract = resolver.resolve(
                 "STANDARD_COMPETITOR_REPORT",
                 List.of("开放平台", "开发者生态", "产品功能"),
@@ -39,8 +39,8 @@ class Task66CoverageContractRegressionTest {
                 null);
 
         assertThat(contract.findField("pricing").orElseThrow().getBlockingLevel())
-                .isEqualTo(CoverageBlockingLevel.BLOCKER);
+                .isEqualTo(CoverageBlockingLevel.WARNING);
         assertThat(contract.findField("weaknesses").orElseThrow().getBlockingLevel())
-                .isEqualTo(CoverageBlockingLevel.BLOCKER);
+                .isEqualTo(CoverageBlockingLevel.WARNING);
     }
 }

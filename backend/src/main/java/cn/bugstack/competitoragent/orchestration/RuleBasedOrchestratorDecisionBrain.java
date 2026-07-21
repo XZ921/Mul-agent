@@ -1,5 +1,6 @@
 package cn.bugstack.competitoragent.orchestration;
 
+import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -36,13 +37,20 @@ public class RuleBasedOrchestratorDecisionBrain implements OrchestratorDecisionB
         if (!"quality_check_final".equals(context.getTriggerNodeName())) {
             return List.of(noAction(context, "P1/P2/P3 当前仅处理 extract_schema、analyze_competitors、write_report/rewrite_report、citation_check 和 quality_check_final 反馈。"));
         }
-        if (context.isPassed()) {
-            return List.of(noAction(context, "当前终审已通过，无需追加编排动作。"));
-        }
+        // requiresHumanIntervention 是显式安全门：即使终审 passed=true，也必须先暂停等待人工，不能被“通过”吞掉。
         if (context.isRequiresHumanIntervention()) {
             return List.of(waitForHuman(context, "终审要求人工介入，禁止自动补图。"));
         }
+        if (context.isPassed()) {
+            return List.of(noAction(context, "当前终审已通过，无需追加编排动作。"));
+        }
         if (context.getLegacyRevisionDirectives() != null && !context.getLegacyRevisionDirectives().isEmpty()) {
+            // legacy adapter 只会复制单条指令自身的 sourceUrls，不能用 review 顶层来源替缺来源指令背书。
+            // 因此必须在生成候选前全量扫描：任一自动变更缺少可追溯来源时，整个周期优先安全停点，
+            // 避免 Policy 拒绝唯一候选后留下“终审失败但没有可执行终态”的 FAILED 半闭环。
+            if (context.getLegacyRevisionDirectives().stream().anyMatch(this::isMissingSourceAutomaticDirective)) {
+                return List.of(waitForHuman(context, "终审修订指令缺少 sourceUrls，禁止自动修改任务计划。"));
+            }
             AtomicInteger index = new AtomicInteger(1);
             return context.getLegacyRevisionDirectives().stream()
                     .map(directive -> decisionAdapter.fromRevisionDirective(
@@ -74,6 +82,24 @@ public class RuleBasedOrchestratorDecisionBrain implements OrchestratorDecisionB
                     .normalized());
         }
         return List.of(noAction(context, "当前终审失败未形成阻断诊断或可执行编排动作。"));
+    }
+
+    /**
+     * 只有会改变计划图或报告正文的 legacy 自动动作强制要求指令级来源。
+     * MANUAL_REVIEW 等安全停点允许没有来源，否则无来源场景连人工接管都无法形成。
+     */
+    private boolean isMissingSourceAutomaticDirective(RevisionDirective directive) {
+        if (directive == null) {
+            return false;
+        }
+        RevisionDirective normalized = directive.normalized();
+        String actionType = normalized.getActionType();
+        boolean automaticMutation = "SUPPLEMENT_EVIDENCE".equals(actionType)
+                || "RERUN_NODE".equals(actionType)
+                || "REWRITE_SECTION".equals(actionType)
+                || "REWRITE_CLAIM".equals(actionType);
+        return automaticMutation
+                && (normalized.getSourceUrls() == null || normalized.getSourceUrls().isEmpty());
     }
 
     /**

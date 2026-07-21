@@ -94,7 +94,7 @@ class OrchestrationDecisionServiceTest {
     }
 
     @Test
-    void shouldGenerateSupplementDecisionForFinalReviewEvidenceGap() {
+    void shouldWaitForHumanWhenFinalReviewEvidenceGapHasNoSources() {
         OrchestrationContext context = OrchestrationContext.builder()
                 .taskId(50L)
                 .triggerNodeName("quality_check_final")
@@ -122,10 +122,14 @@ class OrchestrationDecisionServiceTest {
         List<OrchestrationDecision> decisions = service.decide(context);
 
         assertThat(decisions).hasSize(1);
-        assertThat(decisions.get(0).getDecisionType()).isEqualTo("APPEND_DYNAMIC_BRANCH");
-        assertThat(decisions.get(0).getActionType()).isEqualTo("SUPPLEMENT_EVIDENCE");
+        assertThat(decisions.get(0).getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(decisions.get(0).getActionType()).isEqualTo("MANUAL_REVIEW");
         assertThat(decisions.get(0).getEvidenceState()).isEqualTo(EvidenceState.MISSING_SOURCE);
-        assertThat(decisions.get(0).getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.LEGACY_ADAPTER);
+        assertThat(decisions.get(0).getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_ONLY);
+        assertThat(decisions.get(0).isRequiresHumanIntervention()).isTrue();
+        assertThat(decisions.get(0).isRequiresConfirmation()).isTrue();
+        assertThat(decisions.get(0).getSourceUrls()).isEmpty();
+        assertThat(decisions.get(0).getReason()).contains("缺少 sourceUrls");
     }
 
     @Test
@@ -692,7 +696,7 @@ class OrchestrationDecisionServiceTest {
     }
 
     @Test
-    void shouldKeepPassedReviewAheadOfHumanFlagForParity() {
+    void shouldKeepHumanInterventionAheadOfPassedReviewForSafety() {
         OrchestrationDecision decision = service.decide(OrchestrationContext.builder()
                 .taskId(66L)
                 .triggerNodeName("quality_check_final")
@@ -702,8 +706,10 @@ class OrchestrationDecisionServiceTest {
                 .evidenceState(EvidenceState.FULL_SOURCE)
                 .build()).get(0);
 
-        assertThat(decision.getDecisionType()).isEqualTo("NO_ACTION");
-        assertThat(decision.getActionType()).isEqualTo("NO_ACTION");
+        assertThat(decision.getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(decision.getActionType()).isEqualTo("MANUAL_REVIEW");
+        assertThat(decision.isRequiresHumanIntervention()).isTrue();
+        assertThat(decision.isRequiresConfirmation()).isTrue();
         assertThat(decision.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_ONLY);
     }
 

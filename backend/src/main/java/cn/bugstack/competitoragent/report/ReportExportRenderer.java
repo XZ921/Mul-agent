@@ -149,8 +149,9 @@ final class MarkdownReportExportRenderer implements ReportExportRenderer {
     /**
      * Markdown 导出需要把最近一次协作决策投影成稳定摘要，
      * 这样离线阅读时可以直接看到“为什么当前报告被拦住、下一步应做什么”。
+     * 方法保持包内可复用，使公开轻量下载与正式导出消费同一份字段映射，避免审计字段再次漂移。
      */
-    private String buildMarkdownOrchestrationDecisionSummary(ReportResponse report) {
+    String buildMarkdownOrchestrationDecisionSummary(ReportResponse report) {
         if (!ReportExportRenderSupport.hasOrchestrationDecision(report)
                 && !ReportExportRenderSupport.hasOrchestrationDecisionAudit(report)) {
             return "当前暂无协作决策记录。";
@@ -173,6 +174,7 @@ final class MarkdownReportExportRenderer implements ReportExportRenderer {
             lines.add("分支原因：" + ReportExportRenderSupport.safeText(decision.getMutationBranchReason()));
             lines.add("Fallback：" + (decision.isFallbackUsed() ? "已使用" : "未使用"));
             lines.add("Fallback 原因：" + ReportExportRenderSupport.safeText(decision.getFallbackReason()));
+            lines.add("AI 审计关联：" + ReportExportRenderSupport.safeText(decision.getAiAuditTraceId()));
             lines.add("需要人工介入：" + ReportExportRenderSupport.requiresHumanInterventionText(report));
             lines.add("需要确认：" + ReportExportRenderSupport.requiresConfirmationText(report));
             lines.add("决策原因：" + ReportExportRenderSupport.decisionReason(report));
@@ -364,8 +366,9 @@ final class HtmlReportExportRenderer implements ReportExportRenderer {
     /**
      * HTML 正式导出会被交付与审计链路直接消费，
      * 因此这里把协作决策整理成可读列表，避免用户还要回到原始事件流里找原因。
+     * 方法保持包内可复用，使公开轻量下载无需创建正式导出记录也能获得完全一致的决策摘要。
      */
-    private String buildHtmlOrchestrationDecisionSummary(ReportResponse report) {
+    String buildHtmlOrchestrationDecisionSummary(ReportResponse report) {
         if (!ReportExportRenderSupport.hasOrchestrationDecision(report)
                 && !ReportExportRenderSupport.hasOrchestrationDecisionAudit(report)) {
             return "<p>当前暂无协作决策记录。</p>";
@@ -388,6 +391,7 @@ final class HtmlReportExportRenderer implements ReportExportRenderer {
             lines.add("分支原因：" + ReportExportRenderSupport.safeText(decision.getMutationBranchReason()));
             lines.add("Fallback：" + (decision.isFallbackUsed() ? "已使用" : "未使用"));
             lines.add("Fallback 原因：" + ReportExportRenderSupport.safeText(decision.getFallbackReason()));
+            lines.add("AI 审计关联：" + ReportExportRenderSupport.safeText(decision.getAiAuditTraceId()));
             lines.add("需要人工介入：" + ReportExportRenderSupport.requiresHumanInterventionText(report));
             lines.add("需要确认：" + ReportExportRenderSupport.requiresConfirmationText(report));
             lines.add("决策原因：" + ReportExportRenderSupport.decisionReason(report));
@@ -799,6 +803,7 @@ final class ReportExportRenderSupport {
         payload.put("temperature", decision.getTemperature());
         payload.put("promptHash", safeText(decision.getPromptHash()));
         payload.put("llmResponseHash", safeText(decision.getLlmResponseHash()));
+        payload.put("aiAuditTraceId", safeText(decision.getAiAuditTraceId()));
         payload.put("parseRetryCount", decision.getParseRetryCount());
         payload.put("fallbackUsed", decision.isFallbackUsed());
         payload.put("shadowExecuted", decision.getShadowExecuted());

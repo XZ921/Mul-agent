@@ -107,6 +107,8 @@ orchestration:
   decision:
     mode: RULE_ONLY
     fallback-to-rule: true
+    # 编排热路径使用实测可在 4 秒内完成严格 JSON 的轻量模型，不改变其他 Agent 的全局模型选择。
+    model-name: deepseek-chat
     model-temperature: 0.0
     llm-timeout-ms: 4000
     max-parse-retries: 1

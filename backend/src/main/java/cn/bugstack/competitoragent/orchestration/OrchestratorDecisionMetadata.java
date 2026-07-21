@@ -19,6 +19,8 @@ public class OrchestratorDecisionMetadata {
     private Double temperature;
     private String promptHash;
     private String llmResponseHash;
+    /** 关联同一 Orchestrator cycle 在 AI 调用审计表中的一组 Provider attempts。 */
+    private String aiAuditTraceId;
     @Builder.Default
     private Integer parseRetryCount = 0;
     private boolean fallbackUsed;
@@ -51,6 +53,7 @@ public class OrchestratorDecisionMetadata {
                 .temperature(normalizeTemperature(temperature))
                 .promptHash(blankToNull(promptHash))
                 .llmResponseHash(blankToNull(llmResponseHash))
+                .aiAuditTraceId(blankToNull(aiAuditTraceId))
                 .parseRetryCount(Math.max(0, parseRetryCount == null ? 0 : parseRetryCount))
                 .fallbackUsed(normalizedFallbackUsed)
                 .fallbackReason(normalizedFallbackReason)

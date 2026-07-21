@@ -37,6 +37,7 @@ public class OrchestrationDecisionSummary {
     private Double temperature;
     private String promptHash;
     private String llmResponseHash;
+    private String aiAuditTraceId;
     private Integer parseRetryCount;
     private boolean fallbackUsed;
     private Boolean shadowExecuted;
@@ -75,6 +76,7 @@ public class OrchestrationDecisionSummary {
                 .temperature(temperature)
                 .promptHash(promptHash)
                 .llmResponseHash(llmResponseHash)
+                .aiAuditTraceId(aiAuditTraceId)
                 .parseRetryCount(parseRetryCount)
                 .fallbackUsed(fallbackUsed)
                 .shadowExecuted(shadowExecuted)
@@ -101,6 +103,7 @@ public class OrchestrationDecisionSummary {
                 .temperature(normalizedMetadata.getTemperature())
                 .promptHash(normalizedMetadata.getPromptHash())
                 .llmResponseHash(normalizedMetadata.getLlmResponseHash())
+                .aiAuditTraceId(normalizedMetadata.getAiAuditTraceId())
                 .parseRetryCount(normalizedMetadata.getParseRetryCount())
                 .fallbackUsed(normalizedMetadata.isFallbackUsed())
                 .shadowExecuted(normalizedMetadata.getShadowExecuted())

@@ -30,6 +30,8 @@ class OrchestrationTraceV2FixtureContractTest {
         assertThat(fallbackPayload.path("traceSchemaVersion").asText())
                 .isEqualTo("ORCHESTRATION_TRACE_V2");
         assertThat(fallbackPayload.path("audit").path("attempts")).hasSize(2);
+        assertThat(fallbackPayload.path("decision").path("decisionMetadata")
+                .path("aiAuditTraceId").asText()).isEqualTo("orch-fixture-trace");
         assertThat(fallbackPayload.path("audit").path("finalDecisionIds"))
                 .extracting(JsonNode::asText)
                 .containsExactly("od-801-rule-fallback");

@@ -71,7 +71,8 @@ public class ModelGateway implements LlmClient, EmbeddingClient, RerankClient {
                         .providerKey(request.providerKey())
                         .providerConfig(request.providerConfig())
                         .capability(AiCapability.CHAT)
-                        .modelName(null)
+                        // Orchestrator 可以选择满足热路径 deadline 的专用模型；其他调用仍回退到全局模型。
+                        .modelName(options == null ? null : options.modelName())
                         .systemPrompt(systemPrompt)
                         .userPrompt(userPrompt)
                         .temperature(options == null ? null : options.temperature())

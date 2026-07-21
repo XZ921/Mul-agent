@@ -278,7 +278,8 @@ class Phase2WorkflowIntegrationTest {
         Map<?, ?> reportPayload = (Map<?, ?>) reportEntity.getBody().getData();
         Map<?, ?> reportDiagnosis = (Map<?, ?>) reportPayload.get("reportDiagnosis");
         assertTrue(((Number) reportDiagnosis.get("diagnosisCount")).intValue() >= 1);
-        assertTrue(((Number) reportDiagnosis.get("blockerCount")).intValue() >= 1);
+        // 自动生成的结论缺口保留诊断与人工恢复入口，但阶段1不得将其升级为交付 blocker。
+        assertEquals(0, ((Number) reportDiagnosis.get("blockerCount")).intValue());
 
         restTemplate.postForEntity(taskUrl("/" + taskId + "/resume"), null, ApiResponse.class);
         consumeLatestTaskExecutionRequested(taskId);
@@ -532,6 +533,22 @@ class Phase2WorkflowIntegrationTest {
             String pageTitle = "PRICING".equalsIgnoreCase(sourceType) ? "Notion Pricing" : "Notion AI Help";
             String evidenceId = "T%04d-%s-001".formatted(context.getTaskId(), sourceType);
 
+            /*
+             * 生产 Collector 会显式输出 readyForQuorum，并由多个采集分支共同满足
+             * “至少 5 个 URL、至少 2 个归一域名”的阶段1红线。这里的测试桩必须复刻该契约，
+             * 否则 DAG 会在进入人工质检停点前就因旧版 Collector 输出被正确阻断。
+             */
+            List<String> traceableSourceUrls = "PRICING".equalsIgnoreCase(sourceType)
+                    ? List.of(
+                    "https://www.notion.so/pricing",
+                    "https://www.notion.so/pricing/compare-plans",
+                    "https://www.g2.com/products/notion/pricing")
+                    : List.of(
+                    "https://www.notion.so/help",
+                    "https://www.notion.so/help/guides",
+                    "https://developers.notion.com/reference");
+            String traceableSourceUrlsJson = objectMapper.writeValueAsString(traceableSourceUrls);
+
             evidenceSourceRepository.save(EvidenceSource.builder()
                     .taskId(context.getTaskId())
                     .competitorName(competitorName)
@@ -553,7 +570,8 @@ class Phase2WorkflowIntegrationTest {
                     {
                       "competitor": "%s",
                       "sourceType": "%s",
-                      "sourceUrls": ["%s"],
+                      "sourceUrls": %s,
+                      "readyForQuorum": true,
                       "searchQueries": ["%s documentation", "%s pricing"],
                       "selectedTargets": [{"url":"%s","title":"%s","verified":true}],
                       "sourceCandidates": [{"url":"%s","title":"%s","sourceType":"%s","discoveryMethod":"SEARCH","domain":"www.notion.so","verified":true}],
@@ -613,7 +631,7 @@ class Phase2WorkflowIntegrationTest {
                             }
                           }
                         ],
-                        "sourceUrls": ["%s"]
+                        "sourceUrls": %s
                       },
                       "discoveryNotes": "Phase 2 固定候选来源",
                       "searchProgress": {
@@ -651,7 +669,7 @@ class Phase2WorkflowIntegrationTest {
                     """.formatted(
                     competitorName,
                     sourceType,
-                    url,
+                    traceableSourceUrlsJson,
                     competitorName,
                     competitorName,
                     url,
@@ -667,7 +685,7 @@ class Phase2WorkflowIntegrationTest {
                     competitorName,
                     sourceType,
                     pageTitle,
-                    url,
+                    traceableSourceUrlsJson,
                     url);
             return AgentResult.success(output, "采集完成");
         }).when(collectorAgent).execute(any(AgentContext.class));

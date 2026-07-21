@@ -66,11 +66,11 @@ class RuleBasedOrchestratorDecisionBrainTest {
         assertThat(human.getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
         assertThat(blocking.getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
         assertThat(nonBlocking.getDecisionType()).isEqualTo("NO_ACTION");
-        assertThat(legacy.getActionType()).isEqualTo("SUPPLEMENT_EVIDENCE");
-        assertThat(List.of(passed, human, blocking, nonBlocking))
+        assertThat(legacy.getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(legacy.getActionType()).isEqualTo("MANUAL_REVIEW");
+        assertThat(List.of(passed, human, blocking, nonBlocking, legacy))
                 .extracting(OrchestrationDecision::getDecisionOrigin)
                 .containsOnly(OrchestrationDecisionOrigin.RULE_ONLY);
-        assertThat(legacy.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.LEGACY_ADAPTER);
     }
 
     @Test
@@ -239,12 +239,16 @@ class RuleBasedOrchestratorDecisionBrainTest {
                                 .category("EVIDENCE_GAP")
                                 .actionType("SUPPLEMENT_EVIDENCE")
                                 .summary("补证")
+                                .sourceUrls(List.of("https://example.com/pricing"))
                                 .build(),
                         RevisionDirective.builder()
                                 .category("EXPRESSION_ISSUE")
                                 .actionType("REWRITE_SECTION")
                                 .summary("改写")
+                                .sourceUrls(List.of("https://example.com/pricing"))
                                 .build()))
+                .sourceUrls(List.of("https://example.com/pricing"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
                 .build());
 
         assertThat(decisions)
@@ -259,7 +263,7 @@ class RuleBasedOrchestratorDecisionBrainTest {
     }
 
     @Test
-    void shouldPreserveUnknownTriggerAndPassedHumanParity() {
+    void shouldPreserveUnknownTriggerAndLetHumanInterventionWinPassedConflict() {
         OrchestrationDecision unknown = decide(OrchestrationContext.builder()
                 .taskId(89L)
                 .triggerNodeName("quality_check_draft")
@@ -278,7 +282,34 @@ class RuleBasedOrchestratorDecisionBrainTest {
         assertThat(unknown.getDecisionType()).isEqualTo("NO_ACTION");
         assertThat(unknown.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_ONLY);
         assertThat(unknown.getTargetNode()).isEqualTo("quality_check_draft");
-        assertThat(passedAndHuman.getDecisionType()).isEqualTo("NO_ACTION");
+        assertThat(passedAndHuman.getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(passedAndHuman.getActionType()).isEqualTo("MANUAL_REVIEW");
+        assertThat(passedAndHuman.isRequiresHumanIntervention()).isTrue();
+    }
+
+    @Test
+    void shouldKeepPassedOnlyAndFailedOnlyQuadrantsUnchanged() {
+        OrchestrationDecision passedOnly = decide(OrchestrationContext.builder()
+                .taskId(901L)
+                .triggerNodeName("quality_check_final")
+                .passed(true)
+                .requiresHumanIntervention(false)
+                .sourceUrls(List.of("https://example.com/review"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build()).get(0);
+        OrchestrationDecision failedOnly = decide(OrchestrationContext.builder()
+                .taskId(902L)
+                .triggerNodeName("quality_check_final")
+                .passed(false)
+                .requiresHumanIntervention(false)
+                .sourceUrls(List.of("https://example.com/review"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build()).get(0);
+
+        assertThat(passedOnly.getDecisionType()).isEqualTo("NO_ACTION");
+        assertThat(passedOnly.isRequiresHumanIntervention()).isFalse();
+        assertThat(failedOnly.getDecisionType()).isEqualTo("NO_ACTION");
+        assertThat(failedOnly.isRequiresHumanIntervention()).isFalse();
     }
 
     @Test

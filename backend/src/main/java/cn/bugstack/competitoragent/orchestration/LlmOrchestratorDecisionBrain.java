@@ -60,7 +60,8 @@ public class LlmOrchestratorDecisionBrain implements OrchestratorDecisionBrain {
         long deadlineNanos = calculateDeadline(nanoTimeSource.getAsLong(), properties.getLlmTimeoutMs());
         ModelChatOptions options = new ModelChatOptions(
                 properties.getModelTemperature(),
-                properties.getLlmTimeoutMs());
+                properties.getLlmTimeoutMs(),
+                properties.getModelName());
         OrchestrationDecisionPrompt currentPrompt = promptBuilder.build(normalizedContext, normalizedRuleSet);
         List<LlmOrchestratorDecisionFailure.Attempt> attempts = new ArrayList<>();
         int modelInvocationCount = 0;

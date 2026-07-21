@@ -73,7 +73,8 @@ class LlmOrchestratorDecisionBrainTest {
         ArgumentCaptor<ModelChatOptions> optionsCaptor = ArgumentCaptor.forClass(ModelChatOptions.class);
         ArgumentCaptor<Long> remainingCaptor = ArgumentCaptor.forClass(Long.class);
         verify(modelInvoker).invoke(eq(prompt), eq(context), optionsCaptor.capture(), remainingCaptor.capture());
-        assertThat(optionsCaptor.getValue()).isEqualTo(new ModelChatOptions(0.0d, 4000L));
+        assertThat(optionsCaptor.getValue())
+                .isEqualTo(new ModelChatOptions(0.0d, 4000L, "deepseek-chat"));
         assertThat(remainingCaptor.getValue()).isEqualTo(TimeUnit.MILLISECONDS.toNanos(4000L));
         verify(retryPromptBuilder, never()).build(any(), anyInt(), any());
     }

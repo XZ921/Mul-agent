@@ -38,7 +38,7 @@ class SectionEvidenceBundleTest {
     }
 
     @Test
-    void shouldMarkGapWhenSectionHasNoUsableEvidence() {
+    void shouldDowngradeGeneratedSectionGapWhenSectionHasNoUsableEvidence() {
         SectionEvidenceBundle bundle = SectionEvidenceBundle.builder()
                 .stage("WRITE")
                 .sectionType("CONCLUSION")
@@ -50,7 +50,7 @@ class SectionEvidenceBundleTest {
 
         SectionEvidenceBundle normalized = bundle.normalized();
 
-        assertTrue(normalized.getIssueFlags().contains("SECTION_EVIDENCE_GAP"));
+        assertTrue(normalized.getIssueFlags().contains("OPTIONAL_SECTION_EVIDENCE_GAP"));
         assertTrue(normalized.getIssueFlags().contains("NO_USABLE_EVIDENCE"));
         assertTrue(normalized.getGapSummary().contains("recommendations"));
     }

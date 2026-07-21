@@ -432,6 +432,54 @@ class ReportServiceTest {
     }
 
     @Test
+    void shouldIncludeOrchestrationDecisionAuditInLegacyMarkdownDownload() throws Exception {
+        Report report = minimalReport(915L, "公开 Markdown 决策审计报告");
+        TaskWorkflowEvent decisionEvent = persistedV2Event(
+                915L,
+                "quality_check_final",
+                "llm-policy-rejected-rule-fallback"
+        );
+        stubReportMainPath(report);
+        when(taskWorkflowEventRepository.findLatestOrchestrationDecisionEvent(915L))
+                .thenReturn(Optional.of(decisionEvent));
+        injectTaskWorkflowEventRepositoryIfPresent(reportService);
+
+        String markdown = new String(reportService.exportMarkdown(915L), StandardCharsets.UTF_8);
+
+        assertTrue(markdown.contains("## 协作决策摘要"));
+        assertTrue(markdown.contains("od-801-rule-fallback"));
+        assertTrue(markdown.contains("RULE_FALLBACK"));
+        assertTrue(markdown.contains("CONFIRMATION_REQUIRED"));
+        assertTrue(markdown.contains("MARK_WAITING_INTERVENTION"));
+        assertTrue(markdown.contains("orch-fixture-trace"));
+        assertTrue(markdown.contains("https://docs.example.com/review-gap"));
+    }
+
+    @Test
+    void shouldIncludeOrchestrationDecisionAuditInLegacyHtmlDownload() throws Exception {
+        Report report = minimalReport(916L, "公开 HTML 决策审计报告");
+        TaskWorkflowEvent decisionEvent = persistedV2Event(
+                916L,
+                "quality_check_final",
+                "llm-policy-rejected-rule-fallback"
+        );
+        stubReportMainPath(report);
+        when(taskWorkflowEventRepository.findLatestOrchestrationDecisionEvent(916L))
+                .thenReturn(Optional.of(decisionEvent));
+        injectTaskWorkflowEventRepositoryIfPresent(reportService);
+
+        String html = new String(reportService.exportHtml(916L), StandardCharsets.UTF_8);
+
+        assertTrue(html.contains("协作决策摘要"));
+        assertTrue(html.contains("od-801-rule-fallback"));
+        assertTrue(html.contains("RULE_FALLBACK"));
+        assertTrue(html.contains("CONFIRMATION_REQUIRED"));
+        assertTrue(html.contains("MARK_WAITING_INTERVENTION"));
+        assertTrue(html.contains("orch-fixture-trace"));
+        assertTrue(html.contains("https://docs.example.com/review-gap"));
+    }
+
+    @Test
     void shouldExposeLatestOrchestrationDecisionInReportMainPath() throws Exception {
         Report report = Report.builder()
                 .id(9L)

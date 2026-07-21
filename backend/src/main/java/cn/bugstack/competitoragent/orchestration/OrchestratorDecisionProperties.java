@@ -17,6 +17,8 @@ public class OrchestratorDecisionProperties {
 
     private OrchestratorDecisionMode mode = OrchestratorDecisionMode.RULE_ONLY;
     private boolean fallbackToRule = true;
+    /** Orchestrator 热路径使用独立模型，避免全局长输出模型突破 3-5 秒设计预算。 */
+    private String modelName = "deepseek-chat";
     private double modelTemperature = 0.0d;
     private long llmTimeoutMs = 4000L;
     private int maxParseRetries = 1;
@@ -32,6 +34,10 @@ public class OrchestratorDecisionProperties {
         if (mode == null) {
             throw new IllegalStateException("mode 不能为空");
         }
+        if (modelName == null || modelName.isBlank()) {
+            throw new IllegalStateException("modelName 不能为空");
+        }
+        modelName = modelName.trim();
         if (!Double.isFinite(modelTemperature) || modelTemperature < 0.0d) {
             throw new IllegalStateException("modelTemperature 必须是有限非负数");
         }

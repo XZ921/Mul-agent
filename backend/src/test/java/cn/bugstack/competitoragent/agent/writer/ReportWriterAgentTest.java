@@ -406,7 +406,7 @@ class ReportWriterAgentTest {
     }
 
     @Test
-    void shouldExposeWriterCitationGapMetadataWhenReportConclusionHasNoSources() throws Exception {
+    void shouldKeepGeneratedConclusionGapInAuditWhenReportHasNoSources() throws Exception {
         when(evidenceRepository.findByTaskIdOrderByEvidenceIdAsc(1L)).thenReturn(List.of());
         when(reportRepository.findByTaskId(1L)).thenReturn(Optional.empty());
         when(promptService.render(eq("writer"), any())).thenReturn("writer-prompt");
@@ -436,13 +436,14 @@ class ReportWriterAgentTest {
         JsonNode output = objectMapper.readTree(result.getOutputData());
 
         assertEquals("SUCCESS", result.getStatus().name());
-        assertEquals("ERROR", output.path("citationGapSeverity").asText());
+        assertEquals("WARNING", output.path("citationGapSeverity").asText());
         assertEquals("MISSING_SOURCE", output.path("writerEvidenceState").asText());
-        assertTrue(output.path("missingCitationSections").toString().contains("report_conclusion"));
+        assertTrue(output.path("missingCitationSections").isEmpty());
         assertTrue(output.path("sectionCitationGaps").isArray());
         assertEquals("report_conclusion", output.path("sectionCitationGaps").get(0).path("targetSection").asText());
         assertTrue(output.path("issueFlags").toString().contains("WRITER_CITATION_GAP"));
         assertTrue(output.path("issueFlags").toString().contains("WRITER_MISSING_SOURCE"));
+        assertTrue(output.path("issueFlags").toString().contains("GENERATED_SECTION_REWRITE_ONLY"));
     }
 
     @Test
@@ -475,10 +476,10 @@ class ReportWriterAgentTest {
         verify(reportRepository, atLeastOnce()).save(captor.capture());
         Report saved = captor.getValue();
 
-        assertEquals("ERROR", output.path("citationGapSeverity").asText());
+        assertEquals("WARNING", output.path("citationGapSeverity").asText());
         assertEquals("MISSING_SOURCE", output.path("writerEvidenceState").asText());
         assertEquals("MISSING_SOURCE", saved.getWriterEvidenceState());
-        assertEquals("ERROR", saved.getCitationGapSeverity());
+        assertEquals("WARNING", saved.getCitationGapSeverity());
         assertTrue(saved.getSectionCitationGaps().contains("report_conclusion"));
         assertTrue(saved.getWriterIssueFlags().contains("WRITER_CITATION_GAP"));
     }

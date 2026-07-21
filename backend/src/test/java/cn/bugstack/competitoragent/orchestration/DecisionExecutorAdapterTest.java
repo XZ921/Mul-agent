@@ -103,8 +103,8 @@ class DecisionExecutorAdapterTest {
                 .actionType("SUPPLEMENT_EVIDENCE")
                 .targetNode("collect_sources")
                 .affectedScope("CURRENT_NODE_AND_DOWNSTREAM")
-                .sourceUrls(List.of())
-                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .sourceUrls(List.of("https://example.com/supplement-evidence"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
                 .build();
         OrchestrationDecision rewriteDecision = OrchestrationDecision.builder()
                 .decisionId("od-valid-llm-rewrite")
@@ -123,6 +123,8 @@ class DecisionExecutorAdapterTest {
         DecisionPolicyResult rewritePolicy = policyService.evaluate(
                 rewriteDecision, DecisionPolicyRuleSet.builder().build(), 0, "RUNNING", "SUCCESS");
 
+        assertThat(supplementPolicy.isAllowed()).isTrue();
+        assertThat(rewritePolicy.isAllowed()).isTrue();
         assertThat(adapter.toMutation(supplementDecision, supplementPolicy, 8L, 2).getDynamicAction())
                 .isEqualTo("CREATE_SUPPLEMENT_BRANCH");
         assertThat(adapter.toMutation(rewriteDecision, rewritePolicy, 8L, 2).getDynamicAction())

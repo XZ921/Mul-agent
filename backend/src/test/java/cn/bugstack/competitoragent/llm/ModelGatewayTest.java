@@ -56,12 +56,13 @@ class ModelGatewayTest {
                 "system",
                 "user",
                 "{\"type\":\"object\"}",
-                new ModelChatOptions(0.0d, 4000L));
+                new ModelChatOptions(0.0d, 4000L, "deepseek-chat"));
 
         assertEquals("{\"decisions\":[]}", result);
         verify(modelProvider).chat(argThat(request -> request != null
                 && Double.valueOf(0.0d).equals(request.getTemperature())
                 && Long.valueOf(4000L).equals(request.getTimeoutMillis())
+                && "deepseek-chat".equals(request.getModelName())
                 && request.getSystemPrompt().contains("只输出 JSON")
                 && request.getSystemPrompt().contains("{\"type\":\"object\"}")));
         verify(budgetGuard).check(any());
@@ -90,7 +91,8 @@ class ModelGatewayTest {
 
         verify(modelProvider).chat(argThat(request -> request != null
                 && request.getTemperature() == null
-                && request.getTimeoutMillis() == null));
+                && request.getTimeoutMillis() == null
+                && request.getModelName() == null));
         verify(budgetGuard).check(any());
         verify(aiAuditLogger).record(any());
     }

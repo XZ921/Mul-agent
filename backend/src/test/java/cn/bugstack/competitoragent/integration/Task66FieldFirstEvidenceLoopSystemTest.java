@@ -4,7 +4,6 @@ import cn.bugstack.competitoragent.workflow.coverage.AnalysisDimensionMappingCat
 import cn.bugstack.competitoragent.workflow.coverage.CoverageBlockingLevel;
 import cn.bugstack.competitoragent.workflow.coverage.CoverageContract;
 import cn.bugstack.competitoragent.workflow.coverage.CoverageContractResolver;
-import cn.bugstack.competitoragent.workflow.coverage.CoverageEvidencePath;
 import cn.bugstack.competitoragent.workflow.coverage.DimensionEvidencePlan;
 import cn.bugstack.competitoragent.workflow.coverage.DimensionEvidencePlanFactory;
 import cn.bugstack.competitoragent.workflow.coverage.FieldEvidenceQuery;
@@ -49,7 +48,7 @@ class Task66FieldFirstEvidenceLoopSystemTest {
     }
 
     @Test
-    void standardBilibiliShallowEntryShouldDeepenCoreFeaturesAndPricing() throws Exception {
+    void standardBilibiliShallowEntryShouldDeepenCoreFeaturesWithoutImplicitPricingQueries() throws Exception {
         Task66Request request = readRequest("task66/field-first-standard-bilibili-shallow-request.json");
         CoverageContract contract = coverageContractResolver.resolve(
                 request.reportTemplate(),
@@ -62,18 +61,11 @@ class Task66FieldFirstEvidenceLoopSystemTest {
                 List.of("app.bilibili.com", "open.bilibili.com"));
 
         assertThat(contract.findField("pricing").orElseThrow().getBlockingLevel())
-                .isEqualTo(CoverageBlockingLevel.BLOCKER);
+                .isEqualTo(CoverageBlockingLevel.WARNING);
         assertThat(plan.findField("coreFeatures").orElseThrow().getPlannedQueries())
                 .extracting(FieldEvidenceQuery::getEvidencePathKey)
                 .contains("DOCS_API_GUIDE");
-        assertThat(plan.findField("pricing").orElseThrow().getEvidencePaths())
-                .extracting(CoverageEvidencePath::getPathKey)
-                .contains("OFFICIAL_PRICING_PAGE", "DOCS_BILLING_OR_LIMITS");
-        assertThat(plan.findField("pricing").orElseThrow().getPlannedQueries())
-                .extracting(FieldEvidenceQuery::getQuery)
-                .anySatisfy(query -> assertThat(query).contains("定价"))
-                .anySatisfy(query -> assertThat(query).contains("计费"))
-                .anySatisfy(query -> assertThat(query).contains("服务协议"));
+        assertThat(plan.findField("pricing")).isEmpty();
     }
 
     private Task66Request readRequest(String classpathResource) throws IOException {

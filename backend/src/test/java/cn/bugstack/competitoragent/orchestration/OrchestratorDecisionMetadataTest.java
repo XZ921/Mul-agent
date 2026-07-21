@@ -13,6 +13,7 @@ class OrchestratorDecisionMetadataTest {
                 .temperature(0.0d)
                 .promptHash(" sha256:prompt ")
                 .llmResponseHash(" sha256:response ")
+                .aiAuditTraceId(" orch-12345678-1234-1234-1234-123456789012 ")
                 .parseRetryCount(-1)
                 .fallbackUsed(false)
                 .fallbackReason(" LLM_TIMEOUT ")
@@ -23,6 +24,7 @@ class OrchestratorDecisionMetadataTest {
         assertThat(metadata.getTemperature()).isZero();
         assertThat(metadata.getPromptHash()).isEqualTo("sha256:prompt");
         assertThat(metadata.getLlmResponseHash()).isEqualTo("sha256:response");
+        assertThat(metadata.getAiAuditTraceId()).isEqualTo("orch-12345678-1234-1234-1234-123456789012");
         assertThat(metadata.getParseRetryCount()).isZero();
         assertThat(metadata.isFallbackUsed()).isTrue();
         assertThat(metadata.getFallbackReason()).isEqualTo("LLM_TIMEOUT");
@@ -38,5 +40,15 @@ class OrchestratorDecisionMetadataTest {
 
         assertThat(metadata.getShadowExecuted()).isFalse();
         assertThat(metadata.getShadowSkippedReason()).isEqualTo("SHADOW_BUDGET_EXHAUSTED");
+    }
+
+    @Test
+    void shouldDropBlankAiAuditTraceId() {
+        OrchestratorDecisionMetadata metadata = OrchestratorDecisionMetadata.builder()
+                .aiAuditTraceId("  ")
+                .build()
+                .normalized(OrchestrationDecisionOrigin.LLM_PRIMARY);
+
+        assertThat(metadata.getAiAuditTraceId()).isNull();
     }
 }

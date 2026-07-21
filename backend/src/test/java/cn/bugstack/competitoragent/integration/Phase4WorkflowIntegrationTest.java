@@ -25,6 +25,7 @@ import cn.bugstack.competitoragent.model.entity.RetrievalIndex;
 import cn.bugstack.competitoragent.model.entity.TaskWorkflowEvent;
 import cn.bugstack.competitoragent.model.entity.WorkflowDeadLetterRecord;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionModelInvoker;
 import cn.bugstack.competitoragent.repository.CompetitorKnowledgeRepository;
 import cn.bugstack.competitoragent.repository.EvidenceSourceRepository;
 import cn.bugstack.competitoragent.repository.KnowledgeDocumentRepository;
@@ -184,6 +185,10 @@ class Phase4WorkflowIntegrationTest {
 
     @MockBean
     private RerankClient rerankClient;
+
+    /** Phase 4 验收使用受控 Agent 输出，不进入 Stage 2 Orchestrator 的真实模型执行边界。 */
+    @MockBean
+    private OrchestrationDecisionModelInvoker orchestrationDecisionModelInvoker;
 
     @SpyBean
     private CollectorAgent collectorAgent;

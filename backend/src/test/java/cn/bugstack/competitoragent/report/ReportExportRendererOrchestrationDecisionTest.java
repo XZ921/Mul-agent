@@ -51,6 +51,7 @@ class ReportExportRendererOrchestrationDecisionTest {
         assertTrue(markdown.contains("MISSING_SOURCE"));
         assertTrue(markdown.contains("LLM_PRIMARY"));
         assertTrue(markdown.contains("RULE_FALLBACK"));
+        assertTrue(markdown.contains("orch-export-trace"));
         assertTrue(markdown.contains("LEGACY_RULE_SET"));
         assertTrue(markdown.contains("INVALID_DECISION_ACTION_PAIR"));
         assertTrue(markdown.contains("CONFIRMATION_REQUIRED"));
@@ -66,6 +67,7 @@ class ReportExportRendererOrchestrationDecisionTest {
         assertTrue(html.contains("MISSING_SOURCE"));
         assertTrue(html.contains("LLM_PRIMARY"));
         assertTrue(html.contains("RULE_FALLBACK"));
+        assertTrue(html.contains("orch-export-trace"));
         assertTrue(html.contains("CONFIRMATION_REQUIRED"));
         assertTrue(html.contains("&lt;script&gt;blocked&lt;/script&gt;"));
         assertTrue(!html.contains("<script>blocked</script>"));
@@ -80,6 +82,8 @@ class ReportExportRendererOrchestrationDecisionTest {
                 jsonNode.path("orchestrationDecision").path("decisionContract").asText());
         assertEquals("deepseek-chat",
                 jsonNode.path("orchestrationDecision").path("modelName").asText());
+        assertEquals("orch-export-trace",
+                jsonNode.path("orchestrationDecision").path("aiAuditTraceId").asText());
         assertEquals("CONFIRMATION_REQUIRED",
                 jsonNode.path("orchestrationDecision").path("runtimeStatus").asText());
         assertEquals("MARK_WAITING_INTERVENTION",
@@ -161,6 +165,7 @@ class ReportExportRendererOrchestrationDecisionTest {
                 .temperature(0.0)
                 .promptHash("sha256:prompt-2")
                 .llmResponseHash("sha256:response-2")
+                .aiAuditTraceId("orch-export-trace")
                 .parseRetryCount(1)
                 .fallbackUsed(true)
                 .fallbackReason("PARSE_ERROR:INVALID_DECISION_ACTION_PAIR")

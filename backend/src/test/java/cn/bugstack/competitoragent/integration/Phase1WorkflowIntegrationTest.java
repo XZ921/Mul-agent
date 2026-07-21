@@ -248,7 +248,8 @@ class Phase1WorkflowIntegrationTest {
         Map<?, ?> reportPayload = (Map<?, ?>) reportEntity.getBody().getData();
         Map<?, ?> reportDiagnosis = (Map<?, ?>) reportPayload.get("reportDiagnosis");
         assertTrue(((Number) reportDiagnosis.get("diagnosisCount")).intValue() >= 1);
-        assertTrue(((Number) reportDiagnosis.get("blockerCount")).intValue() >= 1);
+        // 自动生成的结论缺口仍需进入诊断与改写审计，但阶段1友好降级契约禁止将其升级为交付 blocker。
+        assertEquals(0, ((Number) reportDiagnosis.get("blockerCount")).intValue());
         assertTrue(((List<?>) reportDiagnosis.get("contentEvidences")).size() >= 1);
         assertTrue(((List<?>) reportDiagnosis.get("sections")).size() >= 1);
 

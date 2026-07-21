@@ -70,6 +70,8 @@ class CoverageContractProviderTest {
                 .build());
 
         assertThat(resolved.findField("pricing").orElseThrow().getStatus())
-                .isEqualTo(CoverageFieldStatus.REQUIRED);
+                .isEqualTo(CoverageFieldStatus.OPTIONAL);
+        assertThat(resolved.findField("pricing").orElseThrow().getBlockingLevel())
+                .isEqualTo(CoverageBlockingLevel.WARNING);
     }
 }

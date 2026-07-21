@@ -13,6 +13,7 @@ import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionModelInvoker;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.RetrievalChunkRepository;
 import cn.bugstack.competitoragent.repository.RetrievalIndexRepository;
@@ -93,6 +94,10 @@ class ConversationControllerTest {
 
     @MockBean
     private RerankClient rerankClient;
+
+    /** 本测试只验收对话 HTTP 契约，不启动 Orchestrator 的真实模型执行边界。 */
+    @MockBean
+    private OrchestrationDecisionModelInvoker orchestrationDecisionModelInvoker;
 
     @BeforeEach
     void setUp() {

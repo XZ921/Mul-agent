@@ -168,7 +168,9 @@ class Phase5EnterpriseDeliveryIntegrationTest {
         String reportResponse = mockMvc.perform(get("/api/report/{taskId}", taskId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.deliverySummary.deliveryStatus").value("READY"))
+                // 单一来源 URL 未达到阶段1的 5 URL / 2 域名红线，报告必须诚实标记为待补证据。
+                .andExpect(jsonPath("$.data.deliverySummary.deliveryStatus").value("NEEDS_EVIDENCE"))
+                .andExpect(jsonPath("$.data.deliverySummary.readyForDelivery").value(false))
                 .andExpect(jsonPath("$.data.evidenceEntryPoint.sourceUrls[0]").value("https://docs.example.com/phase5/launch-guide.pdf"))
                 .andReturn()
                 .getResponse()

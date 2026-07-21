@@ -136,7 +136,11 @@ public class OrchestrationDecisionModelInvoker {
         }
 
         try {
-            return future.get(remainingNanos, TimeUnit.NANOSECONDS);
+            ModelResponse response = future.get(remainingNanos, TimeUnit.NANOSECONDS);
+            // callable 已经结束，可以同步释放预留，保证成功结果返回时配额已经收口。
+            future.releaseAfterWorkerCompletion();
+            future.throwIfReleaseFailed();
+            return response;
         } catch (TimeoutException exception) {
             // cancel(true) 只是尽力中断 worker；底层 HTTP 最终存活上限仍由 Provider hard timeout 保证。
             future.cancel(true);
@@ -151,26 +155,30 @@ public class OrchestrationDecisionModelInvoker {
             future.attachReleaseFailure(interruptedException);
             throw interruptedException;
         } catch (ExecutionException exception) {
+            // 异常完成同样代表 Provider worker 已退出，不能把 Shadow 预留长期留在配额快照中。
+            future.releaseAfterWorkerCompletion();
             Throwable cause = exception.getCause();
+            ModelInvocationException invocationException;
             if (cause instanceof GovernanceBlockException governanceBlockException) {
                 String decisionCode = governanceBlockException.getDecision() == null
                         ? null
                         : governanceBlockException.getDecision().getDecisionCode();
-                throw new ModelInvocationException(
+                invocationException = new ModelInvocationException(
                         normalizeProviderErrorCode(decisionCode),
                         true,
                         governanceBlockException);
-            }
-            if (cause instanceof LlmException llmException) {
-                throw new ModelInvocationException(
+            } else if (cause instanceof LlmException llmException) {
+                invocationException = new ModelInvocationException(
                         normalizeProviderErrorCode(llmException.getProviderErrorCode()),
                         true,
                         llmException);
+            } else if (cause instanceof RuntimeException runtimeException) {
+                invocationException = new ModelInvocationException(INVOCATION_FAILED, true, runtimeException);
+            } else {
+                invocationException = new ModelInvocationException(INVOCATION_FAILED, true, exception);
             }
-            if (cause instanceof RuntimeException runtimeException) {
-                throw new ModelInvocationException(INVOCATION_FAILED, true, runtimeException);
-            }
-            throw new ModelInvocationException(INVOCATION_FAILED, true, exception);
+            future.attachReleaseFailure(invocationException);
+            throw invocationException;
         }
     }
 
@@ -256,8 +264,8 @@ public class OrchestrationDecisionModelInvoker {
     }
 
     /**
-     * 只有 Future 在 worker 启动前被取消或提交被拒绝时才释放预留。
-     * AtomicBoolean 同时覆盖 timeout、interrupt 与 executor rejection 的竞态，防止双重 release。
+     * Shadow 预留必须覆盖真实 Provider 调用的完整存活期，并在所有终态释放。
+     * AtomicBoolean 同时覆盖成功、异常、timeout、interrupt 与 executor rejection，防止竞态下双重 release。
      */
     private static final class ReservationAwareFutureTask extends FutureTask<ModelResponse> {
 
@@ -279,17 +287,30 @@ public class OrchestrationDecisionModelInvoker {
         @Override
         public void run() {
             workerStarted.set(true);
-            super.run();
+            try {
+                super.run();
+            } finally {
+                // cancel(true) 不保证底层 HTTP 立即退出；只有 worker 真正返回后才能释放正在使用的预留。
+                releaseReservationOnce();
+            }
         }
 
         @Override
         protected void done() {
             if (isCancelled() && !workerStarted.get()) {
-                releaseBeforeWorkerStart();
+                releaseReservationOnce();
             }
         }
 
         private void releaseBeforeWorkerStart() {
+            releaseReservationOnce();
+        }
+
+        private void releaseAfterWorkerCompletion() {
+            releaseReservationOnce();
+        }
+
+        private void releaseReservationOnce() {
             if (admission.reserved() && reservationReleased.compareAndSet(false, true)) {
                 try {
                     shadowBudgetGate.release(admission);
@@ -297,6 +318,16 @@ public class OrchestrationDecisionModelInvoker {
                     // 补偿失败不能遮蔽 executor rejection、timeout 或 caller interrupt 的主错误。
                     releaseFailure.compareAndSet(null, exception);
                 }
+            }
+        }
+
+        private void throwIfReleaseFailed() {
+            RuntimeException failure = releaseFailure.get();
+            if (failure != null) {
+                throw new ModelInvocationException(
+                        "SHADOW_RESERVATION_RELEASE_FAILED",
+                        true,
+                        failure);
             }
         }
 

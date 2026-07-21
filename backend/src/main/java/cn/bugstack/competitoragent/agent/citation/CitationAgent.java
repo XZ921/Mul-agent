@@ -206,7 +206,12 @@ public class CitationAgent extends BaseAgent {
 
         List<String> resultSourceUrls = collectResultSourceUrls(writerOutputSnapshot, taskEvidences, resolvedClaims, trustFindings);
         String citationRiskSeverity = resolveRiskSeverity(deliveryBlockingIssues, deliveryCitationCoverageRate, minCoverageRate);
-        String citationEvidenceState = resolveEvidenceState(deliveryBlockingIssues, deliveryCitationCoverageRate, minCoverageRate, resultSourceUrls);
+        String citationEvidenceState = resolveEvidenceState(
+                deliveryBlockingIssues,
+                deliveryCitationCoverageRate,
+                minCoverageRate,
+                resultSourceUrls,
+                writerOutputSnapshot.writerEvidenceState());
         boolean stageOneDeliveryCitationReady = deliveryBlockingIssues.isEmpty()
                 && deliveryCitationCoverageRate >= minCoverageRate;
 
@@ -418,12 +423,14 @@ public class CitationAgent extends BaseAgent {
     private String resolveEvidenceState(List<CitationIssue> citationIssues,
                                         double citationCoverageRate,
                                         double minCoverageRate,
-                                        List<String> resultSourceUrls) {
+                                        List<String> resultSourceUrls,
+                                        String writerEvidenceState) {
         if (citationIssues.stream().anyMatch(issue -> "MISSING_SOURCE".equals(issue.getEvidenceState()))) {
             return "MISSING_SOURCE";
         }
         if (citationIssues.stream().anyMatch(issue -> "PARTIAL_SOURCE".equals(issue.getEvidenceState()))
-                || citationCoverageRate < minCoverageRate) {
+                || citationCoverageRate < minCoverageRate
+                || "PARTIAL_SOURCE".equalsIgnoreCase(writerEvidenceState)) {
             return "PARTIAL_SOURCE";
         }
         return resultSourceUrls.isEmpty() ? "MISSING_SOURCE" : "FULL_SOURCE";

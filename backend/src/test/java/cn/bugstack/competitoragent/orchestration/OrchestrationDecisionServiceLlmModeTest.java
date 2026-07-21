@@ -38,7 +38,13 @@ class OrchestrationDecisionServiceLlmModeTest {
         OrchestrationDecisionOutcome outcome = service(ruleBrain, llmBrain, properties)
                 .decideWithOutcome(context());
 
-        assertThat(outcome.decisions()).containsExactly(llmDecision);
+        assertThat(outcome.decisions())
+                .extracting(OrchestrationDecision::getDecisionId)
+                .containsExactly(llmDecision.getDecisionId());
+        assertThat(outcome.decisions().get(0)).isNotSameAs(llmDecision);
+        assertThat(outcome.decisions().get(0).getDecisionMetadata().getAiAuditTraceId())
+                .startsWith("orch-")
+                .hasSizeLessThanOrEqualTo(50);
         assertThat(outcome.llmFailure()).isNull();
         assertThat(observed.get().purpose()).isEqualTo(ModelInvocationPurpose.ORCHESTRATOR_PRIMARY);
         verify(ruleBrain, never()).decide(any());
@@ -91,13 +97,22 @@ class OrchestrationDecisionServiceLlmModeTest {
         OrchestrationDecisionOutcome outcome = service(ruleBrain, llmBrain, properties)
                 .decideWithOutcome(context());
 
-        assertThat(outcome.decisions()).containsExactly(ruleDecision);
+        assertThat(outcome.decisions())
+                .extracting(OrchestrationDecision::getDecisionId)
+                .containsExactly(ruleDecision.getDecisionId());
+        assertThat(outcome.decisions().get(0)).isNotSameAs(ruleDecision);
         assertThat(outcome.shadowDecisions()).hasSize(1);
         OrchestrationDecision shadow = outcome.shadowDecisions().get(0);
         assertThat(shadow).isNotSameAs(originalLlmDecision);
         assertThat(shadow.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.LLM_SHADOW);
         assertThat(shadow.getDecisionMetadata()).isNotSameAs(originalMetadata);
         assertThat(shadow.getDecisionMetadata().getShadowExecuted()).isTrue();
+        assertThat(shadow.getDecisionMetadata().getAiAuditTraceId())
+                .startsWith("orch-")
+                .hasSizeLessThanOrEqualTo(50);
+        assertThat(outcome.decisions().get(0).getDecisionMetadata().getAiAuditTraceId())
+                .isEqualTo(shadow.getDecisionMetadata().getAiAuditTraceId());
+        assertThat(ruleDecision.getDecisionMetadata().getAiAuditTraceId()).isNull();
         assertThat(originalLlmDecision.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.LLM_PRIMARY);
         assertThat(originalMetadata.getShadowExecuted()).isNull();
         assertThat(observed.get().purpose()).isEqualTo(ModelInvocationPurpose.ORCHESTRATOR_SHADOW);
@@ -122,11 +137,19 @@ class OrchestrationDecisionServiceLlmModeTest {
                 properties(OrchestratorDecisionMode.LLM_SHADOW, true));
         OrchestrationDecisionOutcome outcome = service.decideWithOutcome(context());
 
-        assertThat(outcome.decisions()).containsExactly(ruleDecision);
+        assertThat(outcome.decisions())
+                .extracting(OrchestrationDecision::getDecisionId)
+                .containsExactly(ruleDecision.getDecisionId());
+        assertThat(outcome.decisions().get(0)).isNotSameAs(ruleDecision);
+        assertThat(outcome.decisions().get(0).getDecisionMetadata().getAiAuditTraceId())
+                .startsWith("orch-");
+        assertThat(ruleDecision.getDecisionMetadata().getAiAuditTraceId()).isNull();
         assertThat(outcome.shadowExecution().executed()).isFalse();
         assertThat(outcome.shadowExecution().skippedReason()).isEqualTo("SHADOW_BUDGET_EXHAUSTED");
         assertThat(outcome.shadowExecution().failure()).isSameAs(failure);
-        assertThat(service.decide(context())).containsExactly(ruleDecision);
+        assertThat(service.decide(context()))
+                .extracting(OrchestrationDecision::getDecisionId)
+                .containsExactly(ruleDecision.getDecisionId());
         verify(ruleBrain, times(2)).decide(any());
         verify(llmBrain, times(2)).decide(any());
     }

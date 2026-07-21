@@ -30,6 +30,7 @@ class OrchestrationDecisionSummaryProjectorTest {
                               "temperature": 0.0,
                               "promptHash": "sha256:prompt",
                               "llmResponseHash": "sha256:response",
+                              "aiAuditTraceId": "orch-projector-trace",
                               "parseRetryCount": 1,
                               "fallbackUsed": true,
                               "fallbackReason": "LLM_TIMEOUT",
@@ -60,6 +61,7 @@ class OrchestrationDecisionSummaryProjectorTest {
         assertThat(summary.getTemperature()).isZero();
         assertThat(summary.getPromptHash()).isEqualTo("sha256:prompt");
         assertThat(summary.getLlmResponseHash()).isEqualTo("sha256:response");
+        assertThat(summary.getAiAuditTraceId()).isEqualTo("orch-projector-trace");
         assertThat(summary.getParseRetryCount()).isEqualTo(1);
         assertThat(summary.isFallbackUsed()).isTrue();
         assertThat(summary.getFallbackReason()).isEqualTo("LLM_TIMEOUT");

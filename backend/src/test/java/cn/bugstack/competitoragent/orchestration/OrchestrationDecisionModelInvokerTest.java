@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -256,7 +257,7 @@ class OrchestrationDecisionModelInvokerTest {
     }
 
     @Test
-    void shouldPropagateReservedShadowMarkerAndAvoidEarlyReleaseAfterWorkerStarts() {
+    void shouldPropagateReservedShadowMarkerAndReleaseAfterWorkerCompletes() {
         ModelGateway gateway = mock(ModelGateway.class);
         OrchestrationShadowBudgetGate gate = mock(OrchestrationShadowBudgetGate.class);
         AtomicReference<ModelInvocationContextHolder.ModelInvocationContext> workerContext = new AtomicReference<>();
@@ -285,7 +286,45 @@ class OrchestrationDecisionModelInvokerTest {
 
         assertThat(workerContext.get().organizationQuotaReserved()).isTrue();
         assertThat(workerContext.get().quotaKey()).isEqualTo("ORCHESTRATOR_SHADOW");
-        verify(gate, never()).release(any());
+        verify(gate, times(1)).release(any());
+    }
+
+    @Test
+    void shouldReleaseStartedReservationOnlyAfterTimedOutWorkerActuallyStops() throws Exception {
+        ModelGateway gateway = mock(ModelGateway.class);
+        OrchestrationShadowBudgetGate gate = mock(OrchestrationShadowBudgetGate.class);
+        OrchestrationShadowBudgetAdmission admission = new OrchestrationShadowBudgetAdmission(
+                true, "ALLOWED_RESERVED", 12, java.util.List.of());
+        when(gate.checkAndReserve(any(), any())).thenReturn(admission);
+        CountDownLatch workerStarted = new CountDownLatch(1);
+        AtomicBoolean allowWorkerToStop = new AtomicBoolean(false);
+        when(gateway.chatForJson(anyString(), anyString(), anyString(), any(ModelChatOptions.class)))
+                .thenAnswer(invocation -> {
+                    workerStarted.countDown();
+                    // 模拟底层 HTTP 在 caller timeout 后短暂忽略中断，确保配额不会在真实请求结束前提前释放。
+                    while (!allowWorkerToStop.get()) {
+                        Thread.interrupted();
+                        java.util.concurrent.locks.LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(2));
+                    }
+                    return "{}";
+                });
+        when(gateway.getModelName()).thenReturn("deepseek-chat");
+        invoker = new OrchestrationDecisionModelInvoker(
+                gateway, properties(1, 1), gate,
+                new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1)));
+
+        try {
+            assertThatThrownBy(() -> invoker.invoke(
+                    prompt(), context(), new ModelChatOptions(0.0d, 4000L), TimeUnit.MILLISECONDS.toNanos(30)))
+                    .isInstanceOf(OrchestrationDecisionModelInvoker.ModelInvocationTimeoutException.class);
+            assertThat(workerStarted.await(1, TimeUnit.SECONDS)).isTrue();
+            verify(gate, never()).release(any());
+
+            allowWorkerToStop.set(true);
+            verify(gate, timeout(1000).times(1)).release(admission);
+        } finally {
+            allowWorkerToStop.set(true);
+        }
     }
 
     @Test

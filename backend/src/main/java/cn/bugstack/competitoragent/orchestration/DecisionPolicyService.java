@@ -16,6 +16,9 @@ import java.util.Set;
 @Service
 public class DecisionPolicyService {
 
+    public static final String MISSING_SOURCE_FOR_AUTOMATIC_MUTATION =
+            "MISSING_SOURCE_FOR_AUTOMATIC_MUTATION: 自动变更缺少可追溯 sourceUrls";
+
     private static final Set<String> AUTOMATIC_MUTATION_ACTIONS = Set.of(
             "CREATE_SUPPLEMENT_BRANCH",
             "CREATE_RERUN_BRANCH",
@@ -81,6 +84,15 @@ public class DecisionPolicyService {
             blockedReasons.add("缺少 sourceUrls 且未显式声明 MISSING_SOURCE");
         } else {
             ruleRefs.add("requireSourceUrlsOrEvidenceGap");
+        }
+        // Prompt 只能引导模型，不能承担最终安全责任。凡是会修改计划图的自动动作，
+        // 在可信来源为空且证据状态明确为 MISSING_SOURCE 时一律拒绝；人工停止与 NO_ACTION 不受影响。
+        if (AUTOMATIC_MUTATION_ACTIONS.contains(normalizedAction)
+                && decision.getSourceUrls().isEmpty()
+                && decision.getEvidenceState() == EvidenceState.MISSING_SOURCE) {
+            blockedReasons.add(MISSING_SOURCE_FOR_AUTOMATIC_MUTATION);
+        } else if (AUTOMATIC_MUTATION_ACTIONS.contains(normalizedAction)) {
+            ruleRefs.add("automaticMutationRequiresSourceUrls");
         }
         if (decision.getDecisionOrigin().usesLlmActionMatrix()
                 && "REWRITE_ONLY".equals(decision.getDecisionType())) {

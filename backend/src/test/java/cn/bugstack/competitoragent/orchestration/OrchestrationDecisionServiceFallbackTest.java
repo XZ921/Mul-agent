@@ -38,6 +38,9 @@ class OrchestrationDecisionServiceFallbackTest {
         assertThat(fallback.getDecisionMetadata().getTemperature()).isZero();
         assertThat(fallback.getDecisionMetadata().getPromptHash()).isEqualTo("prompt-2");
         assertThat(fallback.getDecisionMetadata().getLlmResponseHash()).isEqualTo("response-2");
+        assertThat(fallback.getDecisionMetadata().getAiAuditTraceId())
+                .startsWith("orch-")
+                .hasSizeLessThanOrEqualTo(50);
         assertThat(fallback.getDecisionMetadata().getParseRetryCount()).isEqualTo(1);
         assertThat(fallback.getDecisionMetadata().isFallbackUsed()).isTrue();
         assertThat(fallback.getDecisionMetadata().getFallbackReason()).isEqualTo("PARSE_ERROR:UNKNOWN_ACTION");
@@ -73,6 +76,7 @@ class OrchestrationDecisionServiceFallbackTest {
                 .temperature(0.0d)
                 .promptHash("prompt-policy")
                 .llmResponseHash("response-policy")
+                .aiAuditTraceId("orch-policy-trace")
                 .parseRetryCount(1)
                 .build();
         OrchestrationDecision rejected = OrchestrationDecision.builder()
@@ -87,6 +91,7 @@ class OrchestrationDecisionServiceFallbackTest {
         OrchestratorDecisionMetadata fallbackMetadata = outcome.decisions().get(0).getDecisionMetadata();
         assertThat(fallbackMetadata.getModelName()).isEqualTo("deepseek-chat");
         assertThat(fallbackMetadata.getPromptHash()).isEqualTo("prompt-policy");
+        assertThat(fallbackMetadata.getAiAuditTraceId()).isEqualTo("orch-policy-trace");
         assertThat(fallbackMetadata.getFallbackReason()).isEqualTo("POLICY_REJECTED");
         assertThat(fallbackMetadata.isFallbackUsed()).isTrue();
         assertThat(outcome.sourceUrls()).contains("https://example.com/rejected");

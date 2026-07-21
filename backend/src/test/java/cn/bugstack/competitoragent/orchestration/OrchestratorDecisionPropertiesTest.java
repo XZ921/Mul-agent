@@ -16,6 +16,7 @@ class OrchestratorDecisionPropertiesTest {
 
         assertThat(properties.getMode()).isEqualTo(OrchestratorDecisionMode.RULE_ONLY);
         assertThat(properties.isFallbackToRule()).isTrue();
+        assertThat(properties.getModelName()).isEqualTo("deepseek-chat");
         assertThat(properties.getModelTemperature()).isZero();
         assertThat(properties.getLlmTimeoutMs()).isEqualTo(4000L);
         assertThat(properties.getMaxParseRetries()).isEqualTo(1);
@@ -40,20 +41,24 @@ class OrchestratorDecisionPropertiesTest {
 
     @Test
     void shouldRejectInvalidRequestScopedModelOptions() {
-        assertThatThrownBy(() -> new ModelChatOptions(-0.01d, 4000L))
+        assertThatThrownBy(() -> new ModelChatOptions(-0.01d, 4000L, "deepseek-chat"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("temperature");
-        assertThatThrownBy(() -> new ModelChatOptions(Double.NaN, 4000L))
+        assertThatThrownBy(() -> new ModelChatOptions(Double.NaN, 4000L, "deepseek-chat"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("temperature");
-        assertThatThrownBy(() -> new ModelChatOptions(0.0d, 0L))
+        assertThatThrownBy(() -> new ModelChatOptions(0.0d, 0L, "deepseek-chat"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("timeoutMillis");
+        assertThatThrownBy(() -> new ModelChatOptions(0.0d, 4000L, " "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("modelName");
     }
 
     @Test
     void shouldRejectInvalidTimeoutRetryAndExecutorBounds() {
         assertInvalid(properties -> properties.setLlmTimeoutMs(0L), "llmTimeoutMs");
+        assertInvalid(properties -> properties.setModelName(" "), "modelName");
         assertInvalid(properties -> properties.setMaxParseRetries(-1), "maxParseRetries");
         assertInvalid(properties -> properties.setMaxParseRetries(2), "maxParseRetries");
         assertInvalid(properties -> properties.setExecutorThreads(0), "executorThreads");

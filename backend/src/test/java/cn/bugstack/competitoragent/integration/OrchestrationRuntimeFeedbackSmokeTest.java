@@ -158,7 +158,7 @@ class OrchestrationRuntimeFeedbackSmokeTest {
 
     @Test
     void shouldProduceReplayableOrchestrationDecisionCheckpointAndDynamicBranchThroughApiSmoke() throws Exception {
-        Long taskId = createAndExecuteTask(false);
+        Long taskId = createAndExecuteTask(false, AnalysisTaskStatus.SUCCESS);
 
         AnalysisTask task = waitForTaskStatus(taskId, AnalysisTaskStatus.SUCCESS);
         assertEquals(2, task.getCurrentPlanVersion());
@@ -230,7 +230,11 @@ class OrchestrationRuntimeFeedbackSmokeTest {
 
     @Test
     void shouldExposeMissingSourceEvidenceStateWhenReviewerDirectiveHasNoSourceUrls() throws Exception {
-        Long taskId = createAndExecuteTask(true);
+        Long taskId = createAndExecuteTask(true, AnalysisTaskStatus.STOPPED);
+
+        TaskNode finalReviewNode = nodeRepository.findByTaskIdAndNodeName(taskId, "quality_check_final")
+                .orElseThrow();
+        assertThat(finalReviewNode.getStatus()).isEqualTo(TaskNodeStatus.WAITING_INTERVENTION);
 
         TaskWorkflowEvent decisionEvent = latestEvent(taskId, WorkflowEventType.ORCHESTRATION_DECISION_RECORDED);
         JsonNode decisionPayload = objectMapper.readTree(decisionEvent.getPayload());
@@ -247,7 +251,8 @@ class OrchestrationRuntimeFeedbackSmokeTest {
                 });
     }
 
-    private Long createAndExecuteTask(boolean omitSourceUrls) throws Exception {
+    private Long createAndExecuteTask(boolean omitSourceUrls,
+                                      AnalysisTaskStatus expectedStatus) throws Exception {
         reviewerShouldOmitSourceUrls = omitSourceUrls;
         CreateTaskRequest request = new CreateTaskRequest();
         request.setTaskName(omitSourceUrls ? "orchestration missing source smoke" : "orchestration p1 smoke");
@@ -264,7 +269,7 @@ class OrchestrationRuntimeFeedbackSmokeTest {
 
         restTemplate.postForObject(taskUrl("/" + taskId + "/execute"), null, ApiResponse.class);
         consumeLatestTaskExecutionRequested(taskId);
-        waitForTaskStatus(taskId, AnalysisTaskStatus.SUCCESS);
+        waitForTaskStatus(taskId, expectedStatus);
         return taskId;
     }
 

@@ -140,6 +140,8 @@ public final class OrchestrationDecisionSummaryProjector {
                 .promptHash(metadataText(metadataNode, decisionNode, inputRefsNode, payloadNode, "promptHash"))
                 .llmResponseHash(metadataText(
                         metadataNode, decisionNode, inputRefsNode, payloadNode, "llmResponseHash"))
+                .aiAuditTraceId(metadataText(
+                        metadataNode, decisionNode, inputRefsNode, payloadNode, "aiAuditTraceId"))
                 .parseRetryCount(firstNonNull(
                         integerValue(metadataNode.get("parseRetryCount")),
                         integerValue(decisionNode.get("parseRetryCount")),

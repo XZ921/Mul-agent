@@ -161,13 +161,14 @@ public class DynamicPlanAppender {
                 || reviewOutput == null) {
             return false;
         }
-        if (reviewOutput.path("passed").asBoolean(true)) {
+        if (!"final".equalsIgnoreCase(reviewOutput.path("reviewStage").asText(""))) {
             return false;
         }
+        // 两个 human=true 象限都交给 RuntimeDecisionService 形成可审计暂停；passed-only 仍保持既有短路语义。
         if (reviewOutput.path("requiresHumanIntervention").asBoolean(false)) {
-            return false;
+            return true;
         }
-        return "final".equalsIgnoreCase(reviewOutput.path("reviewStage").asText(""));
+        return !reviewOutput.path("passed").asBoolean(true);
     }
 
     private List<RevisionDirective> readRevisionDirectives(JsonNode reviewOutput) {

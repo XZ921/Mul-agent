@@ -16,6 +16,7 @@
             "temperature": 0.0,
             "promptHash": "sha256:prompt-2",
             "llmResponseHash": "sha256:response-2",
+            "aiAuditTraceId": "orch-fixture-trace",
             "parseRetryCount": 1,
             "fallbackUsed": true,
             "fallbackReason": "PARSE_ERROR:INVALID_DECISION_ACTION_PAIR",

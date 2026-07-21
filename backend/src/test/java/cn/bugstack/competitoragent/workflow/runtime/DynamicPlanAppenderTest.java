@@ -29,6 +29,8 @@ import cn.bugstack.competitoragent.workflow.DynamicTaskGraphService;
 import cn.bugstack.competitoragent.workflow.WorkflowPlan;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 import java.util.ArrayList;
@@ -459,6 +461,132 @@ class DynamicPlanAppenderTest {
         verify(dynamicTaskGraphService, never()).createDynamicPlan(
                 any(), any(), any(DynamicPlanMutation.class), any());
         verify(orchestrationTraceService, never()).recordCheckpoint(any(), any(), any(), any(), any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void shouldRouteBothHumanInterventionQuadrantsThroughRuntime(boolean passed) throws Exception {
+        long taskId = passed ? 54L : 53L;
+        long planId = passed ? 14L : 13L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.RUNNING)
+                .currentPlanVersionId(planId)
+                .currentPlanVersion(1)
+                .build();
+        TaskNode completedNode = TaskNode.builder()
+                .taskId(taskId)
+                .nodeName("quality_check_final")
+                .agentType(AgentType.REVIEWER)
+                .status(TaskNodeStatus.SUCCESS)
+                .planVersionId(planId)
+                .branchKey("root")
+                .outputData("""
+                        {"reviewStage":"final","passed":%s,
+                        "requiresHumanIntervention":true,"summary":"终审要求人工介入"}
+                        """.formatted(passed))
+                .build();
+        TaskPlan parentPlan = TaskPlan.builder()
+                .id(planId)
+                .taskId(taskId)
+                .planVersion(1)
+                .branchKey("root")
+                .active(true)
+                .planSnapshot(objectMapper.writeValueAsString(WorkflowPlan.builder()
+                        .planVersionId(planId)
+                        .planVersion(1)
+                        .branchKey("root")
+                        .nodes(List.of())
+                        .build()))
+                .build();
+        OrchestrationDecision decision = OrchestrationDecision.builder()
+                .decisionId("od-human-" + taskId)
+                .taskId(taskId)
+                .triggerNodeName("quality_check_final")
+                .decisionOrigin(OrchestrationDecisionOrigin.RULE_ONLY)
+                .decisionType("WAIT_FOR_HUMAN")
+                .actionType("MANUAL_REVIEW")
+                .reason("终审要求人工介入")
+                .requiresHumanIntervention(true)
+                .requiresConfirmation(true)
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build();
+        DecisionPolicyResult policy = DecisionPolicyResult.builder()
+                .decisionId(decision.getDecisionId())
+                .decisionOrigin(OrchestrationDecisionOrigin.RULE_ONLY)
+                .allowed(true)
+                .requiresConfirmation(true)
+                .normalizedAction("WAIT_FOR_HUMAN")
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build();
+        DynamicPlanMutation mutation = DynamicPlanMutation.builder()
+                .mutationId("dpm-" + decision.getDecisionId())
+                .decisionId(decision.getDecisionId())
+                .mutationType("MARK_WAITING_INTERVENTION")
+                .branchReason("MANUAL_REVIEW_REQUIRED")
+                .dynamicAction("MANUAL_ONLY")
+                .runtimeCommand("AWAIT_HUMAN")
+                .sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE)
+                .build();
+        OrchestrationRuntimeDecision waiting = new OrchestrationRuntimeDecision(
+                decision,
+                policy,
+                mutation,
+                false,
+                OrchestrationRuntimeDecision.CONFIRMATION_REQUIRED,
+                List.of());
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskPlanRepository.findById(planId)).thenReturn(Optional.of(parentPlan));
+        when(runtimeDecisionService.decide(any(), eq(AnalysisTaskStatus.RUNNING.name()),
+                eq(TaskNodeStatus.SUCCESS.name())))
+                .thenReturn(batch(List.of(waiting), List.of(waiting), planId, 2));
+        when(nodeRepository.save(any(TaskNode.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        boolean appended = appender.maybeAppendDynamicPlan(
+                taskId,
+                new ArrayList<>(List.of(completedNode)),
+                new LinkedHashMap<>(Map.of(completedNode.getNodeName(), completedNode)),
+                completedNode);
+
+        assertThat(appended).isFalse();
+        assertThat(completedNode.getStatus()).isEqualTo(TaskNodeStatus.WAITING_INTERVENTION);
+        assertThat(completedNode.getInterventionReason()).isEqualTo("终审要求人工介入");
+        verify(runtimeDecisionService).decide(any(), eq(AnalysisTaskStatus.RUNNING.name()),
+                eq(TaskNodeStatus.SUCCESS.name()));
+        verify(orchestrationTraceService).recordDecisionBatch(eq(taskId), eq(completedNode), any());
+        verify(nodeRepository).save(completedNode);
+        verify(dynamicTaskGraphService, never()).createDynamicPlan(
+                any(), any(), any(DynamicPlanMutation.class), any());
+    }
+
+    @Test
+    void shouldKeepPassedWithoutHumanInterventionOnExistingShortCircuit() {
+        TaskNode completedNode = TaskNode.builder()
+                .taskId(55L)
+                .nodeName("quality_check_final")
+                .agentType(AgentType.REVIEWER)
+                .status(TaskNodeStatus.SUCCESS)
+                .planVersionId(15L)
+                .outputData("""
+                        {"reviewStage":"final","passed":true,
+                        "requiresHumanIntervention":false,"summary":"终审通过"}
+                        """)
+                .build();
+
+        boolean appended = appender.maybeAppendDynamicPlan(
+                55L,
+                new ArrayList<>(List.of(completedNode)),
+                new LinkedHashMap<>(Map.of(completedNode.getNodeName(), completedNode)),
+                completedNode);
+
+        assertThat(appended).isFalse();
+        assertThat(completedNode.getStatus()).isEqualTo(TaskNodeStatus.SUCCESS);
+        verify(runtimeDecisionService, never()).decide(any(), any(), any());
+        verify(orchestrationTraceService, never()).recordDecisionBatch(any(), any(), any());
+        verify(nodeRepository, never()).save(any());
     }
 
     private OrchestrationRuntimeDecisionBatch batch(List<OrchestrationRuntimeDecision> attempts,

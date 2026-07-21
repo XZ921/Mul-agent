@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Orchestrator 决策模式协调器。
@@ -133,12 +134,14 @@ public class OrchestrationDecisionService {
 
     private OrchestrationDecisionOutcome llmPrimary(OrchestrationContext context) {
         requireLlmBrain();
+        String aiAuditTraceId = newAiAuditTraceId();
         try {
             List<OrchestrationDecision> decisions = invokeLlm(
                     context,
                     ModelInvocationPurpose.ORCHESTRATOR_PRIMARY,
                     GovernanceDefaults.MODEL_DAILY_BUDGET_KEY,
-                    false);
+                    false,
+                    aiAuditTraceId);
             return outcome(
                     OrchestratorDecisionMode.LLM_PRIMARY,
                     decisions,
@@ -160,7 +163,7 @@ public class OrchestrationDecisionService {
             List<OrchestrationDecision> ruleDecisions = safeDecisions(ruleBasedDecisionBrain.decide(context));
             return outcome(
                     OrchestratorDecisionMode.LLM_PRIMARY,
-                    copyLlmFailureFallback(ruleDecisions, failure),
+                    copyLlmFailureFallback(ruleDecisions, failure, aiAuditTraceId),
                     List.of(),
                     OrchestrationShadowExecution.notRequested(context.getSourceUrls()),
                     failure,
@@ -184,16 +187,18 @@ public class OrchestrationDecisionService {
         }
 
         requireLlmBrain();
+        String aiAuditTraceId = newAiAuditTraceId();
         try {
             List<OrchestrationDecision> llmCandidates = invokeLlm(
                     context,
                     ModelInvocationPurpose.ORCHESTRATOR_SHADOW,
                     properties.getShadow().getIsolatedBudgetKey(),
-                    properties.getShadow().isRequireActiveQuota());
+                    properties.getShadow().isRequireActiveQuota(),
+                    aiAuditTraceId);
             List<OrchestrationDecision> shadowCopies = copyShadowDecisions(llmCandidates);
             return outcome(
                     OrchestratorDecisionMode.LLM_SHADOW,
-                    ruleDecisions,
+                    attachAiAuditTraceId(ruleDecisions, aiAuditTraceId),
                     shadowCopies,
                     OrchestrationShadowExecution.executed(null, context.getSourceUrls()),
                     null,
@@ -206,7 +211,7 @@ public class OrchestrationDecisionService {
                     : OrchestrationShadowExecution.skipped(skippedReason, failure, context.getSourceUrls());
             return outcome(
                     OrchestratorDecisionMode.LLM_SHADOW,
-                    ruleDecisions,
+                    attachAiAuditTraceId(ruleDecisions, aiAuditTraceId),
                     List.of(),
                     shadowExecution,
                     failure,
@@ -217,18 +222,19 @@ public class OrchestrationDecisionService {
     private List<OrchestrationDecision> invokeLlm(OrchestrationContext context,
                                                   ModelInvocationPurpose purpose,
                                                   String quotaKey,
-                                                  boolean requireActiveQuota) {
-        ModelInvocationContextHolder.ModelInvocationContext callerContext = ModelInvocationContextHolder.get();
-        String traceId = callerContext == null ? null : callerContext.traceId();
+                                                  boolean requireActiveQuota,
+                                                  String aiAuditTraceId) {
         return ModelInvocationContextHolder.withContext(
                 context.getTaskId(),
                 context.getTriggerNodeName(),
-                traceId,
+                aiAuditTraceId,
                 purpose,
                 quotaKey,
                 requireActiveQuota,
                 false,
-                () -> safeDecisions(llmDecisionBrain.decide(context)));
+                () -> attachAiAuditTraceId(
+                        safeDecisions(llmDecisionBrain.decide(context)),
+                        aiAuditTraceId));
     }
 
     /**
@@ -260,7 +266,8 @@ public class OrchestrationDecisionService {
      */
     private List<OrchestrationDecision> copyLlmFailureFallback(
             List<OrchestrationDecision> ruleDecisions,
-            LlmOrchestratorDecisionFailure failure) {
+            LlmOrchestratorDecisionFailure failure,
+            String aiAuditTraceId) {
         LlmOrchestratorDecisionFailure.Attempt finalAttempt = finalAttempt(failure);
         List<OrchestrationDecision> copies = new ArrayList<>();
         for (OrchestrationDecision ruleDecision : ruleDecisions) {
@@ -269,6 +276,7 @@ public class OrchestrationDecisionService {
                     .temperature(properties.getModelTemperature())
                     .promptHash(finalAttempt == null ? null : finalAttempt.promptHash())
                     .llmResponseHash(finalAttempt == null ? null : finalAttempt.llmResponseHash())
+                    .aiAuditTraceId(aiAuditTraceId)
                     .parseRetryCount(failure.parseRetryCount())
                     .fallbackUsed(true)
                     .fallbackReason(fallbackReasonMapper.map(failure))
@@ -281,6 +289,33 @@ public class OrchestrationDecisionService {
                     .build());
         }
         return List.copyOf(copies);
+    }
+
+    /**
+     * Coordinator 单一拥有 cycle 与 AI audit 的关联 ID；Brain、Policy 和 Trace 只透传该不可执行审计事实。
+     */
+    private List<OrchestrationDecision> attachAiAuditTraceId(
+            List<OrchestrationDecision> decisions,
+            String aiAuditTraceId) {
+        List<OrchestrationDecision> copies = new ArrayList<>();
+        for (OrchestrationDecision decision : safeDecisions(decisions)) {
+            requireDecision(decision, "LLM cycle decision");
+            OrchestratorDecisionMetadata metadata = decision.getDecisionMetadata() == null
+                    ? OrchestratorDecisionMetadata.empty()
+                    : decision.getDecisionMetadata();
+            copies.add(decision.toBuilder()
+                    .decisionMetadata(metadata.toBuilder()
+                            .aiAuditTraceId(aiAuditTraceId)
+                            .build())
+                    .build()
+                    .normalized());
+        }
+        return List.copyOf(copies);
+    }
+
+    /** `orch-` 加标准 UUID 共 41 字符，稳定低于 ai_call_audit_record.trace_id 的 50 字符上限。 */
+    private String newAiAuditTraceId() {
+        return "orch-" + UUID.randomUUID();
     }
 
     private List<OrchestrationDecision> copyPolicyRejectedFallback(

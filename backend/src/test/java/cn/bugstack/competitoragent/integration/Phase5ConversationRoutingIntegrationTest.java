@@ -13,6 +13,7 @@ import cn.bugstack.competitoragent.model.entity.TaskNode;
 import cn.bugstack.competitoragent.model.enums.AgentType;
 import cn.bugstack.competitoragent.model.enums.AnalysisTaskStatus;
 import cn.bugstack.competitoragent.model.enums.TaskNodeStatus;
+import cn.bugstack.competitoragent.orchestration.OrchestrationDecisionModelInvoker;
 import cn.bugstack.competitoragent.repository.AnalysisTaskRepository;
 import cn.bugstack.competitoragent.repository.OrganizationQuotaSnapshotRepository;
 import cn.bugstack.competitoragent.repository.TaskNodeRepository;
@@ -91,6 +92,10 @@ class Phase5ConversationRoutingIntegrationTest {
 
     @MockBean
     private RerankClient rerankClient;
+
+    /** 治理对话验收不调用 Orchestrator Provider，只隔离其模型执行组件。 */
+    @MockBean
+    private OrchestrationDecisionModelInvoker orchestrationDecisionModelInvoker;
 
     @BeforeEach
     void setUp() {

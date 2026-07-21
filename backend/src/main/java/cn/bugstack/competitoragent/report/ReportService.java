@@ -923,6 +923,10 @@ public class ReportService {
                 .toList();
     }
 
+    /**
+     * 公开 Markdown 下载不创建正式导出记录，也不消耗组织导出额度；
+     * 这里只复用无状态的协作决策摘要格式化，确保下载内容与正式导出的审计字段一致。
+     */
     public byte[] exportMarkdown(Long taskId) {
         ReportResponse report = getReport(taskId);
 
@@ -933,15 +937,24 @@ public class ReportService {
         String markdown = """
                 %s
 
+                ## 协作决策摘要
+
+                %s
+
                 ## 写作证据摘要
 
                 %s
-                """.formatted(content, buildWriterEvidenceMarkdown(report.getWriterEvidenceSummary())).trim();
+                """.formatted(
+                content,
+                new MarkdownReportExportRenderer().buildMarkdownOrchestrationDecisionSummary(report),
+                buildWriterEvidenceMarkdown(report.getWriterEvidenceSummary())
+        ).trim();
         return markdown.getBytes(StandardCharsets.UTF_8);
     }
 
     /**
      * HTML 导出复用详情页聚合数据，保证导出视图和页面视图尽量一致。
+     * 公开下载仍保持无配额、无正式记录副作用，只共享协作决策摘要的字段格式化规则。
      */
     public byte[] exportHtml(Long taskId) {
         ReportResponse report = getReport(taskId);
@@ -1012,6 +1025,11 @@ public class ReportService {
                     </section>
 
                     <section class="card">
+                      <h2>协作决策摘要</h2>
+                      %s
+                    </section>
+
+                    <section class="card">
                       <h2>写作证据摘要</h2>
                       %s
                     </section>
@@ -1045,6 +1063,7 @@ public class ReportService {
                 formatReviewStatus(report.getFinalReview()),
                 report.isRewriteApplied() ? "已完成改写闭环" : "单轮直出",
                 escapeHtml(report.getContent()),
+                new HtmlReportExportRenderer().buildHtmlOrchestrationDecisionSummary(report),
                 buildWriterEvidenceHtml(report.getWriterEvidenceSummary()),
                 buildKnowledgeHtml(report.getCompetitorKnowledges()),
                 buildEvidenceHtml(report.getEvidences()),

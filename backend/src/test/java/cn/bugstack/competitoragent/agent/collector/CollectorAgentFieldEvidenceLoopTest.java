@@ -153,9 +153,13 @@ class CollectorAgentFieldEvidenceLoopTest {
         assertThat(secondAttempt.getStatus()).isEqualTo(TaskNodeStatus.FAILED);
         assertThat(context.getFieldEvidenceFingerprintClaims().getOrDefault(claimKey, Set.of()))
                 .doesNotContain(queryFingerprint);
-        assertThat(searchAttempts).hasValue(2);
+        /**
+         * 每次节点尝试包含首轮搜索和未完成字段的第二轮搜索；两次节点尝试共执行四轮。
+         * 核心契约仍是首次失败释放 claim，使第二次节点尝试可以重新执行同一查询。
+         */
+        assertThat(searchAttempts).hasValue(4);
         assertThat(searchDeadlineContexts)
-                .hasSize(2)
+                .hasSize(4)
                 .allSatisfy(deadlineContext -> assertThat(deadlineContext).isNotNull());
         assertThat(collectionDeadlineContexts)
                 .hasSize(2)
