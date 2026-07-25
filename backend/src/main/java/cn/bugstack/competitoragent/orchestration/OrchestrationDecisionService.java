@@ -86,11 +86,23 @@ public class OrchestrationDecisionService {
                     List.of());
         }
         OrchestrationContext context = rawContext.normalized();
+        if (isReviewerContext(context)) {
+            // Reviewer 质量事实必须先由 Java 整轮归一为唯一 candidate。
+            // 即使配置切换到 LLM_PRIMARY/SHADOW，也禁止模型再次生成另一组运行时动作。
+            return ruleOnly(context);
+        }
         return switch (mode) {
             case RULE_ONLY -> ruleOnly(context);
             case LLM_PRIMARY -> llmPrimary(context);
             case LLM_SHADOW -> llmShadow(context);
         };
+    }
+
+    private boolean isReviewerContext(OrchestrationContext context) {
+        String nodeName = context == null ? null : context.getTriggerNodeName();
+        return "quality_check".equals(nodeName)
+                || "quality_check_final".equals(nodeName)
+                || (nodeName != null && nodeName.startsWith("quality_check_revision"));
     }
 
     /**

@@ -44,6 +44,18 @@ public class RevisionDirective {
     /** 指向需要修订的章节，便于前端与后续节点精确定位 */
     private String targetSection;
 
+    /** 证据缺口对应的竞品；自动补采时不得只依赖自然语言摘要猜测。 */
+    private String competitor;
+
+    /** 需要补齐或重新抽取的结构化字段。 */
+    private String targetField;
+
+    /** 所需来源类型，例如 OFFICIAL_PRICING、OFFICIAL_DOCS。 */
+    private String requiredSourceType;
+
+    /** 可审计缺口键：competitor|targetField|requiredSourceType。 */
+    private String gapKey;
+
     /** 面向人的修订摘要 */
     private String summary;
 
@@ -77,6 +89,9 @@ public class RevisionDirective {
         String normalizedFeedback = normalizeText(searchFeedback);
         String normalizedOutcome = normalizeText(expectedOutcome);
         String resolvedActionType = resolveActionType(normalizedCategory, actionType);
+        String normalizedCompetitor = normalizeText(competitor);
+        String normalizedTargetField = normalizeText(targetField);
+        String normalizedRequiredSourceType = normalizeText(requiredSourceType);
 
         return this.toBuilder()
                 .category(normalizedCategory)
@@ -85,12 +100,39 @@ public class RevisionDirective {
                 .priority(resolvePriority(normalizedCategory, priority))
                 .targetNode(resolveTargetNode(normalizedCategory, targetNode))
                 .targetSection(normalizedSection)
+                .competitor(normalizedCompetitor)
+                .targetField(normalizedTargetField)
+                .requiredSourceType(normalizedRequiredSourceType)
+                .gapKey(resolveGapKey(normalizedCompetitor, normalizedTargetField,
+                        normalizedRequiredSourceType, gapKey))
                 .summary(normalizedSummary == null ? buildSummary(normalizedCategory, normalizedSection) : normalizedSummary)
                 .searchFeedback(resolveSearchFeedback(normalizedCategory, normalizedSection, normalizedFeedback))
                 .searchQueries(normalizeDistinctList(searchQueries))
                 .sourceUrls(normalizeDistinctList(sourceUrls))
                 .expectedOutcome(normalizedOutcome == null ? buildExpectedOutcome(normalizedCategory, normalizedSection) : normalizedOutcome)
                 .build();
+    }
+
+    /**
+     * 缺口键只由稳定业务维度组成，禁止把 URL、随机 ID 或自然语言摘要混入键值。
+     * 兼容期输入缺少任一维度时返回 null，交由整轮归一器降级到人工确认。
+     */
+    private String resolveGapKey(String normalizedCompetitor,
+                                 String normalizedTargetField,
+                                 String normalizedRequiredSourceType,
+                                 String currentGapKey) {
+        if (normalizedCompetitor != null
+                && normalizedTargetField != null
+                && normalizedRequiredSourceType != null) {
+            return normalizeGapPart(normalizedCompetitor) + "|"
+                    + normalizeGapPart(normalizedTargetField) + "|"
+                    + normalizeGapPart(normalizedRequiredSourceType);
+        }
+        return normalizeText(currentGapKey);
+    }
+
+    private String normalizeGapPart(String value) {
+        return value.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", "_");
     }
 
     private String normalizeCategory(String value) {

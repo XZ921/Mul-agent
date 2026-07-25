@@ -90,6 +90,15 @@ public class DynamicTaskGraphService {
                                       TaskNode triggerNode,
                                       DynamicPlanMutation mutation,
                                       WorkflowPlan baseWorkflowPlan) {
+        if (parentPlan == null || mutation == null || mutation.getDecisionId() == null) {
+            throw new DynamicPlanMaterializationException("mutation、decisionId 与 parentPlan 不能为空");
+        }
+        TaskPlan existing = taskPlanRepository
+                .findByTaskIdAndDecisionId(parentPlan.getTaskId(), mutation.getDecisionId())
+                .orElse(null);
+        if (existing != null) {
+            return existing;
+        }
         String branchSuffix = "review-" + (parentPlan.getPlanVersion() + 1);
         String parentBranchKey = normalizeBranchKey(parentPlan.getBranchKey());
         String derivedBranchKey = parentBranchKey + "/" + branchSuffix;
@@ -99,6 +108,11 @@ public class DynamicTaskGraphService {
                 mutation,
                 nextExecutionOrder(baseWorkflowPlan),
                 derivedBranchKey);
+        // APPEND_NODES 的成功语义必须包含至少一个真实节点。先在内存中完成组装校验，
+        // 再触碰 active plan，彻底关闭“空派生计划已经持久化”的半提交窗口。
+        if (dynamicNodes.isEmpty()) {
+            throw new DynamicPlanMaterializationException("APPEND_NODES 未生成任何受支持的动态节点");
+        }
         List<WorkflowPlan.WorkflowPlanNode> mergedNodes = new ArrayList<>(baseWorkflowPlan.getNodes());
         mergedNodes.addAll(dynamicNodes);
 
@@ -116,12 +130,15 @@ public class DynamicTaskGraphService {
                     taskPlanRepository.save(activePlan);
                 });
 
-        return taskPlanRepository.save(taskPlanVersioner.createDerivedPlan(
+        TaskPlan derivedTaskPlan = taskPlanVersioner.createDerivedPlan(
                 parentPlan,
                 derivedPlan,
                 triggerNode == null ? null : triggerNode.getNodeName(),
                 mutation == null ? "DYNAMIC_BACKFLOW" : mutation.getBranchReason(),
-                branchSuffix));
+                branchSuffix);
+        derivedTaskPlan.setDecisionId(mutation.getDecisionId());
+        derivedTaskPlan.setMutationId(mutation.getMutationId());
+        return taskPlanRepository.save(derivedTaskPlan);
     }
 
     /**

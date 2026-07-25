@@ -855,9 +855,14 @@ public class QualityReviewAgent extends BaseAgent {
             }
             QualityDiagnosis normalized = diagnosis.normalized();
             String category = resolveDirectiveCategory(normalized);
+            String competitor = resolveDirectiveCompetitor(normalized, evidences);
+            String targetField = resolveDirectiveTargetField(normalized);
             RevisionDirective directive = RevisionDirective.builder()
                     .category(category)
                     .targetSection(safeValue(normalized.getSection(), "通用"))
+                    .competitor(competitor)
+                    .targetField(targetField)
+                    .requiredSourceType(resolveRequiredSourceType(category, targetField, normalized, evidences))
                     .summary(normalized.getRepairSuggestion())
                     .searchFeedback("SEARCH_QUALITY".equals(category) ? normalized.getDetail() : null)
                     .searchQueries(buildSearchQueries(normalized, evidences))
@@ -875,6 +880,58 @@ public class QualityReviewAgent extends BaseAgent {
             directives.putIfAbsent(key, directive);
         }
         return new ArrayList<>(directives.values());
+    }
+
+    /**
+     * 自动补采只能在诊断可唯一定位竞品时写入 competitor。
+     * 多竞品或无证据场景保持 null，由整轮归一器转人工，不从诊断自然语言猜测竞品。
+     */
+    private String resolveDirectiveCompetitor(QualityDiagnosis diagnosis, List<EvidenceSource> evidences) {
+        LinkedHashSet<String> diagnosisUrls = new LinkedHashSet<>(diagnosis.getSourceUrls());
+        LinkedHashSet<String> matched = new LinkedHashSet<>();
+        for (EvidenceSource evidence : evidences == null ? List.<EvidenceSource>of() : evidences) {
+            if (evidence == null || evidence.getCompetitorName() == null || evidence.getCompetitorName().isBlank()) {
+                continue;
+            }
+            if (diagnosisUrls.isEmpty() || diagnosisUrls.contains(evidence.getUrl())) {
+                matched.add(evidence.getCompetitorName().trim());
+            }
+        }
+        return matched.size() == 1 ? matched.iterator().next() : null;
+    }
+
+    private String resolveDirectiveTargetField(QualityDiagnosis diagnosis) {
+        String field = StageOneFirstReportPolicy.fieldForSection(diagnosis.getSection());
+        return field == null || field.isBlank() ? null : field.trim();
+    }
+
+    /** 来源类型优先复用诊断已绑定 evidence 的真实 sourceType，否则按已知目标字段选择固定门禁类型。 */
+    private String resolveRequiredSourceType(String category,
+                                             String targetField,
+                                             QualityDiagnosis diagnosis,
+                                             List<EvidenceSource> evidences) {
+        LinkedHashSet<String> diagnosisUrls = new LinkedHashSet<>(diagnosis.getSourceUrls());
+        LinkedHashSet<String> matchedTypes = new LinkedHashSet<>();
+        for (EvidenceSource evidence : evidences == null ? List.<EvidenceSource>of() : evidences) {
+            if (evidence != null && diagnosisUrls.contains(evidence.getUrl())
+                    && evidence.getSourceType() != null && !evidence.getSourceType().isBlank()) {
+                matchedTypes.add(evidence.getSourceType().trim().toUpperCase(Locale.ROOT));
+            }
+        }
+        if (matchedTypes.size() == 1) {
+            return matchedTypes.iterator().next();
+        }
+        if (targetField == null) {
+            return null;
+        }
+        String normalizedField = targetField.toLowerCase(Locale.ROOT);
+        if (normalizedField.contains("pricing") || normalizedField.contains("price")) {
+            return "OFFICIAL_PRICING";
+        }
+        if ("SEARCH_QUALITY".equals(category) || "EVIDENCE_GAP".equals(category)) {
+            return "OFFICIAL_DOCS";
+        }
+        return "STRUCTURED_SOURCE";
     }
 
     /**

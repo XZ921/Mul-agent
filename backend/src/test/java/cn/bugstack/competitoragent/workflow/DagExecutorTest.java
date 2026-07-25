@@ -1604,7 +1604,8 @@ class DagExecutorTest {
                         new AlwaysSuccessCollectorAgent(),
                         new AlwaysSuccessExtractorAgent(),
                         new AlwaysSuccessAnalyzerAgent(),
-                        new DynamicRewriteAgent())),
+                        new DynamicRewriteAgent(),
+                        new AlwaysSuccessCitationAgent())),
                 mapper,
                 snapshotCacheService,
                 lockService,
@@ -1636,10 +1637,105 @@ class DagExecutorTest {
                 && Long.valueOf(2L).equals(node.getPlanVersionId())));
         assertTrue(storedNodes.stream().anyMatch(node -> "quality_check_revision_patch_v2".equals(node.getNodeName())
                 && "root/review-2".equals(node.getBranchKey())));
+        assertTrue(storedNodes.stream().anyMatch(node -> "target_coverage_gate_v2".equals(node.getNodeName())
+                && node.getStatus() == TaskNodeStatus.SUCCESS));
+        assertTrue(storedNodes.stream().anyMatch(node -> "citation_check_revision_patch_v2".equals(node.getNodeName())
+                && node.getStatus() == TaskNodeStatus.SUCCESS));
     }
 
     @Test
-    void shouldClassifyFinalQualityGateFailureAsDownstreamConsumptionGap() {
+    void shouldStopDynamicBackflowBeforeWriterWhenTargetCoverageGateDoesNotCloseGap() {
+        Long taskId = 1003L;
+        AnalysisTask task = AnalysisTask.builder()
+                .id(taskId)
+                .status(AnalysisTaskStatus.PENDING)
+                .currentPlanVersionId(2L)
+                .currentPlanVersion(2)
+                .build();
+        TaskNode extractor = TaskNode.builder()
+                .id(301L)
+                .taskId(taskId)
+                .nodeName("extract_revision_patch_v2")
+                .displayName("补证后结构化抽取")
+                .agentType(AgentType.EXTRACTOR)
+                .dependsOn("[]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(0)
+                .planVersionId(2L)
+                .branchKey("root/review-2")
+                .build();
+        TaskNode coverageGate = TaskNode.builder()
+                .id(302L)
+                .taskId(taskId)
+                .nodeName("target_coverage_gate_v2")
+                .displayName("目标覆盖门禁")
+                .agentType(AgentType.REVIEWER)
+                .dependsOn("[\"extract_revision_patch_v2\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(1)
+                .planVersionId(2L)
+                .branchKey("root/review-2")
+                .nodeConfig("""
+                        {
+                          "decisionId": "od-1003",
+                          "gapKey": "notion|pricing|official_pricing",
+                          "competitor": "Notion",
+                          "targetField": "pricing",
+                          "requiredSourceType": "OFFICIAL_PRICING"
+                        }
+                        """)
+                .build();
+        TaskNode writer = TaskNode.builder()
+                .id(303L)
+                .taskId(taskId)
+                .nodeName("rewrite_revision_patch_v2")
+                .displayName("动态回流改写报告")
+                .agentType(AgentType.WRITER)
+                .dependsOn("[\"target_coverage_gate_v2\"]")
+                .required(true)
+                .retryable(false)
+                .status(TaskNodeStatus.PENDING)
+                .executionOrder(2)
+                .planVersionId(2L)
+                .branchKey("root/review-2")
+                .build();
+        List<TaskNode> storedNodes = new ArrayList<>(List.of(extractor, coverageGate, writer));
+        AtomicLong writerInvocations = new AtomicLong();
+
+        AnalysisTaskRepository taskRepository = mock(AnalysisTaskRepository.class);
+        TaskNodeRepository nodeRepository = mock(TaskNodeRepository.class);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId)).thenAnswer(invocation -> List.copyOf(storedNodes));
+        when(nodeRepository.findById(301L)).thenReturn(Optional.of(extractor));
+        when(nodeRepository.findById(302L)).thenReturn(Optional.of(coverageGate));
+        when(nodeRepository.findById(303L)).thenReturn(Optional.of(writer));
+        when(nodeRepository.save(any(TaskNode.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DagExecutor executor = newDagExecutor(
+                nodeRepository,
+                taskRepository,
+                List.of(new UnrelatedGapExtractorAgent(), new CountingWriterAgent(writerInvocations)),
+                mock(TaskSnapshotCacheService.class),
+                allowingNodeLockService()
+        );
+
+        executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("coverage-gate-stop-test").build());
+
+        assertEquals(TaskNodeStatus.SUCCESS, extractor.getStatus());
+        assertEquals(TaskNodeStatus.WAITING_INTERVENTION, coverageGate.getStatus());
+        assertTrue(coverageGate.getOutputData().contains("\"targetCoverageDelta\":0"));
+        assertEquals(TaskNodeStatus.PENDING, writer.getStatus());
+        assertEquals(0L, writerInvocations.get());
+        assertEquals(AnalysisTaskStatus.STOPPED, task.getStatus());
+    }
+
+    @Test
+    void shouldBlockLegacyStaticRewriteBeforeFinalQualityGate() {
         Long taskId = 1002L;
         AnalysisTask task = AnalysisTask.builder()
                 .id(taskId)
@@ -1717,12 +1813,13 @@ class DagExecutorTest {
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("quality-gate-test").build());
 
         assertEquals(AnalysisTaskStatus.FAILED, task.getStatus());
-        assertEquals(NodeFailureCategory.DOWNSTREAM_CONSUMPTION_GAP, finalReview.getFailureCategory());
-        assertTrue(task.getErrorMessage().contains("质量闭环"));
+        assertEquals(TaskNodeStatus.SKIPPED, rewriteReport.getStatus());
+        assertEquals(TaskNodeStatus.SKIPPED, finalReview.getStatus());
+        assertNull(finalReview.getFailureCategory());
     }
 
     @Test
-    void shouldAllowRewriteWhenInitialReviewRequiresHumanInterventionButHasNoBlockingDiagnosis() {
+    void shouldNotLetInitialReviewHumanSuggestionBypassPolicyApprovedMutation() {
         Long taskId = 1003L;
         AnalysisTask task = AnalysisTask.builder()
                 .id(taskId)
@@ -1787,10 +1884,10 @@ class DagExecutorTest {
 
         executor.execute(taskId, AgentContext.builder().taskId(taskId).taskName("initial-review-human-test").build());
 
-        assertEquals(AnalysisTaskStatus.SUCCESS, task.getStatus());
-        assertEquals(TaskNodeStatus.SUCCESS, rewriteReport.getStatus());
-        assertNull(initialReview.getFailureCategory());
-        assertNull(initialReview.getInterventionReason());
+        assertEquals(AnalysisTaskStatus.STOPPED, task.getStatus());
+        assertEquals(TaskNodeStatus.SKIPPED, rewriteReport.getStatus());
+        assertEquals(NodeFailureCategory.DOWNSTREAM_CONSUMPTION_GAP, initialReview.getFailureCategory());
+        assertTrue(initialReview.getInterventionReason().contains("下游消费缺口"));
     }
 
     @Test
@@ -2932,7 +3029,7 @@ class DagExecutorTest {
                 return AgentResult.builder()
                         .status(TaskNodeStatus.SUCCESS)
                         .outputData("""
-                                {"reviewStage":"final","passed":false,"requiresHumanIntervention":false,"revisionDirectives":[{"category":"SEARCH_QUALITY","actionType":"SUPPLEMENT_EVIDENCE","summary":"补充官网定价证据","searchQueries":["Notion AI pricing official"],"sourceUrls":["https://www.notion.so/pricing"]}]}
+                                {"reviewStage":"final","passed":false,"requiresHumanIntervention":false,"sourceUrls":["https://www.notion.so/pricing"],"revisionDirectives":[{"category":"SEARCH_QUALITY","actionType":"SUPPLEMENT_EVIDENCE","competitor":"Notion","targetField":"pricing","requiredSourceType":"OFFICIAL_PRICING","summary":"补充官网定价证据","searchQueries":["Notion AI pricing official"],"sourceUrls":["https://www.notion.so/pricing"]}]}
                                 """.trim())
                         .build();
             }
@@ -2941,7 +3038,7 @@ class DagExecutorTest {
                 // 动态补图派生的复核节点复用同一个 Reviewer，实现终审失败后的自动回流闭环。
                 return AgentResult.builder()
                         .status(TaskNodeStatus.SUCCESS)
-                        .outputData("{\"reviewStage\":\"final\",\"passed\":true,\"requiresHumanIntervention\":false}")
+                        .outputData("{\"reviewStage\":\"final\",\"passed\":true,\"requiresHumanIntervention\":false,\"sourceUrls\":[\"https://www.notion.so/pricing\"]}")
                         .build();
             }
             return AgentResult.builder()
@@ -3116,7 +3213,39 @@ class DagExecutorTest {
         public AgentResult execute(AgentContext context) {
             return AgentResult.builder()
                     .status(TaskNodeStatus.SUCCESS)
-                    .outputData("{\"extracted\":true}")
+                    .outputData("""
+                            {
+                              "extracted": true,
+                              "closedGapKeys": ["notion|pricing|official_pricing"],
+                              "sourceUrls": ["https://www.notion.so/pricing"]
+                            }
+                            """)
+                    .build();
+        }
+    }
+
+    private static final class UnrelatedGapExtractorAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.EXTRACTOR;
+        }
+
+        @Override
+        public String getName() {
+            return "unrelated-gap-extractor";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("""
+                            {
+                              "closedGapKeys": ["notion|core_features|official_docs"],
+                              "sourceUrls": ["https://www.notion.so/help"]
+                            }
+                            """)
                     .build();
         }
     }
@@ -3288,6 +3417,34 @@ class DagExecutorTest {
         }
     }
 
+    private static final class AlwaysSuccessCitationAgent implements Agent {
+
+        @Override
+        public AgentType getType() {
+            return AgentType.CITATION;
+        }
+
+        @Override
+        public String getName() {
+            return "always-success-citation";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("""
+                            {
+                              "citationRiskSeverity": "NONE",
+                              "citationEvidenceState": "FULL_SOURCE",
+                              "sourceUrls": ["https://www.notion.so/pricing"],
+                              "citationIssues": []
+                            }
+                            """)
+                    .build();
+        }
+    }
+
     private static final class AnalyzerConsumptionFailureAgent implements Agent {
 
         @Override
@@ -3383,6 +3540,34 @@ class DagExecutorTest {
 
         @Override
         public AgentResult execute(AgentContext context) {
+            return AgentResult.builder()
+                    .status(TaskNodeStatus.SUCCESS)
+                    .outputData("{\"rewritten\":true}")
+                    .build();
+        }
+    }
+
+    private static final class CountingWriterAgent implements Agent {
+
+        private final AtomicLong invocations;
+
+        private CountingWriterAgent(AtomicLong invocations) {
+            this.invocations = invocations;
+        }
+
+        @Override
+        public AgentType getType() {
+            return AgentType.WRITER;
+        }
+
+        @Override
+        public String getName() {
+            return "counting-writer";
+        }
+
+        @Override
+        public AgentResult execute(AgentContext context) {
+            invocations.incrementAndGet();
             return AgentResult.builder()
                     .status(TaskNodeStatus.SUCCESS)
                     .outputData("{\"rewritten\":true}")

@@ -38,7 +38,7 @@ public class DecisionExecutorAdapter {
         OrchestrationDecision decision = rawDecision == null ? null : rawDecision.normalized();
         DecisionPolicyResult policyResult = rawPolicyResult == null ? null : rawPolicyResult.normalized();
         if (decision == null || policyResult == null || !policyResult.isAllowed()) {
-            return noMutation(decision, policyResult);
+            return toNoMutation(decision, policyResult, "POLICY_BLOCKED");
         }
         // confirmation 是 mutation 前的真实暂停门。即使 Policy 已把动作归一为自动补图，
         // 未确认前也只能生成等待人工的命令，绝不能先创建 APPEND_NODES。
@@ -85,6 +85,7 @@ public class DecisionExecutorAdapter {
                     .normalized();
         }
         if ("CREATE_REWRITE_BRANCH".equals(normalizedAction)) {
+            String expectedNodeName = "rewrite_revision_patch_v" + nextPlanVersion;
             return DynamicPlanMutation.builder()
                     .mutationId("dpm-" + decision.getDecisionId())
                     .decisionId(decision.getDecisionId())
@@ -92,10 +93,52 @@ public class DecisionExecutorAdapter {
                     .targetPlanVersionId(targetPlanVersionId)
                     .branchReason("ORCHESTRATOR_DECISION")
                     .dynamicAction(normalizedAction)
-                    .nodeTemplates(List.of())
+                    .nodeTemplates(List.of(WorkflowPlan.WorkflowPlanNode.builder()
+                            .nodeName(expectedNodeName)
+                            .displayName("动态回流改写报告")
+                            .agentType(AgentType.WRITER.name())
+                            .dependsOn(List.of(decision.getTriggerNodeName()))
+                            .required(true)
+                            .executionOrder(0)
+                            .nodeConfig(writeJson(buildRuntimeNodeConfig(decision, "REWRITE")))
+                            .notes("Orchestrator 决策触发的受控改写分支")
+                            .dynamicNode(true)
+                            .originNodeName(decision.getTriggerNodeName())
+                            .build()))
                     .sourceUrls(policyResult.getSourceUrls())
                     .evidenceState(policyResult.getEvidenceState())
-                    .expectedResumeNodeName("rewrite_revision_patch_v" + nextPlanVersion)
+                    .expectedResumeNodeName(expectedNodeName)
+                    .build()
+                    .normalized();
+        }
+        if ("CREATE_RERUN_BRANCH".equals(normalizedAction)) {
+            // RERUN 只物化白名单 Extractor，不能创建 Collector、回退整图或触碰兄弟分支。
+            if (!"extract_schema".equals(decision.getTargetNode())) {
+                return toNoMutation(decision, policyResult, "RERUN_TARGET_NOT_ALLOWED");
+            }
+            String expectedNodeName = "extract_revision_patch_v" + nextPlanVersion;
+            return DynamicPlanMutation.builder()
+                    .mutationId("dpm-" + decision.getDecisionId())
+                    .decisionId(decision.getDecisionId())
+                    .mutationType("APPEND_NODES")
+                    .targetPlanVersionId(targetPlanVersionId)
+                    .branchReason("ORCHESTRATOR_RERUN_DECISION")
+                    .dynamicAction(normalizedAction)
+                    .nodeTemplates(List.of(WorkflowPlan.WorkflowPlanNode.builder()
+                            .nodeName(expectedNodeName)
+                            .displayName("受控结构化重跑")
+                            .agentType(AgentType.EXTRACTOR.name())
+                            .dependsOn(List.of(decision.getTriggerNodeName()))
+                            .required(true)
+                            .executionOrder(0)
+                            .nodeConfig(writeJson(buildRuntimeNodeConfig(decision, "RERUN")))
+                            .notes("Orchestrator 决策触发的白名单 Extractor 重跑")
+                            .dynamicNode(true)
+                            .originNodeName(decision.getTriggerNodeName())
+                            .build()))
+                    .sourceUrls(policyResult.getSourceUrls())
+                    .evidenceState(policyResult.getEvidenceState())
+                    .expectedResumeNodeName(expectedNodeName)
                     .build()
                     .normalized();
         }
@@ -113,6 +156,9 @@ public class DecisionExecutorAdapter {
                     .build()
                     .normalized();
         }
+        if ("NO_ACTION".equals(normalizedAction)) {
+            return toNoMutation(decision, policyResult, "NO_ACTION");
+        }
         return noMutation(decision, policyResult);
     }
 
@@ -126,11 +172,41 @@ public class DecisionExecutorAdapter {
         config.put("evidenceState", decision.getEvidenceState().name());
         config.put("summary", decision.getReason());
         config.put("targetSection", decision.getTargetSection());
+        copyDecisionInputs(config, decision);
         putIfPresent(config, "preferredSearchProvider", policyResult == null ? null : policyResult.getPreferredSearchProvider());
         putIfPresent(config, "tavilyQueryMode", policyResult == null ? null : policyResult.getTavilyQueryMode());
         putIfNotEmpty(config, "preferredDomains", resolvePreferredDomains(decision, policyResult));
         putIfNotEmpty(config, "includeDomains", resolveIncludeDomains(decision, policyResult));
         return config;
+    }
+
+    private Map<String, Object> buildRuntimeNodeConfig(OrchestrationDecision decision, String mode) {
+        Map<String, Object> config = new LinkedHashMap<>();
+        config.put("mode", mode);
+        config.put("decisionId", decision.getDecisionId());
+        config.put("sourceUrls", decision.getSourceUrls());
+        config.put("reason", decision.getReason());
+        config.put("targetSection", decision.getTargetSection());
+        copyDecisionInputs(config, decision);
+        return config;
+    }
+
+    /** Reviewer 的结构化缺口参数只允许从归一 decision.inputRefs 透传，禁止从摘要文本二次猜测。 */
+    private void copyDecisionInputs(Map<String, Object> config, OrchestrationDecision decision) {
+        if (decision == null || decision.getInputRefs() == null) {
+            return;
+        }
+        for (String key : List.of("competitor", "targetField", "requiredSourceType",
+                "gapKey", "sourceSnapshot")) {
+            Object value = decision.getInputRefs().get(key);
+            if (value != null) {
+                config.put(key, value);
+            }
+        }
+        OrchestratorDecisionMetadata metadata = decision.getDecisionMetadata();
+        if (metadata != null && metadata.getAiAuditTraceId() != null) {
+            config.put("aiAuditTraceId", metadata.getAiAuditTraceId());
+        }
     }
 
     private List<String> resolveSuggestedQueries(OrchestrationDecision decision, DecisionPolicyResult policyResult) {

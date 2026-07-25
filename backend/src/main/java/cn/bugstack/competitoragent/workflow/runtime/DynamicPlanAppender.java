@@ -23,8 +23,8 @@ import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -39,7 +39,6 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class DynamicPlanAppender {
 
     private final AnalysisTaskRepository taskRepository;
@@ -49,6 +48,48 @@ public class DynamicPlanAppender {
     private final ObjectMapper objectMapper;
     private final OrchestrationRuntimeDecisionService runtimeDecisionService;
     private final OrchestrationTraceService orchestrationTraceService;
+    private final DynamicPlanMutationCommitter mutationCommitter;
+    private final DynamicPlanMutationFailureHandler mutationFailureHandler;
+
+    @Autowired
+    public DynamicPlanAppender(AnalysisTaskRepository taskRepository,
+                               TaskNodeRepository nodeRepository,
+                               DynamicTaskGraphService dynamicTaskGraphService,
+                               TaskPlanRepository taskPlanRepository,
+                               ObjectMapper objectMapper,
+                               OrchestrationRuntimeDecisionService runtimeDecisionService,
+                               OrchestrationTraceService orchestrationTraceService,
+                               DynamicPlanMutationCommitter mutationCommitter,
+                               DynamicPlanMutationFailureHandler mutationFailureHandler) {
+        this.taskRepository = taskRepository;
+        this.nodeRepository = nodeRepository;
+        this.dynamicTaskGraphService = dynamicTaskGraphService;
+        this.taskPlanRepository = taskPlanRepository;
+        this.objectMapper = objectMapper;
+        this.runtimeDecisionService = runtimeDecisionService;
+        this.orchestrationTraceService = orchestrationTraceService;
+        this.mutationCommitter = mutationCommitter;
+        this.mutationFailureHandler = mutationFailureHandler;
+    }
+
+    /**
+     * 兼容纯单元测试的轻量构造器；生产容器必须使用上面的完整构造器注入 Spring Bean。
+     * 这里手动创建的 committer 不经过 Spring AOP 代理，不能用于验证 @Transactional 回滚语义；
+     * mutation 原子性由 Spring 上下文注入的 DynamicPlanMutationCommitterTransactionTest 覆盖。
+     */
+    public DynamicPlanAppender(AnalysisTaskRepository taskRepository,
+                               TaskNodeRepository nodeRepository,
+                               DynamicTaskGraphService dynamicTaskGraphService,
+                               TaskPlanRepository taskPlanRepository,
+                               ObjectMapper objectMapper,
+                               OrchestrationRuntimeDecisionService runtimeDecisionService,
+                               OrchestrationTraceService orchestrationTraceService) {
+        this(taskRepository, nodeRepository, dynamicTaskGraphService, taskPlanRepository, objectMapper,
+                runtimeDecisionService, orchestrationTraceService,
+                new DynamicPlanMutationCommitter(taskRepository, nodeRepository, taskPlanRepository,
+                        dynamicTaskGraphService, orchestrationTraceService, objectMapper),
+                new DynamicPlanMutationFailureHandler(nodeRepository));
+    }
 
     /**
      * 当终审节点触发动态回流条件时，创建并挂载新的动态计划。
@@ -58,7 +99,7 @@ public class DynamicPlanAppender {
                                           Map<String, TaskNode> nodeMap,
                                           TaskNode completedNode) {
         JsonNode reviewOutput = readJson(completedNode == null ? null : completedNode.getOutputData());
-        if (!shouldCreateDynamicBackflow(completedNode, reviewOutput)) {
+        if (!shouldProcessReviewerCycle(completedNode, reviewOutput)) {
             return false;
         }
 
@@ -116,9 +157,7 @@ public class DynamicPlanAppender {
             }
             if ("MARK_WAITING_INTERVENTION".equals(mutation.getMutationType())) {
                 // confirmation/manual mutation 只暂停当前终审节点，不创建动态计划，也不污染 failureCategory。
-                completedNode.setStatus(TaskNodeStatus.WAITING_INTERVENTION);
-                completedNode.setInterventionReason(decision.getReason());
-                nodeRepository.save(completedNode);
+                mutationCommitter.markWaiting(completedNode, decision.getReason());
                 return false;
             }
             if (!"APPEND_NODES".equals(mutation.getMutationType())) {
@@ -129,24 +168,28 @@ public class DynamicPlanAppender {
                     || !task.getCurrentPlanVersionId().equals(parentPlan.getId())) {
                 continue;
             }
-            TaskPlan derivedPlan = dynamicTaskGraphService.createDynamicPlan(parentPlan, completedNode, mutation, baseWorkflowPlan);
-            List<TaskNode> dynamicNodes = materializeDynamicNodes(taskId, completedNode, derivedPlan, nodeMap);
-            if (dynamicNodes.isEmpty()) {
-                continue;
+            DynamicPlanMutationCommitter.CommitResult commitResult;
+            try {
+                commitResult = mutationCommitter.commit(taskId, task, parentPlan, completedNode, mutation,
+                        decision, baseWorkflowPlan, nodeMap);
+            } catch (Exception exception) {
+                // 主事务已经回滚；失败收口使用独立事务，仅持久化人工停点与确定性原因。
+                log.error("dynamic mutation materialization failed, taskId={}, decisionId={}",
+                        taskId, decision.getDecisionId(), exception);
+                mutationFailureHandler.close(completedNode, exception.getMessage());
+                return false;
             }
-
-            nodeRepository.saveAll(dynamicNodes);
+            if (commitResult.replayed()) {
+                return false;
+            }
+            TaskPlan derivedPlan = commitResult.plan();
+            List<TaskNode> dynamicNodes = commitResult.nodes();
             nodes.addAll(dynamicNodes);
             nodes.sort(java.util.Comparator.comparingInt(TaskNode::getExecutionOrder));
             for (TaskNode dynamicNode : dynamicNodes) {
                 nodeMap.put(dynamicNode.getNodeName(), dynamicNode);
             }
 
-            task.setCurrentPlanVersionId(derivedPlan.getId());
-            task.setCurrentPlanVersion(derivedPlan.getPlanVersion());
-            task.setErrorMessage(null);
-            taskRepository.save(task);
-            orchestrationTraceService.recordCheckpoint(taskId, completedNode, derivedPlan, decision, mutation);
             log.info("dynamic backflow plan attached through orchestration decision, taskId={}, triggerNode={}, planVersion={}, dynamicNodeCount={}",
                     taskId, completedNode.getNodeName(), derivedPlan.getPlanVersion(), dynamicNodes.size());
             return true;
@@ -154,21 +197,24 @@ public class DynamicPlanAppender {
         return false;
     }
 
-    private boolean shouldCreateDynamicBackflow(TaskNode completedNode, JsonNode reviewOutput) {
+    private boolean shouldProcessReviewerCycle(TaskNode completedNode, JsonNode reviewOutput) {
         if (completedNode == null
                 || completedNode.getAgentType() != AgentType.REVIEWER
                 || completedNode.getStatus() != TaskNodeStatus.SUCCESS
                 || reviewOutput == null) {
             return false;
         }
-        if (!"final".equalsIgnoreCase(reviewOutput.path("reviewStage").asText(""))) {
+        if (isTargetCoverageGateNode(completedNode)) {
             return false;
         }
-        // 两个 human=true 象限都交给 RuntimeDecisionService 形成可审计暂停；passed-only 仍保持既有短路语义。
-        if (reviewOutput.path("requiresHumanIntervention").asBoolean(false)) {
-            return true;
-        }
-        return !reviewOutput.path("passed").asBoolean(true);
+        // 所有 Reviewer 阶段都进入同一决策周期。PASS 也要形成可审计 NO_MUTATION，
+        // 但 maybeAppendDynamicPlan 只在真正提交新节点时返回 true。
+        return true;
+    }
+
+    private boolean isTargetCoverageGateNode(TaskNode completedNode) {
+        return completedNode.getNodeName() != null
+                && completedNode.getNodeName().startsWith("target_coverage_gate_v");
     }
 
     private List<RevisionDirective> readRevisionDirectives(JsonNode reviewOutput) {
@@ -266,58 +312,6 @@ public class DynamicPlanAppender {
         } catch (Exception e) {
             log.warn("failed to parse workflow plan snapshot", e);
             return null;
-        }
-    }
-
-    /**
-     * 只把当前动态分支中新派生的节点实体化并落库，避免重复写入旧节点。
-     */
-    private List<TaskNode> materializeDynamicNodes(Long taskId,
-                                                   TaskNode triggerNode,
-                                                   TaskPlan derivedPlan,
-                                                   Map<String, TaskNode> nodeMap) {
-        WorkflowPlan workflowPlan = readWorkflowPlan(derivedPlan == null ? null : derivedPlan.getPlanSnapshot());
-        if (workflowPlan == null || derivedPlan == null) {
-            return List.of();
-        }
-
-        List<TaskNode> materializedNodes = new ArrayList<>();
-        for (WorkflowPlan.WorkflowPlanNode planNode : workflowPlan.getNodes()) {
-            if (!planNode.isDynamicNode()
-                    || !derivedPlan.getBranchKey().equals(planNode.getBranchKey())
-                    || nodeMap.containsKey(planNode.getNodeName())) {
-                continue;
-            }
-            materializedNodes.add(TaskNode.builder()
-                    .taskId(taskId)
-                    .nodeName(planNode.getNodeName())
-                    .displayName(planNode.getDisplayName())
-                    .agentType(AgentType.valueOf(planNode.getAgentType()))
-                    .dependsOn(writeDependencyJson(planNode.getDependsOn()))
-                    .nodeConfig(planNode.getNodeConfig())
-                    .nodeNotes(planNode.getNotes())
-                    .allowFailedDependency(planNode.isAllowFailedDependency())
-                    .required(planNode.isRequired())
-                    .retryable(planNode.isRetryable())
-                    .maxRetries(planNode.getMaxRetries())
-                    .retryCount(0)
-                    .status(TaskNodeStatus.PENDING)
-                    .executionOrder(planNode.getExecutionOrder())
-                    .planVersionId(derivedPlan.getId())
-                    .branchKey(planNode.getBranchKey())
-                    .dynamicNode(planNode.isDynamicNode())
-                    .originNodeName(planNode.getOriginNodeName() == null ? triggerNode.getNodeName() : planNode.getOriginNodeName())
-                    .build());
-        }
-        return materializedNodes;
-    }
-
-    private String writeDependencyJson(List<String> dependencies) {
-        try {
-            return objectMapper.writeValueAsString(dependencies == null ? List.of() : dependencies);
-        } catch (Exception e) {
-            log.warn("failed to serialize dynamic node dependencies", e);
-            return "[]";
         }
     }
 

@@ -243,15 +243,16 @@ class Stage2OrchestrationControlledAcceptanceTest {
     }
 
     @Test
-    void shouldAcceptSourceBackedFinalReviewLegacyContextAsExecutablePrimary() throws Exception {
+    void shouldNormalizeSourceBackedFinalReviewWithoutInvokingLlmControlPlane() throws Exception {
         RuntimeCycle cycle = executeFinalReviewContext(
                 690L,
                 List.of(finalReviewResponse("APPEND_DYNAMIC_BRANCH", "SUPPLEMENT_EVIDENCE", false, 1)));
 
         assertThat(cycle.batch().policyFallbackUsed()).isFalse();
         assertThat(cycle.batch().coordinatorOutcome().llmFailure()).isNull();
+        assertThat(cycle.batch().coordinatorOutcome().mode()).isEqualTo(OrchestratorDecisionMode.RULE_ONLY);
         assertThat(cycle.batch().attempts()).singleElement().satisfies(result -> {
-            assertThat(result.decision().getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.LLM_PRIMARY);
+            assertThat(result.decision().getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_ONLY);
             assertThat(result.decision().getDecisionMetadata().getParseRetryCount()).isZero();
             assertThat(result.policyResult().isAllowed()).isTrue();
             assertThat(result.runtimeStatus()).isEqualTo(OrchestrationRuntimeDecision.READY);
@@ -260,17 +261,16 @@ class Stage2OrchestrationControlledAcceptanceTest {
     }
 
     @Test
-    void shouldClassifySecondParseFailureAsRuleFallbackForFinalReviewContext() throws Exception {
+    void shouldIgnoreMalformedLlmResponsesForFinalReviewContext() throws Exception {
         RuntimeCycle cycle = executeFinalReviewContext(691L, List.of("{malformed", "[]"));
 
-        assertThat(cycle.batch().coordinatorOutcome().llmFailure()).isNotNull();
-        assertThat(cycle.batch().coordinatorOutcome().llmFailure().type())
-                .isEqualTo(LlmOrchestratorFailureType.PARSE_ERROR);
-        assertThat(cycle.batch().coordinatorOutcome().llmFailure().parseRetryCount()).isEqualTo(1);
-        // 该标志只描述 Policy rejection fallback；Parser failure 由 llmFailure 单独表达。
+        // Reviewer 整轮诊断固定由 Java 归一，模型响应不会进入 Parser 或形成第二控制面。
+        assertThat(cycle.batch().coordinatorOutcome().llmFailure()).isNull();
+        assertThat(cycle.batch().coordinatorOutcome().mode()).isEqualTo(OrchestratorDecisionMode.RULE_ONLY);
         assertThat(cycle.batch().policyFallbackUsed()).isFalse();
+        assertThat(cycle.batch().attempts()).hasSize(1);
         assertThat(cycle.batch().finalDecisions()).singleElement().satisfies(result -> {
-            assertThat(result.decision().getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_FALLBACK);
+            assertThat(result.decision().getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_ONLY);
             assertThat(result.policyResult().isAllowed()).isTrue();
             assertThat(result.runtimeStatus()).isEqualTo(OrchestrationRuntimeDecision.READY);
             assertThat(result.mutation().getMutationType()).isEqualTo("APPEND_NODES");
@@ -278,7 +278,7 @@ class Stage2OrchestrationControlledAcceptanceTest {
     }
 
     @Test
-    void shouldClassifyRetriedPolicyRejectionAsRuleFallbackForFinalReviewContext() throws Exception {
+    void shouldIgnorePolicyRejectableLlmResponsesForFinalReviewContext() throws Exception {
         RuntimeCycle cycle = executeFinalReviewContext(
                 692L,
                 List.of(
@@ -286,37 +286,31 @@ class Stage2OrchestrationControlledAcceptanceTest {
                         finalReviewResponse("APPEND_DYNAMIC_BRANCH", "SUPPLEMENT_EVIDENCE", false, 6)));
 
         assertThat(cycle.batch().coordinatorOutcome().llmFailure()).isNull();
-        assertThat(cycle.batch().policyFallbackUsed()).isTrue();
-        assertThat(cycle.batch().attempts()).hasSize(2);
-        assertThat(cycle.batch().attempts().get(0)).satisfies(result -> {
-            assertThat(result.decision().getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.LLM_PRIMARY);
-            assertThat(result.decision().getDecisionMetadata().getParseRetryCount()).isEqualTo(1);
-            assertThat(result.policyResult().isAllowed()).isFalse();
-            assertThat(result.policyResult().getBlockedReasons())
-                    .anyMatch(reason -> reason.contains("query 数量超过上限"));
-            assertThat(result.runtimeStatus()).isEqualTo(OrchestrationRuntimeDecision.POLICY_REJECTED);
-        });
+        assertThat(cycle.batch().coordinatorOutcome().mode()).isEqualTo(OrchestratorDecisionMode.RULE_ONLY);
+        assertThat(cycle.batch().policyFallbackUsed()).isFalse();
+        assertThat(cycle.batch().attempts()).hasSize(1);
         assertThat(cycle.batch().finalDecisions()).singleElement().satisfies(result -> {
-            assertThat(result.decision().getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_FALLBACK);
+            assertThat(result.decision().getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_ONLY);
             assertThat(result.runtimeStatus()).isEqualTo(OrchestrationRuntimeDecision.READY);
             assertThat(result.mutation().getMutationType()).isEqualTo("APPEND_NODES");
         });
     }
 
     @Test
-    void shouldKeepAllowedConservativeFinalReviewPairWithoutDynamicAppendMutation() throws Exception {
+    void shouldIgnoreManualLlmSuggestionAndKeepNormalizedFinalReviewMutation() throws Exception {
         RuntimeCycle cycle = executeFinalReviewContext(
                 693L,
                 List.of(finalReviewResponse("WAIT_FOR_HUMAN", "MANUAL_REVIEW", true, 0)));
 
         assertThat(cycle.batch().policyFallbackUsed()).isFalse();
         assertThat(cycle.batch().coordinatorOutcome().llmFailure()).isNull();
+        assertThat(cycle.batch().coordinatorOutcome().mode()).isEqualTo(OrchestratorDecisionMode.RULE_ONLY);
+        assertThat(cycle.batch().attempts()).hasSize(1);
         assertThat(cycle.batch().finalDecisions()).singleElement().satisfies(result -> {
-            assertThat(result.decision().getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.LLM_PRIMARY);
+            assertThat(result.decision().getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_ONLY);
             assertThat(result.policyResult().isAllowed()).isTrue();
-            assertThat(result.runtimeStatus()).isEqualTo(OrchestrationRuntimeDecision.CONFIRMATION_REQUIRED);
-            assertThat(result.mutation().getMutationType()).isEqualTo("MARK_WAITING_INTERVENTION");
-            assertThat(result.mutation().getMutationType()).isNotEqualTo("APPEND_NODES");
+            assertThat(result.runtimeStatus()).isEqualTo(OrchestrationRuntimeDecision.READY);
+            assertThat(result.mutation().getMutationType()).isEqualTo("APPEND_NODES");
         });
     }
 
@@ -538,6 +532,9 @@ class Stage2OrchestrationControlledAcceptanceTest {
         RevisionDirective directive = RevisionDirective.builder()
                 .category("EVIDENCE_GAP")
                 .actionType("SUPPLEMENT_EVIDENCE")
+                .competitor("Notion AI")
+                .targetField("pricing")
+                .requiredSourceType("OFFICIAL_PRICING")
                 .summary("补充官网定价证据并重新复核")
                 .searchQueries(List.of("Notion AI pricing official"))
                 .sourceUrls(List.of(FINAL_REVIEW_SOURCE_URL))

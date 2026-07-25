@@ -106,6 +106,7 @@ public class DagExecutor {
     private final OrchestrationTraceService orchestrationTraceService;
     private final List<SharedNodeOutputProjector> sharedNodeOutputProjectors;
     private final CollectorEvidenceReadinessPolicy collectorEvidenceReadinessPolicy;
+    private final TargetCoverageGateEvaluator targetCoverageGateEvaluator;
 
     @Autowired
     public DagExecutor(TaskNodeRepository nodeRepository,
@@ -157,6 +158,7 @@ public class DagExecutor {
         this.orchestrationTraceService = orchestrationTraceService;
         this.sharedNodeOutputProjectors = sharedNodeOutputProjectors == null ? List.of() : List.copyOf(sharedNodeOutputProjectors);
         this.collectorEvidenceReadinessPolicy = new CollectorEvidenceReadinessPolicy(objectMapper);
+        this.targetCoverageGateEvaluator = new TargetCoverageGateEvaluator(objectMapper);
     }
 
     public DagExecutor(TaskNodeRepository nodeRepository,
@@ -572,13 +574,17 @@ public class DagExecutor {
                 markNodeStopped(node);
                 return new NodeExecutionResult(node);
             }
-            AgentCapability capability = agentCapabilityRegistry.resolve(node.getAgentType());
-            if (capability == null) {
-                failNode(node, "Missing agent implementation: " + node.getAgentType());
-                return new NodeExecutionResult(node);
+            AgentResult result;
+            if (isTargetCoverageGateNode(node)) {
+                result = evaluateTargetCoverageGate(sharedContext, node);
+            } else {
+                AgentCapability capability = agentCapabilityRegistry.resolve(node.getAgentType());
+                if (capability == null) {
+                    failNode(node, "Missing agent implementation: " + node.getAgentType());
+                    return new NodeExecutionResult(node);
+                }
+                result = executeNodeOnce(capability, nodeContext);
             }
-
-            AgentResult result = executeNodeOnce(capability, nodeContext);
             boolean interrupted = Thread.interrupted();
             TaskNode latestNode = nodeRepository.findById(node.getId()).orElse(node);
             /*
@@ -681,32 +687,51 @@ public class DagExecutor {
         if (completedNode == null || completedNode.getNodeName() == null) {
             return List.of();
         }
-        if ("extract_schema".equals(completedNode.getNodeName())) {
+        if ("extract_schema".equals(completedNode.getNodeName())
+                || completedNode.getNodeName().startsWith("extract_revision_patch_v")) {
             return extractorSuggestionAssembler.fromExtractorOutput(
                     taskId,
                     completedNode.getNodeName(),
                     completedNode.getOutputData());
         }
-        if ("analyze_competitors".equals(completedNode.getNodeName())) {
+        if ("analyze_competitors".equals(completedNode.getNodeName())
+                || completedNode.getNodeName().startsWith("analyze_revision_patch_v")) {
             return analyzerSuggestionAssembler.fromAnalyzerOutput(
                     taskId,
                     completedNode.getNodeName(),
                     completedNode.getOutputData());
         }
-        if ("write_report".equals(completedNode.getNodeName()) || "rewrite_report".equals(completedNode.getNodeName())) {
+        if ("write_report".equals(completedNode.getNodeName())
+                || "rewrite_report".equals(completedNode.getNodeName())
+                || completedNode.getNodeName().startsWith("rewrite_revision_patch_v")) {
             return writerSuggestionAssembler.fromWriterOutput(
                     taskId,
                     completedNode.getNodeName(),
                     completedNode.getOutputData());
         }
         if ("citation_check".equals(completedNode.getNodeName())
-                || "citation_check_revision".equals(completedNode.getNodeName())) {
+                || "citation_check_revision".equals(completedNode.getNodeName())
+                || completedNode.getNodeName().startsWith("citation_check_revision_patch_v")) {
             return citationSuggestionAssembler.fromCitationOutput(
                     taskId,
                     completedNode.getNodeName(),
                     completedNode.getOutputData());
         }
         return List.of();
+    }
+
+    private AgentResult evaluateTargetCoverageGate(AgentContext sharedContext, TaskNode gateNode) {
+        List<String> upstreamOutputs = parseDependencyNames(gateNode.getDependsOn()).stream()
+                .map(sharedContext::getSharedOutput)
+                .filter(output -> output != null && !output.isBlank())
+                .toList();
+        return targetCoverageGateEvaluator.evaluate(gateNode.getNodeConfig(), upstreamOutputs);
+    }
+
+    private boolean isTargetCoverageGateNode(TaskNode node) {
+        return node != null
+                && node.getNodeName() != null
+                && node.getNodeName().startsWith("target_coverage_gate_v");
     }
 
     private void recordAgentDecisionBatchTrace(Long taskId,
@@ -779,6 +804,27 @@ public class DagExecutor {
         node.setCompletedAt(now);
         node.setControlState(TaskNodeControlState.NONE);
         node.setInterventionReason(null);
+
+        /*
+         * 目标覆盖 gate 是工作流层的确定性硬门禁。失败时它已经给出 WAITING_INTERVENTION
+         * 语义，不能再交给普通重试分类器把它降级成 FAILED 或 WAITING_RETRY。
+         */
+        if (result.getStatus() == TaskNodeStatus.WAITING_INTERVENTION) {
+            node.setStatus(TaskNodeStatus.WAITING_INTERVENTION);
+            node.setOutputData(result.getOutputData());
+            node.setErrorMessage(result.getErrorMessage());
+            node.setInterventionReason(result.getErrorMessage());
+            node.setFailureCategory(NodeFailureCategory.MANUAL_INTERVENTION_REQUIRED);
+            node.setNextRetryAt(null);
+            TaskNode savedNode = nodeRepository.save(node);
+            recordExecutionAttempt(savedNode, attemptNo, TaskNodeStatus.WAITING_INTERVENTION,
+                    NodeFailureCategory.MANUAL_INTERVENTION_REQUIRED, result.getErrorMessage());
+            if (result.getOutputData() != null && !result.getOutputData().isBlank()) {
+                sharedContext.putSharedOutput(savedNode.getNodeName(), result.getOutputData());
+                taskSnapshotCacheService.cacheNodeOutput(taskId, savedNode.getNodeName(), result.getOutputData());
+            }
+            return savedNode;
+        }
 
         /*
          * SUCCESS_DEGRADED 代表节点已经收口并产出了可交接结果，
@@ -1676,14 +1722,9 @@ public class DagExecutor {
         }
         return switch (trigger) {
             case "review_failed" -> {
-                JsonNode reviewOutput = readJson(context.getSharedOutput("quality_check"));
-                boolean manualResumeApproved = isManualResumeApproved(node.getNodeConfig());
-                yield reviewOutput != null
-                        && !reviewOutput.path("passed").asBoolean(true)
-                        // 阶段1收口允许“非阻断型初审失败”先进入一次静态 rewrite。
-                        // 这里不再把 requiresHumanIntervention 直接等同于“禁止改写”，
-                        // 只有 reviewer 明确产出了 BLOCKER 诊断，才阻断 rewrite 并要求人工先介入。
-                        && (manualResumeApproved || !hasBlockingReviewDiagnosis(reviewOutput));
+                // Day 2 起静态 DAG 不再解释 Reviewer 原始 passed/BLOCKER 字段。
+                // 初审改写必须由 Policy-approved CREATE_REWRITE_BRANCH mutation 物化动态 Writer。
+                yield false;
             }
             case "rewrite_executed" -> allNodes.stream()
                     .anyMatch(current -> "rewrite_report".equals(current.getNodeName())
@@ -1695,20 +1736,7 @@ public class DagExecutor {
     private String buildConditionalSkipReason(TaskNode node, AgentContext context, List<TaskNode> allNodes) {
         String trigger = resolveTrigger(node.getNodeConfig());
         if ("review_failed".equals(trigger)) {
-            JsonNode reviewOutput = readJson(context.getSharedOutput("quality_check"));
-            if (reviewOutput == null) {
-                return "跳过修订：缺少有效的评审结果";
-            }
-            if (hasBlockingReviewDiagnosis(reviewOutput)
-                    && !isManualResumeApproved(node.getNodeConfig())) {
-                return "跳过修订：初审严重失败，需先人工补证据、调整搜索范围或重跑采集链路";
-            }
-            if (!reviewOutput.has("passed")) {
-                return "跳过修订：评审输出不完整";
-            }
-            return reviewOutput.path("passed").asBoolean(false)
-                    ? "初审已通过，无需修订"
-                    : "初审未通过，应触发修订";
+            return "跳过静态修订：Reviewer 已迁移到 Policy-approved mutation 统一控制面";
         }
 
         if ("rewrite_executed".equals(trigger)) {

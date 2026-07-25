@@ -52,6 +52,26 @@ class OrchestrationDecisionServiceLlmModeTest {
     }
 
     @Test
+    void shouldKeepReviewerOnDeterministicRulePathEvenInLlmPrimaryMode() {
+        RuleBasedOrchestratorDecisionBrain ruleBrain = mock(RuleBasedOrchestratorDecisionBrain.class);
+        LlmOrchestratorDecisionBrain llmBrain = mock(LlmOrchestratorDecisionBrain.class);
+        OrchestrationDecision ruleDecision = decision(OrchestrationDecisionOrigin.RULE_ONLY, "reviewer-rule")
+                .toBuilder().triggerNodeName("quality_check_final").build();
+        when(ruleBrain.decide(any())).thenReturn(List.of(ruleDecision));
+
+        OrchestrationDecisionOutcome outcome = service(
+                ruleBrain, llmBrain, properties(OrchestratorDecisionMode.LLM_PRIMARY, false))
+                .decideWithOutcome(OrchestrationContext.builder()
+                        .taskId(91L).triggerNodeName("quality_check_final")
+                        .passed(true).sourceUrls(List.of("https://example.com/review")).build());
+
+        assertThat(outcome.mode()).isEqualTo(OrchestratorDecisionMode.RULE_ONLY);
+        assertThat(outcome.decisions()).containsExactly(ruleDecision);
+        verify(ruleBrain).decide(any());
+        verify(llmBrain, never()).decide(any());
+    }
+
+    @Test
     void shouldSkipDisabledShadowWithoutCallingLlm() {
         RuleBasedOrchestratorDecisionBrain ruleBrain = mock(RuleBasedOrchestratorDecisionBrain.class);
         LlmOrchestratorDecisionBrain llmBrain = mock(LlmOrchestratorDecisionBrain.class);
@@ -174,7 +194,7 @@ class OrchestrationDecisionServiceLlmModeTest {
     private OrchestrationContext context() {
         return OrchestrationContext.builder()
                 .taskId(91L)
-                .triggerNodeName("quality_check_final")
+                .triggerNodeName("analyze_competitors")
                 .sourceUrls(List.of("https://example.com/context"))
                 .build();
     }
@@ -183,7 +203,7 @@ class OrchestrationDecisionServiceLlmModeTest {
         return OrchestrationDecision.builder()
                 .decisionId(id)
                 .taskId(91L)
-                .triggerNodeName("quality_check_final")
+                .triggerNodeName("analyze_competitors")
                 .decisionOrigin(origin)
                 .decisionType("NO_ACTION")
                 .actionType("NO_ACTION")

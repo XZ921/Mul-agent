@@ -34,6 +34,8 @@ public class DynamicPlanMutation {
     private List<String> sourceUrls = List.of();
     private EvidenceState evidenceState;
     private String expectedResumeNodeName;
+    /** 只读展示字段，只能由 Policy 通过后的 normalizedAction 与 mutation 确定性投影。 */
+    private String projectedNextAction;
 
     /**
      * 归一化动态计划变更，保证补图入口只接收稳定动作和安全默认值。
@@ -48,7 +50,25 @@ public class DynamicPlanMutation {
                 .sourceUrls(normalizeDistinctList(sourceUrls))
                 .evidenceState(resolveEvidenceState())
                 .expectedResumeNodeName(blankToNull(expectedResumeNodeName))
+                .projectedNextAction(upperOrDefault(projectedNextAction, projectNextAction()))
                 .build();
+    }
+
+    private String projectNextAction() {
+        String normalizedMutation = upperOrDefault(mutationType, "NO_MUTATION");
+        String normalizedAction = upperOrDefault(dynamicAction, "NO_ACTION");
+        if ("MARK_WAITING_INTERVENTION".equals(normalizedMutation)) {
+            return "WAITING_INTERVENTION";
+        }
+        if ("NO_MUTATION".equals(normalizedMutation)) {
+            return "NO_ACTION".equalsIgnoreCase(branchReason) ? "PASS" : null;
+        }
+        return switch (normalizedAction) {
+            case "CREATE_SUPPLEMENT_BRANCH" -> "SUPPLEMENT_EVIDENCE";
+            case "CREATE_RERUN_BRANCH" -> "RERUN_NODE";
+            case "CREATE_REWRITE_BRANCH" -> "REWRITE";
+            default -> null;
+        };
     }
 
     private EvidenceState resolveEvidenceState() {

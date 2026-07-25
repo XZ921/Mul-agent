@@ -53,9 +53,60 @@ class CompensationGraphAssemblerTest {
                 .containsExactly(
                         "collect_revision_evidence_v2_1",
                         "extract_revision_patch_v2",
+                        "target_coverage_gate_v2",
                         "analyze_revision_patch_v2",
                         "rewrite_revision_patch_v2",
+                        "citation_check_revision_patch_v2",
                         "quality_check_revision_patch_v2");
+        assertThat(nodes).filteredOn(node -> "rewrite_revision_patch_v2".equals(node.getNodeName()))
+                .singleElement()
+                .satisfies(node -> assertThat(node.getDependsOn()).containsExactly("analyze_revision_patch_v2"));
+        assertThat(nodes).filteredOn(node -> "analyze_revision_patch_v2".equals(node.getNodeName()))
+                .singleElement()
+                .satisfies(node -> assertThat(node.getDependsOn()).containsExactly("target_coverage_gate_v2"));
+    }
+
+    @Test
+    void shouldAssembleRerunMutationIntoExtractorCoverageGateAndFixedBackflowChain() {
+        TaskPlan parentPlan = TaskPlan.builder()
+                .id(8L)
+                .taskId(50L)
+                .planVersion(1)
+                .branchKey("root")
+                .build();
+        TaskNode triggerNode = TaskNode.builder()
+                .taskId(50L)
+                .nodeName("quality_check_final")
+                .agentType(AgentType.REVIEWER)
+                .planVersionId(8L)
+                .branchKey("root")
+                .build();
+        DynamicPlanMutation mutation = DynamicPlanMutation.builder()
+                .mutationId("dpm-003")
+                .decisionId("od-003")
+                .mutationType("APPEND_NODES")
+                .dynamicAction("CREATE_RERUN_BRANCH")
+                .nodeTemplates(List.of(WorkflowPlan.WorkflowPlanNode.builder()
+                        .nodeName("extract_revision_patch_v2")
+                        .displayName("受控结构化重跑")
+                        .agentType(AgentType.EXTRACTOR.name())
+                        .nodeConfig("{\"decisionId\":\"od-003\",\"gapKey\":\"notion|pricing|official_pricing\"}")
+                        .build()))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build();
+
+        List<WorkflowPlan.WorkflowPlanNode> nodes = assembler.assembleDynamicNodes(
+                parentPlan, triggerNode, mutation, 10, "root/review-2");
+
+        assertThat(nodes).extracting(WorkflowPlan.WorkflowPlanNode::getNodeName)
+                .containsExactly(
+                        "extract_revision_patch_v2",
+                        "target_coverage_gate_v2",
+                        "analyze_revision_patch_v2",
+                        "rewrite_revision_patch_v2",
+                        "citation_check_revision_patch_v2",
+                        "quality_check_revision_patch_v2");
+        assertThat(nodes).noneMatch(node -> AgentType.COLLECTOR.name().equals(node.getAgentType()));
     }
 
     @Test
@@ -85,7 +136,10 @@ class CompensationGraphAssemblerTest {
                 parentPlan, triggerNode, mutation, 10, "root/review-2");
 
         assertThat(nodes).extracting(WorkflowPlan.WorkflowPlanNode::getNodeName)
-                .containsExactly("rewrite_revision_patch_v2", "quality_check_revision_patch_v2");
+                .containsExactly(
+                        "rewrite_revision_patch_v2",
+                        "citation_check_revision_patch_v2",
+                        "quality_check_revision_patch_v2");
     }
 
     @Test

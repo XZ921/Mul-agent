@@ -14,13 +14,132 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class DynamicTaskGraphServiceTest {
+
+    @Test
+    void shouldReuseCommittedPlanForRepeatedDecisionId() {
+        cn.bugstack.competitoragent.repository.TaskPlanRepository repository =
+                mock(cn.bugstack.competitoragent.repository.TaskPlanRepository.class);
+        TaskPlan activePlan = TaskPlan.builder()
+                .id(8L)
+                .taskId(21L)
+                .planVersion(1)
+                .branchKey("root")
+                .active(true)
+                .planSnapshot("{}")
+                .build();
+        when(repository.findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(21L))
+                .thenReturn(Optional.of(activePlan));
+        when(repository.save(any(TaskPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        TaskPlan committedPlan = TaskPlan.builder().id(9L).taskId(21L).planVersion(2)
+                .decisionId("repeated-decision").active(true).build();
+        when(repository.findByTaskIdAndDecisionId(21L, "repeated-decision"))
+                .thenReturn(Optional.empty(), Optional.of(committedPlan));
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        DynamicTaskGraphService service = new DynamicTaskGraphService(
+                repository,
+                new TaskPlanVersioner(objectMapper),
+                new CompensationGraphAssembler(objectMapper));
+        TaskNode triggerNode = TaskNode.builder()
+                .taskId(21L)
+                .nodeName("quality_check_final")
+                .agentType(AgentType.REVIEWER)
+                .planVersionId(8L)
+                .branchKey("root")
+                .build();
+        WorkflowPlan basePlan = WorkflowPlan.builder()
+                .planVersionId(8L)
+                .planVersion(1)
+                .branchKey("root")
+                .nodes(List.of())
+                .build();
+        DynamicPlanMutation repeatedMutation = DynamicPlanMutation.builder()
+                .mutationId("dpm-repeated-decision")
+                .decisionId("repeated-decision")
+                .mutationType("APPEND_NODES")
+                .dynamicAction("CREATE_SUPPLEMENT_BRANCH")
+                .branchReason("ORCHESTRATOR_DECISION")
+                .nodeTemplates(List.of(WorkflowPlan.WorkflowPlanNode.builder()
+                        .nodeName("collect_revision_evidence_v2_1")
+                        .agentType(AgentType.COLLECTOR.name())
+                        .build()))
+                .sourceUrls(List.of("https://example.com/pricing"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build();
+
+        TaskPlan first = service.createDynamicPlan(activePlan, triggerNode, repeatedMutation, basePlan);
+        TaskPlan second = service.createDynamicPlan(activePlan, triggerNode, repeatedMutation, basePlan);
+
+        assertThat(first.getPlanVersion()).isEqualTo(2);
+        assertThat(first.getDecisionId()).isEqualTo("repeated-decision");
+        assertThat(second).isSameAs(committedPlan);
+        verify(repository, times(2)).save(any(TaskPlan.class));
+    }
+
+    @Test
+    void shouldRejectEmptyMutationBeforePersistingDerivedPlan() {
+        cn.bugstack.competitoragent.repository.TaskPlanRepository repository =
+                mock(cn.bugstack.competitoragent.repository.TaskPlanRepository.class);
+        TaskPlan activePlan = TaskPlan.builder()
+                .id(8L)
+                .taskId(21L)
+                .planVersion(1)
+                .branchKey("root")
+                .active(true)
+                .planSnapshot("{}")
+                .build();
+        when(repository.findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(21L))
+                .thenReturn(Optional.of(activePlan));
+        when(repository.save(any(TaskPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        DynamicTaskGraphService service = new DynamicTaskGraphService(
+                repository,
+                new TaskPlanVersioner(objectMapper),
+                new CompensationGraphAssembler(objectMapper));
+        TaskNode triggerNode = TaskNode.builder()
+                .taskId(21L)
+                .nodeName("quality_check_final")
+                .agentType(AgentType.REVIEWER)
+                .planVersionId(8L)
+                .branchKey("root")
+                .build();
+        WorkflowPlan basePlan = WorkflowPlan.builder()
+                .planVersionId(8L)
+                .planVersion(1)
+                .branchKey("root")
+                .nodes(List.of(WorkflowPlan.WorkflowPlanNode.builder()
+                        .nodeName("quality_check_final")
+                        .agentType(AgentType.REVIEWER.name())
+                        .branchKey("root")
+                        .build()))
+                .build();
+        DynamicPlanMutation unsupportedRerunMutation = DynamicPlanMutation.builder()
+                .mutationId("dpm-day1-empty-rerun")
+                .decisionId("day1-empty-rerun")
+                .mutationType("APPEND_NODES")
+                .dynamicAction("CREATE_RERUN_BRANCH")
+                .branchReason("ORCHESTRATOR_DECISION")
+                .sourceUrls(List.of("https://example.com/pricing"))
+                .evidenceState(EvidenceState.FULL_SOURCE)
+                .build();
+
+        assertThatThrownBy(() -> service.createDynamicPlan(
+                activePlan, triggerNode, unsupportedRerunMutation, basePlan))
+                .isInstanceOf(DynamicPlanMaterializationException.class)
+                .hasMessageContaining("未生成任何受支持的动态节点");
+        assertThat(activePlan.isActive()).isTrue();
+        verify(repository, never()).save(any(TaskPlan.class));
+    }
 
     @Test
     void shouldCreateDynamicBackflowPlanForEvidenceGapDirective() throws Exception {

@@ -79,13 +79,13 @@ class DecisionPolicyServiceTest {
     }
 
     @Test
-    void shouldKeepLegacyRerunOutsideLlmMatrix() {
+    void shouldAllowControlledLegacyRerunWithoutConfirmation() {
         OrchestrationDecision decision = OrchestrationDecision.builder()
                 .decisionId("od-003")
                 .decisionType("RERUN_NODE")
                 .actionType("RERUN_NODE")
                 .targetNode("extract_schema")
-                .affectedScope("CURRENT_NODE_AND_DOWNSTREAM")
+                .affectedScope("CURRENT_NODE_ONLY")
                 .priority("MEDIUM")
                 .decisionOrigin(OrchestrationDecisionOrigin.LEGACY_ADAPTER)
                 .sourceUrls(List.of("https://example.com/source"))
@@ -101,12 +101,12 @@ class DecisionPolicyServiceTest {
                 "SUCCESS");
 
         assertThat(result.isAllowed()).isTrue();
-        assertThat(result.isRequiresConfirmation()).isTrue();
-        assertThat(result.getRiskLevel()).isEqualTo("HIGH");
+        assertThat(result.isRequiresConfirmation()).isFalse();
+        assertThat(result.getRiskLevel()).isEqualTo("LOW");
         assertThat(result.getNormalizedAction()).isEqualTo("CREATE_RERUN_BRANCH");
         assertThat(result.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.LEGACY_ADAPTER);
         assertThat(result.getDecisionContract()).isEqualTo("LEGACY_RULE_SET");
-        assertThat(result.getPolicyRuleRefs()).contains("rerun_downstream_requires_confirmation");
+        assertThat(result.getPolicyRuleRefs()).doesNotContain("rerun_downstream_requires_confirmation");
     }
 
     @Test

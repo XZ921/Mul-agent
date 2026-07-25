@@ -1340,3 +1340,44 @@ mvn -pl backend test
 - [ ] Task 7 Step 4-8：待执行
 
 下一步唯一动作：等待用户确认后进入 Task 7 Step 4；本轮按要求在 Step 3 完成后停止。
+
+### 27.16 Task 7 Step 4 E 层 Live E2E 启动记录
+
+当前阶段：用户已批准 Step 4，环境与预算冻结执行中，尚未创建 live task
+
+- [x] 信息采集：`9093` 空闲；PostgreSQL `5432`、Redis `16379`、RocketMQ `9876/10911` 可达；数据库基线见 acceptance record §14.9
+- [ ] 数据分析：等待 dev 应用 health、唯一任务真实 MQ 执行与终态证据
+- [ ] 报告撰写：过程问题必须原样追加，不覆盖历史记录
+- [ ] 质检复核：只创建一个新任务，禁止自动 resume/retry/rerun 或修改预算/门槛
+
+已发现并保留两项预检事实：首次探测 Redis `6379` 不可达，核对配置后确认正确端口为 `16379` 且服务正常；DeepSeek 环境变量已配置，Tavily 环境变量未配置但应用存在有效配置入口，凭证来源不规范问题不得隐去，且禁止输出 key。
+
+执行边界：先启动 `LLM_PRIMARY/shadow=false` 的 dev 应用并通过 health；再 preview/create 唯一 Notion + Airtable 任务；确认初始 PostgreSQL 事实后 execute 一次；固定 deadline 内只读轮询；结束后只停止本轮 PID并保留任务数据。本轮不使用 skill。
+
+启动问题 1：首次后台启动因 PowerShell 拆分 `spring-boot.run.arguments`，在 Maven 参数解析阶段以非法选项退出；Spring 应用、Provider 与任务均未启动。改用只对子进程生效的 Spring 环境变量覆盖后继续，未修改 `application.yml`。
+
+第二次启动 readiness 已通过：PID 29820/26040，9093 health HTTP 200/UP，PostgreSQL/Flyway、RocketMQ producer/consumer、6 类真实 Agent capability 和 Tavily configured 安全校验均成功。期间 health 响应因 PowerShell 字节数组未解码被脚本误报一次 false，显式 UTF-8 解码后确认是验收脚本问题，应用未重启、数据库基线未变化。
+
+preview 展开 6 Collector + 8 pipeline 共 14 节点、20 个计划 URL，且未写任务或 AI audit。唯一任务 `taskId=112` 已创建并在 PostgreSQL 落入 plan 82、14 个 PENDING 节点和 3 条初始事件；创建后 AI audit 无增量。execute 仅允许一次，deadline 固定为 40 分钟。
+
+### 27.17 Task 7 Step 4 E 层 Live E2E 完成记录
+
+当前阶段：Task 7 Step 4 已按诚实停点口径完成，带问题通过，在 Step 5 前停止
+
+- [x] 信息采集：taskId 112 的真实 dev 基础设施、MQ、DAG、Tavily、业务 Agent、Orchestrator、PostgreSQL 和读路径事实已取得
+- [x] 数据分析：STOPPED/WAITING_INTERVENTION 满足既定诚实停点硬门；成本、embedding、采集 deadline、证据失衡、mutation ownership 与 task startedAt 投影问题已分开记录
+- [x] 报告撰写：详细时间线、token 分解、V2 决策、数据库计数和问题清单见 acceptance record §14.10
+- [x] 质检复核：只创建/execute 一个任务，零人工重跑，服务 PID 已停止且 9093 释放，未进入 Step 5
+
+结果摘要：task 112 在约 9 分钟内进入 STOPPED，节点 `7 SUCCESS / 6 SUCCESS_DEGRADED / 1 WAITING_INTERVENTION`，无 retry、无孤儿 RUNNING；35/35 MQ 事件 consumed；9 evidence、2 knowledge、1 report；报告可查看，qualityScore=38、deliveryStatus=REVIEW_REQUIRED、sourceUrls=9。6 个 Collector 均有独立 Tavily requestId，也均因 HARD_DEADLINE_REACHED 降级；Airtable/Notion 证据为 8/1。
+
+3 个真实 V2 cycle 均为 LLM_PRIMARY/Policy allowed；Writer 两次得到 READY/APPEND_NODES，终审得到 WAIT_FOR_HUMAN/CONFIRMATION_REQUIRED 并真实暂停。Markdown/HTML 与 report/replay 投影终审 decisionId/origin/traceId/sourceUrls，且只读前后 audit/token/quota 零增量。
+
+成本事实：11 次成功 CHAT 共 1,731,038 actual token，其中业务 deepseek-v4-pro 7 次为 1,720,764，Orchestrator deepseek-chat 4 次为 10,274。`ai.budgetEnabled=false` 导致 12k 单次预计输入上限未生效，终审单次 input 达 870,508。另有 34 条 embedding 失败 audit：DeepSeek 404×14、SiliconFlow 401×14、circuit open×6。
+
+Step 4 状态定为 `PASSED_WITH_RECORDED_ISSUES`。最优先问题是成本治理未启用与 Prompt 逐级膨胀；其次是 embedding 配置不可用、6/6 collector deadline 降级、证据分布失衡、非 Reviewer APPEND_NODES 只审计不物化，以及 task read model 不提供 startedAt。本轮不修改这些问题，不自动复验。
+
+- [x] Task 7 Step 4：真实 taskId=112，诚实停点通过
+- [ ] Task 7 Step 5-8：待执行
+
+下一步唯一动作：等待用户确认是否进入 Step 5 安全与边界扫描；不得自动开始。

@@ -193,7 +193,7 @@ class Phase1WorkflowIntegrationTest {
     }
 
     @Test
-    void shouldExecutePhase1WorkflowThroughPauseResumeAndProduceDiagnosedReport() throws Exception {
+    void shouldExecutePhase1WorkflowThroughPolicyApprovedRewriteAndProduceDiagnosedReport() throws Exception {
         CreateTaskRequest request = new CreateTaskRequest();
         request.setTaskName("Phase 1 封印之战");
         request.setSubjectProduct("企业级 AI 竞品分析平台");
@@ -210,25 +210,15 @@ class Phase1WorkflowIntegrationTest {
         restTemplate.postForEntity(taskUrl("/" + taskId + "/execute"), null, ApiResponse.class);
         consumeLatestTaskExecutionRequested(taskId);
 
-        Map<?, ?> stoppedTaskBody = waitForTaskDetailStatus(taskId, AnalysisTaskStatus.STOPPED);
-        assertTrue(String.valueOf(stoppedTaskBody.get("errorMessage")).contains("人工"));
-
-        TaskNode reviewNode = nodeRepository.findByTaskIdAndNodeName(taskId, "quality_check").orElseThrow();
-        TaskNode rewriteNodeBeforeResume = nodeRepository.findByTaskIdAndNodeName(taskId, "rewrite_report").orElseThrow();
-        assertEquals(TaskNodeStatus.SUCCESS, reviewNode.getStatus());
-        assertNotEquals(TaskNodeStatus.SUCCESS, rewriteNodeBeforeResume.getStatus());
-
-        assertEquals("STOPPED", stoppedTaskBody.get("status"));
-        assertEquals(Boolean.TRUE, stoppedTaskBody.get("canResume"));
-
-        restTemplate.postForEntity(taskUrl("/" + taskId + "/resume"), null, ApiResponse.class);
-        consumeLatestTaskExecutionRequested(taskId);
-
         Map<?, ?> successTaskBody = waitForTaskDetailStatus(taskId, AnalysisTaskStatus.SUCCESS);
-        TaskNode rewriteNode = nodeRepository.findByTaskIdAndNodeName(taskId, "rewrite_report").orElseThrow();
-        TaskNode finalReviewNode = nodeRepository.findByTaskIdAndNodeName(taskId, "quality_check_final").orElseThrow();
-        assertEquals(TaskNodeStatus.SUCCESS, rewriteNode.getStatus());
-        assertEquals(TaskNodeStatus.SUCCESS, finalReviewNode.getStatus());
+        TaskNode reviewNode = nodeRepository.findByTaskIdAndNodeName(taskId, "quality_check").orElseThrow();
+        TaskNode staticRewriteNode = nodeRepository.findByTaskIdAndNodeName(taskId, "rewrite_report").orElseThrow();
+        TaskNode dynamicRewriteNode = nodeRepository.findByTaskIdAndNodeName(taskId, "rewrite_revision_patch_v2").orElseThrow();
+        TaskNode dynamicReviewNode = nodeRepository.findByTaskIdAndNodeName(taskId, "quality_check_revision_patch_v2").orElseThrow();
+        assertEquals(TaskNodeStatus.SUCCESS, reviewNode.getStatus());
+        assertNotEquals(TaskNodeStatus.SUCCESS, staticRewriteNode.getStatus());
+        assertEquals(TaskNodeStatus.SUCCESS, dynamicRewriteNode.getStatus());
+        assertEquals(TaskNodeStatus.SUCCESS, dynamicReviewNode.getStatus());
 
         Optional<Report> savedReport = reportRepository.findByTaskId(taskId);
         assertTrue(savedReport.isPresent());
@@ -254,7 +244,7 @@ class Phase1WorkflowIntegrationTest {
         assertTrue(((List<?>) reportDiagnosis.get("sections")).size() >= 1);
 
         Map<?, ?> initialReview = (Map<?, ?>) reportPayload.get("initialReview");
-        assertEquals(Boolean.TRUE, initialReview.get("requiresHumanIntervention"));
+        assertEquals(Boolean.FALSE, initialReview.get("requiresHumanIntervention"));
 
         assertEquals("SUCCESS", successTaskBody.get("status"));
         assertEquals(Boolean.TRUE, successTaskBody.get("canViewReport"));
@@ -468,7 +458,8 @@ class Phase1WorkflowIntegrationTest {
         doAnswer(invocation -> {
             AgentContext context = invocation.getArgument(0);
             writerExecutionCount++;
-            boolean revision = "rewrite_report".equals(context.getCurrentNodeName());
+            boolean revision = "rewrite_report".equals(context.getCurrentNodeName())
+                    || context.getCurrentNodeName().startsWith("rewrite_revision_patch_v");
             Report report = reportRepository.findByTaskId(context.getTaskId()).orElseGet(Report::new);
             report.setTaskId(context.getTaskId());
             report.setTitle("Phase 1 集成回归报告");
@@ -547,11 +538,11 @@ class Phase1WorkflowIntegrationTest {
     private String initialReviewOutput() {
         return """
                 {
-                  "score": 18,
+                  "score": 72,
                   "passed": false,
-                  "requiresHumanIntervention": true,
-                  "autoRewriteAllowed": false,
-                  "summary": "证据链路缺口过大，系统停止自动改写等待人工恢复。",
+                  "requiresHumanIntervention": false,
+                  "autoRewriteAllowed": true,
+                  "summary": "结论措辞需要基于已有证据做保守改写。",
                   "dimensions": [
                     {
                       "code":"EVIDENCE_TRACEABILITY",
@@ -580,15 +571,25 @@ class Phase1WorkflowIntegrationTest {
                   ],
                   "issues": [
                     {
-                      "type":"missing_evidence",
+                      "type":"expression_issue",
                       "section":"结论",
-                      "severity":"ERROR",
-                      "level":"BLOCKER",
-                      "dimensionCode":"EVIDENCE_TRACEABILITY",
-                      "dimensionName":"证据可追溯性",
-                      "evidenceBasis":"关键结论缺少可回指的证据编号。",
+                      "severity":"WARNING",
+                      "level":"MAJOR",
+                      "dimensionCode":"CLAIM_SUPPORT",
+                      "dimensionName":"结论支撑度",
+                      "evidenceBasis":"现有来源足以支撑保守表达，但不支撑绝对化措辞。",
                       "sourceUrls":["https://www.notion.so/product/ai"],
-                      "suggestion":"补充证据编号或降低结论强度。"
+                      "suggestion":"降低结论强度并明确限定条件。"
+                    }
+                  ],
+                  "revisionDirectives": [
+                    {
+                      "category":"EXPRESSION_ISSUE",
+                      "actionType":"REWRITE_SECTION",
+                      "targetSection":"结论",
+                      "summary":"降低结论强度并明确限定条件。",
+                      "sourceUrls":["https://www.notion.so/product/ai"],
+                      "expectedOutcome":"结论改写为克制且可验证的表达。"
                     }
                   ],
                   "nextActions": [
@@ -612,6 +613,7 @@ class Phase1WorkflowIntegrationTest {
                   "requiresHumanIntervention": false,
                   "autoRewriteAllowed": true,
                   "summary": "改写后报告已达到 Phase 1 最小回归基线。",
+                  "sourceUrls": ["https://www.notion.so/product/ai"],
                   "dimensions": [
                     {
                       "code":"EVIDENCE_TRACEABILITY",
@@ -669,7 +671,14 @@ class Phase1WorkflowIntegrationTest {
         }
         ResponseEntity<ApiResponse> detailResponse = restTemplate.getForEntity(taskUrl("/" + taskId), ApiResponse.class);
         Map<?, ?> latestTaskBody = (Map<?, ?>) detailResponse.getBody().getData();
-        throw new AssertionError("任务详情未在预期时间内进入状态 " + expectedStatus + "，当前状态为 " + latestTaskBody.get("status"));
+        List<String> nodeStates = nodeRepository.findByTaskIdOrderByExecutionOrderAsc(taskId).stream()
+                .map(node -> node.getNodeName() + "=" + node.getStatus()
+                        + (node.getInterventionReason() == null ? "" : "(" + node.getInterventionReason() + ")"))
+                .toList();
+        throw new AssertionError("任务详情未在预期时间内进入状态 " + expectedStatus
+                + "，当前状态=" + latestTaskBody.get("status")
+                + "，错误=" + latestTaskBody.get("errorMessage")
+                + "，节点=" + nodeStates);
     }
 
     private String taskUrl(String path) {

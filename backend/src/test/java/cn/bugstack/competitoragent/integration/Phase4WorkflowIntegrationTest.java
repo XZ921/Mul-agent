@@ -311,6 +311,10 @@ class Phase4WorkflowIntegrationTest {
                 () -> "成功链路后应已经挂接动态补图节点，实际节点列表=" + nodePayloads);
         assertTrue(nodePayloads.stream().anyMatch(node -> String.valueOf(node.get("nodeName")).startsWith("collect_revision_evidence_v")),
                 () -> "动态补证分支未出现，实际节点列表=" + nodePayloads);
+        assertTrue(nodePayloads.stream().anyMatch(node -> String.valueOf(node.get("nodeName")).startsWith("target_coverage_gate_v")),
+                () -> "目标覆盖门禁分支未出现，实际节点列表=" + nodePayloads);
+        assertTrue(nodePayloads.stream().anyMatch(node -> String.valueOf(node.get("nodeName")).startsWith("citation_check_revision_patch_v")),
+                () -> "动态引用核查分支未出现，实际节点列表=" + nodePayloads);
         assertTrue(nodePayloads.stream().anyMatch(node -> String.valueOf(node.get("nodeName")).startsWith("quality_check_revision_patch_v")),
                 () -> "动态复核分支未出现，实际节点列表=" + nodePayloads);
 
@@ -604,7 +608,14 @@ class Phase4WorkflowIntegrationTest {
                           "competitorName": "Notion AI",
                           "sourceUrls": ["https://www.notion.so/help", "https://www.notion.so/security"]
                         }
-                      ]
+                      ],
+                      "closedGapKeys": ["notion_ai|security|official_docs"],
+                      "targetCoverage": {
+                        "status": "CLOSED",
+                        "closedGapKeys": ["notion_ai|security|official_docs"],
+                        "sourceUrls": ["https://www.notion.so/security"]
+                      },
+                      "sourceUrls": ["https://www.notion.so/help", "https://www.notion.so/security"]
                     }
                     """, "抽取完成");
         }).when(extractorAgent).execute(any(AgentContext.class));
@@ -706,6 +717,22 @@ class Phase4WorkflowIntegrationTest {
                               "suggestion":"先改写结论，再准备补证分支。"
                             }
                           ],
+                          "revisionDirectives": [
+                            {
+                              "category":"SEARCH_QUALITY",
+                              "actionType":"SUPPLEMENT_EVIDENCE",
+                              "priority":"HIGH",
+                              "targetSection":"安全能力",
+                              "competitor":"Notion AI",
+                              "targetField":"security",
+                              "requiredSourceType":"OFFICIAL_DOCS",
+                              "summary":"补充安全说明与权限管理证据",
+                              "searchFeedback":"当前企业安全说明覆盖仍不足",
+                              "searchQueries":["Notion AI security admin audit"],
+                              "sourceUrls":["https://www.notion.so/security"],
+                              "expectedOutcome":"补齐安全与权限说明的官网来源，并形成可回指证据链。"
+                            }
+                          ],
                           "nextActions": [
                             {
                               "title":"先改写当前结论",
@@ -747,6 +774,9 @@ class Phase4WorkflowIntegrationTest {
                               "actionType":"SUPPLEMENT_EVIDENCE",
                               "priority":"HIGH",
                               "targetSection":"安全能力",
+                              "competitor":"Notion AI",
+                              "targetField":"security",
+                              "requiredSourceType":"OFFICIAL_DOCS",
                               "summary":"补充安全说明与权限管理证据",
                               "searchFeedback":"当前企业安全说明覆盖仍不足",
                               "searchQueries":["Notion AI security admin audit"],
@@ -767,6 +797,7 @@ class Phase4WorkflowIntegrationTest {
                           "requiresHumanIntervention": false,
                           "autoRewriteAllowed": true,
                           "summary": "动态补证后已达到第四阶段回归基线。",
+                          "sourceUrls": ["https://www.notion.so/help", "https://www.notion.so/security"],
                           "diagnoses": [],
                           "issues": [],
                           "nextActions": []
@@ -782,6 +813,7 @@ class Phase4WorkflowIntegrationTest {
                       "requiresHumanIntervention": false,
                       "autoRewriteAllowed": true,
                       "summary": "评审通过。",
+                      "sourceUrls": ["https://www.notion.so/help", "https://www.notion.so/security"],
                       "diagnoses": [],
                       "issues": [],
                       "nextActions": []

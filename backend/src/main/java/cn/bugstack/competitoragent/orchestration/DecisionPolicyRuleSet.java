@@ -52,7 +52,7 @@ public class DecisionPolicyRuleSet {
     @Builder.Default
     private int maxSearchQueriesPerDecision = 5;
     @Builder.Default
-    private List<String> confirmationRequiredDecisionTypes = List.of("RERUN_NODE");
+    private List<String> confirmationRequiredDecisionTypes = List.of();
     @Builder.Default
     private List<String> blockedTaskStatuses = List.of("STOPPED");
     @Builder.Default
@@ -63,12 +63,6 @@ public class DecisionPolicyRuleSet {
      */
     @Builder.Default
     private List<PolicyRiskRule> riskRules = List.of(
-            PolicyRiskRule.builder()
-                    .ruleId("rerun_downstream_requires_confirmation")
-                    .when("decisionType == 'RERUN_NODE' && affectedScope == 'CURRENT_NODE_AND_DOWNSTREAM'")
-                    .riskLevel("HIGH")
-                    .requiresConfirmation(true)
-                    .build(),
             PolicyRiskRule.builder()
                     .ruleId("missing_source_requires_supplement")
                     .when("evidenceState == 'MISSING_SOURCE' && actionType != 'SUPPLEMENT_EVIDENCE'")

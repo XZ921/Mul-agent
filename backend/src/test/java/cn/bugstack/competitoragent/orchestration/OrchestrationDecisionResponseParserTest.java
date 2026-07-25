@@ -302,7 +302,7 @@ class OrchestrationDecisionResponseParserTest {
     }
 
     @Test
-    void shouldRejectUnknownAndCrossedPairsIncludingLegacyOnlyActions() throws Exception {
+    void shouldRejectUnknownAndCrossedPairsWhileAcceptingControlledRerun() throws Exception {
         ObjectNode unknown = validCandidate("FREE_FORM_DAG", "FREE_FORM_ACTION", List.of());
         ObjectNode crossed = validCandidate("REWRITE_ONLY", "SUPPLEMENT_EVIDENCE", List.of(FULL_URL));
         ObjectNode legacy = validCandidate("RERUN_NODE", "RERUN_NODE", List.of(FULL_URL));
@@ -317,9 +317,7 @@ class OrchestrationDecisionResponseParserTest {
         assertThat(result.issues()).containsExactly(
                 issue(0, OrchestrationDecisionResponseParser.UNKNOWN_DECISION_TYPE, "decisionType"),
                 issue(0, OrchestrationDecisionResponseParser.UNKNOWN_ACTION_TYPE, "actionType"),
-                issue(1, OrchestrationDecisionActionMatrix.INVALID_DECISION_ACTION_PAIR, "decisionType/actionType"),
-                issue(2, OrchestrationDecisionResponseParser.UNKNOWN_DECISION_TYPE, "decisionType"),
-                issue(2, OrchestrationDecisionResponseParser.UNKNOWN_ACTION_TYPE, "actionType"));
+                issue(1, OrchestrationDecisionActionMatrix.INVALID_DECISION_ACTION_PAIR, "decisionType/actionType"));
     }
 
     @Test

@@ -19,5 +19,7 @@ public interface TaskPlanRepository extends JpaRepository<TaskPlan, Long> {
 
     Optional<TaskPlan> findFirstByTaskIdAndActiveTrueOrderByPlanVersionDesc(Long taskId);
 
+    Optional<TaskPlan> findByTaskIdAndDecisionId(Long taskId, String decisionId);
+
     void deleteByTaskId(Long taskId);
 }

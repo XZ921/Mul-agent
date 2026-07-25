@@ -18,6 +18,7 @@ class OrchestrationDecisionActionMatrixTest {
                 .containsExactly(
                         "LLM_NO_ACTION",
                         "LLM_SUPPLEMENT_EVIDENCE",
+                        "LLM_RERUN_EXTRACT_SCHEMA",
                         "LLM_REWRITE_SECTION",
                         "LLM_REWRITE_CLAIM",
                         "LLM_MANUAL_REVIEW");
@@ -46,6 +47,8 @@ class OrchestrationDecisionActionMatrixTest {
                         "quality_check_final", "CURRENT_NODE_ONLY"),
                 completeDecision("quality_check_final", "APPEND_DYNAMIC_BRANCH", "SUPPLEMENT_EVIDENCE",
                         "collect_sources", "CURRENT_NODE_AND_DOWNSTREAM"),
+                completeDecision("quality_check_final", "RERUN_NODE", "RERUN_NODE",
+                        "extract_schema", "CURRENT_NODE_ONLY"),
                 completeDecision("quality_check_final", "REWRITE_ONLY", "REWRITE_SECTION",
                         "rewrite_report", "CURRENT_NODE_ONLY"),
                 completeDecision("quality_check_final", "REWRITE_ONLY", "REWRITE_CLAIM",
@@ -97,10 +100,9 @@ class OrchestrationDecisionActionMatrixTest {
     }
 
     @Test
-    void shouldRejectLegacyOnlyActionsForLlmContract() {
+    void shouldAllowControlledRerunAndRejectOtherLegacyOnlyActionsForLlmContract() {
         assertThat(matrix.validate(completeDecision("extract_schema", "RERUN_NODE", "RERUN_NODE",
-                "extract_schema", "CURRENT_NODE_AND_DOWNSTREAM")).violationCodes())
-                .containsExactly("INVALID_DECISION_ACTION_PAIR");
+                "extract_schema", "CURRENT_NODE_ONLY")).valid()).isTrue();
         assertThat(matrix.validate(completeDecision("quality_check_final", "APPEND_DYNAMIC_BRANCH",
                 "DOMAIN_HINT_DISCOVERY", "collect_sources", "CURRENT_NODE_AND_DOWNSTREAM")).violationCodes())
                 .containsExactly("INVALID_DECISION_ACTION_PAIR");

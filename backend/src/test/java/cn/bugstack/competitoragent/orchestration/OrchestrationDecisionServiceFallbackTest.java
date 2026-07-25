@@ -126,7 +126,7 @@ class OrchestrationDecisionServiceFallbackTest {
     private OrchestrationContext context() {
         return OrchestrationContext.builder()
                 .taskId(92L)
-                .triggerNodeName("quality_check_final")
+                .triggerNodeName("analyze_competitors")
                 .sourceUrls(List.of("https://example.com/context"))
                 .build();
     }
@@ -135,7 +135,7 @@ class OrchestrationDecisionServiceFallbackTest {
         return OrchestrationDecision.builder()
                 .decisionId("rule-92")
                 .taskId(92L)
-                .triggerNodeName("quality_check_final")
+                .triggerNodeName("analyze_competitors")
                 .decisionOrigin(OrchestrationDecisionOrigin.RULE_ONLY)
                 .decisionType("APPEND_DYNAMIC_BRANCH")
                 .actionType("SUPPLEMENT_EVIDENCE")

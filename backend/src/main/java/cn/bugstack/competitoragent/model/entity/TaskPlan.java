@@ -31,7 +31,8 @@ import java.util.List;
 @Entity
 @Table(name = "task_plan", indexes = {
         @Index(name = "idx_task_plan_task_id", columnList = "taskId"),
-        @Index(name = "idx_task_plan_parent_plan_id", columnList = "parentPlanId")
+        @Index(name = "idx_task_plan_parent_plan_id", columnList = "parentPlanId"),
+        @Index(name = "uk_task_plan_task_decision", columnList = "taskId,decisionId", unique = true)
 })
 @Schema(description = "任务计划版本")
 public class TaskPlan {
@@ -59,6 +60,14 @@ public class TaskPlan {
     @Column(length = 80)
     @Schema(description = "触发该计划版本的节点", example = "quality_check")
     private String triggerNodeName;
+
+    /** 触发派生计划的权威 decisionId，用于任务重放时的持久化幂等。 */
+    @Column(length = 160)
+    private String decisionId;
+
+    /** 与 decisionId 对应的 mutationId，便于审计计划版本的唯一来源。 */
+    @Column(length = 180)
+    private String mutationId;
 
     @Column(nullable = false, length = 40)
     @Schema(description = "计划类型", example = "INITIAL")

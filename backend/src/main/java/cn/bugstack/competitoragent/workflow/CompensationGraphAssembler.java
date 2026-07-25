@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 动态补图组装器。
@@ -41,6 +42,7 @@ public class CompensationGraphAssembler {
         int nextPlanVersion = parentPlan.getPlanVersion() + 1;
 
         List<String> supplementCollectorNames = new ArrayList<>();
+        Map<String, Object> targetCoverageConfig = new LinkedHashMap<>();
         boolean needsExtractBranch = false;
         boolean needsRewriteBranch = false;
 
@@ -64,10 +66,12 @@ public class CompensationGraphAssembler {
                             derivedBranchKey));
                     needsExtractBranch = true;
                     needsRewriteBranch = true;
+                    copyTargetCoverageConfig(targetCoverageConfig, directive);
                 }
                 case "CREATE_RERUN_BRANCH" -> {
                     needsExtractBranch = true;
                     needsRewriteBranch = true;
+                    copyTargetCoverageConfig(targetCoverageConfig, directive);
                 }
                 case "CREATE_REWRITE_BRANCH" -> needsRewriteBranch = true;
                 default -> {
@@ -83,6 +87,7 @@ public class CompensationGraphAssembler {
                     supplementCollectorNames.isEmpty() ? List.of(triggerNode.getNodeName()) : List.copyOf(supplementCollectorNames),
                     nextPlanVersion,
                     order,
+                    writeJson(targetCoverageConfig),
                     derivedBranchKey);
             return dynamicNodes;
         }
@@ -121,6 +126,7 @@ public class CompensationGraphAssembler {
         int order = startOrder;
         int planVersion = parentPlan.getPlanVersion() + 1;
         List<String> collectorDependencies = new ArrayList<>();
+        String targetCoverageConfig = buildTargetCoverageGateConfig(mutation);
         if ("CREATE_SUPPLEMENT_BRANCH".equals(mutation.getDynamicAction())) {
             int collectorCount = Math.max(1, mutation.getNodeTemplates().size());
             for (int index = 0; index < collectorCount; index++) {
@@ -153,6 +159,7 @@ public class CompensationGraphAssembler {
                     collectorDependencies,
                     planVersion,
                     order,
+                    targetCoverageConfig,
                     derivedBranchKey);
             return dynamicNodes;
         }
@@ -163,6 +170,40 @@ public class CompensationGraphAssembler {
                     List.of(triggerNode.getNodeName()),
                     planVersion,
                     order,
+                    derivedBranchKey);
+            return dynamicNodes;
+        }
+        if ("CREATE_RERUN_BRANCH".equals(mutation.getDynamicAction())) {
+            WorkflowPlan.WorkflowPlanNode extractorTemplate = mutation.getNodeTemplates().stream()
+                    .filter(template -> AgentType.EXTRACTOR.name().equals(template.getAgentType()))
+                    .findFirst()
+                    .orElse(null);
+            if (extractorTemplate == null) {
+                return List.of();
+            }
+            String extractorName = "extract_revision_patch_v" + planVersion;
+            dynamicNodes.add(WorkflowPlan.WorkflowPlanNode.builder()
+                    .nodeName(extractorName)
+                    .displayName(extractorTemplate.getDisplayName())
+                    .agentType(AgentType.EXTRACTOR.name())
+                    .dependsOn(List.of(triggerNode.getNodeName()))
+                    .required(true)
+                    .executionOrder(order++)
+                    .nodeConfig(extractorTemplate.getNodeConfig())
+                    .notes(extractorTemplate.getNotes())
+                    .branchKey(derivedBranchKey)
+                    .dynamicNode(true)
+                    .originNodeName(triggerNode.getNodeName())
+                    .build());
+            // Day 3 起 RERUN 只能从白名单 Extractor 进入同一套目标覆盖门禁和固定回流链，
+            // 禁止再停留在“只物化 Extractor”导致后续 Writer 路由不确定。
+            appendCoverageAnalyzeRewriteCitationReviewChain(
+                    dynamicNodes,
+                    triggerNode,
+                    extractorName,
+                    planVersion,
+                    order,
+                    targetCoverageConfig,
                     derivedBranchKey);
             return dynamicNodes;
         }
@@ -190,6 +231,10 @@ public class CompensationGraphAssembler {
                     put("sourceUrls", directive.getSourceUrls());
                     put("summary", directive.getSummary());
                     put("expectedOutcome", directive.getExpectedOutcome());
+                    put("competitor", directive.getCompetitor());
+                    put("targetField", directive.getTargetField());
+                    put("requiredSourceType", directive.getRequiredSourceType());
+                    put("gapKey", directive.getGapKey());
                 }}))
                 .notes("质量回流触发的动态补证分支")
                 .branchKey(derivedBranchKey)
@@ -204,11 +249,9 @@ public class CompensationGraphAssembler {
                                                        List<String> extractDependencies,
                                                        int planVersion,
                                                        int startOrder,
+                                                       String targetCoverageConfig,
                                                        String derivedBranchKey) {
         String extractNodeName = "extract_revision_patch_v" + planVersion;
-        String analyzeNodeName = "analyze_revision_patch_v" + planVersion;
-        String rewriteNodeName = "rewrite_revision_patch_v" + planVersion;
-        String reviewNodeName = "quality_check_revision_patch_v" + planVersion;
         int order = startOrder;
 
         dynamicNodes.add(WorkflowPlan.WorkflowPlanNode.builder()
@@ -226,11 +269,48 @@ public class CompensationGraphAssembler {
                 .originNodeName(triggerNode.getNodeName())
                 .build());
 
+        return appendCoverageAnalyzeRewriteCitationReviewChain(
+                dynamicNodes,
+                triggerNode,
+                extractNodeName,
+                planVersion,
+                order,
+                targetCoverageConfig,
+                derivedBranchKey);
+    }
+
+    private int appendCoverageAnalyzeRewriteCitationReviewChain(List<WorkflowPlan.WorkflowPlanNode> dynamicNodes,
+                                                                TaskNode triggerNode,
+                                                                String extractorNodeName,
+                                                                int planVersion,
+                                                                int startOrder,
+                                                                String targetCoverageConfig,
+                                                                String derivedBranchKey) {
+        String coverageGateNodeName = "target_coverage_gate_v" + planVersion;
+        String analyzeNodeName = "analyze_revision_patch_v" + planVersion;
+        int order = startOrder;
+
+        dynamicNodes.add(WorkflowPlan.WorkflowPlanNode.builder()
+                .nodeName(coverageGateNodeName)
+                .displayName("目标覆盖门禁")
+                .agentType(AgentType.REVIEWER.name())
+                .dependsOn(List.of(extractorNodeName))
+                .required(true)
+                .executionOrder(order++)
+                .nodeConfig(targetCoverageConfig == null || targetCoverageConfig.isBlank()
+                        ? "{}"
+                        : targetCoverageConfig)
+                .notes("确定性校验补采或重跑是否关闭指定 gapKey；未关闭时停止在人工接管。")
+                .branchKey(derivedBranchKey)
+                .dynamicNode(true)
+                .originNodeName(triggerNode.getNodeName())
+                .build());
+
         dynamicNodes.add(WorkflowPlan.WorkflowPlanNode.builder()
                 .nodeName(analyzeNodeName)
                 .displayName("补证后重新分析")
                 .agentType(AgentType.ANALYZER.name())
-                .dependsOn(List.of(extractNodeName))
+                .dependsOn(List.of(coverageGateNodeName))
                 .required(true)
                 .executionOrder(order++)
                 .nodeConfig(writeJson(new LinkedHashMap<>() {{
@@ -257,6 +337,7 @@ public class CompensationGraphAssembler {
                                          int startOrder,
                                          String derivedBranchKey) {
         String rewriteNodeName = "rewrite_revision_patch_v" + planVersion;
+        String citationNodeName = "citation_check_revision_patch_v" + planVersion;
         String reviewNodeName = "quality_check_revision_patch_v" + planVersion;
         int order = startOrder;
 
@@ -278,15 +359,31 @@ public class CompensationGraphAssembler {
                 .build());
 
         dynamicNodes.add(WorkflowPlan.WorkflowPlanNode.builder()
-                .nodeName(reviewNodeName)
-                .displayName("动态回流复核")
-                .agentType(AgentType.REVIEWER.name())
+                .nodeName(citationNodeName)
+                .displayName("动态回流引用核查")
+                .agentType(AgentType.CITATION.name())
                 .dependsOn(List.of(rewriteNodeName))
                 .required(true)
                 .executionOrder(order++)
                 .nodeConfig(writeJson(new LinkedHashMap<>() {{
-                    put("qualityPolicy", "dynamic patch review");
+                    put("mode", "revision");
                     put("sourceNode", rewriteNodeName);
+                }}))
+                .branchKey(derivedBranchKey)
+                .dynamicNode(true)
+                .originNodeName(triggerNode.getNodeName())
+                .build());
+
+        dynamicNodes.add(WorkflowPlan.WorkflowPlanNode.builder()
+                .nodeName(reviewNodeName)
+                .displayName("动态回流复核")
+                .agentType(AgentType.REVIEWER.name())
+                .dependsOn(List.of(citationNodeName))
+                .required(true)
+                .executionOrder(order++)
+                .nodeConfig(writeJson(new LinkedHashMap<>() {{
+                    put("qualityPolicy", "dynamic patch review");
+                    put("sourceNode", citationNodeName);
                 }}))
                 .branchKey(derivedBranchKey)
                 .dynamicNode(true)
@@ -296,11 +393,77 @@ public class CompensationGraphAssembler {
         return order;
     }
 
+    private void copyTargetCoverageConfig(Map<String, Object> config, RevisionDirective directive) {
+        if (config == null || directive == null) {
+            return;
+        }
+        putIfPresent(config, "competitor", directive.getCompetitor());
+        putIfPresent(config, "targetField", directive.getTargetField());
+        putIfPresent(config, "requiredSourceType", directive.getRequiredSourceType());
+        putIfPresent(config, "gapKey", directive.getGapKey());
+        putIfPresent(config, "summary", directive.getSummary());
+        putIfNotEmpty(config, "sourceUrls", directive.getSourceUrls());
+    }
+
+    private String buildTargetCoverageGateConfig(DynamicPlanMutation mutation) {
+        Map<String, Object> config = new LinkedHashMap<>();
+        if (mutation == null) {
+            return writeJson(config);
+        }
+        putIfPresent(config, "decisionId", mutation.getDecisionId());
+        putIfPresent(config, "mutationId", mutation.getMutationId());
+        putIfPresent(config, "dynamicAction", mutation.getDynamicAction());
+        putIfNotEmpty(config, "sourceUrls", mutation.getSourceUrls());
+        for (WorkflowPlan.WorkflowPlanNode template : mutation.getNodeTemplates()) {
+            JsonMap jsonMap = readJsonMap(template == null ? null : template.getNodeConfig());
+            if (jsonMap.values().isEmpty()) {
+                continue;
+            }
+            for (String key : List.of("competitor", "targetField", "requiredSourceType",
+                    "gapKey", "sourceSnapshot", "aiAuditTraceId", "reason", "summary")) {
+                Object value = jsonMap.values().get(key);
+                if (value != null) {
+                    config.putIfAbsent(key, value);
+                }
+            }
+        }
+        return writeJson(config);
+    }
+
+    private JsonMap readJsonMap(String rawJson) {
+        if (rawJson == null || rawJson.isBlank()) {
+            return new JsonMap(Map.of());
+        }
+        try {
+            return new JsonMap(objectMapper.readValue(rawJson, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
+            }));
+        } catch (Exception ignored) {
+            return new JsonMap(Map.of());
+        }
+    }
+
+    private void putIfPresent(Map<String, Object> config, String key, String value) {
+        if (config == null || key == null || value == null || value.isBlank()) {
+            return;
+        }
+        config.put(key, value);
+    }
+
+    private void putIfNotEmpty(Map<String, Object> config, String key, List<String> values) {
+        if (config == null || key == null || values == null || values.isEmpty()) {
+            return;
+        }
+        config.put(key, values);
+    }
+
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("serialize dynamic node config failed", e);
         }
+    }
+
+    private record JsonMap(Map<String, Object> values) {
     }
 }

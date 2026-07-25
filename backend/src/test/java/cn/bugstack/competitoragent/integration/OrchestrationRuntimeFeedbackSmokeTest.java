@@ -169,15 +169,17 @@ class OrchestrationRuntimeFeedbackSmokeTest {
                 .contains(
                         "collect_revision_evidence_v2_1",
                         "extract_revision_patch_v2",
+                        "target_coverage_gate_v2",
                         "analyze_revision_patch_v2",
                         "rewrite_revision_patch_v2",
+                        "citation_check_revision_patch_v2",
                         "quality_check_revision_patch_v2");
         assertThat(nodes.stream()
                 .filter(TaskNode::isDynamicNode)
                 .map(TaskNode::getBranchKey))
                 .containsOnly("root/review-2");
 
-        TaskWorkflowEvent decisionEvent = latestEvent(taskId, WorkflowEventType.ORCHESTRATION_DECISION_RECORDED);
+        TaskWorkflowEvent decisionEvent = latestDecisionEventWithMutation(taskId, "APPEND_NODES");
         JsonNode decisionPayload = objectMapper.readTree(decisionEvent.getPayload());
         // 本用例从真实 API/DAG 进入生产 RuntimeDecisionService，因此这里必须锁定其 batch 经 TraceService
         // 落成的 V2 audit 结构，不能只验证为兼容旧读链保留的顶层 decision/policy/mutation 别名。
@@ -185,10 +187,9 @@ class OrchestrationRuntimeFeedbackSmokeTest {
                 .isEqualTo("ORCHESTRATION_TRACE_V2");
         assertThat(decisionPayload.at("/audit/mode").asText()).isEqualTo("RULE_ONLY");
         assertThat(decisionPayload.at("/audit/coordinatorDecisions")).hasSize(1);
-        // RULE_ONLY 表示 Coordinator 选择规则模式；本场景的修订指令经 legacy adapter 转换，
-        // 因而 decision origin 必须保留 LEGACY_ADAPTER，不能把 mode 错写成单条 decision 的来源。
+        // Reviewer 所有阶段统一进入整轮 Java 归一入口，不能再保留可并行裁决的 legacy origin。
         assertThat(decisionPayload.at("/audit/coordinatorDecisions/0/decisionOrigin").asText())
-                .isEqualTo("LEGACY_ADAPTER");
+                .isEqualTo("RULE_ONLY");
         assertThat(decisionPayload.at("/audit/attempts")).hasSize(1);
         assertThat(decisionPayload.at("/audit/attempts/0/decision/decisionId").asText())
                 .isEqualTo(decisionPayload.at("/decision/decisionId").asText());
@@ -232,7 +233,7 @@ class OrchestrationRuntimeFeedbackSmokeTest {
     void shouldExposeMissingSourceEvidenceStateWhenReviewerDirectiveHasNoSourceUrls() throws Exception {
         Long taskId = createAndExecuteTask(true, AnalysisTaskStatus.STOPPED);
 
-        TaskNode finalReviewNode = nodeRepository.findByTaskIdAndNodeName(taskId, "quality_check_final")
+        TaskNode finalReviewNode = nodeRepository.findByTaskIdAndNodeName(taskId, "quality_check")
                 .orElseThrow();
         assertThat(finalReviewNode.getStatus()).isEqualTo(TaskNodeStatus.WAITING_INTERVENTION);
 
@@ -327,6 +328,17 @@ class OrchestrationRuntimeFeedbackSmokeTest {
                 .orElseThrow(() -> new AssertionError("缺少事件 " + eventType + ", taskId=" + taskId));
     }
 
+    private TaskWorkflowEvent latestDecisionEventWithMutation(Long taskId, String mutationType) {
+        String mutationMarker = "\"mutationType\":\"" + mutationType + "\"";
+        return taskWorkflowEventRepository.findAll().stream()
+                .filter(event -> taskId.equals(event.getTaskId()))
+                .filter(event -> WorkflowEventType.ORCHESTRATION_DECISION_RECORDED == event.getEventType())
+                .filter(event -> event.getPayload() != null && event.getPayload().contains(mutationMarker))
+                .max(java.util.Comparator.comparing(TaskWorkflowEvent::getId))
+                .orElseThrow(() -> new AssertionError(
+                        "缺少 mutationType=" + mutationType + " 的编排决策事件, taskId=" + taskId));
+    }
+
     private JsonNode getReplay(Long taskId) throws Exception {
         String rawResponse = restTemplate.getForObject(taskUrl("/" + taskId + "/replay"), String.class);
         JsonNode response = objectMapper.readTree(rawResponse);
@@ -389,7 +401,16 @@ class OrchestrationRuntimeFeedbackSmokeTest {
                 {"sourceUrls":["https://www.notion.so/product/ai"],"successCollected":1}
                 """, "采集完成")).when(collectorAgent).execute(any(AgentContext.class));
         doAnswer(invocation -> AgentResult.success("""
-                {"competitors":[{"competitorName":"Notion AI","sourceUrls":["https://www.notion.so/product/ai"]}]}
+                {
+                  "competitors":[{"competitorName":"Notion AI","sourceUrls":["https://www.notion.so/product/ai"]}],
+                  "closedGapKeys":["notion_ai|pricing|official_pricing"],
+                  "targetCoverage":{
+                    "status":"CLOSED",
+                    "closedGapKeys":["notion_ai|pricing|official_pricing"],
+                    "sourceUrls":["https://www.notion.so/pricing"]
+                  },
+                  "sourceUrls":["https://www.notion.so/pricing"]
+                }
                 """, "抽取完成")).when(extractorAgent).execute(any(AgentContext.class));
         doAnswer(invocation -> AgentResult.success("""
                 {"summary":"analysis done","sourceUrls":["https://www.notion.so/product/ai"]}
@@ -405,15 +426,13 @@ class OrchestrationRuntimeFeedbackSmokeTest {
                         """, "动态补丁复核通过，任务进入成功收口");
             }
             if ("quality_check_final".equals(context.getCurrentNodeName())) {
-                return AgentResult.success(finalReviewFailedOutput(), "终审失败，进入 Orchestrator 回流");
+                return AgentResult.success(reviewFailedOutput("final"), "终审失败，进入 Orchestrator 回流");
             }
-            return AgentResult.success("""
-                    {"reviewStage":"initial","passed":false,"requiresHumanIntervention":false,"autoRewriteAllowed":true}
-                    """, "初审要求改写");
+            return AgentResult.success(reviewFailedOutput("initial"), "初审失败，进入 Orchestrator 回流");
         }).when(reviewerAgent).execute(any(AgentContext.class));
     }
 
-    private String finalReviewFailedOutput() {
+    private String reviewFailedOutput(String reviewStage) {
         String sourceUrlsField = reviewerShouldOmitSourceUrls
                 ? ""
                 : """
@@ -426,7 +445,7 @@ class OrchestrationRuntimeFeedbackSmokeTest {
                 """;
         return """
                 {
-                  "reviewStage":"final",
+                  "reviewStage":"%s",
                   "passed":false,
                   "requiresHumanIntervention":false,
                   "summary":"缺少官网定价证据，需要补源后复核",
@@ -435,6 +454,9 @@ class OrchestrationRuntimeFeedbackSmokeTest {
                     {
                       "category":"EVIDENCE_GAP",
                       "actionType":"SUPPLEMENT_EVIDENCE",
+                      "competitor":"Notion AI",
+                      "targetField":"pricing",
+                      "requiredSourceType":"OFFICIAL_PRICING",
                       "summary":"补充官网定价证据",
                       "searchQueries":["Notion AI pricing official"],
                       %s
@@ -442,7 +464,7 @@ class OrchestrationRuntimeFeedbackSmokeTest {
                     }
                   ]
                 }
-                """.formatted(sourceUrlsField, directiveSourceUrlsField);
+                """.formatted(reviewStage, sourceUrlsField, directiveSourceUrlsField);
     }
 
     private String taskUrl(String path) {

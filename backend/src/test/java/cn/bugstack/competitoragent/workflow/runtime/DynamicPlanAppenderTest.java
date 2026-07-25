@@ -70,6 +70,60 @@ class DynamicPlanAppenderTest {
     );
 
     @Test
+    void shouldSendInitialReviewThroughUnifiedRuntimeDecisionPipeline() throws Exception {
+        TaskNode initialReview = TaskNode.builder()
+                .taskId(60L)
+                .nodeName("quality_check")
+                .agentType(AgentType.REVIEWER)
+                .status(TaskNodeStatus.SUCCESS)
+                .planVersionId(20L)
+                .branchKey("root")
+                .outputData("""
+                        {"reviewStage":"initial","passed":false,
+                        "requiresHumanIntervention":false,
+                        "diagnoses":[{"type":"missing_evidence","level":"MAJOR"}]}
+                        """)
+                .build();
+        AnalysisTask task = AnalysisTask.builder().id(60L).status(AnalysisTaskStatus.RUNNING)
+                .currentPlanVersionId(20L).currentPlanVersion(1).build();
+        TaskPlan parentPlan = TaskPlan.builder().id(20L).taskId(60L).planVersion(1).branchKey("root")
+                .active(true).planSnapshot(objectMapper.writeValueAsString(WorkflowPlan.builder()
+                        .planVersionId(20L).planVersion(1).branchKey("root").nodes(List.of()).build())).build();
+        OrchestrationDecision decision = OrchestrationDecision.builder()
+                .decisionId("od-60-quality_check-review-cycle").taskId(60L)
+                .triggerNodeName("quality_check").decisionOrigin(OrchestrationDecisionOrigin.RULE_ONLY)
+                .decisionType("WAIT_FOR_HUMAN").actionType("MANUAL_REVIEW")
+                .targetNode("quality_check").affectedScope("CURRENT_NODE_ONLY")
+                .reason("初审缺少完整结构化诊断").requiresHumanIntervention(true)
+                .sourceUrls(List.of()).evidenceState(EvidenceState.MISSING_SOURCE).build().normalized();
+        DecisionPolicyResult policy = DecisionPolicyResult.builder().decisionId(decision.getDecisionId())
+                .allowed(true).requiresConfirmation(true).normalizedAction("MANUAL_ONLY").sourceUrls(List.of())
+                .evidenceState(EvidenceState.MISSING_SOURCE).build();
+        DynamicPlanMutation mutation = new DecisionExecutorAdapter(objectMapper)
+                .toMutation(decision, policy, 20L, 2);
+        OrchestrationRuntimeDecision waiting = new OrchestrationRuntimeDecision(decision, policy, mutation,
+                false, OrchestrationRuntimeDecision.CONFIRMATION_REQUIRED, List.of());
+        when(taskRepository.findById(60L)).thenReturn(Optional.of(task));
+        when(taskPlanRepository.findById(20L)).thenReturn(Optional.of(parentPlan));
+        when(runtimeDecisionService.decide(any(), eq(AnalysisTaskStatus.RUNNING.name()),
+                eq(TaskNodeStatus.SUCCESS.name())))
+                .thenReturn(batch(List.of(waiting), List.of(waiting), 20L, 2));
+
+        boolean appended = appender.maybeAppendDynamicPlan(
+                60L,
+                new ArrayList<>(List.of(initialReview)),
+                new LinkedHashMap<>(Map.of(initialReview.getNodeName(), initialReview)),
+                initialReview);
+
+        assertThat(appended).isFalse();
+        verify(runtimeDecisionService).decide(argThat(context -> "initial".equals(context.getReviewStage())),
+                eq(AnalysisTaskStatus.RUNNING.name()), eq(TaskNodeStatus.SUCCESS.name()));
+        verify(orchestrationTraceService).recordDecisionBatch(eq(60L), eq(initialReview), any());
+        verify(dynamicTaskGraphService, never()).createDynamicPlan(
+                any(), any(), any(DynamicPlanMutation.class), any());
+    }
+
+    @Test
     void shouldNotAppendNodesForInvalidLlmPairBlockedByPolicy() throws Exception {
         AnalysisTask task = AnalysisTask.builder()
                 .id(51L)
@@ -318,7 +372,8 @@ class DynamicPlanAppenderTest {
         when(runtimeDecisionService.decide(any(), eq(AnalysisTaskStatus.STOPPED.name()),
                 eq(TaskNodeStatus.SUCCESS.name())))
                 .thenReturn(batch(List.of(primaryAttempt, ready), List.of(ready), 8L, 2));
-        when(dynamicTaskGraphService.createDynamicPlan(eq(parentPlan), eq(completedNode), eq(mutation), any()))
+        when(dynamicTaskGraphService.createDynamicPlan(eq(parentPlan), eq(completedNode),
+                any(DynamicPlanMutation.class), any()))
                 .thenReturn(derivedPlan);
         when(nodeRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -563,7 +618,7 @@ class DynamicPlanAppenderTest {
     }
 
     @Test
-    void shouldKeepPassedWithoutHumanInterventionOnExistingShortCircuit() {
+    void shouldAuditPassedReviewAsNoMutationThroughUnifiedPipeline() throws Exception {
         TaskNode completedNode = TaskNode.builder()
                 .taskId(55L)
                 .nodeName("quality_check_final")
@@ -572,9 +627,31 @@ class DynamicPlanAppenderTest {
                 .planVersionId(15L)
                 .outputData("""
                         {"reviewStage":"final","passed":true,
-                        "requiresHumanIntervention":false,"summary":"终审通过"}
+                        "requiresHumanIntervention":false,"summary":"终审通过",
+                        "sourceUrls":["https://example.com/review"]}
                         """)
                 .build();
+        AnalysisTask task = AnalysisTask.builder().id(55L).status(AnalysisTaskStatus.RUNNING)
+                .currentPlanVersionId(15L).currentPlanVersion(1).build();
+        TaskPlan parentPlan = TaskPlan.builder().id(15L).taskId(55L).planVersion(1).branchKey("root")
+                .active(true).planSnapshot(objectMapper.writeValueAsString(WorkflowPlan.builder()
+                        .planVersionId(15L).planVersion(1).branchKey("root").nodes(List.of()).build())).build();
+        OrchestrationDecision decision = OrchestrationDecision.builder().decisionId("od-55-pass")
+                .taskId(55L).triggerNodeName("quality_check_final").decisionOrigin(OrchestrationDecisionOrigin.RULE_ONLY)
+                .decisionType("NO_ACTION").actionType("NO_ACTION").targetNode("quality_check_final")
+                .affectedScope("CURRENT_NODE_ONLY").sourceUrls(List.of("https://example.com/review"))
+                .evidenceState(EvidenceState.FULL_SOURCE).build().normalized();
+        DecisionPolicyResult policy = DecisionPolicyResult.builder().decisionId(decision.getDecisionId())
+                .allowed(true).normalizedAction("NO_ACTION").sourceUrls(decision.getSourceUrls())
+                .evidenceState(EvidenceState.FULL_SOURCE).build();
+        DynamicPlanMutation mutation = new DecisionExecutorAdapter(objectMapper).toMutation(decision, policy, 15L, 2);
+        OrchestrationRuntimeDecision noMutation = new OrchestrationRuntimeDecision(decision, policy, mutation,
+                false, OrchestrationRuntimeDecision.NO_MUTATION, List.of());
+        when(taskRepository.findById(55L)).thenReturn(Optional.of(task));
+        when(taskPlanRepository.findById(15L)).thenReturn(Optional.of(parentPlan));
+        when(runtimeDecisionService.decide(any(), eq(AnalysisTaskStatus.RUNNING.name()),
+                eq(TaskNodeStatus.SUCCESS.name())))
+                .thenReturn(batch(List.of(noMutation), List.of(noMutation), 15L, 2));
 
         boolean appended = appender.maybeAppendDynamicPlan(
                 55L,
@@ -584,9 +661,49 @@ class DynamicPlanAppenderTest {
 
         assertThat(appended).isFalse();
         assertThat(completedNode.getStatus()).isEqualTo(TaskNodeStatus.SUCCESS);
-        verify(runtimeDecisionService, never()).decide(any(), any(), any());
-        verify(orchestrationTraceService, never()).recordDecisionBatch(any(), any(), any());
+        verify(runtimeDecisionService).decide(any(), eq(AnalysisTaskStatus.RUNNING.name()),
+                eq(TaskNodeStatus.SUCCESS.name()));
+        verify(orchestrationTraceService).recordDecisionBatch(eq(55L), eq(completedNode), any());
         verify(nodeRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldNotTreatTargetCoverageGateAsReviewerDecisionCycle() throws Exception {
+        TaskNode coverageGate = TaskNode.builder()
+                .taskId(56L)
+                .nodeName("target_coverage_gate_v2")
+                .agentType(AgentType.REVIEWER)
+                .status(TaskNodeStatus.SUCCESS)
+                .planVersionId(16L)
+                .branchKey("root/review-2")
+                .outputData("""
+                        {
+                          "targetCoverageGate": "PASSED",
+                          "targetCoverageDelta": 1,
+                          "closedGapKeys": ["notion|pricing|official_pricing"],
+                          "sourceUrls": ["https://www.notion.so/pricing"]
+                        }
+                        """)
+                .build();
+        AnalysisTask task = AnalysisTask.builder().id(56L).status(AnalysisTaskStatus.RUNNING)
+                .currentPlanVersionId(16L).currentPlanVersion(2).build();
+        TaskPlan parentPlan = TaskPlan.builder().id(16L).taskId(56L).planVersion(2).branchKey("root/review-2")
+                .active(true).planSnapshot(objectMapper.writeValueAsString(WorkflowPlan.builder()
+                        .planVersionId(16L).planVersion(2).branchKey("root/review-2").nodes(List.of()).build())).build();
+        OrchestrationRuntimeDecisionBatch emptyBatch = batch(List.of(), List.of(), 16L, 3);
+        when(taskRepository.findById(56L)).thenReturn(Optional.of(task));
+        when(taskPlanRepository.findById(16L)).thenReturn(Optional.of(parentPlan));
+        when(runtimeDecisionService.decide(any(), eq(AnalysisTaskStatus.RUNNING.name()),
+                eq(TaskNodeStatus.SUCCESS.name()))).thenReturn(emptyBatch);
+
+        boolean appended = appender.maybeAppendDynamicPlan(
+                56L,
+                new ArrayList<>(List.of(coverageGate)),
+                new LinkedHashMap<>(Map.of(coverageGate.getNodeName(), coverageGate)),
+                coverageGate);
+
+        assertThat(appended).isFalse();
+        verify(runtimeDecisionService, never()).decide(any(), any(), any());
     }
 
     private OrchestrationRuntimeDecisionBatch batch(List<OrchestrationRuntimeDecision> attempts,

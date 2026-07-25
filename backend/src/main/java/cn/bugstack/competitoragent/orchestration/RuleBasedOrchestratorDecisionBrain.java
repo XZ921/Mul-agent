@@ -22,6 +22,10 @@ public class RuleBasedOrchestratorDecisionBrain implements OrchestratorDecisionB
 
     @Override
     public List<OrchestrationDecision> decide(OrchestrationContext context) {
+        if (isReviewerTrigger(context.getTriggerNodeName())) {
+            // 初审、终审和动态复审必须经过同一个整轮归一入口，禁止在 DAG 中再次解释 passed 或 BLOCKER。
+            return List.of(decisionAdapter.fromReviewCycle(context));
+        }
         if ("extract_schema".equals(context.getTriggerNodeName())) {
             return decideExtractorSuggestions(context);
         }
@@ -82,6 +86,12 @@ public class RuleBasedOrchestratorDecisionBrain implements OrchestratorDecisionB
                     .normalized());
         }
         return List.of(noAction(context, "当前终审失败未形成阻断诊断或可执行编排动作。"));
+    }
+
+    private boolean isReviewerTrigger(String triggerNodeName) {
+        return "quality_check".equals(triggerNodeName)
+                || "quality_check_final".equals(triggerNodeName)
+                || (triggerNodeName != null && triggerNodeName.startsWith("quality_check_revision"));
     }
 
     /**

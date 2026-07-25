@@ -667,3 +667,94 @@ mvn -pl backend test
 - 剩余步骤：Step 4-8
 - 步骤执行状态：Step 1-3 成功；Step 4-8 待执行
 - 下一步唯一动作：等待用户确认后进入 Task 7 Step 4；本轮在 Step 3 停止
+
+### 14.9 Step 4 E 层全真实基础设施 Live E2E 启动记录
+
+当前阶段：Task 7 Step 4.1 环境与预算冻结执行中，尚未启动应用或创建任务
+
+- [x] 信息采集：9093、dev PostgreSQL/Redis/RocketMQ、凭证布尔状态、数据库基线与工具链版本已冻结
+- [ ] 数据分析：等待应用 health、安全配置校验和真实任务结果
+- [ ] 报告撰写：执行中的问题、taskId、调用与 token 事实将在本节后续追加
+- [ ] 质检复核：只允许创建并执行一个任务，失败后不自动 resume/retry/rerun，不进入 Step 5
+
+冻结时间：`2026-07-21 13:34:23 +08:00`；Java `17.0.3.1`；Maven `3.9.9`。`9093` 未监听。Docker 中 PostgreSQL、Redis、RocketMQ NameServer 均为 healthy，Broker 正在运行且未配置容器 healthcheck；TCP 实测 `5432/16379/9876/10911` 均可达。
+
+预检问题记录：首次按常见默认端口探测 Redis `6379` 得到不可达；核对项目配置后确认 dev 使用 `16379`，实际可达，因此这是预检端口假设错误，不是 Redis 故障。`DEEPSEEK_API_KEY` 环境变量已配置；`TAVILY_API_KEY` 环境变量未配置，但当前应用存在有效配置入口。后者作为凭证来源不规范问题保留，启动后仍必须由应用安全校验与真实调用证明可用，且任何记录不得输出 key。
+
+PostgreSQL 执行前基线：
+
+```text
+analysis_task|max_id=111|count=55
+task_plan|max_id=81|count=52
+task_node|max_id=1151|count=598
+task_workflow_event|max_id=1614|count=1074
+ai_call_audit_record|max_id=1137|count=818
+evidence_source|max_id=818|count=329
+competitor_knowledge|max_id=126|count=42
+report|max_id=132|count=26
+organization_quota_snapshot|count=0|fingerprint=EMPTY
+```
+
+调用边界冻结：仅一个 Notion + Airtable 新任务；不做人工重跑。正常主链预计 5-7 次业务 Agent LLM 调用，Orchestrator 每个 cycle 首次调用最多叠加一次 parse retry；Extractor/Reviewer 仍受各自既有 JSON 与节点重试上限约束。preview 后必须记录实际 collector/pipeline 数并更新理论上界；执行过程中不得提高 Tavily 预算、节点重试、质量阈值或决策门槛。
+
+- 当前执行步骤：Task 7 Step 4.1
+- 已完成步骤占比：Task 7 3/8（37.5%）
+- 剩余步骤：Step 4.1 readiness、Step 4.2-4.3 唯一任务；Step 5-8
+- 步骤执行状态：Step 1-3 成功；Step 4 执行中；Step 5-8 待执行
+- 当前真实 Provider/Tavily 调用增量：0
+- 当前数据库新增 live task：0
+
+启动问题 1：首次后台 `spring-boot:run` 在 Maven 参数解析阶段退出。PowerShell `Start-Process` 将包含空格的 `spring-boot.run.arguments` 拆分，`--orchestration.decision.shadow.enabled=false` 被 Maven 识别为非法选项。该进程未进入 Spring Boot、未监听 9093、未连接 Provider、未创建任务，真实 Provider/Tavily 与数据库增量均为 0。后续改为仅注入本次子进程的 `ORCHESTRATION_DECISION_MODE=LLM_PRIMARY`、`ORCHESTRATION_DECISION_SHADOW_ENABLED=false`，保持仓库默认配置不变并消除引号歧义。
+
+readiness 结果：第二次启动成功，Maven launcher PID=`29820`，Spring Boot PID=`26040`。Tomcat 绑定 9093，health 为 HTTP 200 / `UP`；PostgreSQL 连接与 31 条 Flyway migration 校验通过；RocketMQ producer 初始化成功，真实 listener container 以 `CLUSTERING` 模式订阅 `task-workflow-events`；6 类 Agent capability 为 `COLLECTOR/EXTRACTOR/ANALYZER/WRITER/REVIEWER/CITATION`；搜索安全校验报告 Tavily configured=true。没有 Spring Bean 装配或基础设施 hard fail。
+
+验证问题 2：首次 readiness 脚本收到的 `Invoke-WebRequest.Content` 是 UTF-8 字节数组，日志显示为数字序列，字符串正则因此误报 `READINESS=False`；显式 UTF-8 解码后同一接口为 `{"status":"UP","groups":["liveness","readiness"]}`。这是验收脚本解码问题，不是应用 health 失败；未因此重启应用或创建任务。
+
+preview 结果：HTTP/API 成功，`TASK_PLAN_PREVIEW_V1` 展开 2 个竞品、6 个 Collector、8 个 pipeline，共 14 节点与 20 个计划 sourceUrls；preview 前后 `analysis_task=55`、`ai_call_audit_record=818`，确认只读。基于实际 DAG 冻结业务 LLM 理论上界：正常主链 5 次，含改写 7 次；若 Extractor/Reviewer JSON 修复全部触顶约 15 次，另加每个 Orchestrator cycle 最多 2 次。产品节点自动重试仍受计划配置约束，但本次禁止任何人工 resume/retry/rerun。
+
+唯一任务已创建：`taskId=112`，初始 `PENDING`，`currentPlanVersion=1`、active `planId=82`；PostgreSQL 已落入 14 个 `PENDING` 节点和 3 条初始事件（TASK_CREATED、COLLABORATION_PLAN_RECORDED、COLLABORATION_CHECKPOINT_UPDATED）。创建后 `analysis_task=56/maxId=112`，AI audit 仍为 818。下一步只允许调用一次 execute，并从调用时刻使用固定 40 分钟 deadline。
+
+### 14.10 Step 4 E 层 Live E2E 完成记录
+
+当前阶段：Task 7 Step 4 已按诚实停点口径完成，带问题通过，在 Step 5 前停止
+
+- [x] 信息采集：真实 9093/dev/PostgreSQL/Redis/RocketMQ/Tavily/全业务 Agent/双 DeepSeek 模型事实已取得
+- [x] 数据分析：终态、节点、MQ、V2、报告、来源、AI audit/token、只读零增量与问题分组均已核对
+- [x] 报告撰写：taskId 112、完整时间线、调用成本和 6 类过程问题已记录
+- [x] 质检复核：只创建并执行一个任务，未 resume/retry/rerun，未修改预算、Prompt、Parser、Policy 或质量阈值，未进入 Step 5
+
+唯一 execute 时间为 `2026-07-21 13:43:18 +08:00`，冻结 deadline 为 `14:23:18 +08:00`。任务在 `13:52:18` 收口，实际耗时约 9 分钟，数据库终态 `STOPPED`，原因为存在等待人工处理节点。节点状态为 `7 SUCCESS + 6 SUCCESS_DEGRADED + 1 WAITING_INTERVENTION`，等待节点是 `quality_check_final`；14 个节点均无 retry、无孤儿 RUNNING。任务 API `canResume=true`、`canViewReport=true`，本次按约束未 resume。
+
+真实 MQ 闭环：35 条 task workflow event 全部 CONSUMED，包括 TASK_CREATED 1、TASK_EXECUTION_REQUESTED 1、NODE_READY 14、NODE_COMPLETED 14、ORCHESTRATION_DECISION_RECORDED 3、协作 plan/checkpoint 各 1。执行由真实 RocketMQ consumer thread 接管，未使用同步替身。
+
+真实采集与持久化：6 个 Collector 均留下不同 Tavily requestId，证明 6 个分支真实调用；3 个分支保留 Tavily raw content。任务落入 9 条 evidence、2 条 competitor knowledge、1 条 report；证据分布 Airtable=8、Notion=1。6 个 Collector 全部因 `HARD_DEADLINE_REACHED` 进入 SUCCESS_DEGRADED，其中 3 个 readyForQuorum=true。报告存在且正文非空，qualityScore=38、qualityPassed=false、deliveryStatus=REVIEW_REQUIRED、readyForDelivery=false、blockerCount=0、evidenceGapCount=0、delivery sourceUrls=9。按 §24 的 E 层口径，质量分数不是硬门，当前属于来源与质量事实诚实可见的人工停点。
+
+真实 AI 编排：数据库存在 3 个 ORCHESTRATION_TRACE_V2 cycle，均为 `LLM_PRIMARY` 且 Policy allowed。write_report 与 rewrite_report 分别形成 `SUPPLEMENT_EVIDENCE + READY + APPEND_NODES`；quality_check_final 经一次 parse retry 形成 `WAIT_FOR_HUMAN + CONFIRMATION_REQUIRED + MARK_WAITING_INTERVENTION`。终审 decisionId=`od-112-quality_check_final-llm-1`，aiAuditTraceId=`orch-81dcba65-655b-42dd-95b0-0b9e12c0e1e6`。report/replay 投影最新终审决策；公开 Markdown/HTML 均包含同一 decisionId、`LLM_PRIMARY`、traceId 和来源，不含 rawPrompt、rawResponse、Authorization 或 api-key 字样。
+
+AI 调用与 token：task 112 共 45 条 audit。其中 CHAT 11 条且全部成功，actual input=1,715,091、output=15,947、total=1,731,038；业务 `deepseek-v4-pro` 7 次占 1,720,764，Orchestrator `deepseek-chat` 4 次占 10,274。按节点 actual total：Extractor 两次合计 33,610；Analyzer 37,236；首稿 Writer 134,277；初审 Reviewer 186,406；改写 Writer 457,308；终审 Reviewer 871,927；四次 Orchestrator 合计 10,274。其余 34 条均为失败 embedding audit，无 actual token：DeepSeek 14 次 HTTP_404、SiliconFlow fallback 14 次 HTTP_401、熔断跳过 6 次。
+
+只读零副作用：调用 task/nodes/report/replay/Markdown/HTML 前后，task 112 的 AI audit 始终 45、actual token 始终 1,731,038，organization quota fingerprint 始终 EMPTY；公开下载未创建正式 export record，符合其无副作用接口边界。最终数据库关联计数为 task=1、plan=1、nodes=14、attempts=14、events=35、audits=45、evidence=9、knowledge=2、report=1、formal export record=0。
+
+问题清单：
+
+1. `COST_GOVERNANCE_DISABLED`：`ai.budgetEnabled=false`，默认单次预计输入上限 12,000 未生效；11 条成功 CHAT 均记录 `BUDGET_DISABLED`。实际 1.731M token 远超执行前 100k 建议预算，且 Prompt 从首稿约 131k input 膨胀到终审约 870k input。这是本轮最严重问题，Step 4 不因既定诚实停点口径失败，但后续真实运行前必须优先治理。
+2. `EMBEDDING_PROVIDER_MISCONFIGURED`：DeepSeek embedding endpoint 返回 404，SiliconFlow fallback 返回 401，随后 circuit open；34 次失败 audit 增加噪声与调用尝试，embedding 能力实际不可用。
+3. `COLLECTOR_HARD_DEADLINE_DEGRADATION`：6/6 Collector 均触发 hard deadline；虽然 Tavily 真实参与且主链可继续，但采集质量显著降级。
+4. `EVIDENCE_DISTRIBUTION_IMBALANCE`：Airtable 8 条证据，Notion 仅 1 条，报告质量只有 38 分并进入人工终审。
+5. `SUGGESTION_MUTATION_OWNERSHIP_GAP`：Writer 两次得到 `READY/APPEND_NODES`，但 `AgentSuggestion` gate 当前只执行人工暂停，`DynamicPlanAppender` 只处理终审 Reviewer，因此计划仍为 version 1、dynamic node=0。决策审计与实际 mutation ownership 的语义需后续收敛；这不是 MQ 丢消息。
+6. `TASK_READ_MODEL_STARTED_AT_ABSENT`：数据库 `analysis_task.started_at` 有值，但公开 task 详情 DTO 不提供 startedAt，只能通过数据库和节点时间线核对启动时刻。
+
+验收脚本自身还记录两项非产品问题：首次后台启动参数被 PowerShell 拆分；首次 health 正文未显式 UTF-8 解码。二者均在创建任务前修正，没有真实调用或数据库增量。
+
+本轮只停止自身 PID 26040/29820，二者均已退出，9093 已释放；PostgreSQL task 112 及全部关联事实保留。
+
+- [x] Task 7 Step 1：67/67
+- [x] Task 7 Step 2：133/133 + 148/148
+- [x] Task 7 Step 3：1413 tests / 0 failures / 0 errors / 10 skipped
+- [x] Task 7 Step 4：`PASSED_WITH_RECORDED_ISSUES`，真实 taskId=112，STOPPED/WAITING_INTERVENTION 诚实停点
+- [ ] Task 7 Step 5-8：待执行
+
+- 当前执行步骤：Task 7 Step 4 已完成
+- 已完成步骤占比：Task 7 4/8（50%）
+- 剩余步骤：Step 5 安全扫描、Step 6 clean package、Step 7 最终 JAR 持久化复核、Step 8 零遗留审计
+- 下一步唯一动作：等待用户确认是否进入 Step 5；本轮不修复上述问题、不自动复验、不进入 Step 5

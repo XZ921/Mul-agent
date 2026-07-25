@@ -102,8 +102,8 @@ class OrchestrationDecisionPromptBuilderTest {
                         .map(OrchestrationDecisionActionMatrix.ActionRule::actionType)
                         .distinct()
                         .toList());
-        assertThat(prompt.userPrompt()).doesNotContain("RERUN_NODE", "DOMAIN_HINT_DISCOVERY");
-        assertThat(prompt.responseSchema()).doesNotContain("RERUN_NODE", "DOMAIN_HINT_DISCOVERY");
+        assertThat(prompt.userPrompt()).contains("RERUN_NODE").doesNotContain("DOMAIN_HINT_DISCOVERY");
+        assertThat(prompt.responseSchema()).contains("RERUN_NODE").doesNotContain("DOMAIN_HINT_DISCOVERY");
     }
 
     @Test

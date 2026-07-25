@@ -65,7 +65,7 @@ class RuleBasedOrchestratorDecisionBrainTest {
         assertThat(passed.getDecisionType()).isEqualTo("NO_ACTION");
         assertThat(human.getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
         assertThat(blocking.getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
-        assertThat(nonBlocking.getDecisionType()).isEqualTo("NO_ACTION");
+        assertThat(nonBlocking.getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
         assertThat(legacy.getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
         assertThat(legacy.getActionType()).isEqualTo("MANUAL_REVIEW");
         assertThat(List.of(passed, human, blocking, nonBlocking, legacy))
@@ -229,7 +229,7 @@ class RuleBasedOrchestratorDecisionBrainTest {
     }
 
     @Test
-    void shouldPreserveLegacyDirectiveOrderIdsAndOrigin() {
+    void shouldNormalizeWholeReviewerCycleToSingleHighestPriorityDecision() {
         List<OrchestrationDecision> decisions = decide(OrchestrationContext.builder()
                 .taskId(88L)
                 .triggerNodeName("quality_check_final")
@@ -238,6 +238,9 @@ class RuleBasedOrchestratorDecisionBrainTest {
                         RevisionDirective.builder()
                                 .category("EVIDENCE_GAP")
                                 .actionType("SUPPLEMENT_EVIDENCE")
+                                .competitor("Notion")
+                                .targetField("pricing")
+                                .requiredSourceType("OFFICIAL_PRICING")
                                 .summary("补证")
                                 .sourceUrls(List.of("https://example.com/pricing"))
                                 .build(),
@@ -253,13 +256,15 @@ class RuleBasedOrchestratorDecisionBrainTest {
 
         assertThat(decisions)
                 .extracting(OrchestrationDecision::getDecisionId)
-                .containsExactly("od-88-quality_check_final-1", "od-88-quality_check_final-2");
+                .containsExactly("od-88-quality_check_final-review-cycle");
         assertThat(decisions)
                 .extracting(OrchestrationDecision::getActionType)
-                .containsExactly("SUPPLEMENT_EVIDENCE", "REWRITE_SECTION");
+                .containsExactly("SUPPLEMENT_EVIDENCE");
         assertThat(decisions)
                 .extracting(OrchestrationDecision::getDecisionOrigin)
-                .containsOnly(OrchestrationDecisionOrigin.LEGACY_ADAPTER);
+                .containsOnly(OrchestrationDecisionOrigin.RULE_ONLY);
+        assertThat(decisions.get(0).getInputRefs())
+                .containsEntry("gapKey", "notion|pricing|official_pricing");
     }
 
     @Test
@@ -282,9 +287,10 @@ class RuleBasedOrchestratorDecisionBrainTest {
         assertThat(unknown.getDecisionType()).isEqualTo("NO_ACTION");
         assertThat(unknown.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_ONLY);
         assertThat(unknown.getTargetNode()).isEqualTo("quality_check_draft");
-        assertThat(passedAndHuman.getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
-        assertThat(passedAndHuman.getActionType()).isEqualTo("MANUAL_REVIEW");
-        assertThat(passedAndHuman.isRequiresHumanIntervention()).isTrue();
+        // 模型原始 requiresHumanIntervention 只是诊断事实，不能单独抢占可追溯 PASS。
+        assertThat(passedAndHuman.getDecisionType()).isEqualTo("NO_ACTION");
+        assertThat(passedAndHuman.getActionType()).isEqualTo("NO_ACTION");
+        assertThat(passedAndHuman.isRequiresHumanIntervention()).isFalse();
     }
 
     @Test
@@ -308,8 +314,8 @@ class RuleBasedOrchestratorDecisionBrainTest {
 
         assertThat(passedOnly.getDecisionType()).isEqualTo("NO_ACTION");
         assertThat(passedOnly.isRequiresHumanIntervention()).isFalse();
-        assertThat(failedOnly.getDecisionType()).isEqualTo("NO_ACTION");
-        assertThat(failedOnly.isRequiresHumanIntervention()).isFalse();
+        assertThat(failedOnly.getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(failedOnly.isRequiresHumanIntervention()).isTrue();
     }
 
     @Test

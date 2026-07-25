@@ -194,7 +194,7 @@ class OrchestrationDecisionServiceTest {
     }
 
     @Test
-    void shouldFallbackToNoActionWhenNoDirectiveAndNoBlockingDiagnosis() {
+    void shouldStopWhenFailedReviewHasNoStructuredDirective() {
         OrchestrationContext context = OrchestrationContext.builder()
                 .taskId(50L)
                 .triggerNodeName("quality_check_final")
@@ -213,7 +213,8 @@ class OrchestrationDecisionServiceTest {
         List<OrchestrationDecision> decisions = service.decide(context);
 
         assertThat(decisions).hasSize(1);
-        assertThat(decisions.get(0).getDecisionType()).isEqualTo("NO_ACTION");
+        assertThat(decisions.get(0).getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
+        assertThat(decisions.get(0).getReason()).contains("没有完整的结构化修订诊断");
     }
 
     @Test
@@ -547,7 +548,7 @@ class OrchestrationDecisionServiceTest {
     }
 
     @Test
-    void shouldPreserveLegacyDirectiveOrderIdsAndLegacyOrigin() {
+    void shouldNormalizeReviewerDirectivesToSingleHighestPriorityCandidate() {
         OrchestrationContext context = OrchestrationContext.builder()
                 .taskId(61L)
                 .triggerNodeName("quality_check_final")
@@ -557,6 +558,9 @@ class OrchestrationDecisionServiceTest {
                                 .category("EVIDENCE_GAP")
                                 .actionType("SUPPLEMENT_EVIDENCE")
                                 .targetSection("pricing")
+                                .competitor("Notion")
+                                .targetField("pricing")
+                                .requiredSourceType("OFFICIAL_PRICING")
                                 .summary("补充定价证据")
                                 .sourceUrls(List.of("https://example.com/pricing"))
                                 .build(),
@@ -573,18 +577,16 @@ class OrchestrationDecisionServiceTest {
 
         List<OrchestrationDecision> decisions = service.decide(context);
 
-        assertThat(decisions).hasSize(2);
+        assertThat(decisions).hasSize(1);
         assertThat(decisions)
                 .extracting(OrchestrationDecision::getDecisionId)
-                .containsExactly(
-                        "od-61-quality_check_final-1",
-                        "od-61-quality_check_final-2");
+                .containsExactly("od-61-quality_check_final-review-cycle");
         assertThat(decisions)
                 .extracting(OrchestrationDecision::getActionType)
-                .containsExactly("SUPPLEMENT_EVIDENCE", "REWRITE_SECTION");
+                .containsExactly("SUPPLEMENT_EVIDENCE");
         assertThat(decisions)
                 .extracting(OrchestrationDecision::getDecisionOrigin)
-                .containsOnly(OrchestrationDecisionOrigin.LEGACY_ADAPTER);
+                .containsOnly(OrchestrationDecisionOrigin.RULE_ONLY);
     }
 
     @Test
@@ -696,7 +698,7 @@ class OrchestrationDecisionServiceTest {
     }
 
     @Test
-    void shouldKeepHumanInterventionAheadOfPassedReviewForSafety() {
+    void shouldNotLetRawHumanSuggestionOverrideTraceablePassedReview() {
         OrchestrationDecision decision = service.decide(OrchestrationContext.builder()
                 .taskId(66L)
                 .triggerNodeName("quality_check_final")
@@ -706,10 +708,10 @@ class OrchestrationDecisionServiceTest {
                 .evidenceState(EvidenceState.FULL_SOURCE)
                 .build()).get(0);
 
-        assertThat(decision.getDecisionType()).isEqualTo("WAIT_FOR_HUMAN");
-        assertThat(decision.getActionType()).isEqualTo("MANUAL_REVIEW");
-        assertThat(decision.isRequiresHumanIntervention()).isTrue();
-        assertThat(decision.isRequiresConfirmation()).isTrue();
+        assertThat(decision.getDecisionType()).isEqualTo("NO_ACTION");
+        assertThat(decision.getActionType()).isEqualTo("NO_ACTION");
+        assertThat(decision.isRequiresHumanIntervention()).isFalse();
+        assertThat(decision.isRequiresConfirmation()).isFalse();
         assertThat(decision.getDecisionOrigin()).isEqualTo(OrchestrationDecisionOrigin.RULE_ONLY);
     }
 

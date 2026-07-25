@@ -49,6 +49,14 @@ public class OrchestrationDecisionActionMatrix {
                         "collect_sources",
                         "CURRENT_NODE_AND_DOWNSTREAM"),
                 new ActionRule(
+                        "LLM_RERUN_EXTRACT_SCHEMA",
+                        "RERUN_NODE",
+                        "RERUN_NODE",
+                        "CREATE_RERUN_BRANCH",
+                        TargetNodePolicy.FIXED_NODE,
+                        "extract_schema",
+                        "CURRENT_NODE_ONLY"),
+                new ActionRule(
                         "LLM_REWRITE_SECTION",
                         "REWRITE_ONLY",
                         "REWRITE_SECTION",

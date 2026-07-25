@@ -4,6 +4,7 @@ import cn.bugstack.competitoragent.workflow.contract.RevisionDirective;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -13,6 +14,69 @@ import java.util.Map;
  */
 @Component
 public class OrchestrationDecisionAdapter {
+
+    /**
+     * 将一轮 Reviewer 的全部结构化诊断归一为唯一 candidate decision。
+     * Reviewer 的自然语言、分数和 requiresHumanIntervention 只保留为质量事实；
+     * 只有明确的 MANUAL_REVIEW 指令或自动动作缺少安全必填字段时才形成 Java 硬停点。
+     */
+    public OrchestrationDecision fromReviewCycle(OrchestrationContext rawContext) {
+        OrchestrationContext context = rawContext == null ? null : rawContext.normalized();
+        if (context == null || context.getTaskId() == null) {
+            return manualDecision(null, "unknown_reviewer", 0, "Reviewer 决策上下文缺少 taskId");
+        }
+        List<RevisionDirective> directives = context.getLegacyRevisionDirectives().stream()
+                .filter(java.util.Objects::nonNull)
+                .map(RevisionDirective::normalized)
+                .sorted(Comparator
+                        .comparingInt(this::actionRank)
+                        .thenComparing(this::stableDirectiveKey))
+                .toList();
+
+        if (!directives.isEmpty()) {
+            RevisionDirective selected = directives.get(0);
+            String validationError = validateAutomaticDirective(selected);
+            if (validationError != null) {
+                return reviewCycleManualDecision(context, validationError);
+            }
+            return fromRevisionDirective(context.getTaskId(), context.getTriggerNodeName(), selected, 0)
+                    .toBuilder()
+                    .decisionId(reviewCycleDecisionId(context))
+                    .decisionOrigin(OrchestrationDecisionOrigin.RULE_ONLY)
+                    .build()
+                    .normalized();
+        }
+        if (context.isPassed() && !context.getSourceUrls().isEmpty()) {
+            return OrchestrationDecision.builder()
+                    .decisionId(reviewCycleDecisionId(context))
+                    .taskId(context.getTaskId())
+                    .triggerNodeName(context.getTriggerNodeName())
+                    .decisionOrigin(OrchestrationDecisionOrigin.RULE_ONLY)
+                    .decisionType("NO_ACTION")
+                    .actionType("NO_ACTION")
+                    .targetNode(context.getTriggerNodeName())
+                    .affectedScope("CURRENT_NODE_ONLY")
+                    .reason("Reviewer 已通过且结论具备可追溯 sourceUrls。")
+                    .priority("LOW")
+                    .inputRefs(buildInputRefs(context.getTriggerNodeName()))
+                    .sourceUrls(context.getSourceUrls())
+                    .evidenceState(context.getEvidenceState())
+                    .build()
+                    .normalized();
+        }
+        return reviewCycleManualDecision(context, context.isPassed()
+                        ? "Reviewer 通过结论缺少 sourceUrls，禁止直接收口"
+                        : "Reviewer 未通过但没有完整的结构化修订诊断");
+    }
+
+    private OrchestrationDecision reviewCycleManualDecision(OrchestrationContext context, String reason) {
+        return manualDecision(context.getTaskId(), context.getTriggerNodeName(), 0, reason)
+                .toBuilder()
+                .decisionId(reviewCycleDecisionId(context))
+                .decisionOrigin(OrchestrationDecisionOrigin.RULE_ONLY)
+                .build()
+                .normalized();
+    }
 
     public OrchestrationDecision fromRevisionDirective(Long taskId,
                                                        String triggerNodeName,
@@ -40,7 +104,7 @@ public class OrchestrationDecisionAdapter {
                 .requiresConfirmation(false)
                 .confidence(resolveConfidence(normalized))
                 .suggestedQueries(normalized.getSearchQueries())
-                .inputRefs(buildInputRefs(triggerNodeName))
+                .inputRefs(buildInputRefs(triggerNodeName, normalized))
                 .sourceUrls(sourceUrls)
                 .evidenceState(evidenceState)
                 .build()
@@ -93,7 +157,8 @@ public class OrchestrationDecisionAdapter {
 
     private String resolveAffectedScope(RevisionDirective directive) {
         return switch (directive.getActionType()) {
-            case "SUPPLEMENT_EVIDENCE", "RERUN_NODE" -> "CURRENT_NODE_AND_DOWNSTREAM";
+            case "SUPPLEMENT_EVIDENCE" -> "CURRENT_NODE_AND_DOWNSTREAM";
+            case "RERUN_NODE" -> "CURRENT_NODE_ONLY";
             case "REWRITE_SECTION", "REWRITE_CLAIM" -> "CURRENT_NODE_ONLY";
             default -> "CURRENT_NODE_ONLY";
         };
@@ -131,5 +196,73 @@ public class OrchestrationDecisionAdapter {
         refs.put("agentSuggestionIds", List.of());
         refs.put("triggerNodeName", triggerNodeName);
         return refs;
+    }
+
+    private Map<String, Object> buildInputRefs(String triggerNodeName, RevisionDirective directive) {
+        Map<String, Object> refs = buildInputRefs(triggerNodeName);
+        refs.put("competitor", directive.getCompetitor());
+        refs.put("targetField", directive.getTargetField());
+        refs.put("requiredSourceType", directive.getRequiredSourceType());
+        refs.put("gapKey", directive.getGapKey());
+        refs.put("sourceSnapshot", directive.getSourceUrls());
+        return refs;
+    }
+
+    private int actionRank(RevisionDirective directive) {
+        return switch (directive.getActionType()) {
+            case "MANUAL_REVIEW" -> 0;
+            case "SUPPLEMENT_EVIDENCE" -> 1;
+            case "RERUN_NODE" -> 2;
+            case "REWRITE_SECTION", "REWRITE_CLAIM" -> 3;
+            default -> 4;
+        };
+    }
+
+    private String stableDirectiveKey(RevisionDirective directive) {
+        return String.join("|",
+                safe(directive.getCompetitor()),
+                safe(directive.getTargetField()),
+                safe(directive.getRequiredSourceType()),
+                safe(directive.getTargetNode()));
+    }
+
+    private String validateAutomaticDirective(RevisionDirective directive) {
+        if ("MANUAL_REVIEW".equals(directive.getActionType())) {
+            return directive.getSummary();
+        }
+        if (directive.getSourceUrls().isEmpty()) {
+            return "自动 Reviewer 动作缺少 sourceUrls，禁止执行";
+        }
+        if ("SUPPLEMENT_EVIDENCE".equals(directive.getActionType())
+                && (isBlank(directive.getCompetitor())
+                || isBlank(directive.getTargetField())
+                || isBlank(directive.getRequiredSourceType())
+                || isBlank(directive.getGapKey()))) {
+            return "补采诊断缺少 competitor、targetField、requiredSourceType 或 gapKey";
+        }
+        if ("RERUN_NODE".equals(directive.getActionType())
+                && (!"extract_schema".equals(directive.getTargetNode())
+                || isBlank(directive.getTargetField())
+                || isBlank(directive.getRequiredSourceType())
+                || isBlank(directive.getGapKey()))) {
+            return "RERUN_NODE 必须命中 extract_schema 白名单并携带 targetField、requiredSourceType 和 gapKey";
+        }
+        return null;
+    }
+
+    private String reviewCycleDecisionId(OrchestrationContext context) {
+        return reviewCycleDecisionId(context.getTaskId(), context.getTriggerNodeName());
+    }
+
+    private String reviewCycleDecisionId(Long taskId, String triggerNodeName) {
+        return "od-" + taskId + "-" + safe(triggerNodeName) + "-review-cycle";
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.trim();
     }
 }

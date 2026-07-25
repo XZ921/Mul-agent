@@ -755,7 +755,8 @@ class Phase2WorkflowIntegrationTest {
     private void configureWriterAgent() {
         doAnswer(invocation -> {
             AgentContext context = invocation.getArgument(0);
-            boolean revision = "rewrite_report".equals(context.getCurrentNodeName());
+            boolean revision = "rewrite_report".equals(context.getCurrentNodeName())
+                    || context.getCurrentNodeName().startsWith("rewrite_revision_patch_v");
             Report report = reportRepository.findByTaskId(context.getTaskId()).orElseGet(Report::new);
             report.setTaskId(context.getTaskId());
             report.setTitle("Phase 2 集成回归报告");
@@ -842,6 +843,15 @@ class Phase2WorkflowIntegrationTest {
                               "suggestion":"补充证据编号或降低结论强度。"
                             }
                           ],
+                          "revisionDirectives": [
+                            {
+                              "category":"MANUAL_INTERVENTION",
+                              "actionType":"MANUAL_REVIEW",
+                              "summary":"证据链仍需人工确认后才能继续。",
+                              "sourceUrls":["https://www.notion.so/help"],
+                              "expectedOutcome":"人工确认现有证据边界后恢复工作流。"
+                            }
+                          ],
                           "nextActions": [
                             {
                               "title":"恢复工作流并执行改写",
@@ -861,6 +871,7 @@ class Phase2WorkflowIntegrationTest {
                       "requiresHumanIntervention": false,
                       "autoRewriteAllowed": true,
                       "summary": "修订后报告已达到 Phase 2 回归基线。",
+                      "sourceUrls": ["https://www.notion.so/help", "https://www.notion.so/pricing"],
                       "diagnoses": [],
                       "issues": [],
                       "nextActions": []
